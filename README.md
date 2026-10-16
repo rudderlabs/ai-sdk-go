@@ -83,7 +83,7 @@ See [docs/mcp.md](docs/mcp.md) for every option, how each property is derived, i
 
 ## Reliability
 
-Analytics never breaks the server: the integration recovers from its own panics, a failing `Identify` or rule function only drops what it would have added, and a client error drops the event. Windows, counters and argument hashes are kept in memory per process.
+Analytics never breaks the server: the integration recovers from its own panics, a failing `Identify` or rule function only drops what it would have added, and a client error drops the event. State is in memory, per wrapped server, per process: each replica and each restart emits its own `mcp_client_seen` and restarts the `call_index`, `retry_count` and `ms_since_previous_call` counters.
 
 ## Contributing
 

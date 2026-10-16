@@ -155,11 +155,11 @@ func TrackMCPEventSubscription(ctx context.Context, server *mcp.Server, change S
 		emit(opts.Analytics, "mcp_event_subscription_changed", whom, p)
 
 		key := w.name + "\x00" + change.SubscriptionID
-		memory.Lock()
-		defer memory.Unlock()
-		if t := memory.expiries[key]; t != nil {
+		w.mem.Lock()
+		defer w.mem.Unlock()
+		if t := w.mem.expiries[key]; t != nil {
 			t.Stop()
-			delete(memory.expiries, key)
+			delete(w.mem.expiries, key)
 		}
 		if (change.Action == SubscriptionCreated || change.Action == SubscriptionRefreshed) && change.TTL > 0 {
 			expired := change
@@ -169,16 +169,16 @@ func TrackMCPEventSubscription(ctx context.Context, server *mcp.Server, change S
 			expired.HistoryTruncated = nil
 			var t *time.Timer
 			t = time.AfterFunc(change.TTL, func() {
-				memory.Lock()
-				if memory.expiries[key] != t {
-					memory.Unlock()
+				w.mem.Lock()
+				if w.mem.expiries[key] != t {
+					w.mem.Unlock()
 					return
 				}
-				delete(memory.expiries, key)
-				memory.Unlock()
+				delete(w.mem.expiries, key)
+				w.mem.Unlock()
 				TrackMCPEventSubscription(context.WithoutCancel(ctx), server, expired)
 			})
-			memory.expiries[key] = t
+			w.mem.expiries[key] = t
 		}
 	})
 }

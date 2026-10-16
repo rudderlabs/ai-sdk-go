@@ -16,7 +16,6 @@ func TestEventsReachTheDataPlane(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(resetMemory)
 	server := workspaceServer("dp-mcp", nil)
 	if err := WrapMCPServer(server, Options{Analytics: client}); err != nil {
 		t.Fatal(err)

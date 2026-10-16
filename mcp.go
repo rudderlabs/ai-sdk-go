@@ -37,16 +37,17 @@ var owned = map[string]bool{
 	"tool_name": true, "tool_status": true,
 }
 
-// wrapped is one tracked server.
+// wrapped is one tracked server. Its counters, windows and caches belong to it alone.
 type wrapped struct {
 	opts    atomic.Pointer[options]
 	name    string
 	version string
+	mem     *serverState
 }
 
 var registry sync.Map // *mcp.Server -> *wrapped
 
-// serverMemory is shared by every server with the same name, so per-request servers agree.
+// serverMemory is what a server's own responses taught the integration.
 type serverMemory struct {
 	toolSchemas          map[string]map[string]any
 	nativeContext        map[string]bool
@@ -72,47 +73,28 @@ type pendingInput struct {
 	toolName  string
 }
 
-var memory = struct {
+// serverState is what one wrapped server remembers, in memory, for this process only.
+type serverState struct {
 	sync.Mutex
-	servers       map[string]*serverMemory
+	server        *serverMemory
 	clientSeen    *boundedMap[time.Time]
 	scopes        *boundedMap[*scopeState]
 	inputRequired *boundedMap[pendingInput]
 	expiries      map[string]*time.Timer
-}{
-	servers:       map[string]*serverMemory{},
-	clientSeen:    newBoundedMap[time.Time](maxEntries),
-	scopes:        newBoundedMap[*scopeState](maxEntries),
-	inputRequired: newBoundedMap[pendingInput](maxEntries),
-	expiries:      map[string]*time.Timer{},
 }
 
-// serverMem returns the memory of a server name; the caller holds memory.Mutex.
-func serverMem(name string) *serverMemory {
-	m := memory.servers[name]
-	if m == nil {
-		m = &serverMemory{
+func newServerState() *serverState {
+	return &serverState{
+		server: &serverMemory{
 			toolSchemas:   map[string]map[string]any{},
 			nativeContext: map[string]bool{},
 			resources:     map[string]string{},
-		}
-		memory.servers[name] = m
+		},
+		clientSeen:    newBoundedMap[time.Time](maxEntries),
+		scopes:        newBoundedMap[*scopeState](maxEntries),
+		inputRequired: newBoundedMap[pendingInput](maxEntries),
+		expiries:      map[string]*time.Timer{},
 	}
-	return m
-}
-
-// resetMemory forgets the in-memory windows, counters, caches and expiry timers.
-func resetMemory() {
-	memory.Lock()
-	defer memory.Unlock()
-	memory.servers = map[string]*serverMemory{}
-	memory.clientSeen.clear()
-	memory.scopes.clear()
-	memory.inputRequired.clear()
-	for _, t := range memory.expiries {
-		t.Stop()
-	}
-	memory.expiries = map[string]*time.Timer{}
 }
 
 // WrapMCPServer tracks an MCP server built on github.com/modelcontextprotocol/go-sdk. Call it
@@ -135,7 +117,7 @@ func WrapMCPServer(server *mcp.Server, opts Options) error {
 		existing.(*wrapped).opts.Store(n)
 		return nil
 	}
-	w := &wrapped{}
+	w := &wrapped{mem: newServerState()}
 	w.name, w.version = serverImpl(server)
 	w.opts.Store(n)
 	registry.Store(server, w)
@@ -450,14 +432,14 @@ func (w *wrapped) clientSeen(rc *reqCtx, extra *mcp.RequestExtra, client *mcp.Im
 	}
 	key := strings.Join([]string{w.name, clientName, rc.identity.OAuthClientID, user}, "\x00")
 	now := time.Now()
-	memory.Lock()
-	until, seen := memory.clientSeen.get(key)
+	w.mem.Lock()
+	until, seen := w.mem.clientSeen.get(key)
 	if seen && until.After(now) {
-		memory.Unlock()
+		w.mem.Unlock()
 		return
 	}
-	memory.clientSeen.set(key, now.Add(rc.opts.ClientSeenWindow))
-	memory.Unlock()
+	w.mem.clientSeen.set(key, now.Add(rc.opts.ClientSeenWindow))
+	w.mem.Unlock()
 	p := map[string]any{}
 	put(p, "mcp_session_id", str(rc.base["mcp_session_id"]))
 	p["server_name"] = w.name
@@ -487,10 +469,10 @@ func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
 		h.name = "unknown"
 	}
 	rc.toolName = h.name
-	memory.Lock()
-	sm := serverMem(w.name)
+	w.mem.Lock()
+	sm := w.mem.server
 	nativeCap, nativeContext := sm.nativeCapabilityTool, sm.nativeContext[h.name]
-	memory.Unlock()
+	w.mem.Unlock()
 	if h.name == capabilityTool && opts.capabilities != nil && !nativeCap {
 		h.reply = w.capabilityRequested(rc, p.Arguments)
 		return
@@ -532,9 +514,9 @@ func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
 	}
 	start := time.Now()
 	key := w.name + "\x00" + rc.scope
-	memory.Lock()
-	defer memory.Unlock()
-	s, ok := memory.scopes.get(key)
+	w.mem.Lock()
+	defer w.mem.Unlock()
+	s, ok := w.mem.scopes.get(key)
 	if !ok {
 		s = &scopeState{hashes: map[string]int{}}
 	}
@@ -549,7 +531,7 @@ func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
 		h.props["retry_count"] = s.hashes[hash]
 		s.hashes[hash]++
 	}
-	memory.scopes.set(key, s)
+	w.mem.scopes.set(key, s)
 }
 
 func (w *wrapped) reportedContext(opts *options, v any) map[string]any {
@@ -599,9 +581,9 @@ func (w *wrapped) capabilityRequested(rc *reqCtx, arguments json.RawMessage) mcp
 }
 
 func (w *wrapped) resourceName(uri string) string {
-	memory.Lock()
-	defer memory.Unlock()
-	sm := serverMem(w.name)
+	w.mem.Lock()
+	defer w.mem.Unlock()
+	sm := w.mem.server
 	for _, t := range sm.templates {
 		if t.matches(uri) {
 			return t.template
@@ -694,9 +676,9 @@ func (w *wrapped) toolCallDone(ctx context.Context, h *handling, res mcp.Result,
 		extra["is_error_result"] = r.IsError
 		if r.IsError {
 			status = "error"
-			memory.Lock()
-			schema := serverMem(w.name).toolSchemas[h.name]
-			memory.Unlock()
+			w.mem.Lock()
+			schema := w.mem.server.toolSchemas[h.name]
+			w.mem.Unlock()
 			invalid := invalidArguments(schema, h.args)
 			if len(invalid) > 0 {
 				extra["invalid_arguments"] = invalid
@@ -727,11 +709,11 @@ func (w *wrapped) finish(h *handling, event, nameKey, status string, extra map[s
 			p[k] = v
 		}
 		if h.rc.scope != "" {
-			memory.Lock()
-			if s, ok := memory.scopes.get(w.name + "\x00" + h.rc.scope); ok {
+			w.mem.Lock()
+			if s, ok := w.mem.scopes.get(w.name + "\x00" + h.rc.scope); ok {
 				s.last = end
 			}
-			memory.Unlock()
+			w.mem.Unlock()
 		}
 	}
 	for k, v := range extra {
@@ -811,13 +793,13 @@ func (w *wrapped) inputKey(rc *reqCtx, toolName, key, requestState string) strin
 }
 
 func (w *wrapped) inputRequired(h *handling, r *mcp.CallToolResult) {
-	memory.Lock()
-	defer memory.Unlock()
+	w.mem.Lock()
+	defer w.mem.Unlock()
 	for key, ir := range r.InputRequests {
 		if _, ok := ir.(*mcp.ElicitParams); !ok {
 			continue
 		}
-		memory.inputRequired.set(w.inputKey(h.rc, h.name, key, r.RequestState), pendingInput{
+		w.mem.inputRequired.set(w.inputKey(h.rc, h.name, key, r.RequestState), pendingInput{
 			start: time.Now(), requestID: h.rc.requestID, toolName: h.name,
 		})
 	}
@@ -836,10 +818,10 @@ func (w *wrapped) inputResponses(rc *reqCtx, p *mcp.CallToolParamsRaw, toolName 
 			continue
 		}
 		k := w.inputKey(rc, toolName, key, p.RequestState)
-		memory.Lock()
-		pending, found := memory.inputRequired.get(k)
-		memory.inputRequired.remove(k)
-		memory.Unlock()
+		w.mem.Lock()
+		pending, found := w.mem.inputRequired.get(k)
+		w.mem.inputRequired.remove(k)
+		w.mem.Unlock()
 		e := elicitation{action: er.Action, toolName: toolName}
 		if found {
 			e.duration = time.Since(pending.start)
@@ -998,9 +980,9 @@ func (w *wrapped) toolsList(rc *reqCtx, r *mcp.ListToolsResult) mcp.Result {
 	if !opts.RequestContext.Disabled {
 		contextSchema = requestContextSchema(opts)
 	}
-	memory.Lock()
-	defer memory.Unlock()
-	sm := serverMem(w.name)
+	w.mem.Lock()
+	defer w.mem.Unlock()
+	sm := w.mem.server
 	changed := false
 	tools := make([]*mcp.Tool, 0, len(r.Tools)+1)
 	for _, t := range r.Tools {
@@ -1056,9 +1038,9 @@ func (w *wrapped) toolsList(rc *reqCtx, r *mcp.ListToolsResult) mcp.Result {
 }
 
 func (w *wrapped) rememberResources(res mcp.Result) {
-	memory.Lock()
-	defer memory.Unlock()
-	sm := serverMem(w.name)
+	w.mem.Lock()
+	defer w.mem.Unlock()
+	sm := w.mem.server
 	switch r := res.(type) {
 	case *mcp.ListResourcesResult:
 		for _, x := range r.Resources {

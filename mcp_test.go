@@ -62,6 +62,24 @@ func TestClientSeenAgainAfterWindow(t *testing.T) {
 	}
 }
 
+func TestStateIsPerWrappedServer(t *testing.T) {
+	first, second := workspaceServer("same-name", nil), workspaceServer("same-name", nil)
+	r1, r2 := wrap(t, first, Options{}), wrap(t, second, Options{})
+	meta := mcp.Meta{metaInteractionID: "int_shared"}
+	for _, server := range []*mcp.Server{first, second} {
+		cs := connect(t, server, "2025-06-18", nil)
+		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, meta)
+	}
+	for i, r := range []*recorder{r1, r2} {
+		if len(r.named("mcp_client_seen")) != 1 {
+			t.Errorf("server %d: mcp_client_seen = %d, want 1", i, len(r.named("mcp_client_seen")))
+		}
+		if p := r.props(t, "mcp_tool_called"); p["call_index"] != 0 || p["retry_count"] != 0 {
+			t.Errorf("server %d: counters shared across servers: %v", i, p)
+		}
+	}
+}
+
 func TestToolCalledShapesNeverValues(t *testing.T) {
 	seen := &handlerSeen{}
 	server := workspaceServer("workspace-mcp", seen)
@@ -332,7 +350,6 @@ func TestAnalyticsFailuresNeverReachTheServer(t *testing.T) {
 		if err := WrapMCPServer(server, Options{Analytics: client, CapabilityRequests: &CapabilityRequestOptions{}}); err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(resetMemory)
 		cs := connect(t, server, "2025-06-18", nil)
 		if res := callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil); res.IsError {
 			t.Fatal("the tool call failed")

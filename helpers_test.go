@@ -161,8 +161,7 @@ func (r *recorder) wait(t *testing.T, event string, n int) []analytics.Track {
 	}
 }
 
-// newRecorder returns a recorder that fails the test on any event that breaks the schema, and
-// resets the in-memory state after the test.
+// newRecorder returns a recorder that fails the test on any event that breaks the schema.
 func newRecorder(t *testing.T) *recorder {
 	t.Helper()
 	r := &recorder{}
@@ -172,7 +171,6 @@ func newRecorder(t *testing.T) *recorder {
 		for _, msg := range r.invalid {
 			t.Errorf("event breaks the spec schema: %s", msg)
 		}
-		resetMemory()
 	})
 	return r
 }
