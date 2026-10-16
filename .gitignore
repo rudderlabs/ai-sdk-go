@@ -1,0 +1,13 @@
+coverage.out
+coverage.html
+*.test
+*.prof
+bin/
+dist/
+.env
+.env.*
+!.env.example
+.DS_Store
+.vscode/
+.idea/
+.claude/
