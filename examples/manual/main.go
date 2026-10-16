@@ -122,11 +122,10 @@ func helpdesk(ctx context.Context, rs analytics.Client) result {
 	// Pass the context StartInteraction returns to code that reports into the interaction.
 	defer in.End(rudderstackai.EndOptions{ResponseText: answer})
 
-	started := time.Now()
 	// ... call your model here ...
 	in.RecordCall(rudderstackai.LLMCall{
 		Provider: "openai", Model: model, InputTokens: 120, OutputTokens: 18,
-		ResponseID: "resp_tool", FinishReason: "tool_calls", StartedAt: started,
+		ResponseID: "resp_tool", FinishReason: "tool_calls",
 	})
 	args := map[string]any{"priority": "high", "summary": "Invoice export fails"}
 	in.RecordToolCalls(rudderstackai.ToolCall{ID: "call_1", Name: "create_ticket", Args: args})
@@ -135,10 +134,9 @@ func helpdesk(ctx context.Context, rs analytics.Client) result {
 	took := time.Since(toolStarted)
 	in.RecordToolResult("call_1", rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Duration: &took, Result: ticket})
 
-	started = time.Now()
 	in.RecordCall(rudderstackai.LLMCall{
 		Provider: "openai", Model: model, InputTokens: 160, OutputTokens: 25,
-		ResponseID: "resp_answer", FinishReason: "stop", StartedAt: started, OutputText: answer,
+		ResponseID: "resp_answer", FinishReason: "stop", OutputText: answer,
 	})
 	return result{InteractionID: in.ID(), ConversationID: in.ConversationID()}
 }
