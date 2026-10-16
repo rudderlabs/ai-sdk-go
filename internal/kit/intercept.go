@@ -47,6 +47,12 @@ type StreamHandler interface {
 // Complete reports whether the provider's terminal event arrived.
 func (o *Observer) Complete() bool { return o.Done }
 
+// EventFilter is an optional StreamHandler extension: Hide, asked after OnEvent, drops that event
+// from what the SDK reads (a usage-only chunk the integration asked for, not the caller).
+type EventFilter interface {
+	Hide(event string, data []byte) bool
+}
+
 // Prepared is a streamed request changed before it is sent (stream_options.include_usage).
 type Prepared struct {
 	Body map[string]any
@@ -158,7 +164,9 @@ func (s *Spec) Intercept(req *http.Request, next func(*http.Request) (*http.Resp
 		var h StreamHandler
 		safe(func() { h = s.NewStream(c, resp) })
 		if h != nil {
-			resp.Body = &sseBody{src: resp.Body, h: h, ctx: req.Context(), reader: bufio.NewReader(resp.Body)}
+			body := &sseBody{src: resp.Body, h: h, ctx: req.Context(), reader: bufio.NewReader(resp.Body)}
+			body.filter, _ = h.(EventFilter)
+			resp.Body = body
 			return resp, nil
 		}
 	}
@@ -288,26 +296,50 @@ type sseBody struct {
 	data   []string
 	once   sync.Once
 	mu     sync.Mutex
+	// With a filter, an event's lines are held until its blank line decides whether it is shown.
+	filter EventFilter
+	held   bytes.Buffer
+	hide   bool
 }
 
 func (b *sseBody) Read(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.buf.Len() == 0 {
+	for b.buf.Len() == 0 {
 		line, err := b.reader.ReadBytes('\n')
 		if len(line) > 0 {
-			b.buf.Write(line)
-			b.parse(line)
+			b.take(line)
 		}
 		if err != nil {
+			b.buf.Write(b.held.Bytes())
+			b.held.Reset()
 			if b.buf.Len() == 0 {
 				b.end(err)
 				return 0, err
 			}
 			defer b.end(err)
+			break
 		}
 	}
 	return b.buf.Read(p)
+}
+
+func (b *sseBody) take(line []byte) {
+	if b.filter == nil {
+		b.buf.Write(line)
+		b.parse(line)
+		return
+	}
+	b.held.Write(line)
+	b.parse(line)
+	if len(bytes.TrimRight(line, "\r\n")) > 0 {
+		return
+	}
+	if !b.hide {
+		b.buf.Write(b.held.Bytes())
+	}
+	b.held.Reset()
+	b.hide = false
 }
 
 func (b *sseBody) parse(line []byte) {
@@ -318,6 +350,9 @@ func (b *sseBody) parse(line []byte) {
 			event, data := b.event, strings.Join(b.data, "\n")
 			b.event, b.data = "", nil
 			safe(func() { b.h.OnEvent(event, []byte(data)) })
+			if b.filter != nil {
+				safe(func() { b.hide = b.filter.Hide(event, []byte(data)) })
+			}
 		}
 	case strings.HasPrefix(s, ":"):
 	case strings.HasPrefix(s, "event:"):

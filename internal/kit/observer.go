@@ -53,6 +53,8 @@ type Observer struct {
 	Incomplete bool
 	// Done: the provider's terminal event arrived; closing the stream afterwards completes it.
 	Done bool
+	// Record, when set, records the call in Finish instead (once); false falls back to the default.
+	Record func(end End, errorType string) bool
 
 	mu       sync.Mutex
 	tools    []*streamTool
@@ -171,6 +173,9 @@ func (o *Observer) Finish(end End, errorType string) {
 	}
 	o.finished = true
 	o.mu.Unlock()
+	if o.Record != nil && o.Record(end, errorType) {
+		return
+	}
 	truncated := end == Completed && o.Incomplete
 	if truncated {
 		end, errorType = Errored, "api_error"
