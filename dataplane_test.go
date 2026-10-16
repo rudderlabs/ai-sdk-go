@@ -45,7 +45,8 @@ func TestEventsReachTheDataPlane(t *testing.T) {
 			t.Errorf("%s: %v", m.Event, err)
 		}
 	}
-	if msgs[0].Event != "mcp_client_seen" || msgs[1].Event != "mcp_tool_called" {
+	// analytics-go can deliver batches out of order.
+	if got := msgs[0].Event + "," + msgs[1].Event; got != "mcp_client_seen,mcp_tool_called" && got != "mcp_tool_called,mcp_client_seen" {
 		t.Errorf("events = %s, %s", msgs[0].Event, msgs[1].Event)
 	}
 }
