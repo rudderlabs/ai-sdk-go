@@ -167,6 +167,26 @@
       "expected": "key [secret] end"
     },
     {
+      "name": "secret_pem_private_key",
+      "input": "key:\n-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun\nVTLw7onLRnrq0/IzW7yWR7QkrmBL7jTKEn5u+qKhbwKfBstIs+bMY2Zkp18gnTxK\n-----END RSA PRIVATE KEY-----\nthanks",
+      "expected": "key:\n[secret]\nthanks"
+    },
+    {
+      "name": "secret_pem_private_key_unterminated",
+      "input": "-----BEGIN PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun\nVTLw7onLRnrq0/IzW7yWR7QkrmBL7jTKEn5u+qKhbwKfBstIs+bMY2Zkp18gnTxK\n",
+      "expected": "[secret]"
+    },
+    {
+      "name": "pem_public_key_kept",
+      "input": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\n-----END PUBLIC KEY-----",
+      "expected": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE\n-----END PUBLIC KEY-----"
+    },
+    {
+      "name": "secret_google_oauth_token",
+      "input": "Authorization header was ya29.a0AfH6SMBx3kL9qZ_tR-7vWm2nYpQ8sJdKfE and ya29.short stays",
+      "expected": "Authorization header was [secret] and ya29.short stays"
+    },
+    {
       "name": "not_google",
       "input": "AIzaShort and AIzaSyD-1234567890abcdefghijklmnopqrstuvwxyz",
       "expected": "AIzaShort and AIzaSyD-1234567890abcdefghijklmnopqrstuvwxyz"
@@ -253,6 +273,11 @@
   ],
   "rules": [
     {
+      "name": "pem_private_key",
+      "pattern": "-----BEGIN[A-Z0-9 ]*PRIVATE KEY-----(?:[^-]|-(?!----))*(?:-----END[A-Z0-9 ]*PRIVATE KEY-----)?",
+      "token": "secret"
+    },
+    {
       "name": "bearer",
       "pattern": "(?<![A-Za-z0-9_-])[Bb]earer[ \\t]+[A-Za-z0-9._~+/-]{16,}=*",
       "token": "secret"
@@ -275,6 +300,11 @@
     {
       "name": "google_api_key",
       "pattern": "(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])",
+      "token": "secret"
+    },
+    {
+      "name": "google_oauth_token",
+      "pattern": "(?<![A-Za-z0-9_-])ya29\\.[0-9A-Za-z_-]{20,}",
       "token": "secret"
     },
     {

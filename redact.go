@@ -23,11 +23,13 @@ type redactRule struct {
 }
 
 var redactRules = []redactRule{
+	{name: "pem_private_key", pattern: `-----BEGIN[A-Z0-9 ]*PRIVATE KEY-----(?:[^-]|-(?!----))*(?:-----END[A-Z0-9 ]*PRIVATE KEY-----)?`, token: "secret"},
 	{name: "bearer", pattern: `(?<![A-Za-z0-9_-])[Bb]earer[ \t]+[A-Za-z0-9._~+/-]{16,}=*`, token: "secret"},
 	{name: "jwt", pattern: `(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`, token: "secret"},
 	{name: "openai_anthropic_key", pattern: `(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}`, token: "secret"},
 	{name: "stripe_key", pattern: `(?<![A-Za-z0-9_-])(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{10,}`, token: "secret"},
 	{name: "google_api_key", pattern: `(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])`, token: "secret"},
+	{name: "google_oauth_token", pattern: `(?<![A-Za-z0-9_-])ya29\.[0-9A-Za-z_-]{20,}`, token: "secret"},
 	{name: "slack_token", pattern: `(?<![A-Za-z0-9_-])xox[abposr]-[A-Za-z0-9-]{10,}`, token: "secret"},
 	{name: "github_token", pattern: `(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{20,}`, token: "secret"},
 	{name: "aws_access_key", pattern: `(?<![A-Za-z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Za-z0-9])`, token: "secret"},
