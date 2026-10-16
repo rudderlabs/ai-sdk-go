@@ -127,8 +127,8 @@ func expectEvents(msgs []dataplane.Message, g grant, sessionID string) error {
 	}); err != nil {
 		return err
 	}
-	for i, m := range byEvent["mcp_tool_called"] {
-		if err := harness.Fields("mcp_tool_called", m.Properties, map[string]any{
+	for i := range 2 {
+		if err := harness.Fields("mcp_tool_called", harness.Find(byEvent["mcp_tool_called"], "call_index", i), map[string]any{
 			"tool_name": "list_sources", "tool_status": "success", "account_id": account, "mcp_session_id": sessionID,
 			"client_name": clientName(g), "call_index": i, "retry_count": i,
 			// Only mcp_client_seen carries the OAuth client and scopes.

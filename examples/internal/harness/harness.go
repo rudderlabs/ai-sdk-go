@@ -169,6 +169,18 @@ func ByEvent(msgs []dataplane.Message) map[string][]dataplane.Message {
 	return out
 }
 
+// Find returns the first message whose property key equals value. Batches can arrive out of
+// order, so asserts find events by content rather than position.
+func Find(msgs []dataplane.Message, key string, value any) map[string]any {
+	want, _ := json.Marshal(value)
+	for _, m := range msgs {
+		if got, _ := json.Marshal(m.Properties[key]); bytes.Equal(got, want) {
+			return m.Properties
+		}
+	}
+	return map[string]any{}
+}
+
 // Counts checks how many of each event arrived.
 func Counts(byEvent map[string][]dataplane.Message, want map[string]int) error {
 	for name, n := range want {

@@ -147,13 +147,13 @@ func expectEvents(msgs []dataplane.Message, stdio bool, clientName, protocol str
 			"server_name": "workspace-mcp", "server_version": "1.4.0", "client_name": clientName, "client_version": "1.0.0",
 			"transport": transport, "protocol_version": harness.Present, "auth_method": "none",
 		}},
-		{"mcp_tool_called", byEvent["mcp_tool_called"][0].Properties, map[string]any{
+		{"mcp_tool_called", harness.Find(byEvent["mcp_tool_called"], "tool_name", "list_destinations"), map[string]any{
 			"tool_name": "list_destinations", "tool_status": "success", "server_name": "workspace-mcp", "client_name": clientName,
 			"interaction_id": interaction, "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "intent": "debug_delivery",
 			"user_sentiment": "negative", "argument_keys": []string{"workspace_id"}, "is_error_result": false,
 			"call_index": 0, "retry_count": 0, "protocol_version": protocol, "duration_ms": harness.Present, "request_id": harness.Present,
 		}},
-		{"mcp_tool_called", byEvent["mcp_tool_called"][1].Properties, map[string]any{
+		{"mcp_tool_called", harness.Find(byEvent["mcp_tool_called"], "tool_name", "create_audience"), map[string]any{
 			"tool_name": "create_audience", "tool_status": "success", "interaction_id": interaction, "call_index": 1,
 			"argument_keys": []string{"name"}, "intent": harness.Absent,
 		}},

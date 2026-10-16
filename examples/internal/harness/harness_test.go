@@ -55,6 +55,10 @@ func TestFieldsAndCounts(t *testing.T) {
 	if err := Fields("e", props, map[string]any{"a": Present}); err != nil {
 		t.Error(err)
 	}
+	found := []dataplane.Message{{Properties: map[string]any{"i": 1.0}}, {Properties: map[string]any{"i": 0.0}}}
+	if Find(found, "i", 0)["i"] != 0.0 || len(Find(found, "i", 2)) != 0 {
+		t.Error("find")
+	}
 	by := ByEvent([]dataplane.Message{{Event: "x"}, {Event: "x"}})
 	if Counts(by, map[string]int{"x": 2}) != nil || Counts(by, map[string]int{"y": 1}) == nil {
 		t.Error("counts")
