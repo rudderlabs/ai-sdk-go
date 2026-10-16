@@ -1,6 +1,7 @@
 package rudderstackai
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -26,6 +27,7 @@ type config struct {
 	azureDeployments    map[string]string
 	serverFeedback      bool
 	evaluator           EvaluateFunc
+	traceIDFrom         func(context.Context) string
 }
 
 func defaultConfig() config {
@@ -217,6 +219,16 @@ func WithEvaluator(evaluate EvaluateFunc) ConfigOption {
 func WithServerFeedback(on bool) ConfigOption {
 	return func(c *config, _ *pending) error {
 		c.serverFeedback = on
+		return nil
+	}
+}
+
+// WithTraceIDFrom sets where an interaction without a TraceID finds its trace_id: fn reads it
+// from the context at the start of the interaction and at each integration call until one is
+// found. The rudderotel module provides one for the active OpenTelemetry span. Nil removes it.
+func WithTraceIDFrom(fn func(ctx context.Context) string) ConfigOption {
+	return func(c *config, _ *pending) error {
+		c.traceIDFrom = fn
 		return nil
 	}
 }

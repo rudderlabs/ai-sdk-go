@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/uuid"
 	analytics "github.com/rudderlabs/analytics-go/v4"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // InteractionOptions configures [StartInteraction] and [RunInteraction].
@@ -35,7 +34,7 @@ type InteractionOptions struct {
 	// Intent is what the user wants, when known up front, for example "refund_request".
 	Intent string
 	// TraceID links the interaction to a trace (Langfuse, LangSmith, OpenTelemetry). Defaults to
-	// the trace of the OpenTelemetry span active in the context.
+	// what [WithTraceIDFrom] finds in the context, such as the active OpenTelemetry span's trace.
 	TraceID string
 	// Trigger is TriggerUser (the default) or TriggerSystem for app-initiated runs.
 	Trigger Trigger
@@ -374,13 +373,13 @@ func first2(a, b Surface) Surface {
 	return b
 }
 
-// fillTraceID takes the trace of the active OpenTelemetry span unless one is set.
+// fillTraceID takes the trace ID [WithTraceIDFrom] finds in the context, unless one is set.
 func (i *Interaction) fillTraceID(ctx context.Context) {
 	if i.traceID != "" || ctx == nil {
 		return
 	}
-	if sc := trace.SpanContextFromContext(ctx); sc.HasTraceID() {
-		i.traceID = sc.TraceID().String()
+	if from := cfg().traceIDFrom; from != nil {
+		safely(func() { i.traceID = from(ctx) })
 	}
 }
 

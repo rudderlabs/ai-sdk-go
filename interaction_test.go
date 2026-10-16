@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"go.opentelemetry.io/otel/trace"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
@@ -178,23 +177,29 @@ func TestRunInteractionGoexitEndsWithoutPanic(t *testing.T) {
 	}
 }
 
-func TestTraceIDFromActiveSpan(t *testing.T) {
+func TestTraceIDFromContext(t *testing.T) {
 	r := setupAI(t)
-	tid := trace.TraceID{0x4b, 0xf9, 0x2f, 0x35, 0x77, 0xb3, 0x4d, 0xa6, 0xa3, 0xce, 0x92, 0x9d, 0x0e, 0x0e, 0x47, 0x36}
-	sc := trace.NewSpanContext(trace.SpanContextConfig{TraceID: tid, SpanID: trace.SpanID{1, 2, 3, 4, 5, 6, 7, 8}, TraceFlags: trace.FlagsSampled})
-	ctx := trace.ContextWithSpanContext(context.Background(), sc)
+	type spanKey struct{}
+	const tid = "4bf92f3577b34da6a3ce929d0e0e4736"
+	if err := Configure(WithTraceIDFrom(func(ctx context.Context) string {
+		s, _ := ctx.Value(spanKey{}).(string)
+		return s
+	})); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.WithValue(context.Background(), spanKey{}, tid)
 
 	_, fromSpan := StartInteraction(ctx, InteractionOptions{Trigger: TriggerSystem})
 	fromSpan.End(EndOptions{})
 	_, explicit := StartInteraction(ctx, InteractionOptions{Trigger: TriggerSystem, TraceID: "mine"})
 	explicit.End(EndOptions{})
-	// A span active only when the first model call starts fills it too.
+	// A trace present only when the first model call starts fills it too.
 	_, late := StartInteraction(context.Background(), InteractionOptions{Trigger: TriggerSystem})
 	late.callStarted(ctx, IntegrationOpenAI)
 	late.End(EndOptions{})
 
 	got := r.named("ai_response_received")
-	if got[0].Properties["trace_id"] != tid.String() || got[1].Properties["trace_id"] != "mine" || got[2].Properties["trace_id"] != tid.String() {
+	if got[0].Properties["trace_id"] != tid || got[1].Properties["trace_id"] != "mine" || got[2].Properties["trace_id"] != tid {
 		t.Fatalf("trace ids: %v %v %v", got[0].Properties["trace_id"], got[1].Properties["trace_id"], got[2].Properties["trace_id"])
 	}
 	if integrationOf(got[2]) != IntegrationOpenAI {
