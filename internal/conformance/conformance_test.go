@@ -41,6 +41,10 @@ type apiDriver func(ctx context.Context, r *run, step obj) error
 
 var apis = map[string]apiDriver{}
 
+// gaps names scenarios a Go integration cannot reproduce, with the reason. Integration test files
+// add theirs in init; keep it short and explain each one.
+var gaps = map[string]string{}
+
 // Ops and APIs that belong to Node.js and Python integrations with no Go counterpart.
 var platformOps = map[string]string{
 	"langchain_tool":             "LangChain is a Node.js and Python framework",
@@ -138,6 +142,9 @@ func TestConformance(t *testing.T) {
 	passed := 0
 	for _, sc := range scenarios {
 		why := unsupported(sc.Steps)
+		if g, ok := gaps[sc.Name]; ok && why == "" {
+			why = g
+		}
 		if why != "" {
 			skipped[why] = append(skipped[why], sc.Name)
 			continue
