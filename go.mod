@@ -3,6 +3,7 @@ module github.com/rudderlabs/ai-sdk-go
 go 1.26.0
 
 require (
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/mark3labs/mcp-go v1.2.1
@@ -12,6 +13,7 @@ require (
 )
 
 require (
+	github.com/aws/smithy-go v1.28.1 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/grafana/jsonparser v0.0.0-20250908162026-5c2524e07b4c // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
