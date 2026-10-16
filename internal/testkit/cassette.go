@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-
-	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 )
 
 // Cassette is a provider cassette (spec/fixtures/CASSETTE-FORMAT.md).
@@ -80,7 +78,7 @@ func (resp CassetteResponse) serve(_ *LLM, w http.ResponseWriter, _ *http.Reques
 	contentType := strings.ToLower(resp.Headers["content-type"])
 	switch {
 	case resp.Events != nil && strings.Contains(contentType, "application/vnd.amazon.eventstream"):
-		events := make([]eventstream.Message, 0, len(resp.Events))
+		events := make([]esMessage, 0, len(resp.Events))
 		for _, e := range resp.Events {
 			events = append(events, eventMessage(e.Event, e.Payload))
 		}

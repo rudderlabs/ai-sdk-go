@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 )
 
 // BedrockReply is one exact reply on a Bedrock Runtime route (`bedrock.converse`,
@@ -65,7 +63,7 @@ func (rep BedrockReply) serve(_ *LLM, w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(rep.Response)
 		return
 	}
-	events := make([]eventstream.Message, 0, len(rep.Stream)+1)
+	events := make([]esMessage, 0, len(rep.Stream)+1)
 	for i, raw := range rep.Stream {
 		var one map[string]json.RawMessage
 		if err := json.Unmarshal(raw, &one); err != nil || len(one) != 1 {
@@ -85,30 +83,25 @@ func (rep BedrockReply) serve(_ *LLM, w http.ResponseWriter, _ *http.Request) {
 }
 
 // eventMessage is an event-stream event message with a JSON payload.
-func eventMessage(eventType string, payload []byte) eventstream.Message {
-	m := eventstream.Message{Payload: compact(payload)}
-	m.Headers.Set(":message-type", eventstream.StringValue("event"))
-	m.Headers.Set(":event-type", eventstream.StringValue(eventType))
-	m.Headers.Set(":content-type", eventstream.StringValue("application/json"))
-	return m
+func eventMessage(eventType string, payload []byte) esMessage {
+	return esMessage{payload: compact(payload), headers: [][2]string{
+		{":message-type", "event"}, {":event-type", eventType}, {":content-type", "application/json"},
+	}}
 }
 
 // exceptionMessage is a modeled exception, as AWS sends it mid-stream.
-func exceptionMessage(code string, payload []byte) eventstream.Message {
-	m := eventstream.Message{Payload: payload}
-	m.Headers.Set(":message-type", eventstream.StringValue("exception"))
-	m.Headers.Set(":exception-type", eventstream.StringValue(code))
-	m.Headers.Set(":content-type", eventstream.StringValue("application/json"))
-	return m
+func exceptionMessage(code string, payload []byte) esMessage {
+	return esMessage{payload: payload, headers: [][2]string{
+		{":message-type", "exception"}, {":exception-type", code}, {":content-type", "application/json"},
+	}}
 }
 
 // writeEventStream sends an application/vnd.amazon.eventstream body, flushing after each message.
-func writeEventStream(w http.ResponseWriter, status int, headers map[string]string, events []eventstream.Message) {
+func writeEventStream(w http.ResponseWriter, status int, headers map[string]string, events []esMessage) {
 	writeHead(w, status, "application/vnd.amazon.eventstream", headers)
 	rc := http.NewResponseController(w)
-	enc := eventstream.NewEncoder()
 	for _, m := range events {
-		if enc.Encode(w, m) != nil {
+		if m.encode(w) != nil {
 			return
 		}
 		_ = rc.Flush()

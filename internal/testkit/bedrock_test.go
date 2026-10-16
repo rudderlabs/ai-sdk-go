@@ -6,8 +6,6 @@ import (
 	"io"
 	"strings"
 	"testing"
-
-	"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream"
 )
 
 const conversePath = "/model/us.anthropic.claude-sonnet-4%3A0/converse"
@@ -20,10 +18,9 @@ type decoded struct {
 
 func decodeAll(t *testing.T, r io.Reader) []decoded {
 	t.Helper()
-	dec := eventstream.NewDecoder()
 	var out []decoded
 	for {
-		m, err := dec.Decode(r, nil)
+		m, err := decodeMessage(r)
 		if errors.Is(err, io.EOF) {
 			return out
 		}
@@ -31,10 +28,10 @@ func decodeAll(t *testing.T, r io.Reader) []decoded {
 			t.Fatal(err)
 		}
 		h := map[string]string{}
-		for _, hd := range m.Headers {
-			h[hd.Name] = hd.Value.String()
+		for _, hd := range m.headers {
+			h[hd[0]] = hd[1]
 		}
-		out = append(out, decoded{h, string(m.Payload)})
+		out = append(out, decoded{h, string(m.payload)})
 	}
 }
 
