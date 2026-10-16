@@ -20,5 +20,7 @@ cover: test
 vulncheck:
 	$(GO) run $(govulncheck) ./...
 
+EXAMPLES = mcp-server mcp-stateless-http mcp-auth
+
 example:
-	$(GO) run ./examples/mcp-server --check
+	for e in $(EXAMPLES); do $(GO) run ./examples/$$e --check || exit 1; done

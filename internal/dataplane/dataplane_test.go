@@ -57,3 +57,30 @@ func TestDataPlane(t *testing.T) {
 		t.Error("Wait invented messages")
 	}
 }
+
+func TestForwarding(t *testing.T) {
+	upstream := Start()
+	defer upstream.Close()
+	s := StartForwarding(upstream.URL + "/")
+	defer s.Close()
+	if got := post(t, s.URL+"/v1/batch", []byte(`{"batch":[{"type":"track","event":"a"}]}`), false); got != 200 {
+		t.Fatalf("status %d", got)
+	}
+	if len(s.Messages()) != 1 || len(upstream.Messages()) != 1 {
+		t.Errorf("local %v, upstream %v", s.Messages(), upstream.Messages())
+	}
+	// Upstream rejects: the batch is not kept, and the sender sees upstream's status to retry.
+	if got := post(t, s.URL+"/v1/batch", []byte("not json"), false); got != 400 || len(s.Messages()) != 1 {
+		t.Errorf("rejected batch: status %d, %d kept", got, len(s.Messages()))
+	}
+	down := StartForwarding("http://127.0.0.1:1")
+	defer down.Close()
+	if got := post(t, down.URL+"/v1/batch", []byte(`{"batch":[]}`), false); got != 502 {
+		t.Errorf("unreachable upstream: status %d", got)
+	}
+	bad := StartForwarding("http://bad host")
+	defer bad.Close()
+	if got := post(t, bad.URL+"/v1/batch", []byte(`{"batch":[]}`), false); got != 502 {
+		t.Errorf("bad upstream URL: status %d", got)
+	}
+}

@@ -2,12 +2,12 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/rudderlabs/ai-sdk-go/examples/internal/harness"
+	"github.com/rudderlabs/ai-sdk-go/internal/dataplane"
 )
 
 func TestMain(m *testing.M) {
@@ -17,42 +17,30 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestCheckPassesAndEventsMatchTheSchema(t *testing.T) {
+func TestCheck(t *testing.T) {
 	var out bytes.Buffer
 	if code := run([]string{"--check"}, &out); code != 0 {
 		t.Fatalf("check exited %d:\n%s", code, out.String())
 	}
-	f, err := os.Open("../../spec/ai-events-v0.3.schema.json")
-	if err != nil {
-		t.Fatal(err)
+}
+
+// TestLive runs --live against a mock standing in for the real data plane.
+func TestLive(t *testing.T) {
+	upstream := dataplane.Start()
+	defer upstream.Close()
+	t.Setenv("RUDDERSTACK_WRITE_KEY", "live-key")
+	t.Setenv("RUDDERSTACK_DATA_PLANE_URL", upstream.URL)
+	var out bytes.Buffer
+	if code := run([]string{"--live"}, &out); code != 0 {
+		t.Fatalf("live check exited %d:\n%s", code, out.String())
 	}
-	defer f.Close()
-	doc, err := jsonschema.UnmarshalJSON(f)
-	if err != nil {
-		t.Fatal(err)
+	if len(upstream.Messages()) < 15 {
+		t.Errorf("upstream got %d events", len(upstream.Messages()))
 	}
-	const url = "https://rudderstack.com/schemas/ai-events/0.3.0"
-	c := jsonschema.NewCompiler()
-	if err := c.AddResource(url, doc); err != nil {
-		t.Fatal(err)
-	}
-	for _, m := range lastMessages {
-		def := m.Event
-		if !strings.HasPrefix(def, "mcp_") {
-			def = "mcp_declared_tool_event"
-		}
-		schema, err := c.Compile(url + "#/$defs/" + def)
-		if err != nil {
-			t.Fatal(err)
-		}
-		b, _ := json.Marshal(m.Properties)
-		v, _ := jsonschema.UnmarshalJSON(bytes.NewReader(b))
-		if err := schema.Validate(v); err != nil {
-			t.Errorf("%s: %v", m.Event, err)
-		}
-	}
-	if len(lastMessages) < 15 {
-		t.Errorf("only %d events", len(lastMessages))
+	t.Setenv("RUDDERSTACK_WRITE_KEY", "")
+	out.Reset()
+	if code := run([]string{"--live"}, &out); code != 0 || !strings.Contains(out.String(), harness.Skipped) {
+		t.Errorf("live without a key exited %d: %s", code, out.String())
 	}
 }
 

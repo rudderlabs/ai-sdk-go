@@ -10,11 +10,10 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	analytics "github.com/rudderlabs/analytics-go/v4"
 
+	"github.com/rudderlabs/ai-sdk-go/examples/internal/harness"
 	"github.com/rudderlabs/ai-sdk-go/internal/dataplane"
 )
 
@@ -22,38 +21,35 @@ import (
 // program as a stdio server from `go test` too.
 const mainEnv = "MCP_SERVER_EXAMPLE_MAIN"
 
-// lastMessages keeps the messages of the last check, for the tests' schema validation.
-var lastMessages []dataplane.Message
-
-func runCheck(stderr io.Writer) error {
-	dp := dataplane.Start()
-	defer dp.Close()
-	var all []dataplane.Message
+// runCheck runs three legs. Each uses its own client name and interaction ID, so the asserts
+// hold whether the SDK keeps client windows and counters per wrapped server or per server name.
+func runCheck(sink *harness.Sink, stderr io.Writer) error {
 	for _, leg := range []struct {
-		name string
-		run  func(string, io.Writer) error
+		name, client string
+		run          func(*harness.Sink, string) (string, error)
 	}{
-		{"streamable HTTP, 2025-06-18", func(url string, _ io.Writer) error { return httpLeg(url, "2025-06-18", "check-client-2025") }},
-		{"streamable HTTP, 2026-07-28", func(url string, _ io.Writer) error { return httpLeg(url, "", "check-client-2026") }},
-		{"stdio", stdioLeg},
+		{"streamable HTTP, 2025-06-18", "check-client-2025", func(s *harness.Sink, c string) (string, error) { return httpLeg(s, "2025-06-18", c) }},
+		{"streamable HTTP, latest client", "check-client-latest", func(s *harness.Sink, c string) (string, error) { return httpLeg(s, "", c) }},
+		{"stdio", "check-client-stdio", func(s *harness.Sink, c string) (string, error) { return stdioLeg(s, c, stderr) }},
 	} {
-		before := len(dp.Messages())
-		if err := leg.run(dp.URL, stderr); err != nil {
+		before := len(sink.Messages())
+		protocol, err := leg.run(sink, leg.client)
+		if err != nil {
 			return fmt.Errorf("%s: %w", leg.name, err)
 		}
-		msgs := dp.Messages()[before:]
-		if err := expectEvents(msgs, leg.name); err != nil {
+		msgs := sink.Messages()[before:]
+		if err := expectEvents(msgs, leg.name == "stdio", leg.client, protocol); err != nil {
 			return fmt.Errorf("%s: %w", leg.name, err)
 		}
 		fmt.Fprintf(stderr, "ok  %s: %d events\n", leg.name, len(msgs))
-		all = append(all, msgs...)
 	}
-	lastMessages = all
 	return nil
 }
 
+const traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
 // exercise lists the tools and calls each kind once, as an agent would.
-func exercise(ctx context.Context, cs *mcp.ClientSession) error {
+func exercise(ctx context.Context, cs *mcp.ClientSession, clientName string) error {
 	tools, err := cs.ListTools(ctx, nil)
 	if err != nil {
 		return err
@@ -61,7 +57,7 @@ func exercise(ctx context.Context, cs *mcp.ClientSession) error {
 	if !slices.ContainsFunc(tools.Tools, func(t *mcp.Tool) bool { return t.Name == "request_capability" }) {
 		return fmt.Errorf("request_capability not offered")
 	}
-	meta := mcp.Meta{"com.rudderstack/interaction_id": "int_check", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+	meta := mcp.Meta{"com.rudderstack/interaction_id": "int_" + clientName, "traceparent": traceparent}
 	calls := []*mcp.CallToolParams{
 		{Name: "list_destinations", Meta: meta, Arguments: map[string]any{
 			"workspace_id": "ws_1", "request_context": map[string]any{"intent": "debug_delivery", "user_sentiment": "negative"},
@@ -81,16 +77,15 @@ func exercise(ctx context.Context, cs *mcp.ClientSession) error {
 	return nil
 }
 
-// httpLeg runs one client over streamable HTTP. Each leg names its client differently:
-// mcp_client_seen reports a client once per window.
-func httpLeg(dataPlaneURL, protocol, clientName string) error {
-	client, err := analytics.NewWithConfig("check", analytics.Config{DataPlaneUrl: dataPlaneURL, NoProxySupport: true, Interval: 20 * time.Millisecond})
+// httpLeg runs one client over streamable HTTP and returns the protocol version it negotiated.
+func httpLeg(sink *harness.Sink, protocol, clientName string) (string, error) {
+	client, err := sink.NewClient()
 	if err != nil {
-		return err
+		return "", err
 	}
 	server, err := newServer(client, "")
 	if err != nil {
-		return err
+		return "", err
 	}
 	ts := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil))
 	defer ts.Close()
@@ -98,78 +93,86 @@ func httpLeg(dataPlaneURL, protocol, clientName string) error {
 	cs, err := mcp.NewClient(&mcp.Implementation{Name: clientName, Version: "1.0.0"}, nil).
 		Connect(ctx, &mcp.StreamableClientTransport{Endpoint: ts.URL, DisableStandaloneSSE: true}, &mcp.ClientSessionOptions{ProtocolVersion: protocol})
 	if err != nil {
-		return err
+		return "", err
 	}
-	err = exercise(ctx, cs)
+	err = exercise(ctx, cs, clientName)
 	_ = cs.Close()
 	if cerr := client.Close(); err == nil {
 		err = cerr
 	}
-	return err
+	return cs.InitializeResult().ProtocolVersion, err
 }
 
-func stdioLeg(dataPlaneURL string, stderr io.Writer) error {
+func stdioLeg(sink *harness.Sink, clientName string, stderr io.Writer) (string, error) {
 	self, err := os.Executable()
 	if err != nil {
-		return err
+		return "", err
 	}
 	cmd := exec.Command(self, "--transport=stdio")
-	cmd.Env = append(os.Environ(), "RUDDERSTACK_WRITE_KEY=check", "RUDDERSTACK_DATA_PLANE_URL="+dataPlaneURL, mainEnv+"=1")
+	cmd.Env = append(os.Environ(), "RUDDERSTACK_WRITE_KEY="+sink.WriteKey, "RUDDERSTACK_DATA_PLANE_URL="+sink.URL, mainEnv+"=1")
 	cmd.Stderr = stderr
 	ctx := context.Background()
-	cs, err := mcp.NewClient(&mcp.Implementation{Name: "check-client", Version: "1.0.0"}, nil).
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: clientName, Version: "1.0.0"}, nil).
 		Connect(ctx, &mcp.CommandTransport{Command: cmd}, &mcp.ClientSessionOptions{ProtocolVersion: "2025-06-18"})
 	if err != nil {
-		return err
+		return "", err
 	}
-	err = exercise(ctx, cs)
+	err = exercise(ctx, cs, clientName)
 	// Closing stdin stops the server, which flushes its events before exiting.
 	if cerr := cs.Close(); err == nil && cerr != nil && !strings.Contains(cerr.Error(), "exit") {
 		err = cerr
 	}
-	return err
+	return cs.InitializeResult().ProtocolVersion, err
 }
 
-// expectEvents checks the events one exercise must produce.
-func expectEvents(msgs []dataplane.Message, leg string) error {
-	byName := map[string][]dataplane.Message{}
-	for _, m := range msgs {
-		wl, _ := m.Context["wrapperLibrary"].(map[string]any)
-		lib, _ := m.Context["library"].(map[string]any)
-		if wl["name"] != "ai-sdk-go" || wl["integration"] != "mcp" || wl["specVersion"] != "0.3.0" || lib["name"] != "analytics-go" {
-			return fmt.Errorf("%s: context = %v", m.Event, m.Context)
-		}
-		byName[m.Event] = append(byName[m.Event], m)
-	}
-	want := map[string]int{"mcp_client_seen": 1, "mcp_tool_called": 2, "audience_created": 1, "mcp_capability_requested": 1}
-	for name, n := range want {
-		if len(byName[name]) != n {
-			return fmt.Errorf("got %d %s, want %d (events: %d)", len(byName[name]), name, n, len(msgs))
-		}
+// expectEvents checks the events one exercise must produce, field by field.
+func expectEvents(msgs []dataplane.Message, stdio bool, clientName, protocol string) error {
+	byEvent := harness.ByEvent(msgs)
+	if err := harness.Counts(byEvent, map[string]int{
+		"mcp_client_seen": 1, "mcp_tool_called": 2, "audience_created": 1, "mcp_capability_requested": 1,
+	}); err != nil {
+		return err
 	}
 	transport := "streamable_http"
-	if leg == "stdio" {
+	if stdio {
 		transport = "stdio"
 	}
-	if got := byName["mcp_client_seen"][0].Properties["transport"]; got != transport {
-		return fmt.Errorf("transport = %v, want %s", got, transport)
+	interaction := "int_" + clientName
+	checks := []struct {
+		event string
+		props map[string]any
+		want  map[string]any
+	}{
+		{"mcp_client_seen", byEvent["mcp_client_seen"][0].Properties, map[string]any{
+			"server_name": "workspace-mcp", "server_version": "1.4.0", "client_name": clientName, "client_version": "1.0.0",
+			"transport": transport, "protocol_version": harness.Present, "auth_method": "none",
+		}},
+		{"mcp_tool_called", byEvent["mcp_tool_called"][0].Properties, map[string]any{
+			"tool_name": "list_destinations", "tool_status": "success", "server_name": "workspace-mcp", "client_name": clientName,
+			"interaction_id": interaction, "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "intent": "debug_delivery",
+			"user_sentiment": "negative", "argument_keys": []string{"workspace_id"}, "is_error_result": false,
+			"call_index": 0, "retry_count": 0, "protocol_version": protocol, "duration_ms": harness.Present, "request_id": harness.Present,
+		}},
+		{"mcp_tool_called", byEvent["mcp_tool_called"][1].Properties, map[string]any{
+			"tool_name": "create_audience", "tool_status": "success", "interaction_id": interaction, "call_index": 1,
+			"argument_keys": []string{"name"}, "intent": harness.Absent,
+		}},
+		{"audience_created", byEvent["audience_created"][0].Properties, map[string]any{
+			"audience_type": "computed", "tool_name": "create_audience", "tool_status": "success", "interaction_id": interaction,
+		}},
+		{"mcp_capability_requested", byEvent["mcp_capability_requested"][0].Properties, map[string]any{
+			"capability": "bulk_export", "interaction_id": interaction, "server_name": "workspace-mcp",
+		}},
 	}
-	list := byName["mcp_tool_called"][0].Properties
-	checks := map[string]any{
-		"tool_name": "list_destinations", "tool_status": "success", "interaction_id": "int_check",
-		"trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "intent": "debug_delivery", "user_sentiment": "negative",
-		"server_name": "workspace-mcp",
-	}
-	for k, v := range checks {
-		if list[k] != v {
-			return fmt.Errorf("mcp_tool_called %s = %v, want %v", k, list[k], v)
+	for _, c := range checks {
+		if err := harness.Fields(c.event, c.props, c.want); err != nil {
+			return err
 		}
 	}
-	if name, _ := list["client_name"].(string); !strings.HasPrefix(name, "check-client") {
-		return fmt.Errorf("mcp_tool_called client_name = %v", list["client_name"])
-	}
-	if got := byName["audience_created"][0].Properties["audience_type"]; got != "computed" {
-		return fmt.Errorf("audience_created audience_type = %v", got)
+	for _, m := range msgs {
+		if m.UserID != "" || m.AnonymousID != "ai_system" {
+			return fmt.Errorf("%s: userId %q, anonymousId %q; want the anonymous system user", m.Event, m.UserID, m.AnonymousID)
+		}
 	}
 	return nil
 }

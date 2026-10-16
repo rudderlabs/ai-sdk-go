@@ -18,7 +18,8 @@ Tools (golangci-lint, govulncheck) run through `go run` at the versions pinned i
 *.go                  package rudderstackai: the public API, at the module root
 version.go            SDK version, bumped by release-please
 spec/                 AI events spec JSON Schema and cross-SDK fixtures shared with the Node.js and Python SDKs
-examples/mcp-server/  MCP server example; runs end to end in CI with --check
+internal/dataplane/   mock RudderStack data plane, optionally forwarding to a real one
+examples/             MCP examples; each runs end to end in CI with --check, and nightly with --live
 ```
 
 ## Everyday commands
@@ -30,7 +31,7 @@ examples/mcp-server/  MCP server example; runs end to end in CI with --check
 | `make test`      | `go test -race` with a coverage profile in `coverage.out`                        |
 | `make cover`     | Runs the tests, then prints per-function and total coverage                      |
 | `make vulncheck` | govulncheck against the module and its dependencies                              |
-| `make example`   | Runs the MCP server example with `--check`                                       |
+| `make example`   | Runs every example with `--check`                                                |
 
 CI also runs `gofmt -l .` and `go vet ./...` on their own, and fails if total coverage drops below 90%.
 

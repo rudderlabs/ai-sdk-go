@@ -5,6 +5,8 @@
 //
 // With --check it runs end to end against a mock data plane, over both transports, and exits
 // non-zero when an expected event is missing or wrong. It needs no network or credentials.
+// --live runs the same check with the events sent to RUDDERSTACK_DATA_PLANE_URL, and is
+// skipped without credentials.
 package main
 
 import (
@@ -24,6 +26,7 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/examples/internal/harness"
 )
 
 func main() {
@@ -36,16 +39,12 @@ func run(args []string, stderr io.Writer) int {
 	transport := fs.String("transport", "stdio", "stdio or http")
 	addr := fs.String("addr", "127.0.0.1:8080", "listen address for --transport=http")
 	check := fs.Bool("check", false, "run end to end against a mock data plane and exit")
+	live := fs.Bool("live", false, "run the check with events sent to RUDDERSTACK_DATA_PLANE_URL")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *check {
-		if err := runCheck(stderr); err != nil {
-			fmt.Fprintln(stderr, "check failed:", err)
-			return 1
-		}
-		fmt.Fprintln(stderr, "check passed")
-		return 0
+	if *check || *live {
+		return harness.Run(stderr, *live, func(sink *harness.Sink) error { return runCheck(sink, stderr) })
 	}
 	if err := serve(*transport, *addr); err != nil {
 		fmt.Fprintln(stderr, err)

@@ -77,9 +77,15 @@ Every event carries `context.wrapperLibrary` (`name: "ai-sdk-go"`, `version`, `s
 
 See [docs/mcp.md](docs/mcp.md) for every option, how each property is derived, identity, joining the calling agent through `_meta`, and limits.
 
-## Example
+## Examples
 
-[`examples/mcp-server`](examples/mcp-server) serves a tracked server over stdio or streamable HTTP. `go run ./examples/mcp-server --check` runs it end to end against a local mock data plane, over both transports and both protocol revisions, and fails on a missing or wrong event.
+| Example                                               | Shows                                                                                         |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [`mcp-server`](examples/mcp-server)                   | stdio and streamable HTTP, `request_context`, a declared event, `request_capability`          |
+| [`mcp-stateless-http`](examples/mcp-stateless-http)   | Stateless streamable HTTP on 2026-07-28, confirmation through an `input_required` elicitation |
+| [`mcp-auth`](examples/mcp-auth)                       | A bearer token check and `Identify`: `userId`, `account_id`, `oauth_client_id`, `token_scopes` |
+
+`go run ./examples/<name> --check` runs one end to end against a local mock data plane and fails on a missing or wrong event; `--live` sends the same events to `RUDDERSTACK_DATA_PLANE_URL` with `RUDDERSTACK_WRITE_KEY`. See [examples/README.md](examples/README.md).
 
 ## Reliability
 

@@ -1,0 +1,70 @@
+name: Live examples
+
+# Runs each example's check with --live: the events go to the real RudderStack data plane, and
+# the check fails unless the data plane accepts them and each one matches. Without the
+# RUDDERSTACK_WRITE_KEY and RUDDERSTACK_DATA_PLANE_URL secrets, each job is skipped and says so
+# in the job summary.
+on:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  example:
+    name: ${{ matrix.example }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: live-examples
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [mcp-server, mcp-stateless-http, mcp-auth]
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Check secrets
+        id: secrets
+        env:
+          EXAMPLE: ${{ matrix.example }}
+          HAS_RUDDERSTACK_WRITE_KEY: ${{ secrets.RUDDERSTACK_WRITE_KEY != '' }}
+          HAS_RUDDERSTACK_DATA_PLANE_URL: ${{ secrets.RUDDERSTACK_DATA_PLANE_URL != '' }}
+        run: |
+          missing=""
+          if [ "$HAS_RUDDERSTACK_WRITE_KEY" != "true" ]; then missing="$missing RUDDERSTACK_WRITE_KEY"; fi
+          if [ "$HAS_RUDDERSTACK_DATA_PLANE_URL" != "true" ]; then missing="$missing RUDDERSTACK_DATA_PLANE_URL"; fi
+          if [ -n "$missing" ]; then
+            echo "::warning::skipping $EXAMPLE: missing secrets:$missing"
+            echo "### $EXAMPLE: skipped: no key (missing:$missing)" >> "$GITHUB_STEP_SUMMARY"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.secrets.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        if: steps.secrets.outputs.run == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Run the example against the real data plane
+        if: steps.secrets.outputs.run == 'true'
+        env:
+          EXAMPLE: ${{ matrix.example }}
+          RUDDERSTACK_WRITE_KEY: ${{ secrets.RUDDERSTACK_WRITE_KEY }}
+          RUDDERSTACK_DATA_PLANE_URL: ${{ secrets.RUDDERSTACK_DATA_PLANE_URL }}
+        run: |
+          set -o pipefail
+          go run "./examples/${EXAMPLE}" --live 2>&1 | tee output.txt
+          echo "### $EXAMPLE: $(tail -n 1 output.txt)" >> "$GITHUB_STEP_SUMMARY"

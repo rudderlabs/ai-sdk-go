@@ -114,9 +114,13 @@ jobs:
         run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
 
   example:
-    name: Example end to end
+    name: Example ${{ matrix.example }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [mcp-server, mcp-stateless-http, mcp-auth]
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -133,6 +137,8 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Runs the MCP server example against a mock data plane; --check exits non-zero on a missing or wrong event.
-      - name: Run the MCP server example
-        run: go run ./examples/mcp-server --check
+      # Against a mock data plane; --check exits non-zero on a missing or wrong event.
+      - name: Run the example against a mock data plane
+        env:
+          EXAMPLE: ${{ matrix.example }}
+        run: go run "./examples/${EXAMPLE}" --check
