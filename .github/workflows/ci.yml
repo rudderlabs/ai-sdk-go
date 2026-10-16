@@ -39,7 +39,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: stable
 
       - name: Check formatting
         run: test -z "$(gofmt -l .)"
@@ -53,9 +53,14 @@ jobs:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
 
   test:
-    name: Unit tests
+    name: Unit tests (Go ${{ matrix.go }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # The minimum in go.mod and the supported Go releases.
+        go: ['1.26.x', '1.27.x']
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -70,7 +75,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: ${{ matrix.go }}
 
       - name: Run unit tests with coverage
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
@@ -86,9 +91,37 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: coverage
+          name: coverage-go${{ matrix.go }}
           path: coverage.out
           retention-days: 14
+
+  mcpgo-v0:
+    name: mcp-go v0.55.1
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+
+      # The version rudder-mcp-server uses; it serves protocol revisions up to 2025-11-25.
+      - name: Test ruddermcpgo against mcp-go v0.55.1
+        run: |
+          cp go.mod go.v0.mod
+          cp go.sum go.v0.sum
+          go get -modfile=go.v0.mod github.com/mark3labs/mcp-go@v0.55.1
+          go test -race -tags mcpgo_v0 -modfile=go.v0.mod ./ruddermcpgo/...
 
   vulncheck:
     name: Vulnerability check
@@ -108,7 +141,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: stable
 
       - name: govulncheck
         run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
@@ -120,7 +153,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [mcp-server, mcp-stateless-http, mcp-auth]
+        example: [mcp-server, mcp-server-mcpgo, mcp-stateless-http, mcp-auth]
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -135,7 +168,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version-file: go.mod
+          go-version: stable
 
       # Against a mock data plane; --check exits non-zero on a missing or wrong event.
       - name: Run the example against a mock data plane

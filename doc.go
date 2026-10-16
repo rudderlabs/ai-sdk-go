@@ -3,7 +3,8 @@
 //
 // [WrapMCPServer] tracks an MCP server built on github.com/modelcontextprotocol/go-sdk:
 // which AI clients call it, which tools they call, whether calls succeed, and for which
-// customer. Events never carry tool arguments, results, resource contents, prompt text or
+// customer. Package ruddermcpgo does the same for github.com/mark3labs/mcp-go. State is kept per
+// server name, per process. Events never carry tool arguments, results, resource contents, prompt text or
 // elicitation answers. Events go through a github.com/rudderlabs/analytics-go/v4 client and
 // carry context.wrapperLibrary = {name: "ai-sdk-go", version, specVersion, integration: "mcp"}
 // beside the client's own context.library.
