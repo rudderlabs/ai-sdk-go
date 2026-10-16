@@ -20,9 +20,17 @@ updates:
         patterns:
           - '*'
 
-  # go.mod covers the examples too: they live in the same module.
+  # Every module of go.work.
   - package-ecosystem: 'gomod'
-    directory: '/'
+    directories:
+      - '/'
+      - '/rudderopenai'
+      - '/rudderanthropic'
+      - '/ruddergenai'
+      - '/rudderbedrock'
+      - '/rudderotel'
+      - '/internal/conformance'
+      - '/examples'
     schedule:
       interval: 'weekly'
     cooldown:
