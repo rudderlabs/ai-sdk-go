@@ -23,9 +23,9 @@ Go 1.26 or later, with [`github.com/rudderlabs/analytics-go/v4`](https://github.
 | MCP library | Import | Wrap with | Tested | Protocol revisions |
 | --- | --- | --- | --- | --- |
 | [`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk) (official) | `github.com/rudderlabs/ai-sdk-go` | `rudderstackai.WrapMCPServer` | v1.8.0 | 2025-06-18, 2025-11-25, 2026-07-28 |
-| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v1.1.1, v0.55.1 | 2025-06-18, 2025-11-25; 2026-07-28 from v1.0 |
+| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v0.55.1 (the minimum) to v1.1.1 | v0.55.1 to v0.x: 2025-06-18, 2025-11-25; v1.x: also 2026-07-28 |
 
-Both send the same events with the same options, defaults and properties. mcp-go v0.x does not serve 2026-07-28: latest clients fall back to `initialize`.
+Both send the same events with the same options, defaults and properties. `ruddermcpgo` requires mcp-go v0.55.1, the oldest version it supports, so adding it never upgrades yours; CI tests v0.55.1 and v1.1.1. mcp-go v0.x does not serve 2026-07-28: latest clients fall back to `initialize`.
 
 ## Quick start
 

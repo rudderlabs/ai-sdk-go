@@ -15,7 +15,7 @@ go run ./examples/mcp-server-mcpgo --transport=stdio                     # for a
 go run ./examples/mcp-server-mcpgo --transport=http --addr=127.0.0.1:8080 # streamable HTTP
 ```
 
-`--check` runs three legs, each a real go-sdk client exercising the mcp-go server: streamable HTTP on 2025-06-18, streamable HTTP with a client on the latest protocol (mcp-go v1.1 serves 2026-07-28: stateless requests, no session), and stdio (the example starts itself as a subprocess). Each leg must produce:
+`--check` runs three legs, each a real go-sdk client exercising the mcp-go server: streamable HTTP on 2025-06-18, streamable HTTP with a client on the latest protocol (2025-11-25 on mcp-go v0.x; on v1.x, 2026-07-28: stateless requests, no session), and stdio (the example starts itself as a subprocess). Each leg must produce:
 
 - `mcp_client_seen`: server name and version, client name and version, transport, `auth_method: none`, and the negotiated `protocol_version`;
 - `mcp_tool_called` twice: tool name, status, the negotiated `protocol_version`, `intent` and `user_sentiment` from `request_context`, `interaction_id` and `trace_id` from `_meta`, `argument_keys`, `call_index` and `retry_count`;

@@ -1,7 +1,7 @@
-//go:build !mcpgo_v0
+//go:build mcpgo_v1
 
-// Multi round-trip requests (input_required) exist from mcp-go v1.0; the v0 CI job runs with
-// -tags mcpgo_v0 and skips this file.
+// Multi round-trip requests (input_required) exist from mcp-go v1.0. go.mod requires the oldest
+// supported version, v0.55.1; the CI job that tests the latest mcp-go runs with -tags mcpgo_v1.
 
 package ruddermcpgo
 

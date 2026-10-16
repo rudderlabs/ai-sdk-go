@@ -95,8 +95,8 @@ jobs:
           path: coverage.out
           retention-days: 14
 
-  mcpgo-v0:
-    name: mcp-go v0.55.1
+  mcpgo-latest:
+    name: mcp-go v1.1.1 (latest)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -115,13 +115,14 @@ jobs:
         with:
           go-version: stable
 
-      # The version rudder-mcp-server uses; it serves protocol revisions up to 2025-11-25.
-      - name: Test ruddermcpgo against mcp-go v0.55.1
+      # go.mod requires the oldest supported mcp-go (v0.55.1), so consumers keep their version;
+      # this job tests the latest, which also serves 2026-07-28.
+      - name: Test ruddermcpgo and its example against mcp-go v1.1.1
         run: |
-          cp go.mod go.v0.mod
-          cp go.sum go.v0.sum
-          go get -modfile=go.v0.mod github.com/mark3labs/mcp-go@v0.55.1
-          go test -race -tags mcpgo_v0 -modfile=go.v0.mod ./ruddermcpgo/...
+          cp go.mod go.latest.mod
+          cp go.sum go.latest.sum
+          go get -modfile=go.latest.mod github.com/mark3labs/mcp-go@v1.1.1
+          go test -race -tags mcpgo_v1 -modfile=go.latest.mod ./ruddermcpgo/... ./examples/mcp-server-mcpgo/...
 
   vulncheck:
     name: Vulnerability check

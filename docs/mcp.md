@@ -5,9 +5,9 @@ The integration tracks an MCP server: which AI clients call it, which tools they
 | MCP library | Package | Entry point | Versions tested | Protocol revisions |
 | --- | --- | --- | --- | --- |
 | [`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk) (official) | `github.com/rudderlabs/ai-sdk-go` | `rudderstackai.WrapMCPServer` | v1.8.0 | 2025-06-18, 2025-11-25, 2026-07-28 |
-| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v1.1.1, v0.55.1 | 2025-06-18, 2025-11-25; 2026-07-28 from v1.0 |
+| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v0.55.1 (the minimum) to v1.1.1 | v0.55.1 to v0.x: 2025-06-18, 2025-11-25; v1.x: also 2026-07-28 |
 
-Both send the same events with the same options, defaults and properties. Each library lives in its own package, so a go-sdk server never compiles mcp-go; `ruddermcpgo` builds on the root package and so also compiles the go-sdk.
+Both send the same events with the same options, defaults and properties. `ruddermcpgo` requires mcp-go v0.55.1, the oldest version it supports, so adding it never upgrades a server's mcp-go; CI tests v0.55.1 and v1.1.1. Each library lives in its own package, so a go-sdk server never compiles mcp-go; `ruddermcpgo` builds on the root package and so also compiles the go-sdk.
 
 - [Setup](#setup)
 - [Options](#options)
@@ -186,7 +186,7 @@ deliver := rudderstackai.WrapMCPEventSender(server, func(ctx context.Context, d 
 ## Limits
 
 - Only MCP servers are tracked, on the two libraries above.
-- Neither library exposes the server's name to the integration, and the go-sdk not the JSON-RPC request ID either; the integration reads them through reflection, tested against the pinned versions (a test fails when the go-sdk's internals change). If a future version changes them, set `Options.ServerName`; otherwise `server_name` and `request_id` fall back to `unknown` rather than failing.
+- Neither library exposes the server's name to the integration, and the go-sdk not the JSON-RPC request ID either; the integration reads them through reflection, tested against the versions above (a test fails when the go-sdk's internals change). If a future version changes them, set `Options.ServerName`; otherwise `server_name` and `request_id` fall back to `unknown` rather than failing.
 - `transport` is detected only for streamable HTTP; set `Options.Transport` for stdio and SSE.
 - State is in memory, per server name, per process: the `mcp_client_seen` windows, `call_index`, `retry_count` and `ms_since_previous_call` counters, argument hashes, tool schemas, resource names, pending `input_required` elicitations and MCP Events expiry timers (at most 10,000 entries each, 1,000 resource templates, 1,000 server names; the least recently used go first). Every server of one name in the process shares it, so a server built per request keeps counting, and re-wrapping keeps it while replacing the options; give each distinct server a unique name (`Options.ServerName`). Nothing is shared between processes: each replica and each restart emits its own `mcp_client_seen` and starts its counters again. The integration holds no reference to a wrapped server, so servers built per request are released.
 - `resource_name` needs the resource list or template list from a `resources/list` or `resources/templates/list` this process answered; otherwise it is `unknown`.
