@@ -1,0 +1,83 @@
+{
+  "synthetic": true,
+  "description": "Bedrock Runtime Converse then ConverseStream (tool use, then the streamed answer after the tool result). Synthetic: written from the documented response shapes, not recorded. Replace with a recorded, scrubbed cassette once AWS credentials exist.",
+  "sources": [
+    "https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html",
+    "https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseStream.html",
+    "https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html"
+  ],
+  "interactions": [
+    {
+      "request": { "method": "POST", "path": "/model/{modelId}/converse" },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-amzn-requestid": "5e2f2a3c-0b7e-4c1a-9a51-3d0c1f6a7b01"
+        },
+        "body": {
+          "output": {
+            "message": {
+              "role": "assistant",
+              "content": [
+                { "text": "I'll check the weather in Paris." },
+                {
+                  "toolUse": {
+                    "toolUseId": "tooluse_kZJMlvQmRJ6eAyJE5GIl7Q",
+                    "name": "get_weather",
+                    "input": { "city": "Paris" }
+                  }
+                }
+              ]
+            }
+          },
+          "stopReason": "tool_use",
+          "usage": {
+            "inputTokens": 412,
+            "outputTokens": 54,
+            "totalTokens": 1490,
+            "cacheReadInputTokens": 0,
+            "cacheWriteInputTokens": 1024
+          },
+          "metrics": { "latencyMs": 1180 }
+        }
+      }
+    },
+    {
+      "request": { "method": "POST", "path": "/model/{modelId}/converse-stream" },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/vnd.amazon.eventstream",
+          "x-amzn-requestid": "9b1d6c4e-2f3a-4e8b-8c7d-6a5b4c3d2e02"
+        },
+        "events": [
+          { "event": "messageStart", "payload": { "role": "assistant" } },
+          {
+            "event": "contentBlockDelta",
+            "payload": { "contentBlockIndex": 0, "delta": { "text": "It is 18°C and cloudy" } }
+          },
+          {
+            "event": "contentBlockDelta",
+            "payload": { "contentBlockIndex": 0, "delta": { "text": " in Paris." } }
+          },
+          { "event": "contentBlockStop", "payload": { "contentBlockIndex": 0 } },
+          { "event": "messageStop", "payload": { "stopReason": "end_turn" } },
+          {
+            "event": "metadata",
+            "payload": {
+              "usage": {
+                "inputTokens": 96,
+                "outputTokens": 18,
+                "totalTokens": 1138,
+                "cacheReadInputTokens": 1024,
+                "cacheWriteInputTokens": 0
+              },
+              "metrics": { "latencyMs": 640 }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

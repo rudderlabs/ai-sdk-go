@@ -1,0 +1,24 @@
+{
+  "synthetic": true,
+  "description": "Python examples/openrouter-quickstart: one streamed Chat Completions answer through OpenRouter. OpenRouter always sends usage: the final chunk carries usage (with cost, cost_details and is_byok) and one choice with an empty delta repeating finish_reason. Synthetic: written from OpenRouter's documented shapes, not recorded. Replace with a scrubbed recording from the live workflow once an OpenRouter key exists.",
+  "sources": [
+    "https://openrouter.ai/docs/api-reference/streaming",
+    "https://openrouter.ai/docs/use-cases/usage-accounting"
+  ],
+  "interactions": [
+    {
+      "request": { "method": "POST", "path": "/api/v1/chat/completions" },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "text/event-stream" },
+        "events": [
+          { "payload": { "id": "gen-1760400000-Ab1Cd2Ef3Gh4Ij5Kl6Mn", "provider": "Groq", "model": "openai/gpt-oss-20b", "object": "chat.completion.chunk", "created": 1760400000, "choices": [{ "index": 0, "delta": { "role": "assistant", "content": "" }, "finish_reason": null, "native_finish_reason": null, "logprobs": null }] } },
+          { "payload": { "id": "gen-1760400000-Ab1Cd2Ef3Gh4Ij5Kl6Mn", "provider": "Groq", "model": "openai/gpt-oss-20b", "object": "chat.completion.chunk", "created": 1760400000, "choices": [{ "index": 0, "delta": { "role": "assistant", "content": "Standard shipping usually takes 3-5 business days." }, "finish_reason": null, "native_finish_reason": null, "logprobs": null }] } },
+          { "payload": { "id": "gen-1760400000-Ab1Cd2Ef3Gh4Ij5Kl6Mn", "provider": "Groq", "model": "openai/gpt-oss-20b", "object": "chat.completion.chunk", "created": 1760400000, "choices": [{ "index": 0, "delta": { "role": "assistant", "content": "" }, "finish_reason": "stop", "native_finish_reason": "stop", "logprobs": null }] } },
+          { "payload": { "id": "gen-1760400000-Ab1Cd2Ef3Gh4Ij5Kl6Mn", "provider": "Groq", "model": "openai/gpt-oss-20b", "object": "chat.completion.chunk", "created": 1760400000, "choices": [{ "index": 0, "delta": { "role": "assistant", "content": "" }, "finish_reason": "stop", "native_finish_reason": "stop", "logprobs": null }], "usage": { "prompt_tokens": 81, "completion_tokens": 14, "total_tokens": 95, "cost": 0, "is_byok": false, "prompt_tokens_details": { "cached_tokens": 0 }, "cost_details": { "upstream_inference_cost": null }, "completion_tokens_details": { "reasoning_tokens": 0 } } } },
+          { "payload": "[DONE]" }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "synthetic": true,
+  "description": "Python examples/openai-quickstart: a Chat Completions answer, then a streamed answer with stream_options.include_usage (two interactions). Synthetic: written from the documented response shapes, not recorded. Replace with a scrubbed recording from the live workflow once an OpenAI key exists.",
+  "sources": [
+    "https://platform.openai.com/docs/api-reference/chat/object",
+    "https://platform.openai.com/docs/api-reference/chat/streaming"
+  ],
+  "interactions": [
+    {
+      "request": { "method": "POST", "path": "/v1/chat/completions" },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json" },
+        "body": { "id": "chatcmpl-Cq1bN5yRt8Wv2Xz4Ad6Fg8Hj0Kl2M", "object": "chat.completion", "created": 1760400300, "model": "gpt-4.1-mini-2025-04-14", "choices": [{ "index": 0, "message": { "role": "assistant", "content": "RudderStack is a customer data platform that collects events and routes them to your tools and warehouse.", "refusal": null, "annotations": [] }, "logprobs": null, "finish_reason": "stop" }], "usage": { "prompt_tokens": 15, "completion_tokens": 20, "total_tokens": 35, "prompt_tokens_details": { "cached_tokens": 0, "audio_tokens": 0 }, "completion_tokens_details": { "reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0 } }, "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5" }
+      }
+    },
+    {
+      "request": { "method": "POST", "path": "/v1/chat/completions" },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "text/event-stream; charset=utf-8" },
+        "events": [
+          { "payload": { "id": "chatcmpl-Cq1bP7aTv0Yx4Zb6Cf8Hi0Jl2Mn4O", "object": "chat.completion.chunk", "created": 1760400301, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [{ "index": 0, "delta": { "role": "assistant", "content": "", "refusal": null }, "logprobs": null, "finish_reason": null }], "usage": null } },
+          { "payload": { "id": "chatcmpl-Cq1bP7aTv0Yx4Zb6Cf8Hi0Jl2Mn4O", "object": "chat.completion.chunk", "created": 1760400301, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [{ "index": 0, "delta": { "content": "Events stream in,\n" }, "logprobs": null, "finish_reason": null }], "usage": null } },
+          { "payload": { "id": "chatcmpl-Cq1bP7aTv0Yx4Zb6Cf8Hi0Jl2Mn4O", "object": "chat.completion.chunk", "created": 1760400301, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [{ "index": 0, "delta": { "content": "routed through quiet pipes,\nwarehouse wakes to light." }, "logprobs": null, "finish_reason": null }], "usage": null } },
+          { "payload": { "id": "chatcmpl-Cq1bP7aTv0Yx4Zb6Cf8Hi0Jl2Mn4O", "object": "chat.completion.chunk", "created": 1760400301, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [{ "index": 0, "delta": {}, "logprobs": null, "finish_reason": "stop" }], "usage": null } },
+          { "payload": { "id": "chatcmpl-Cq1bP7aTv0Yx4Zb6Cf8Hi0Jl2Mn4O", "object": "chat.completion.chunk", "created": 1760400301, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [], "usage": { "prompt_tokens": 14, "completion_tokens": 17, "total_tokens": 31, "prompt_tokens_details": { "cached_tokens": 0, "audio_tokens": 0 }, "completion_tokens_details": { "reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0 } } } },
+          { "payload": "[DONE]" }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,170 @@
+{
+  "synthetic": false,
+  "description": "Gemini API replies for the google-genai example, recorded from the real API (gemini-3.5-flash-lite, 2026-10-14): a chat turn that calls get_weather, then the streamed answer to the function response. Scrubbed: no API key or request headers were recorded, and thoughtSignature values are replaced. Streamed usageMetadata is a running total.",
+  "sources": [
+    "https://ai.google.dev/api/generate-content",
+    "https://ai.google.dev/gemini-api/docs/function-calling",
+    "https://ai.google.dev/gemini-api/docs/thinking"
+  ],
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.5-flash-lite:generateContent"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "get_weather",
+                      "args": {
+                        "city": "Paris"
+                      },
+                      "id": "call_705688"
+                    },
+                    "thoughtSignature": "cmVjb3JkZWQtc2lnbmF0dXJlLXNjcnViYmVk"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 55,
+            "candidatesTokenCount": 16,
+            "totalTokenCount": 71,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 55
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.5-flash-lite",
+          "responseId": "TRPPauPkL6Dag8UPrf7I8A0"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent?alt=sse"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "events": [
+          {
+            "payload": {
+              "candidates": [
+                {
+                  "content": {
+                    "parts": [
+                      {
+                        "text": "The weather"
+                      }
+                    ],
+                    "role": "model"
+                  },
+                  "index": 0
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 99,
+                "candidatesTokenCount": 2,
+                "totalTokenCount": 101,
+                "promptTokensDetails": [
+                  {
+                    "modality": "TEXT",
+                    "tokenCount": 99
+                  }
+                ],
+                "serviceTier": "standard"
+              },
+              "modelVersion": "gemini-3.5-flash-lite",
+              "responseId": "VRPPapSEBpOvg8UPhaS0kQU"
+            }
+          },
+          {
+            "payload": {
+              "candidates": [
+                {
+                  "content": {
+                    "parts": [
+                      {
+                        "text": " in Paris is sunny with a temperature of 20°C."
+                      }
+                    ],
+                    "role": "model"
+                  },
+                  "index": 0
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 99,
+                "candidatesTokenCount": 16,
+                "totalTokenCount": 115,
+                "promptTokensDetails": [
+                  {
+                    "modality": "TEXT",
+                    "tokenCount": 99
+                  }
+                ],
+                "serviceTier": "standard"
+              },
+              "modelVersion": "gemini-3.5-flash-lite",
+              "responseId": "VRPPapSEBpOvg8UPhaS0kQU"
+            }
+          },
+          {
+            "payload": {
+              "candidates": [
+                {
+                  "content": {
+                    "parts": [
+                      {
+                        "text": "",
+                        "thoughtSignature": "cmVjb3JkZWQtc2lnbmF0dXJlLXNjcnViYmVk"
+                      }
+                    ],
+                    "role": "model"
+                  },
+                  "finishReason": "STOP",
+                  "index": 0
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 99,
+                "candidatesTokenCount": 16,
+                "totalTokenCount": 115,
+                "promptTokensDetails": [
+                  {
+                    "modality": "TEXT",
+                    "tokenCount": 99
+                  }
+                ],
+                "serviceTier": "standard"
+              },
+              "modelVersion": "gemini-3.5-flash-lite",
+              "responseId": "VRPPapSEBpOvg8UPhaS0kQU"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

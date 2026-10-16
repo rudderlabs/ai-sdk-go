@@ -1,0 +1,348 @@
+{
+  "fixture_version": 1,
+  "description": "Built-in masking of opt-in text fields (prompt_text, response_text, action_details.feedback_text, intent_summary) and of span content. Each SDK's built-in masking must turn every input into its expected output exactly. `rules` lists the rules in application order: `pattern` is the exact regular expression source both SDKs compile (no flags; applied globally, left to right, without overlaps); every match is replaced by `tokens[token]` unless `check` names a validation the match must pass (luhn: Luhn checksum; ipv6: 8 groups, or fewer with one `::`; phone: 10-12 digits, 9-15 after a leading +; ssn: area not 000/666/900-999, group not 00, serial not 0000; iban: 15-34 alphanumerics without spaces and ISO 7064 mod-97 == 1); with `keep_group: 1` only the text after capture group 1 is replaced. Each rule runs over the previous rule's output, so the first rule to match a span wins. Text longer than 32000 code points is not masked: the field is withheld (`expected: null`). A case with `repeat: n` means input and expected are each repeated n times. Names and postal addresses are not caught.",
+  "tokens": {
+    "email": "[email]",
+    "phone": "[phone]",
+    "card": "[card]",
+    "ip": "[ip]",
+    "secret": "[secret]",
+    "ssn": "[ssn]",
+    "iban": "[iban]"
+  },
+  "cases": [
+    {
+      "name": "email_plain",
+      "input": "Contact me at jane.doe+billing@example.co.uk please.",
+      "expected": "Contact me at [email] please."
+    },
+    {
+      "name": "email_in_url",
+      "input": "https://app.example.com/reset?email=bob@corp.io&x=1",
+      "expected": "https://app.example.com/reset?email=[email]&x=1"
+    },
+    {
+      "name": "email_unicode",
+      "input": "Écrivez à josé.núñez@exemple.fr ou à 李@例子.中国",
+      "expected": "Écrivez à [email] ou à [email]"
+    },
+    {
+      "name": "email_trailing_period",
+      "input": "mailto:ops@example.com.",
+      "expected": "mailto:[email]."
+    },
+    {
+      "name": "phone_us",
+      "input": "Call (555) 123-4567 or 555-987-6543.",
+      "expected": "Call [phone] or [phone]."
+    },
+    {
+      "name": "phone_international",
+      "input": "UK office: +44 20 7946 0958, India +91 98765 43210",
+      "expected": "UK office: [phone], India [phone]"
+    },
+    {
+      "name": "phone_e164",
+      "input": "+14155550123",
+      "expected": "[phone]"
+    },
+    {
+      "name": "phone_unicode_neighbours",
+      "input": "Ünïcödé text 😀 with +1 415 555 0123 ✓",
+      "expected": "Ünïcödé text 😀 with [phone] ✓"
+    },
+    {
+      "name": "not_phone_dates_times_versions",
+      "input": "Released 2026-10-13 at 12:30:45, version 1.2.3, build 20261013.",
+      "expected": "Released 2026-10-13 at 12:30:45, version 1.2.3, build 20261013."
+    },
+    {
+      "name": "card_luhn_valid",
+      "input": "Card 4111 1111 1111 1111 exp 12/29, or 4111-1111-1111-1111, or 4111111111111111",
+      "expected": "Card [card] exp 12/29, or [card], or [card]"
+    },
+    {
+      "name": "card_amex",
+      "input": "Amex 3782 822463 10005",
+      "expected": "Amex [card]"
+    },
+    {
+      "name": "card_not_luhn_left_alone",
+      "input": "Order 1234 5678 9012 3456 shipped",
+      "expected": "Order 1234 5678 9012 3456 shipped"
+    },
+    {
+      "name": "long_digit_run_left_alone",
+      "input": "Tracking 12345678901234567890123",
+      "expected": "Tracking 12345678901234567890123"
+    },
+    {
+      "name": "ipv4",
+      "input": "Server 10.0.0.12:8080 and client 192.168.1.254",
+      "expected": "Server [ip]:8080 and client [ip]"
+    },
+    {
+      "name": "not_ipv4",
+      "input": "Version 1.2.3.4.5 and 256.1.1.1 and 999.10.10.10",
+      "expected": "Version 1.2.3.4.5 and 256.1.1.1 and 999.10.10.10"
+    },
+    {
+      "name": "ipv6",
+      "input": "Client 2001:db8:85a3::8a2e:370:7334, fe80::1, ::1 and 2001:0db8:0000:0000:0000:ff00:0042:8329",
+      "expected": "Client [ip], [ip], [ip] and [ip]"
+    },
+    {
+      "name": "not_ipv6",
+      "input": "Meet at 10:30 or 10:30:15, MAC 00:1A:2B:3C:4D:5E, std::vector",
+      "expected": "Meet at 10:30 or 10:30:15, MAC 00:1A:2B:3C:4D:5E, std::vector"
+    },
+    {
+      "name": "secret_openai_anthropic",
+      "input": "key sk-proj-AbCdEf0123456789xyzXYZ and sk-ant-api03-AbCdEf0123456789_-xyz",
+      "expected": "key [secret] and [secret]"
+    },
+    {
+      "name": "secret_needs_token_boundary",
+      "input": "task-abcdefghijklmnopqrstu is a slug; risk-free",
+      "expected": "task-abcdefghijklmnopqrstu is a slug; risk-free"
+    },
+    {
+      "name": "secret_slack_github_aws",
+      "input": "xoxb-1234567890-abcdefghij ghp_0123456789abcdefghijABCDEFGHIJ012345 AKIAIOSFODNN7EXAMPLE",
+      "expected": "[secret] [secret] [secret]"
+    },
+    {
+      "name": "secret_jwt",
+      "input": "token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk",
+      "expected": "token=[secret]"
+    },
+    {
+      "name": "secret_bearer",
+      "input": "Authorization: Bearer abcdef0123456789ABCDEF.ghij",
+      "expected": "Authorization: [secret]"
+    },
+    {
+      "name": "bearer_word_left_alone",
+      "input": "The bearer of bad news",
+      "expected": "The bearer of bad news"
+    },
+    {
+      "name": "overlap_first_rule_wins",
+      "input": "sk-abcdefghijklmnop1234@example.com",
+      "expected": "[secret]@example.com"
+    },
+    {
+      "name": "overlap_email_with_ip_host",
+      "input": "http://admin@192.168.0.1/ and mail ops@10.0.0.1",
+      "expected": "http://admin@[ip]/ and mail ops@[ip]"
+    },
+    {
+      "name": "mixed",
+      "input": "I'm Jane (jane@acme.com, +1 415 555 0123), card 5555 5555 5555 4444, from 203.0.113.9",
+      "expected": "I'm Jane ([email], [phone]), card [card], from [ip]"
+    },
+    {
+      "name": "names_not_caught",
+      "input": "My name is Jane Doe and I live at 12 Baker Street",
+      "expected": "My name is Jane Doe and I live at 12 Baker Street"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "name": "secret_stripe",
+      "input": "live sk_live_FAKE0000example and rk_test_FAKE0000example here",
+      "expected": "live [secret] and [secret] here"
+    },
+    {
+      "name": "not_stripe",
+      "input": "pk_live_abcdefghij1234 is publishable; sk_live_short; mask_live_abcdefghijkl",
+      "expected": "pk_live_abcdefghij1234 is publishable; sk_live_short; mask_live_abcdefghijkl"
+    },
+    {
+      "name": "secret_google",
+      "input": "key AIzaSyD-1234567890abcdefghijklmnopqrstu end",
+      "expected": "key [secret] end"
+    },
+    {
+      "name": "not_google",
+      "input": "AIzaShort and AIzaSyD-1234567890abcdefghijklmnopqrstuvwxyz",
+      "expected": "AIzaShort and AIzaSyD-1234567890abcdefghijklmnopqrstuvwxyz"
+    },
+    {
+      "name": "secret_url_password",
+      "input": "postgres://admin:S3cret!@db.example.com:5432/app and redis://:hunter22@cache:6379",
+      "expected": "postgres://admin:[secret]@db.example.com:5432/app and redis://:[secret]@cache:6379"
+    },
+    {
+      "name": "not_url_password",
+      "input": "see https://example.com:8080/path and user@example.com",
+      "expected": "see https://example.com:8080/path and [email]"
+    },
+    {
+      "name": "secret_key_value",
+      "input": "api_key=9f8e7d6c5b4a&Token: abc123def, PASSWORD = \"hunter22\" and client_secret:'s3cr3tvalue'",
+      "expected": "api_key=[secret]&Token: [secret], PASSWORD = \"[secret]\" and client_secret:'[secret]'"
+    },
+    {
+      "name": "not_key_value",
+      "input": "my password is long, token=abc, the api key; mytoken=abcdef",
+      "expected": "my password is long, token=abc, the api key; mytoken=abcdef"
+    },
+    {
+      "name": "ssn",
+      "input": "SSN 123-45-6789, also 078-05-1120",
+      "expected": "SSN [ssn], also [ssn]"
+    },
+    {
+      "name": "not_ssn",
+      "input": "000-12-3456, 666-12-3456, 900-12-3456, 123-00-4567, 123-45-0000 and 2024-10-13",
+      "expected": "000-12-3456, 666-12-3456, 900-12-3456, 123-00-4567, 123-45-0000 and 2024-10-13"
+    },
+    {
+      "name": "iban",
+      "input": "IBAN DE89 3704 0044 0532 0130 00 or GB82WEST12345698765432.",
+      "expected": "IBAN [iban] or [iban]."
+    },
+    {
+      "name": "not_iban",
+      "input": "AB12 CDEF GHIJ KLMN and DE00 1234 5678 ABCD",
+      "expected": "AB12 CDEF GHIJ KLMN and DE00 1234 5678 ABCD"
+    },
+    {
+      "name": "phone_two_groups",
+      "input": "Call 07700 900123 or 98765 43210 today",
+      "expected": "Call [phone] or [phone] today"
+    },
+    {
+      "name": "not_phone_two_groups",
+      "input": "ZIP 94105-1234, ref 12345 6789, room 2024 10135",
+      "expected": "ZIP 94105-1234, ref 12345 6789, room 2024 10135"
+    },
+    {
+      "name": "version_like_ipv4_documented",
+      "input": "Version 10.2.3.4 is out",
+      "expected": "Version [ip] is out"
+    },
+    {
+      "name": "long_run_linear",
+      "input": "a.",
+      "expected": "a.",
+      "repeat": 15000
+    },
+    {
+      "name": "size_cap_kept",
+      "input": "a",
+      "expected": "a",
+      "repeat": 32000
+    },
+    {
+      "name": "size_cap_withheld",
+      "input": "a",
+      "expected": null,
+      "repeat": 32001
+    },
+    {
+      "name": "size_cap_counts_code_points",
+      "input": "😀",
+      "expected": "😀",
+      "repeat": 16001
+    }
+  ],
+  "rules": [
+    {
+      "name": "bearer",
+      "pattern": "(?<![A-Za-z0-9_-])[Bb]earer[ \\t]+[A-Za-z0-9._~+/-]{16,}=*",
+      "token": "secret"
+    },
+    {
+      "name": "jwt",
+      "pattern": "(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+",
+      "token": "secret"
+    },
+    {
+      "name": "openai_anthropic_key",
+      "pattern": "(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}",
+      "token": "secret"
+    },
+    {
+      "name": "stripe_key",
+      "pattern": "(?<![A-Za-z0-9_-])(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{10,}",
+      "token": "secret"
+    },
+    {
+      "name": "google_api_key",
+      "pattern": "(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])",
+      "token": "secret"
+    },
+    {
+      "name": "slack_token",
+      "pattern": "(?<![A-Za-z0-9_-])xox[abposr]-[A-Za-z0-9-]{10,}",
+      "token": "secret"
+    },
+    {
+      "name": "github_token",
+      "pattern": "(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{20,}",
+      "token": "secret"
+    },
+    {
+      "name": "aws_access_key",
+      "pattern": "(?<![A-Za-z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Za-z0-9])",
+      "token": "secret"
+    },
+    {
+      "name": "url_password",
+      "pattern": "((?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*://[^ \\t\\r\\n:/@]*:)[^ \\t\\r\\n/@]+(?=@)",
+      "token": "secret",
+      "keep_group": 1
+    },
+    {
+      "name": "key_value_secret",
+      "pattern": "((?<![A-Za-z0-9_-])(?:[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss][Ss][_-]?[Tt][Oo][Kk][Ee][Nn]|[Aa][Uu][Tt][Hh][_-]?[Tt][Oo][Kk][Ee][Nn]|[Cc][Ll][Ii][Ee][Nn][Tt][_-]?[Ss][Ee][Cc][Rr][Ee][Tt]|[Ss][Ee][Cc][Rr][Ee][Tt][_-]?[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Pp][Ww][Dd])[\"']?[ \\t]*[:=][ \\t]*[\"']?)[^ \\t\\r\\n\"'&,;]{4,}",
+      "token": "secret",
+      "keep_group": 1
+    },
+    {
+      "name": "email",
+      "pattern": "(?<![A-Za-z0-9._%+\\u00C0-\\uD7FF-])[A-Za-z0-9._%+\\u00C0-\\uD7FF-]+@[A-Za-z0-9\\u00C0-\\uD7FF-]+(?:\\.[A-Za-z0-9\\u00C0-\\uD7FF-]+)*\\.[A-Za-z\\u00C0-\\uD7FF]{2,}",
+      "token": "email"
+    },
+    {
+      "name": "ipv4",
+      "pattern": "(?<![A-Za-z0-9.])(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?![0-9]|\\.[0-9])",
+      "token": "ip"
+    },
+    {
+      "name": "ipv6",
+      "pattern": "(?<![A-Za-z0-9:.])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![A-Za-z0-9:])",
+      "token": "ip",
+      "check": "ipv6"
+    },
+    {
+      "name": "iban",
+      "pattern": "(?<![A-Za-z0-9])[A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?(?![A-Za-z0-9])",
+      "token": "iban",
+      "check": "iban"
+    },
+    {
+      "name": "us_ssn",
+      "pattern": "(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9-])",
+      "token": "ssn",
+      "check": "ssn"
+    },
+    {
+      "name": "card",
+      "pattern": "(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?![0-9])",
+      "token": "card",
+      "check": "luhn"
+    },
+    {
+      "name": "phone",
+      "pattern": "(?<![A-Za-z0-9+])(?<![0-9][ .-])(?:\\+[0-9]{1,3}(?:[ .-]?(?:\\([0-9]{1,4}\\)|[0-9]{1,4})){2,6}|(?:\\([0-9]{2,4}\\)[ .-]?|[0-9]{2,4}[ .-])[0-9]{3,4}[ .-][0-9]{3,4}|[0-9]{4,5}[ .-][0-9]{5,6})(?![0-9A-Za-z]|[ .-][0-9])",
+      "token": "phone",
+      "check": "phone"
+    }
+  ]
+}

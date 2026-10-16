@@ -1,0 +1,63 @@
+# AI events spec v0.3 events for the RudderStack data catalog (rudder-cli, rudder/v1).
+version: rudder/v1
+kind: events
+metadata:
+  name: ai_events
+spec:
+  events:
+    - id: ai_user_prompt_created
+      name: ai_user_prompt_created
+      event_type: track
+      description: The user asked something.
+    - id: ai_response_received
+      name: ai_response_received
+      event_type: track
+      description: One answer, with totals across every model call, tool and agent it took.
+    - id: ai_llm_response_received
+      name: ai_llm_response_received
+      event_type: track
+      description: Optional, one per model call. Totals belong on ai_response_received.
+    - id: ai_interaction_classified
+      name: ai_interaction_classified
+      event_type: track
+      description: Opt-in labels for one answered interaction, from the customer's own classifier.
+    - id: ai_interaction_scored
+      name: ai_interaction_scored
+      event_type: track
+      description: Opt-in. One named quality score of an interaction, from an LLM judge, a code check or a human.
+    - id: ai_user_action
+      name: ai_user_action
+      event_type: track
+      description: What the user did with an answer, joined to it by interaction_id.
+    - id: mcp_client_seen
+      name: mcp_client_seen
+      event_type: track
+      description: An MCP client's first request in a window, with its name, version, transport and auth.
+    - id: mcp_tool_called
+      name: mcp_tool_called
+      event_type: track
+      description: An MCP tools/call request completed or failed. Never tool arguments or results.
+    - id: mcp_elicitation_completed
+      name: mcp_elicitation_completed
+      event_type: track
+      description: The MCP server asked the user for input and the client responded or the request failed.
+    - id: mcp_capability_requested
+      name: mcp_capability_requested
+      event_type: track
+      description: Opt-in. An agent asked the MCP server for a capability no tool offers.
+    - id: mcp_resource_read
+      name: mcp_resource_read
+      event_type: track
+      description: An MCP resources/read request completed or failed.
+    - id: mcp_prompt_used
+      name: mcp_prompt_used
+      event_type: track
+      description: An MCP prompts/get request completed or failed.
+    - id: mcp_event_subscription_changed
+      name: mcp_event_subscription_changed
+      event_type: track
+      description: Experimental, opt-in. An MCP Events subscription was created, refreshed or ended.
+    - id: mcp_event_delivered
+      name: mcp_event_delivered
+      event_type: track
+      description: Experimental, opt-in. The MCP server finished delivering one MCP Events update.

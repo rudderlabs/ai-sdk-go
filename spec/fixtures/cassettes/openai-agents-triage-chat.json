@@ -1,0 +1,177 @@
+{
+  "description": "examples/openai-agents triage run: triage hands off to orders, which calls lookup_order and answers (Chat Completions). Replayed by both SDKs' example tests; expected holds the ai_response_received properties they assert.",
+  "synthetic": true,
+  "source": "Written from OpenAI's documented response shapes; replace with a recorded run once keys exist.",
+  "route": "openai.chat",
+  "replies": [
+    {
+      "json": {
+        "id": "chatcmpl-triage-1",
+        "object": "chat.completion",
+        "created": 1760400001,
+        "model": "gpt-4.1-mini-2025-04-14",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call_triage_1",
+                  "type": "function",
+                  "function": {
+                    "name": "transfer_to_orders",
+                    "arguments": "{}"
+                  }
+                }
+              ]
+            },
+            "finish_reason": "tool_calls",
+            "logprobs": null
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 312,
+          "completion_tokens": 15,
+          "total_tokens": 327,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "json": {
+        "id": "chatcmpl-triage-2",
+        "object": "chat.completion",
+        "created": 1760400002,
+        "model": "gpt-4.1-mini-2025-04-14",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call_triage_2",
+                  "type": "function",
+                  "function": {
+                    "name": "lookup_order",
+                    "arguments": "{\"order_id\":\"1234\"}"
+                  }
+                }
+              ]
+            },
+            "finish_reason": "tool_calls",
+            "logprobs": null
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 287,
+          "completion_tokens": 18,
+          "total_tokens": 305,
+          "prompt_tokens_details": {
+            "cached_tokens": 128
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        }
+      }
+    },
+    {
+      "json": {
+        "id": "chatcmpl-triage-3",
+        "object": "chat.completion",
+        "created": 1760400003,
+        "model": "gpt-4.1-mini-2025-04-14",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "Order 1234 shipped and arrives Friday."
+            },
+            "finish_reason": "stop",
+            "logprobs": null
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 330,
+          "completion_tokens": 14,
+          "total_tokens": 344,
+          "prompt_tokens_details": {
+            "cached_tokens": 256
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "response_status": "success",
+    "llm_call_count": 3,
+    "tool_call_count": 2,
+    "total_input_tokens": 929,
+    "total_output_tokens": 47,
+    "total_reasoning_tokens": 0,
+    "total_tokens": 976,
+    "total_cached_input_tokens": 384,
+    "total_cache_write_tokens": 0,
+    "finish_reason": "stop",
+    "primary_model": "gpt-4.1-mini",
+    "primary_provider": "openai",
+    "response_text": "Order 1234 shipped and arrives Friday.",
+    "usage_breakdown": [
+      {
+        "agent_name": "triage",
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "call_count": 1,
+        "input_tokens": 312,
+        "output_tokens": 15,
+        "reasoning_tokens": 0,
+        "total_tokens": 327,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "error_count": 0
+      },
+      {
+        "agent_name": "orders",
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "call_count": 2,
+        "input_tokens": 617,
+        "output_tokens": 32,
+        "reasoning_tokens": 0,
+        "total_tokens": 649,
+        "cached_input_tokens": 384,
+        "cache_write_tokens": 0,
+        "error_count": 0
+      }
+    ],
+    "tool_breakdown": [
+      {
+        "agent_name": "orders",
+        "tool_name": "lookup_order",
+        "call_count": 1,
+        "error_count": 0,
+        "duration_ms": "<number>",
+        "measured_count": 1,
+        "max_duration_ms": "<number>"
+      },
+      {
+        "agent_name": "triage",
+        "tool_name": "transfer_to_orders",
+        "call_count": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "fixture_version": 1,
+  "description": "Provider names, shared by the Node.js and Python SDKs. A provider label from a framework (LangChain ls_provider, Claude Agent SDK, AI SDK provider ID, LiteLLM custom_llm_provider, Vercel AI Gateway routing.finalProvider) or a router model's vendor prefix is trimmed and lower-cased, then looked up in aliases: a known alias becomes its canonical name, anything else is sent unchanged (not lower-cased). Only aliases are listed, so a name the SDKs already send (mistral, aws.bedrock, gcp.gemini...) is never renamed. Labels passed to recordCall / record_call, wrapper provider options, tracing spans and the Google Gen AI integration (google, google.vertex) are not looked up; google.vertex here is the AI SDK's provider ID. A call whose provider is one of routers and whose model has a vendor prefix (openai/gpt-4o) is reported under that vendor, looked up the same way. Both SDKs embed this table and their tests check it equals this file.",
+  "aliases": {
+    "amazon_bedrock": "aws.bedrock",
+    "amazon-bedrock": "aws.bedrock",
+    "bedrock": "aws.bedrock",
+    "anthropicaws": "aws.bedrock",
+    "google_vertexai": "gcp.vertex_ai",
+    "google.vertex": "gcp.vertex_ai",
+    "vertex": "gcp.vertex_ai",
+    "vertex_ai": "gcp.vertex_ai",
+    "anthropicgooglecloud": "gcp.vertex_ai",
+    "google_genai": "gcp.gemini",
+    "google.generative-ai": "gcp.gemini",
+    "gemini": "gcp.gemini",
+    "azure": "azure.ai.openai",
+    "azure_openai": "azure.ai.openai",
+    "foundry": "azure.ai.inference",
+    "firstparty": "anthropic",
+    "mistralai": "mistral",
+    "litellm_proxy": "litellm"
+  },
+  "routers": ["openrouter", "litellm", "gateway"],
+  "cases": [
+    { "input": "mistralai", "expected": "mistral" },
+    { "input": "mistral", "expected": "mistral" },
+    { "input": " MistralAI ", "expected": "mistral" },
+    { "input": "firstParty", "expected": "anthropic" },
+    { "input": "anthropicAws", "expected": "aws.bedrock" },
+    { "input": "bedrock", "expected": "aws.bedrock" },
+    { "input": "aws.bedrock", "expected": "aws.bedrock" },
+    { "input": "gemini", "expected": "gcp.gemini" },
+    { "input": "google", "expected": "google" },
+    { "input": "litellm_proxy", "expected": "litellm" },
+    { "input": "openrouter", "expected": "openrouter" },
+    { "input": "gateway", "expected": "gateway" },
+    { "input": "openai", "expected": "openai" },
+    { "input": "MyProvider", "expected": "MyProvider" }
+  ],
+  "router_cases": [
+    { "provider": "openrouter", "model": "openai/gpt-4o", "expected": "openai" },
+    { "provider": "OpenRouter", "model": "openai/gpt-4o", "expected": "openai" },
+    { "provider": "openrouter", "model": "mistralai/mistral-large", "expected": "mistral" },
+    { "provider": "litellm", "model": "gemini/gemini-2.5-flash", "expected": "gcp.gemini" },
+    { "provider": "litellm", "model": "fast", "expected": "litellm" },
+    { "provider": "gateway", "model": "anthropic/claude-sonnet-4-5", "expected": "anthropic" },
+    { "provider": "openai", "model": "openai/gpt-4o", "expected": "openai" },
+    { "provider": "aws.bedrock", "model": "meta/llama", "expected": "aws.bedrock" }
+  ],
+  "requested_model_cases": [
+    { "requested": "gpt-4o", "served": "gpt-4o-2024-08-06", "expected": null },
+    { "requested": "openai/gpt-4o", "served": "gpt-4o-2024-08-06", "expected": null },
+    { "requested": "gpt-4o", "served": "openai/gpt-4o", "expected": null },
+    { "requested": "gpt-4o", "served": "gpt-4o-mini", "expected": "gpt-4o" },
+    { "requested": "openrouter/auto", "served": "anthropic/claude-sonnet-4-5", "expected": "openrouter/auto" },
+    { "requested": "fast", "served": "openai/qwen3:1.7b", "expected": "fast" },
+    { "requested": "gpt-5", "served": null, "expected": null }
+  ]
+}

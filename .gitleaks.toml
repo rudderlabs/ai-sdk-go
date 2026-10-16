@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fake keys and tokens the shared masking fixture must replace"
+paths = ['''^spec/fixtures/redaction-v0\.1\.json$''']
