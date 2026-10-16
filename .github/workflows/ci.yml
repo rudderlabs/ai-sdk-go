@@ -128,7 +128,16 @@ jobs:
           cp go.mod go.latest.mod
           cp go.sum go.latest.sum
           go get -modfile=go.latest.mod github.com/mark3labs/mcp-go@v1.1.1
-          go test -race -tags mcpgo_v1 -modfile=go.latest.mod ./ruddermcpgo/... ./examples/mcp-server-mcpgo/...
+          go test -race -tags mcpgo_v1 -modfile=go.latest.mod ./ruddermcpgo/...
+
+      # The examples are their own module.
+      - name: Test the mcp-go example against mcp-go v1.1.1
+        working-directory: examples
+        run: |
+          cp go.mod go.latest.mod
+          cp go.sum go.latest.sum
+          go get -modfile=go.latest.mod github.com/mark3labs/mcp-go@v1.1.1
+          go test -race -tags mcpgo_v1 -modfile=go.latest.mod ./mcp-server-mcpgo/...
 
   module:
     name: Module ${{ matrix.module }}
