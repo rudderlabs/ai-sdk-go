@@ -452,7 +452,10 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 		}
 		r := recover()
 		i.End(EndOptions{Status: StatusError, ErrorType: "api_error"})
-		panic(r)
+		// nil: runtime.Goexit (t.FailNow), which must keep unwinding rather than become a panic.
+		if r != nil {
+			panic(r)
+		}
 	}()
 	err = fn(ctx, i)
 	completed = true
