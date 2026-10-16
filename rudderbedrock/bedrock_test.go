@@ -446,7 +446,15 @@ func TestStreamCloseAfterMessageStop(t *testing.T) {
 		}
 		return es.Close()
 	})
-	check(t, rec.named(t, "ai_response_received")[0], map[string]any{"response_status": "success", "finish_reason": "tool_calls"})
+	// As in Node.js a stream the app stops reading is cancelled, but the SDK decodes ahead of the
+	// app: when it already reached the end of the stream, the call completed.
+	got := rec.named(t, "ai_response_received")
+	if len(got) != 1 {
+		t.Fatalf("got %d ai_response_received", len(got))
+	}
+	if status := got[0]["response_status"]; status != "cancelled" && status != "success" {
+		t.Errorf("response_status = %v", status)
+	}
 }
 
 func TestStreamNoMessageStop(t *testing.T) {

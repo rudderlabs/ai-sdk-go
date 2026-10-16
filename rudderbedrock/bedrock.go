@@ -306,7 +306,12 @@ type streamCall struct {
 	mu    sync.Mutex
 	obs   *kit.Observer
 	ended bool
+	// pending are decoded events the app may not have received yet: the SDK decodes up to
+	// readAhead events ahead (two unbuffered channels), so an event counts once two more decoded.
+	pending []smithy.Deserializable
 }
+
+const readAhead = 2
 
 // start begins observing a streamed response, before the SDK reads its first event.
 func (s *streamCall) start(resp *smithyhttp.Response) {
@@ -351,6 +356,13 @@ func (s *streamCall) observe(event smithy.Deserializable, err error) {
 	if s.ended || s.obs == nil {
 		return
 	}
+	if err != nil {
+		// The app gets every event decoded before the stream stopped.
+		for _, e := range s.pending {
+			safe(func() { s.onEvent(e) })
+		}
+		s.pending = nil
+	}
 	switch {
 	case errors.Is(err, io.EOF):
 		s.endLocked(kit.Completed, "")
@@ -363,7 +375,12 @@ func (s *streamCall) observe(event smithy.Deserializable, err error) {
 		s.endLocked(kit.Errored, t)
 		return
 	}
-	safe(func() { s.onEvent(event) })
+	s.pending = append(s.pending, event)
+	for len(s.pending) > readAhead {
+		e := s.pending[0]
+		s.pending = s.pending[1:]
+		safe(func() { s.onEvent(e) })
+	}
 }
 
 func (s *streamCall) onEvent(event smithy.Deserializable) {
