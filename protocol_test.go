@@ -284,3 +284,27 @@ func TestStreamableHTTPStateless2026(t *testing.T) {
 		t.Error("stateless call with a session ID")
 	}
 }
+
+// A latest-protocol client probes a stateful server with server/discover, learns it serves only
+// legacy versions and falls back to initialize. Only the handshake that succeeds is reported.
+func TestStatefulServerDiscoverProbeFallsBack(t *testing.T) {
+	server := workspaceServer("stateful-mcp", nil)
+	r := wrap(t, server, Options{Identify: identifyFromToken})
+	cs := connectHTTP(t, httpServer(t, server, nil), "")
+	if got := cs.InitializeResult().ProtocolVersion; got != legacyProtocol {
+		t.Fatalf("negotiated %s, want %s", got, legacyProtocol)
+	}
+	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
+	seen := r.named("mcp_client_seen")
+	if len(seen) != 1 {
+		t.Fatalf("mcp_client_seen = %d, want 1", len(seen))
+	}
+	call := r.props(t, "mcp_tool_called")
+	p := seen[0].Properties
+	if p["protocol_version"] != legacyProtocol || p["mcp_session_id"] != cs.ID() || call["mcp_session_id"] != cs.ID() || call["protocol_version"] != legacyProtocol {
+		t.Errorf("client seen = %v, tool call = %v, session %s", p, call, cs.ID())
+	}
+	if len(r.all()) != 2 {
+		t.Errorf("events = %v, want only the handshake's and the call's", r.names())
+	}
+}

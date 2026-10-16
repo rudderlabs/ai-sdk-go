@@ -82,7 +82,7 @@ The go-sdk v1.8 serves both revisions, and both are tested end to end with a rea
 | ------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Client name, version, features | The `initialize` request                                       | Each request's `_meta`: `io.modelcontextprotocol/clientInfo`, `io.modelcontextprotocol/clientCapabilities`   |
 | `protocol_version`             | Negotiated in `initialize` (else the `Mcp-Protocol-Version` header) | `io.modelcontextprotocol/protocolVersion` of each request                                              |
-| `mcp_client_seen`              | At `initialize`                                                | At the first request in the window (`server/discover` included)                                              |
+| `mcp_client_seen`              | At `initialize`                                                | At the first request in the window; a `server/discover` only when the server supports the version it asks for |
 | `mcp_session_id`               | The transport's session ID (`Mcp-Session-Id` on streamable HTTP) | Absent                                                                                                     |
 | Elicitation                    | The server's `elicitation/create` request and the client's response | A `tools/call` result with `inputRequests`, answered by the client's retry with `inputResponses` (matched by `requestState`, else by client, user and tool) |
 

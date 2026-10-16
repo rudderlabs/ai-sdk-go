@@ -21,6 +21,7 @@ import (
 
 const (
 	capabilityTool  = "request_capability"
+	methodDiscover  = "server/discover"
 	requestContext  = "request_context"
 	maxEntries      = 10_000
 	protocol2026    = "2026-07-28"
@@ -174,6 +175,7 @@ type handling struct {
 	answered bool
 	session  *mcp.ServerSession
 	reqExtra *mcp.RequestExtra
+	meta     map[string]any
 }
 
 func (w *wrapped) receiving(next mcp.MethodHandler) mcp.MethodHandler {
@@ -221,14 +223,16 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	meta := metaOf(params)
 	id := opts.identity(ctx, tokenOf(extra))
 	rc := w.context(ctx, opts, ss, extra, meta, id)
-	h := &handling{rc: rc, method: method, props: map[string]any{}, session: ss, reqExtra: extra}
+	h := &handling{rc: rc, method: method, props: map[string]any{}, session: ss, reqExtra: extra, meta: meta}
 	if method == "initialize" {
 		h.init, _ = params.(*mcp.InitializeParams)
 		return h
 	}
-	if _, ok := meta[metaProtocolVersion]; ok {
-		w.newProtocolClient(rc, extra, meta)
-	} else if _, ok := meta[metaClientInfo]; ok {
+	// server/discover is reported in after: on a server that cannot serve the version, the
+	// client falls back to initialize.
+	_, hasVersion := meta[metaProtocolVersion]
+	_, hasClient := meta[metaClientInfo]
+	if method != methodDiscover && (hasVersion || hasClient) {
 		w.newProtocolClient(rc, extra, meta)
 	}
 	switch r := req.(type) {
@@ -608,6 +612,11 @@ func (w *wrapped) after(ctx context.Context, h *handling, res mcp.Result, err er
 				caps = capabilityNames(h.init.Capabilities)
 			}
 			w.clientSeen(h.rc, h.reqExtra, client, caps)
+		}
+	case methodDiscover:
+		// The client stays on the version it asked for only when the server supports it.
+		if r, ok := res.(*mcp.DiscoverResult); ok && err == nil && r != nil && slices.Contains(r.SupportedVersions, str(h.meta[metaProtocolVersion])) {
+			w.newProtocolClient(h.rc, h.reqExtra, h.meta)
 		}
 	case "tools/list":
 		if r, ok := res.(*mcp.ListToolsResult); ok && err == nil && r != nil {

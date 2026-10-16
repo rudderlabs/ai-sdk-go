@@ -17,7 +17,7 @@ go run ./examples/mcp-server --transport=http --addr=127.0.0.1:8080 # streamable
 
 `--check` runs three legs, each a real go-sdk client exercising the server: streamable HTTP on 2025-06-18, streamable HTTP with a client on the latest protocol (a stateful server negotiates 2025-11-25 with it; see [`mcp-stateless-http`](../mcp-stateless-http) for 2026-07-28), and stdio (the example starts itself as a subprocess). Each leg must produce:
 
-- `mcp_client_seen`: server name and version, client name and version, transport, `auth_method: none`;
+- `mcp_client_seen`: server name and version, client name and version, transport, `auth_method: none`, and the negotiated `protocol_version` and session the calls then use (a latest-protocol client's `server/discover` probe of this stateful server is not reported);
 - `mcp_tool_called` twice: tool name, status, the negotiated `protocol_version`, `intent` and `user_sentiment` from `request_context`, `interaction_id` and `trace_id` from `_meta`, `argument_keys`, `call_index` and `retry_count`;
 - `audience_created` with `audience_type`, and `mcp_capability_requested` with `capability`;
 - every event for the anonymous system user (`anonymousId: ai_system`), with `context.wrapperLibrary`, valid against the spec schema.

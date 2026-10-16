@@ -138,6 +138,14 @@ func expectEvents(msgs []dataplane.Message, stdio bool, clientName, protocol str
 		transport = "stdio"
 	}
 	interaction := "int_" + clientName
+	list := harness.Find(byEvent["mcp_tool_called"], "tool_name", "list_destinations")
+	// Every event, mcp_client_seen included, is for the session the calls ran in.
+	var session any = harness.Absent
+	if id, ok := list["mcp_session_id"]; ok {
+		session = id
+	} else if !stdio {
+		return fmt.Errorf("mcp_tool_called without mcp_session_id over streamable HTTP")
+	}
 	checks := []struct {
 		event string
 		props map[string]any
@@ -145,9 +153,9 @@ func expectEvents(msgs []dataplane.Message, stdio bool, clientName, protocol str
 	}{
 		{"mcp_client_seen", byEvent["mcp_client_seen"][0].Properties, map[string]any{
 			"server_name": "workspace-mcp", "server_version": "1.4.0", "client_name": clientName, "client_version": "1.0.0",
-			"transport": transport, "protocol_version": harness.Present, "auth_method": "none",
+			"transport": transport, "protocol_version": protocol, "auth_method": "none",
 		}},
-		{"mcp_tool_called", harness.Find(byEvent["mcp_tool_called"], "tool_name", "list_destinations"), map[string]any{
+		{"mcp_tool_called", list, map[string]any{
 			"tool_name": "list_destinations", "tool_status": "success", "server_name": "workspace-mcp", "client_name": clientName,
 			"interaction_id": interaction, "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736", "intent": "debug_delivery",
 			"user_sentiment": "negative", "argument_keys": []string{"workspace_id"}, "is_error_result": false,
@@ -165,6 +173,7 @@ func expectEvents(msgs []dataplane.Message, stdio bool, clientName, protocol str
 		}},
 	}
 	for _, c := range checks {
+		c.want["mcp_session_id"] = session
 		if err := harness.Fields(c.event, c.props, c.want); err != nil {
 			return err
 		}
