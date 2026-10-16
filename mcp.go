@@ -5,104 +5,43 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
-	"runtime"
 	"slices"
-	"sort"
+	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
-	"weak"
 
-	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
 
-const (
-	capabilityTool  = "request_capability"
-	methodDiscover  = "server/discover"
-	requestContext  = "request_context"
-	maxEntries      = 10_000
-	protocol2026    = "2026-07-28"
-	legacyProtocol  = "2025-11-25"
-	capabilityReply = "Recorded for the server owner. No tool here can do this yet; tell the user."
+// instances are the wrapped go-sdk servers, without keeping them alive.
+var instances weakMap[mcp.Server, *wrapped]
+
+// sessionInfo is what the integration keeps per go-sdk session: the protocol version it
+// negotiated at initialize and, for stdio and in-memory connections, the ID that scopes its
+// call counters.
+type sessionInfo struct {
+	version    string
+	connection string
+}
+
+var (
+	sessions    weakMap[mcp.ServerSession, sessionInfo]
+	connections atomic.Uint64
 )
-
-var sentiments = []string{"negative", "neutral", "positive"}
-
-// owned are the properties the integration sets; a declared tool rule cannot override them.
-var owned = map[string]bool{
-	"mcp_session_id": true, "server_name": true, "account_id": true, "client_name": true,
-	"client_version": true, "protocol_version": true, "interaction_id": true, "trace_id": true,
-	"tool_name": true, "tool_status": true,
-}
-
-// wrapped is one tracked server. Its counters, windows and caches belong to it alone.
-type wrapped struct {
-	opts    atomic.Pointer[options]
-	name    string
-	version string
-	mem     *serverState
-}
-
-var registry sync.Map // *mcp.Server -> *wrapped
-
-// serverMemory is what a server's own responses taught the integration.
-type serverMemory struct {
-	toolSchemas          map[string]map[string]any
-	nativeContext        map[string]bool
-	nativeCapabilityTool bool
-	resources            map[string]string
-	templates            []resourceTemplate
-}
-
-type resourceTemplate struct {
-	template string
-	matches  func(string) bool
-}
-
-type scopeState struct {
-	calls  int
-	last   time.Time
-	hashes map[string]int
-}
-
-type pendingInput struct {
-	start     time.Time
-	requestID string
-	toolName  string
-}
-
-// serverState is what one wrapped server remembers, in memory, for this process only.
-type serverState struct {
-	sync.Mutex
-	server        *serverMemory
-	clientSeen    *boundedMap[time.Time]
-	scopes        *boundedMap[*scopeState]
-	inputRequired *boundedMap[pendingInput]
-	expiries      map[string]*time.Timer
-}
-
-func newServerState() *serverState {
-	return &serverState{
-		server: &serverMemory{
-			toolSchemas:   map[string]map[string]any{},
-			nativeContext: map[string]bool{},
-			resources:     map[string]string{},
-		},
-		clientSeen:    newBoundedMap[time.Time](maxEntries),
-		scopes:        newBoundedMap[*scopeState](maxEntries),
-		inputRequired: newBoundedMap[pendingInput](maxEntries),
-		expiries:      map[string]*time.Timer{},
-	}
-}
 
 // WrapMCPServer tracks an MCP server built on github.com/modelcontextprotocol/go-sdk. Call it
 // once at startup, before serving. It adds a receiving and a sending middleware; requests and
 // responses pass through unchanged except for the request_context argument (added to each
 // tool's input schema and removed before the tool runs) and, when enabled, the
 // request_capability tool. Wrapping the same server again replaces its options.
+//
+// Counters, client windows and learned schemas belong to the server name (Options.ServerName,
+// else the name the server was created with), shared by every server of that name in the
+// process: a server built per request keeps counting.
 //
 // It returns an error for invalid options, such as a missing client or a declared tool event
 // named with a reserved prefix.
@@ -114,14 +53,15 @@ func WrapMCPServer(server *mcp.Server, opts Options) error {
 	if err != nil {
 		return err
 	}
-	if existing, ok := registry.Load(server); ok {
-		existing.(*wrapped).opts.Store(n)
+	if w, ok := instances.get(server); ok {
+		n.resolveName(w.opts.Load().reflectedName, w.opts.Load().version)
+		w.opts.Store(n)
 		return nil
 	}
-	w := &wrapped{mem: newServerState()}
-	w.name, w.version = serverImpl(server)
+	n.resolveName(serverImpl(server))
+	w := &wrapped{}
 	w.opts.Store(n)
-	registry.Store(server, w)
+	instances.update(server, func(*wrapped, bool) *wrapped { return w })
 	server.AddReceivingMiddleware(w.receiving)
 	server.AddSendingMiddleware(w.sending)
 	return nil
@@ -129,53 +69,29 @@ func WrapMCPServer(server *mcp.Server, opts Options) error {
 
 // serverImpl reads the name and version the server was created with; the SDK has no getter.
 func serverImpl(s *mcp.Server) (name, version string) {
-	name = "unknown"
 	safely(func() {
 		impl := reflect.ValueOf(s).Elem().FieldByName("impl")
 		if !impl.IsValid() || impl.Kind() != reflect.Pointer || impl.IsNil() {
 			return
 		}
-		if n := impl.Elem().FieldByName("Name").String(); n != "" {
-			name = n
-		}
+		name = impl.Elem().FieldByName("Name").String()
 		version = impl.Elem().FieldByName("Version").String()
 	})
 	return name, version
 }
-
-// reqCtx is everything known about one request, for the events it causes.
-type reqCtx struct {
-	w         *wrapped
-	opts      *options
-	base      map[string]any
-	who       who
-	identity  Identity
-	requestID string
-	// scope is "session:<id>", else "interaction:<caller's id>"; empty when the server minted it.
-	scope    string
-	toolName string
-}
-
-type reqCtxKey struct{}
 
 // elicitFlagKey marks a context in which an elicitation/create request reached the client.
 type elicitFlagKey struct{}
 
 // handling is the state of one request between the two halves of the middleware.
 type handling struct {
-	rc       *reqCtx
-	method   string
-	name     string
-	req      mcp.Request // replaces the request, when request_context was stripped
-	reply    mcp.Result  // answers the request without calling the server
-	args     map[string]any
-	props    map[string]any
-	start    time.Time
-	init     *mcp.InitializeParams
-	answered bool
-	session  *mcp.ServerSession
-	reqExtra *mcp.RequestExtra
-	meta     map[string]any
+	rc      *reqCtx
+	method  string
+	name    string
+	req     mcp.Request // replaces the request, when request_context was stripped
+	reply   mcp.Result  // answers the request without calling the server
+	init    *mcp.InitializeParams
+	session *mcp.ServerSession
 }
 
 func (w *wrapped) receiving(next mcp.MethodHandler) mcp.MethodHandler {
@@ -186,16 +102,19 @@ func (w *wrapped) receiving(next mcp.MethodHandler) mcp.MethodHandler {
 			return next(ctx, method, req)
 		}
 		if h.reply != nil {
+			safely(func() { h.rc.Succeeded(method, nil) })
 			return h.reply, nil
 		}
 		if h.req != nil {
 			req = h.req
 		}
 		ctx = context.WithValue(ctx, reqCtxKey{}, h.rc)
-		h.start = time.Now()
+		h.rc.Started()
 		res, err := next(ctx, method, req)
+		// Read now: the transport may cancel the context after the call returned.
+		ctxErr := ctx.Err()
 		safely(func() {
-			if replaced := w.after(ctx, h, res, err); replaced != nil {
+			if replaced := w.after(h, res, err, ctxErr); replaced != nil {
 				res = replaced
 			}
 		})
@@ -216,93 +135,50 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	if strings.HasPrefix(method, "notifications/") {
 		return nil
 	}
-	opts := w.opts.Load()
 	ss, _ := req.GetSession().(*mcp.ServerSession)
 	extra := req.GetExtra()
 	params := req.GetParams()
-	meta := metaOf(params)
-	id := opts.identity(ctx, tokenOf(extra))
-	rc := w.context(ctx, opts, ss, extra, meta, id)
-	h := &handling{rc: rc, method: method, props: map[string]any{}, session: ss, reqExtra: extra, meta: meta}
+	r := mcpbridge.Request{Ctx: ctx, Meta: metaOf(params), RequestID: requestIDOf(ctx)}
+	if extra != nil {
+		r.Token = extra.TokenInfo
+		r.HTTP = extra.Header != nil
+	}
+	r.SessionID = sessionIDOf(ss, extra)
+	var info sessionInfo
+	if ss != nil {
+		info, _ = sessions.get(ss)
+		if ip := ss.InitializeParams(); ip != nil && ip.ClientInfo != nil {
+			r.Client = &mcpbridge.Client{Name: ip.ClientInfo.Name, Title: ip.ClientInfo.Title, Version: ip.ClientInfo.Version}
+		}
+		if r.SessionID == "" && !r.HTTP {
+			info = sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
+				if i.connection == "" {
+					i.connection = strconv.FormatUint(connections.Add(1), 10)
+				}
+				return i
+			})
+			r.Connection = info.connection
+		}
+	}
+	r.ProtocolVersion = info.version
+	if r.ProtocolVersion == "" && r.HTTP {
+		r.ProtocolVersion = extra.Header.Get("Mcp-Protocol-Version")
+	}
+	rc := w.begin(r)
+	h := &handling{rc: rc, method: method, session: ss}
 	if method == "initialize" {
 		h.init, _ = params.(*mcp.InitializeParams)
 		return h
 	}
-	// server/discover is reported in after: on a server that cannot serve the version, the
-	// client falls back to initialize.
-	_, hasVersion := meta[metaProtocolVersion]
-	_, hasClient := meta[metaClientInfo]
-	if method != methodDiscover && (hasVersion || hasClient) {
-		w.newProtocolClient(rc, extra, meta)
-	}
-	switch r := req.(type) {
+	switch x := req.(type) {
 	case *mcp.CallToolRequest:
-		w.toolCall(h, r)
+		w.toolCall(h, x)
 	case *mcp.ReadResourceRequest:
-		h.name = w.resourceName(r.Params.URI)
+		h.name = rc.ResourceName(x.Params.URI)
 	case *mcp.GetPromptRequest:
-		h.name = r.Params.Name
-		if h.name == "" {
-			h.name = "unknown"
-		}
+		h.name = x.Params.Name
 	}
 	return h
-}
-
-func (w *wrapped) newProtocolClient(rc *reqCtx, extra *mcp.RequestExtra, meta map[string]any) {
-	client := implementation(meta[metaClientInfo])
-	w.clientSeen(rc, extra, client, capabilityNames(meta[metaClientCapabilities]))
-}
-
-func implementation(v any) *mcp.Implementation {
-	var impl mcp.Implementation
-	b, err := compactJSON(v)
-	if err != nil || v == nil || json.Unmarshal(b, &impl) != nil {
-		return nil
-	}
-	return &impl
-}
-
-func (w *wrapped) context(ctx context.Context, opts *options, ss *mcp.ServerSession, extra *mcp.RequestExtra, meta map[string]any, id Identity) *reqCtx {
-	client := implementation(meta[metaClientInfo])
-	var ip *mcp.InitializeParams
-	if ss != nil {
-		ip = ss.InitializeParams()
-	}
-	if client == nil && ip != nil {
-		client = ip.ClientInfo
-	}
-	sessionID := sessionIDOf(ss, extra)
-	interactionID, traceID := joinIDs(meta)
-	base := map[string]any{}
-	put(base, "mcp_session_id", sessionID)
-	base["server_name"] = w.name
-	put(base, "account_id", id.AccountID)
-	if client != nil {
-		put(base, "client_name", client.Name)
-		put(base, "client_version", client.Version)
-	}
-	put(base, "protocol_version", protocolVersion(ss, extra, meta))
-	base["interaction_id"] = interactionID
-	if interactionID == "" {
-		base["interaction_id"] = mintID()
-	}
-	put(base, "trace_id", traceID)
-	rc := &reqCtx{w: w, opts: opts, base: base, who: who{id.UserID, id.AnonymousID}, identity: id, requestID: requestIDOf(ctx)}
-	switch {
-	case sessionID != "":
-		rc.scope = "session:" + sessionID
-	case interactionID != "":
-		rc.scope = "interaction:" + interactionID
-	}
-	return rc
-}
-
-func tokenOf(extra *mcp.RequestExtra) (token *auth.TokenInfo) {
-	if extra != nil {
-		token = extra.TokenInfo
-	}
-	return token
 }
 
 func sessionIDOf(ss *mcp.ServerSession, extra *mcp.RequestExtra) string {
@@ -317,48 +193,46 @@ func sessionIDOf(ss *mcp.ServerSession, extra *mcp.RequestExtra) string {
 	return ""
 }
 
-// negotiated holds the protocol version each session negotiated at initialize, without
-// keeping the session alive.
-var negotiated = struct {
-	sync.Mutex
-	m map[weak.Pointer[mcp.ServerSession]]string
-}{m: map[weak.Pointer[mcp.ServerSession]]string{}}
+func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
+	p := r.Params
+	var raw map[string]json.RawMessage
+	if len(p.Arguments) > 0 && json.Unmarshal(p.Arguments, &raw) != nil {
+		raw = nil
+	}
+	var answers []mcpbridge.Answer
+	for k, v := range p.InputResponses {
+		er, _ := v.(*mcp.ElicitResult)
+		a := mcpbridge.Answer{Key: k}
+		if er != nil {
+			a.Action = er.Action
+		}
+		answers = append(answers, a)
+	}
+	_, progress := p.Meta["progressToken"]
+	strip, capability := h.rc.ToolCall(p.Name, raw, progress, answers, p.RequestState)
+	if capability {
+		reply := h.rc.Capability(raw)
+		h.reply = &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: reply}}}
+		return
+	}
+	if strip {
+		delete(raw, requestContext)
+		if stripped, err := json.Marshal(raw); err == nil {
+			cp := *p
+			cp.Arguments = stripped
+			h.req = &mcp.CallToolRequest{Session: r.Session, Params: &cp, Extra: r.Extra}
+		}
+	}
+}
 
 func rememberNegotiated(ss *mcp.ServerSession, version string) {
 	if ss == nil || version == "" {
 		return
 	}
-	wp := weak.Make(ss)
-	negotiated.Lock()
-	defer negotiated.Unlock()
-	if _, ok := negotiated.m[wp]; !ok {
-		runtime.AddCleanup(ss, func(wp weak.Pointer[mcp.ServerSession]) {
-			negotiated.Lock()
-			defer negotiated.Unlock()
-			delete(negotiated.m, wp)
-		}, wp)
-	}
-	negotiated.m[wp] = version
-}
-
-// protocolVersion is the request's _meta version (2026-07-28), else the session's negotiated
-// one, else the Mcp-Protocol-Version header.
-func protocolVersion(ss *mcp.ServerSession, extra *mcp.RequestExtra, meta map[string]any) string {
-	if v := str(meta[metaProtocolVersion]); v != "" {
-		return v
-	}
-	if ss != nil {
-		negotiated.Lock()
-		v := negotiated.m[weak.Make(ss)]
-		negotiated.Unlock()
-		if v != "" {
-			return v
-		}
-	}
-	if extra != nil && extra.Header != nil {
-		return extra.Header.Get("Mcp-Protocol-Version")
-	}
-	return ""
+	sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
+		i.version = version
+		return i
+	})
 }
 
 // idKeyType is the go-sdk's unexported context key type for the JSON-RPC request ID.
@@ -383,7 +257,7 @@ func requestIDOf(ctx context.Context) (id string) {
 			case string:
 				id = raw
 			case int64:
-				id = formatInt(raw)
+				id = strconv.FormatInt(raw, 10)
 			}
 		}
 	})
@@ -413,466 +287,93 @@ func findIDKeyType(ctx context.Context) reflect.Type {
 	return nil
 }
 
-func formatInt(n int64) string {
-	b, _ := json.Marshal(n)
-	return string(b)
+// failure is the error_type of a failed request, or "" when it succeeded. A request is
+// cancelled only when it failed (an error, or an error result) while its context was cancelled:
+// a call that succeeded stays a success.
+func failure(err, ctxErr error, errorResult bool) (kind string, cancelled bool) {
+	if err == nil && !errorResult {
+		return "", false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(ctxErr, context.Canceled) {
+		return "cancelled", true
+	}
+	if err == nil {
+		return "", false
+	}
+	return errorType(err), false
 }
 
-func transportOf(opts *options, extra *mcp.RequestExtra) string {
-	if extra != nil && extra.Header != nil {
-		return TransportStreamableHTTP
+func (w *wrapped) after(h *handling, res mcp.Result, err, ctxErr error) mcp.Result {
+	rc := h.rc
+	var discover []string
+	if r, ok := res.(*mcp.DiscoverResult); ok && r != nil {
+		discover = r.SupportedVersions
 	}
-	return opts.Transport
-}
-
-func (w *wrapped) clientSeen(rc *reqCtx, extra *mcp.RequestExtra, client *mcp.Implementation, caps []string) {
-	var clientName, clientTitle, clientVersion string
-	if client != nil {
-		clientName, clientTitle, clientVersion = client.Name, client.Title, client.Version
+	if err == nil {
+		rc.Succeeded(h.method, discover)
 	}
-	user := rc.who.userID
-	if user == "" {
-		user = rc.who.anonymousID
-	}
-	key := strings.Join([]string{w.name, clientName, rc.identity.OAuthClientID, user}, "\x00")
-	now := time.Now()
-	w.mem.Lock()
-	until, seen := w.mem.clientSeen.get(key)
-	if seen && until.After(now) {
-		w.mem.Unlock()
-		return
-	}
-	w.mem.clientSeen.set(key, now.Add(rc.opts.ClientSeenWindow))
-	w.mem.Unlock()
-	p := map[string]any{}
-	put(p, "mcp_session_id", str(rc.base["mcp_session_id"]))
-	p["server_name"] = w.name
-	put(p, "server_version", w.version)
-	put(p, "client_name", clientName)
-	put(p, "client_title", clientTitle)
-	put(p, "client_version", clientVersion)
-	if caps != nil {
-		p["client_capabilities"] = caps
-	}
-	put(p, "protocol_version", str(rc.base["protocol_version"]))
-	put(p, "transport", transportOf(rc.opts, extra))
-	put(p, "auth_method", rc.identity.AuthMethod)
-	put(p, "oauth_client_id", rc.identity.OAuthClientID)
-	if rc.identity.TokenScopes != nil {
-		p["token_scopes"] = rc.identity.TokenScopes
-	}
-	put(p, "country", rc.identity.Country)
-	put(p, "account_id", rc.identity.AccountID)
-	emit(rc.opts.Analytics, "mcp_client_seen", rc.who, p)
-}
-
-func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
-	rc, opts, p := h.rc, h.rc.opts, r.Params
-	h.name = p.Name
-	if h.name == "" {
-		h.name = "unknown"
-	}
-	rc.toolName = h.name
-	w.mem.Lock()
-	sm := w.mem.server
-	nativeCap, nativeContext := sm.nativeCapabilityTool, sm.nativeContext[h.name]
-	w.mem.Unlock()
-	if h.name == capabilityTool && opts.capabilities != nil && !nativeCap {
-		h.reply = w.capabilityRequested(rc, p.Arguments)
-		return
-	}
-	var raw map[string]json.RawMessage
-	if len(p.Arguments) > 0 && json.Unmarshal(p.Arguments, &raw) == nil && raw != nil {
-		if reported, ok := raw[requestContext]; ok && !opts.RequestContext.Disabled && !nativeContext {
-			delete(raw, requestContext)
-			if stripped, err := json.Marshal(raw); err == nil {
-				cp := *p
-				cp.Arguments = stripped
-				h.req = &mcp.CallToolRequest{Session: r.Session, Params: &cp, Extra: r.Extra}
-				var v any
-				_ = json.Unmarshal(reported, &v)
-				for k, val := range w.reportedContext(opts, v) {
-					h.props[k] = val
-				}
-			}
-		}
-		h.args = map[string]any{}
-		keys := make([]string, 0, len(raw))
-		for k, val := range raw {
-			var x any
-			_ = json.Unmarshal(val, &x)
-			h.args[k] = x
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		h.props["argument_keys"] = keys
-	}
-	_, progress := p.Meta["progressToken"]
-	h.props["progress_requested"] = progress
-	h.answered = len(p.InputResponses) > 0
-	if h.answered {
-		w.inputResponses(rc, p, h.name)
-	}
-	if rc.scope == "" {
-		return
-	}
-	start := time.Now()
-	key := w.name + "\x00" + rc.scope
-	w.mem.Lock()
-	defer w.mem.Unlock()
-	s, ok := w.mem.scopes.get(key)
-	if !ok {
-		s = &scopeState{hashes: map[string]int{}}
-	}
-	h.props["call_index"] = s.calls
-	s.calls++
-	if !s.last.IsZero() {
-		h.props["ms_since_previous_call"] = max(0, start.Sub(s.last).Milliseconds())
-	}
-	s.last = start
-	if !h.answered {
-		hash := argumentsHash(h.name, h.args)
-		h.props["retry_count"] = s.hashes[hash]
-		s.hashes[hash]++
-	}
-	w.mem.scopes.set(key, s)
-}
-
-func (w *wrapped) reportedContext(opts *options, v any) map[string]any {
-	out := map[string]any{}
-	m, ok := v.(map[string]any)
-	if !ok {
-		return out
-	}
-	if intent := str(m["intent"]); opts.intents != nil && intent != "" {
-		if slices.Contains(opts.intents, intent) {
-			out["intent"] = intent
-		} else {
-			out["intent"] = "other"
-		}
-	}
-	if s := str(m["user_sentiment"]); opts.userSentiment && slices.Contains(sentiments, s) {
-		out["user_sentiment"] = s
-	}
-	if reason, ok := m["call_reason"].(string); ok && opts.CaptureContent {
-		if masked, ok := maskText(strings.TrimSpace(reason)); ok && masked != "" {
-			out["call_reason"] = capText(masked, maxTextLength)
-		}
-	}
-	return out
-}
-
-func (w *wrapped) capabilityRequested(rc *reqCtx, arguments json.RawMessage) mcp.Result {
-	var args map[string]any
-	_ = json.Unmarshal(arguments, &args)
-	capability := "other"
-	if c := str(args["capability"]); c != "" && slices.Contains(rc.opts.capabilities, c) {
-		capability = c
-	}
-	p := map[string]any{}
-	for k, v := range rc.base {
-		p[k] = v
-	}
-	p["capability"] = capability
-	if detail, ok := args["detail"].(string); ok && capability == "other" && rc.opts.CaptureContent {
-		// Withheld, not sent, when it still looks sensitive after masking.
-		if masked, ok := maskText(strings.TrimSpace(detail)); ok && masked != "" && !hasSensitive(masked) {
-			p["capability_detail"] = capText(masked, maxTextLength)
-		}
-	}
-	emit(rc.opts.Analytics, "mcp_capability_requested", rc.who, p)
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: capabilityReply}}}
-}
-
-func (w *wrapped) resourceName(uri string) string {
-	w.mem.Lock()
-	defer w.mem.Unlock()
-	sm := w.mem.server
-	for _, t := range sm.templates {
-		if t.matches(uri) {
-			return t.template
-		}
-	}
-	if name := sm.resources[uri]; name != "" {
-		return name
-	}
-	return "unknown"
-}
-
-func (w *wrapped) after(ctx context.Context, h *handling, res mcp.Result, err error) mcp.Result {
+	r, _ := res.(*mcp.CallToolResult)
+	errType, cancelled := failure(err, ctxErr, r != nil && r.IsError)
 	switch h.method {
 	case "initialize":
 		if r, ok := res.(*mcp.InitializeResult); ok && err == nil && r != nil {
 			rememberNegotiated(h.session, r.ProtocolVersion)
-			put(h.rc.base, "protocol_version", r.ProtocolVersion)
-			var client *mcp.Implementation
-			var caps []string
+			var client *mcpbridge.Client
+			var caps any
 			if h.init != nil {
-				client = h.init.ClientInfo
-				caps = capabilityNames(h.init.Capabilities)
+				if ci := h.init.ClientInfo; ci != nil {
+					client = &mcpbridge.Client{Name: ci.Name, Title: ci.Title, Version: ci.Version}
+				}
+				caps = h.init.Capabilities
 			}
-			w.clientSeen(h.rc, h.reqExtra, client, caps)
-		}
-	case methodDiscover:
-		// The client stays on the version it asked for only when the server supports it.
-		if r, ok := res.(*mcp.DiscoverResult); ok && err == nil && r != nil && slices.Contains(r.SupportedVersions, str(h.meta[metaProtocolVersion])) {
-			w.newProtocolClient(h.rc, h.reqExtra, h.meta)
+			rc.Initialized(client, caps, r.ProtocolVersion)
 		}
 	case "tools/list":
 		if r, ok := res.(*mcp.ListToolsResult); ok && err == nil && r != nil {
-			if replaced := w.toolsList(h.rc, r); replaced != nil {
-				return replaced
-			}
+			return toolsList(rc, w, r)
 		}
-	case "resources/list", "resources/templates/list":
-		if err == nil {
-			w.rememberResources(res)
+	case "resources/list":
+		if r, ok := res.(*mcp.ListResourcesResult); ok && err == nil && r != nil {
+			byURI := map[string]string{}
+			for _, x := range r.Resources {
+				if x != nil {
+					byURI[x.URI] = x.Name
+				}
+			}
+			w.RememberResources(byURI)
+		}
+	case "resources/templates/list":
+		if r, ok := res.(*mcp.ListResourceTemplatesResult); ok && err == nil && r != nil {
+			var templates []string
+			for _, x := range r.ResourceTemplates {
+				if x != nil {
+					templates = append(templates, x.URITemplate)
+				}
+			}
+			w.RememberTemplates(templates)
 		}
 	case "tools/call":
-		w.toolCallDone(ctx, h, res, err)
+		o := mcpbridge.Outcome{ErrorType: errType, Cancelled: cancelled}
+		if r, ok := res.(*mcp.CallToolResult); ok && r != nil && err == nil {
+			o.Result = r
+			if r.InputRequests != nil {
+				o.InputRequired, o.RequestState = true, r.RequestState
+				for key, ir := range r.InputRequests {
+					if _, ok := ir.(*mcp.ElicitParams); ok {
+						o.InputKeys = append(o.InputKeys, key)
+					}
+				}
+			}
+		}
+		rc.ToolDone(o)
 	case "resources/read", "prompts/get":
-		event, nameKey := "mcp_resource_read", "resource_name"
-		if h.method == "prompts/get" {
-			event, nameKey = "mcp_prompt_used", "prompt_name"
+		size := 0
+		if err == nil {
+			size = byteSize(res)
 		}
-		extra := map[string]any{}
-		status := "success"
-		switch {
-		case wasCanceled(ctx, err):
-			status = "error"
-			extra["error_type"] = "cancelled"
-		case err != nil:
-			status = "error"
-			extra["error_type"] = errorType(err)
-		default:
-			extra["result_size_bytes"] = byteSize(res)
-		}
-		w.finish(h, event, nameKey, status, extra)
+		rc.Finished(h.method, h.name, size, errType)
 	}
 	return nil
-}
-
-func wasCanceled(ctx context.Context, err error) bool {
-	return errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled)
-}
-
-func (w *wrapped) toolCallDone(ctx context.Context, h *handling, res mcp.Result, err error) {
-	r, _ := res.(*mcp.CallToolResult)
-	extra := map[string]any{}
-	status := "success"
-	var result map[string]any
-	switch {
-	case wasCanceled(ctx, err):
-		status = "error"
-		extra["error_type"] = "cancelled"
-		extra["time_to_cancel_ms"] = time.Since(h.start).Milliseconds()
-	case err != nil:
-		status = "error"
-		extra["error_type"] = errorType(err)
-	case r == nil:
-		status = "error"
-		extra["error_type"] = "api_error"
-	case r.InputRequests != nil:
-		// A 2026-07-28 input_required leg: the call goes on in the client's retry.
-		w.inputRequired(h, r)
-		return
-	default:
-		b, _ := compactJSON(r)
-		result, _ = toJSONValue(r).(map[string]any)
-		for k, v := range resultStats(result, len(b)) {
-			extra[k] = v
-		}
-		extra["is_error_result"] = r.IsError
-		if r.IsError {
-			status = "error"
-			w.mem.Lock()
-			schema := w.mem.server.toolSchemas[h.name]
-			w.mem.Unlock()
-			invalid := invalidArguments(schema, h.args)
-			if len(invalid) > 0 {
-				extra["invalid_arguments"] = invalid
-				extra["error_type"] = "invalid_request"
-			} else {
-				extra["error_type"] = "api_error"
-			}
-		}
-	}
-	w.finish(h, "mcp_tool_called", "tool_name", status, extra)
-	w.declaredEvent(h, result, status)
-}
-
-func (w *wrapped) finish(h *handling, event, nameKey, status string, extra map[string]any) {
-	end := time.Now()
-	p := map[string]any{}
-	for k, v := range h.rc.base {
-		p[k] = v
-	}
-	p["request_id"] = h.rc.requestID
-	p[nameKey] = h.name
-	p["tool_status"] = status
-	if _, cancel := extra["time_to_cancel_ms"]; !cancel {
-		p["duration_ms"] = end.Sub(h.start).Milliseconds()
-	}
-	if h.method == "tools/call" {
-		for k, v := range h.props {
-			p[k] = v
-		}
-		if h.rc.scope != "" {
-			w.mem.Lock()
-			if s, ok := w.mem.scopes.get(w.name + "\x00" + h.rc.scope); ok {
-				s.last = end
-			}
-			w.mem.Unlock()
-		}
-	}
-	for k, v := range extra {
-		p[k] = v
-	}
-	emit(h.rc.opts.Analytics, event, h.rc.who, p)
-}
-
-// toolResultValue is what rules see of a result: structuredContent, else a single text block
-// parsed as JSON (or as is), else the content blocks.
-func toolResultValue(result map[string]any) any {
-	if result == nil {
-		return nil
-	}
-	if sc, ok := result["structuredContent"]; ok && sc != nil {
-		return sc
-	}
-	content, _ := result["content"].([]any)
-	if len(content) == 1 {
-		if block, ok := content[0].(map[string]any); ok && block["type"] == "text" {
-			if text, ok := block["text"].(string); ok {
-				var v any
-				if json.Unmarshal([]byte(text), &v) == nil {
-					return v
-				}
-				return text
-			}
-		}
-	}
-	return result["content"]
-}
-
-func (w *wrapped) declaredEvent(h *handling, result map[string]any, status string) {
-	rule, ok := h.rc.opts.rules[h.name]
-	if !ok {
-		return
-	}
-	value := toolResultValue(result)
-	if rule.When != nil {
-		send := false
-		safely(func() { send = rule.When(h.args, value) })
-		if !send {
-			return
-		}
-	}
-	p := map[string]any{}
-	if rule.Properties != nil {
-		safely(func() {
-			for k, v := range rule.Properties(h.args, value) {
-				if !owned[k] {
-					p[k] = v
-				}
-			}
-		})
-	}
-	for k, v := range h.rc.base {
-		p[k] = v
-	}
-	p["tool_name"] = h.name
-	p["tool_status"] = status
-	emit(h.rc.opts.Analytics, rule.Event, h.rc.who, p)
-}
-
-func (w *wrapped) inputKey(rc *reqCtx, toolName, key, requestState string) string {
-	if requestState != "" {
-		return strings.Join([]string{w.name, "state", requestState, key}, "\x00")
-	}
-	whom := str(rc.base["mcp_session_id"])
-	if whom == "" {
-		user := rc.who.userID
-		if user == "" {
-			user = rc.who.anonymousID
-		}
-		whom = str(rc.base["client_name"]) + "\x00" + user
-	}
-	return strings.Join([]string{w.name, whom, toolName, key}, "\x00")
-}
-
-func (w *wrapped) inputRequired(h *handling, r *mcp.CallToolResult) {
-	w.mem.Lock()
-	defer w.mem.Unlock()
-	for key, ir := range r.InputRequests {
-		if _, ok := ir.(*mcp.ElicitParams); !ok {
-			continue
-		}
-		w.mem.inputRequired.set(w.inputKey(h.rc, h.name, key, r.RequestState), pendingInput{
-			start: time.Now(), requestID: h.rc.requestID, toolName: h.name,
-		})
-	}
-}
-
-// inputResponses records the elicitations a 2026-07-28 retry answers.
-func (w *wrapped) inputResponses(rc *reqCtx, p *mcp.CallToolParamsRaw, toolName string) {
-	keys := make([]string, 0, len(p.InputResponses))
-	for k := range p.InputResponses {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		er, ok := p.InputResponses[key].(*mcp.ElicitResult)
-		if !ok || !validAction(er.Action) {
-			continue
-		}
-		k := w.inputKey(rc, toolName, key, p.RequestState)
-		w.mem.Lock()
-		pending, found := w.mem.inputRequired.get(k)
-		w.mem.inputRequired.remove(k)
-		w.mem.Unlock()
-		e := elicitation{action: er.Action, toolName: toolName}
-		if found {
-			e.duration = time.Since(pending.start)
-			e.hasDuration = true
-			e.requestID = pending.requestID
-		}
-		w.elicitationCompleted(rc, e)
-	}
-}
-
-func validAction(a string) bool { return a == "accept" || a == "decline" || a == "cancel" }
-
-type elicitation struct {
-	action      string
-	errorType   string
-	duration    time.Duration
-	hasDuration bool
-	toolName    string
-	requestID   string
-}
-
-func (w *wrapped) elicitationCompleted(rc *reqCtx, e elicitation) {
-	p := map[string]any{}
-	var whom who
-	var opts *options
-	if rc != nil {
-		for k, v := range rc.base {
-			p[k] = v
-		}
-		whom, opts = rc.who, rc.opts
-	} else {
-		p["server_name"] = w.name
-		opts = w.opts.Load()
-	}
-	p["elicitation_action"] = e.action
-	put(p, "tool_name", e.toolName)
-	put(p, "request_id", e.requestID)
-	if e.hasDuration {
-		p["duration_ms"] = e.duration.Milliseconds()
-	}
-	put(p, "error_type", e.errorType)
-	emit(opts.Analytics, "mcp_elicitation_completed", whom, p)
 }
 
 func (w *wrapped) sending(next mcp.MethodHandler) mcp.MethodHandler {
@@ -886,24 +387,21 @@ func (w *wrapped) sending(next mcp.MethodHandler) mcp.MethodHandler {
 		start := time.Now()
 		res, err := next(ctx, method, req)
 		safely(func() {
-			rc, _ := ctx.Value(reqCtxKey{}).(*reqCtx)
-			if rc != nil && rc.w != w {
-				rc = nil
-			}
-			e := elicitation{duration: time.Since(start), hasDuration: true, action: "cancel"}
-			if rc != nil {
-				e.toolName, e.requestID = rc.toolName, rc.requestID
-			}
+			e := mcpbridge.Elicitation{Duration: time.Since(start), HasDuration: true, Action: "cancel"}
 			r, _ := res.(*mcp.ElicitResult)
 			switch {
 			case err != nil:
-				e.errorType = errorType(err)
+				e.ErrorType = errorType(err)
 			case r != nil && validAction(r.Action):
-				e.action = r.Action
+				e.Action = r.Action
 			default:
-				e.errorType = "api_error"
+				e.ErrorType = "api_error"
 			}
-			w.elicitationCompleted(rc, e)
+			var call mcpbridge.Call
+			if rc := fromContext(ctx); rc != nil {
+				call = rc
+			}
+			w.Elicited(call, e)
 		})
 		return res, err
 	}
@@ -918,124 +416,43 @@ func Elicit(ctx context.Context, session *mcp.ServerSession, params *mcp.ElicitP
 	res, err := session.Elicit(context.WithValue(ctx, elicitFlagKey{}, sent), params)
 	if err != nil && !sent.Load() {
 		safely(func() {
-			if rc, ok := ctx.Value(reqCtxKey{}).(*reqCtx); ok && rc != nil {
-				rc.w.elicitationCompleted(rc, elicitation{
-					action: "cancel", errorType: "invalid_request", toolName: rc.toolName, requestID: rc.requestID,
-				})
+			if rc := fromContext(ctx); rc != nil {
+				rc.w.Elicited(rc, mcpbridge.Elicitation{Action: "cancel", ErrorType: "invalid_request"})
 			}
 		})
 	}
 	return res, err
 }
 
-func requestContextSchema(opts *options) map[string]any {
-	props := map[string]any{}
-	if opts.intents != nil {
-		props["intent"] = map[string]any{
-			"type": "string", "enum": opts.intents,
-			"description": "What the user is trying to do, from this list; 'other' when none fits.",
-		}
-	}
-	if opts.userSentiment {
-		props["user_sentiment"] = map[string]any{
-			"type": "string", "enum": sentiments,
-			"description": "The user's mood in their latest message.",
-		}
-	}
-	if opts.CaptureContent {
-		props["call_reason"] = map[string]any{
-			"type": "string", "maxLength": maxTextLength,
-			"description": "One short sentence on why you are making this call. No personal data.",
-		}
-	}
-	if len(props) == 0 {
-		return nil
-	}
-	return map[string]any{
-		"type":                 "object",
-		"description":          "Optional context for the server's analytics; removed before the tool runs. Leave out what you are unsure of.",
-		"properties":           props,
-		"additionalProperties": false,
-	}
-}
-
-func capabilityToolDef(opts *options) *mcp.Tool {
-	props := map[string]any{
-		"capability": map[string]any{
-			"type": "string", "enum": opts.capabilities,
-			"description": "The missing capability; 'other' when none fits.",
-		},
-	}
-	if opts.CaptureContent {
-		props["detail"] = map[string]any{
-			"type": "string", "maxLength": maxTextLength,
-			"description": "For 'other' only: a short description of the need. No personal data.",
-		}
-	}
-	return &mcp.Tool{
-		Name:        capabilityTool,
-		Description: "Call this when no available tool can do what the user needs. It records the missing capability for the server's owner and performs no action.",
-		InputSchema: map[string]any{
-			"type": "object", "properties": props, "required": []string{"capability"}, "additionalProperties": false,
-		},
-	}
-}
-
-// toolsList records the tools and adds request_context and request_capability to a copy of a
-// tools/list page.
-func (w *wrapped) toolsList(rc *reqCtx, r *mcp.ListToolsResult) mcp.Result {
-	opts := rc.opts
-	var contextSchema map[string]any
-	if !opts.RequestContext.Disabled {
-		contextSchema = requestContextSchema(opts)
-	}
-	w.mem.Lock()
-	defer w.mem.Unlock()
-	sm := w.mem.server
-	changed := false
-	tools := make([]*mcp.Tool, 0, len(r.Tools)+1)
-	for _, t := range r.Tools {
+// toolsList adds request_context and request_capability to a copy of a tools/list page.
+func toolsList(rc *reqCtx, w *wrapped, r *mcp.ListToolsResult) mcp.Result {
+	listed := make([]mcpbridge.Tool, 0, len(r.Tools))
+	index := make([]int, 0, len(r.Tools))
+	for i, t := range r.Tools {
 		if t == nil {
-			tools = append(tools, t)
 			continue
 		}
 		schema, _ := toJSONValue(t.InputSchema).(map[string]any)
-		if schema == nil {
-			schema = map[string]any{}
-		}
-		sm.toolSchemas[t.Name] = schema
-		if t.Name == capabilityTool {
-			sm.nativeCapabilityTool = true
-		}
-		props, _ := schema["properties"].(map[string]any)
-		if _, native := props[requestContext]; native {
-			sm.nativeContext[t.Name] = true
-			tools = append(tools, t)
-			continue
-		}
-		delete(sm.nativeContext, t.Name)
-		if contextSchema == nil {
-			tools = append(tools, t)
-			continue
-		}
-		changed = true
-		newProps := map[string]any{}
-		for k, v := range props {
-			newProps[k] = v
-		}
-		newProps[requestContext] = contextSchema
-		newSchema := map[string]any{}
-		for k, v := range schema {
-			newSchema[k] = v
-		}
-		newSchema["type"] = "object"
-		newSchema["properties"] = newProps
-		cp := *t
-		cp.InputSchema = newSchema
-		tools = append(tools, &cp)
+		listed = append(listed, mcpbridge.Tool{Name: t.Name, Schema: schema})
+		index = append(index, i)
 	}
-	if opts.capabilities != nil && !sm.nativeCapabilityTool && r.NextCursor == "" {
-		tools = append(tools, capabilityToolDef(opts))
+	schemas, addCapability := rc.ListTools(listed, r.NextCursor == "")
+	changed := false
+	tools := slices.Clone(r.Tools)
+	for j, schema := range schemas {
+		if schema == nil {
+			continue
+		}
+		cp := *tools[index[j]]
+		cp.InputSchema = schema
+		tools[index[j]] = &cp
+		changed = true
+	}
+	if def := w.CapabilityTool(); addCapability && def != nil {
+		tools = append(tools, &mcp.Tool{
+			Name: def.Name, Description: def.Description, InputSchema: def.Schema,
+			Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+		})
 		changed = true
 	}
 	if !changed {
@@ -1044,25 +461,4 @@ func (w *wrapped) toolsList(rc *reqCtx, r *mcp.ListToolsResult) mcp.Result {
 	cp := *r
 	cp.Tools = tools
 	return &cp
-}
-
-func (w *wrapped) rememberResources(res mcp.Result) {
-	w.mem.Lock()
-	defer w.mem.Unlock()
-	sm := w.mem.server
-	switch r := res.(type) {
-	case *mcp.ListResourcesResult:
-		for _, x := range r.Resources {
-			if x != nil && x.URI != "" && x.Name != "" {
-				sm.resources[x.URI] = x.Name
-			}
-		}
-	case *mcp.ListResourceTemplatesResult:
-		for _, x := range r.ResourceTemplates {
-			if x == nil || x.URITemplate == "" || slices.ContainsFunc(sm.templates, func(t resourceTemplate) bool { return t.template == x.URITemplate }) {
-				continue
-			}
-			sm.templates = append(sm.templates, resourceTemplate{template: x.URITemplate, matches: templateMatcher(x.URITemplate).MatchString})
-		}
-	}
 }

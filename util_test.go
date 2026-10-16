@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -125,19 +128,59 @@ func TestInvalidArguments(t *testing.T) {
 
 func TestErrorTypes(t *testing.T) {
 	cases := map[error]string{
-		context.DeadlineExceeded:              "timeout",
-		fmt.Errorf("x: %w", context.Canceled): "cancelled",
-		&jsonrpc.Error{Code: -32700}:          "invalid_request",
-		&jsonrpc.Error{Code: -32601}:          "invalid_request",
-		&jsonrpc.Error{Code: -32000}:          "connection_error",
-		&jsonrpc.Error{Code: -32001}:          "timeout",
-		&jsonrpc.Error{Code: -32603}:          "api_error",
-		errors.New("anything"):                "api_error",
+		context.DeadlineExceeded:                                 "timeout",
+		fmt.Errorf("x: %w", context.Canceled):                    "cancelled",
+		&jsonrpc.Error{Code: -32700}:                             "invalid_request",
+		&jsonrpc.Error{Code: -32601}:                             "invalid_request",
+		&jsonrpc.Error{Code: -32000}:                             "connection_error",
+		&jsonrpc.Error{Code: -32001}:                             "timeout",
+		&jsonrpc.Error{Code: -32603}:                             "api_error",
+		&jsonrpc.Error{Code: -32020}:                             "invalid_request",
+		&jsonrpc.Error{Code: -32021}:                             "invalid_request",
+		&jsonrpc.Error{Code: -32022}:                             "invalid_request",
+		&jsonrpc.Error{Code: -32042}:                             "auth_error",
+		errors.New("anything"):                                   "api_error",
+		codedError(-32602):                                       "invalid_request",
+		statusError(429):                                         "rate_limit",
+		statusError(504):                                         "timeout",
+		statusError(401):                                         "auth_error",
+		statusError(403):                                         "auth_error",
+		statusError(422):                                         "invalid_request",
+		statusError(500):                                         "api_error",
+		fmt.Errorf("wrapped: %w", statusError(429)):              "rate_limit",
+		errors.Join(errors.New("first"), &ThrottlingException{}): "rate_limit",
+		&net.OpError{Op: "dial", Err: syscall.ECONNREFUSED}:      "connection_error",
+		&net.DNSError{IsTimeout: true}:                           "timeout",
+		os.ErrDeadlineExceeded:                                   "timeout",
+		io.ErrUnexpectedEOF:                                      "connection_error",
 	}
 	for err, want := range cases {
 		if got := errorType(err); got != want {
 			t.Errorf("errorType(%v) = %s, want %s", err, got, want)
 		}
+	}
+}
+
+type codedError int64
+
+func (e codedError) Error() string    { return "coded" }
+func (e codedError) ErrorCode() int64 { return int64(e) }
+
+type statusError int
+
+func (e statusError) Error() string   { return "status" }
+func (e statusError) StatusCode() int { return int(e) }
+
+type ThrottlingException struct{}
+
+func (*ThrottlingException) Error() string { return "slow down" }
+
+func TestCaps(t *testing.T) {
+	if got := capID("  " + strings.Repeat("a", 300) + " "); len(got) != 256 {
+		t.Errorf("capID = %d", len(got))
+	}
+	if got := capLabel(strings.Repeat("b", 100)); len(got) != 64 {
+		t.Errorf("capLabel = %d", len(got))
 	}
 }
 
@@ -159,11 +202,8 @@ func TestHelpers(t *testing.T) {
 	if !m.MatchString("destinations://d1/runs/r.2") || m.MatchString("destinations:///runs/r") {
 		t.Error("templateMatcher")
 	}
-	if byteSize(func() {}) != 0 || toJSONValue(func() {}) != nil || capabilityNames("x") != nil || implementation(nil) != nil {
+	if byteSize(func() {}) != 0 || toJSONValue(func() {}) != nil || capabilityNames("x") != nil || clientFromMeta(nil) != nil {
 		t.Error("unencodable values")
-	}
-	if formatInt(42) != "42" {
-		t.Error("formatInt")
 	}
 	stats := resultStats(map[string]any{"content": []any{map[string]any{"type": "image"}, map[string]any{"type": "image"}, map[string]any{"type": "custom"}}, "structuredContent": map[string]any{"next_cursor": "n"}}, 9)
 	if !slices.Equal(stats["result_content_types"].([]string), []string{"image", "structured"}) || stats["result_paginated"] != true || stats["result_tokens_estimate"] != 2 {

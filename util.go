@@ -8,19 +8,27 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"math"
+	"net"
+	"os"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 )
 
 const (
-	// maxMetaLength caps every _meta value copied into an event.
+	// maxMetaLength caps every _meta value, ID and name copied into an event.
 	maxMetaLength = 256
+	// maxLabelLength caps short labels: protocol_version, auth_method, country,
+	// delivery_mode, failure_reason.
+	maxLabelLength = 64
 	// maxTextLength caps agent-written text (call_reason, capability_detail), in code points.
 	maxTextLength = 200
 
@@ -54,7 +62,13 @@ func str(v any) string {
 }
 
 // opaque reads a _meta value as an opaque, length-capped string.
-func opaque(v any) string { return capText(str(v), maxMetaLength) }
+func opaque(v any) string { return capID(str(v)) }
+
+// capID trims and caps an ID or name read off the wire or from Identify.
+func capID(s string) string { return capText(strings.TrimSpace(s), maxMetaLength) }
+
+// capLabel trims and caps a short label, such as a protocol version or a delivery mode.
+func capLabel(s string) string { return capText(strings.TrimSpace(s), maxLabelLength) }
 
 var traceparentRE = regexp.MustCompile(`^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(?:-|$)`)
 
@@ -276,30 +290,95 @@ func templateMatcher(template string) *regexp.Regexp {
 	return regexp.MustCompile("^" + strings.Join(parts, ".+?") + "$")
 }
 
-// errorTypeForCode maps a JSON-RPC error code to an error_type.
+// errorTypeForCode maps a JSON-RPC or MCP error code to an error_type.
 func errorTypeForCode(code int64) string {
 	switch code {
-	case -32700, -32600, -32601, -32602:
+	case -32700, -32600, -32601, -32602,
+		-32020, // header mismatch
+		-32021, // missing required client capability
+		-32022: // unsupported protocol version
 		return "invalid_request"
 	case -32001:
 		return "timeout"
 	case -32000:
 		return "connection_error"
+	case -32042: // a URL elicitation, such as a sign-in, is required first
+		return "auth_error"
 	default:
 		return "api_error"
 	}
 }
 
-// errorType maps an error returned by a handler or the client to an error_type.
+// errorType maps an error returned by a handler or the client to an error_type. An error that
+// maps to nothing more specific than api_error follows the errors it wraps.
 func errorType(err error) string {
+	if err == nil {
+		return ""
+	}
 	var wire *jsonrpc.Error
+	var coded interface{ ErrorCode() int64 }
 	switch {
-	case errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, os.ErrDeadlineExceeded):
 		return "timeout"
 	case errors.Is(err, context.Canceled):
 		return "cancelled"
 	case errors.As(err, &wire):
 		return errorTypeForCode(wire.Code)
+	case errors.As(err, &coded):
+		return errorTypeForCode(coded.ErrorCode())
+	case errors.Is(err, syscall.ECONNREFUSED), errors.Is(err, syscall.ECONNRESET), errors.Is(err, net.ErrClosed),
+		errors.Is(err, io.ErrUnexpectedEOF):
+		return "connection_error"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return "timeout"
+	}
+	seen := 0
+	for todo := []error{err}; len(todo) > 0 && seen < 32; seen++ {
+		e := todo[0]
+		todo = todo[1:]
+		if kind := errorTypeOf(e); kind != "api_error" {
+			return kind
+		}
+		switch u := e.(type) {
+		case interface{ Unwrap() error }:
+			if next := u.Unwrap(); next != nil {
+				todo = append(todo, next)
+			}
+		case interface{ Unwrap() []error }:
+			todo = append(todo, u.Unwrap()...)
+		}
+	}
+	return "api_error"
+}
+
+// errorTypeOf maps one error by its HTTP status and type name, as the Node.js and Python SDKs do.
+func errorTypeOf(err error) string {
+	status := 0
+	switch s := err.(type) {
+	case interface{ StatusCode() int }:
+		status = s.StatusCode()
+	case interface{ HTTPStatusCode() int }:
+		status = s.HTTPStatusCode()
+	}
+	name := strings.ToLower(reflect.TypeOf(err).String())
+	has := func(parts ...string) bool {
+		return slices.ContainsFunc(parts, func(p string) bool { return strings.Contains(name, p) })
+	}
+	switch {
+	case status == 429 || has("ratelimit", "throttling"):
+		return "rate_limit"
+	case status == 408 || status == 504 || has("timeout"):
+		return "timeout"
+	case has("cancel", "abort"):
+		return "cancelled"
+	case status == 401 || status == 403 || has("authentication", "permissiondenied", "accessdenied"):
+		return "auth_error"
+	case status == 400 || status == 422 || has("badrequest", "unprocessable", "validationexception"):
+		return "invalid_request"
+	case has("connection"):
+		return "connection_error"
 	default:
 		return "api_error"
 	}
@@ -361,6 +440,18 @@ func (m *boundedMap[V]) remove(k string) {
 		delete(m.items, k)
 	}
 }
+
+// each calls f for every entry, least recently set first, until f returns false.
+func (m *boundedMap[V]) each(f func(k string, v V) bool) {
+	for e := m.order.Front(); e != nil; e = e.Next() {
+		be := e.Value.(*boundedEntry[V])
+		if !f(be.key, be.value) {
+			return
+		}
+	}
+}
+
+func (m *boundedMap[V]) size() int { return m.order.Len() }
 
 func (m *boundedMap[V]) clear() {
 	m.order.Init()

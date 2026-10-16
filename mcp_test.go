@@ -62,24 +62,6 @@ func TestClientSeenAgainAfterWindow(t *testing.T) {
 	}
 }
 
-func TestStateIsPerWrappedServer(t *testing.T) {
-	first, second := workspaceServer("same-name", nil), workspaceServer("same-name", nil)
-	r1, r2 := wrap(t, first, Options{}), wrap(t, second, Options{})
-	meta := mcp.Meta{metaInteractionID: "int_shared"}
-	for _, server := range []*mcp.Server{first, second} {
-		cs := connect(t, server, "2025-06-18", nil)
-		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, meta)
-	}
-	for i, r := range []*recorder{r1, r2} {
-		if len(r.named("mcp_client_seen")) != 1 {
-			t.Errorf("server %d: mcp_client_seen = %d, want 1", i, len(r.named("mcp_client_seen")))
-		}
-		if p := r.props(t, "mcp_tool_called"); p["call_index"] != 0 || p["retry_count"] != 0 {
-			t.Errorf("server %d: counters shared across servers: %v", i, p)
-		}
-	}
-}
-
 func TestToolCalledShapesNeverValues(t *testing.T) {
 	seen := &handlerSeen{}
 	server := workspaceServer("workspace-mcp", seen)
@@ -113,9 +95,13 @@ func TestToolCalledShapesNeverValues(t *testing.T) {
 	if _, ok := p["duration_ms"].(int64); !ok {
 		t.Errorf("duration_ms = %T", p["duration_ms"])
 	}
-	for _, k := range []string{"call_index", "retry_count", "ms_since_previous_call", "trace_id"} {
+	// An in-memory connection without session ID or caller interaction_id counts per connection.
+	if p["call_index"] != 0 || p["retry_count"] != 0 {
+		t.Errorf("counters = %v/%v", p["call_index"], p["retry_count"])
+	}
+	for _, k := range []string{"ms_since_previous_call", "trace_id"} {
 		if _, ok := p[k]; ok {
-			t.Errorf("%s set without a scope or trace", k)
+			t.Errorf("%s set on a first call without a trace", k)
 		}
 	}
 	if all := mustJSON(r.all()); strings.Contains(all, "ws_private_42") || strings.Contains(all, "secret-destination") {
@@ -316,8 +302,12 @@ func TestIdentifyTokenAndFailures(t *testing.T) {
 	if id := opts.identity(context.Background(), nil); id.UserID != "" || id.AuthMethod != "none" {
 		t.Errorf("failed identify = %+v", id)
 	}
+	// A failing Identify makes the request anonymous: not even the token's user or scopes.
+	if id := opts.identity(context.Background(), tok); id.UserID != "" || id.TokenScopes != nil || id.AuthMethod != "oauth" {
+		t.Errorf("failed identify with a token = %+v", id)
+	}
 	opts.Identify = func(context.Context, *auth.TokenInfo) (Identity, error) { panic("boom") }
-	if id := opts.identity(context.Background(), tok); id.UserID != "oauth|8812" || id.AccountID != "" {
+	if id := opts.identity(context.Background(), tok); id.UserID != "" || id.AccountID != "" || id.TokenScopes != nil {
 		t.Errorf("panicking identify = %+v", id)
 	}
 }
@@ -347,6 +337,7 @@ func (broken) Close() error { return nil }
 func TestAnalyticsFailuresNeverReachTheServer(t *testing.T) {
 	for _, client := range []broken{{panics: true}, {}} {
 		server := workspaceServer("workspace-mcp", nil)
+		freshState(t)
 		if err := WrapMCPServer(server, Options{Analytics: client, CapabilityRequests: &CapabilityRequestOptions{}}); err != nil {
 			t.Fatal(err)
 		}
@@ -366,10 +357,33 @@ func TestRequestIDFallsBackOutsideTheSDK(t *testing.T) {
 	}
 }
 
-func TestServerImplFallback(t *testing.T) {
-	name, version := serverImpl(mcp.NewServer(&mcp.Implementation{Name: "", Version: ""}, nil))
-	if name != "unknown" || version != "" {
-		t.Errorf("serverImpl = %q %q", name, version)
+func TestServerNameFallbackAndOverride(t *testing.T) {
+	o := &options{}
+	o.resolveName(serverImpl(mcp.NewServer(&mcp.Implementation{Name: "", Version: ""}, nil)))
+	if o.name != "unknown" || o.version != "" {
+		t.Errorf("name = %q %q", o.name, o.version)
+	}
+	server := workspaceServer("reflected-mcp", nil)
+	r := wrap(t, server, Options{ServerName: "configured-mcp"})
+	cs := connect(t, server, "2025-06-18", nil)
+	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
+	if p := r.props(t, "mcp_tool_called"); p["server_name"] != "configured-mcp" {
+		t.Errorf("server_name = %v", p["server_name"])
+	}
+}
+
+// The go-sdk has no getters for the server's name or the request ID; this fails when its
+// internals change, before the fallbacks ("unknown") reach production events.
+func TestGoSDKInternalsStillReadable(t *testing.T) {
+	if name, version := serverImpl(mcp.NewServer(&mcp.Implementation{Name: "probe", Version: "9.9.9"}, nil)); name != "probe" || version != "9.9.9" {
+		t.Fatalf("go-sdk internals changed: server name/version read as %q/%q", name, version)
+	}
+	server := workspaceServer("probe-mcp", nil)
+	r := wrap(t, server, Options{})
+	cs := connect(t, server, "2025-06-18", nil)
+	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
+	if id := r.props(t, "mcp_tool_called")["request_id"]; id == "unknown" || id == "" {
+		t.Fatalf("go-sdk internals changed: request_id read as %v", id)
 	}
 }
 
@@ -659,5 +673,81 @@ func TestResourcesAndPrompts(t *testing.T) {
 	all := mustJSON(r.all())
 	if strings.Contains(all, "private") || strings.Contains(all, "dst_123") {
 		t.Error("content or URI IDs leaked")
+	}
+}
+
+func TestRedactOptions(t *testing.T) {
+	cases := []struct {
+		name string
+		opts Options
+		want any
+	}{
+		{"built-in", Options{}, "mail [email] now"},
+		{"hook after masking", Options{Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "now", "[time]"), nil }}, "mail [email] [time]"},
+		{"masking off", Options{DisableRedaction: true}, "mail ann@example.com now"},
+		{"failing hook drops", Options{Redact: func(string) (string, error) { return "", errors.New("x") }}, nil},
+		{"panicking hook drops", Options{Redact: func(string) (string, error) { panic("x") }}, nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			server := workspaceServer("redact-mcp", nil)
+			c.opts.CaptureContent = true
+			r := wrap(t, server, c.opts)
+			cs := connect(t, server, "2025-06-18", nil)
+			callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w", requestContext: map[string]any{"call_reason": "mail ann@example.com now"}}, nil)
+			if got := r.props(t, "mcp_tool_called")["call_reason"]; got != c.want {
+				t.Errorf("call_reason = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestCapabilityToolIsReadOnly(t *testing.T) {
+	server := workspaceServer("readonly-mcp", nil)
+	wrap(t, server, Options{CapabilityRequests: &CapabilityRequestOptions{}})
+	cs := connect(t, server, "2025-06-18", nil)
+	tools, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tool := tools.Tools[len(tools.Tools)-1]
+	if tool.Name != capabilityTool || tool.Annotations == nil || !tool.Annotations.ReadOnlyHint {
+		t.Errorf("tool = %s", mustJSON(tool))
+	}
+}
+
+// A call that finished before the client's cancellation reached the server stays a success.
+func TestCallSucceedingDespiteCancelStaysSuccess(t *testing.T) {
+	server := mcp.NewServer(&mcp.Implementation{Name: "late-cancel-mcp", Version: "1"}, nil)
+	started := make(chan struct{})
+	mcp.AddTool(server, &mcp.Tool{Name: "stubborn"}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+		close(started)
+		<-ctx.Done()
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "done anyway"}}}, nil, nil
+	})
+	r := wrap(t, server, Options{})
+	cs := connect(t, server, "2025-06-18", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-started
+		cancel()
+	}()
+	_, _ = cs.CallTool(ctx, &mcp.CallToolParams{Name: "stubborn", Arguments: map[string]any{}})
+	p := r.wait(t, "mcp_tool_called", 1)[0].Properties
+	if p["tool_status"] != "success" || p["error_type"] != nil {
+		t.Errorf("a completed call was reported as %v / %v", p["tool_status"], p["error_type"])
+	}
+}
+
+func TestLongWireValuesAreCapped(t *testing.T) {
+	server := workspaceServer(strings.Repeat("n", 300), nil)
+	r := wrap(t, server, Options{Identify: func(context.Context, *auth.TokenInfo) (Identity, error) {
+		return Identity{AccountID: strings.Repeat("a", 300), Country: strings.Repeat("c", 100)}, nil
+	}})
+	cs := connect(t, server, "2025-06-18", nil)
+	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
+	seen := r.props(t, "mcp_client_seen")
+	if len(seen["server_name"].(string)) != 256 || len(seen["account_id"].(string)) != 256 || len(seen["country"].(string)) != 64 {
+		t.Errorf("not capped: %v", seen)
 	}
 }

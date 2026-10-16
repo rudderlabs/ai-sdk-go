@@ -7,7 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -15,6 +17,20 @@ import (
 	"github.com/rudderlabs/ai-sdk-go/examples/internal/harness"
 	"github.com/rudderlabs/ai-sdk-go/internal/dataplane"
 )
+
+// runs numbers the checks in this process: state is kept per server name for the whole
+// process, so a second run (--check, then --live, in one test binary) uses fresh client names.
+var runs atomic.Int64
+
+func runSuffix() string {
+	if n := runs.Add(1); n > 1 {
+		return "-" + strconv.FormatInt(n, 10)
+	}
+	return ""
+}
+
+// suffix is this run's client name suffix.
+var suffix string
 
 // checkGrants are two users of two workspaces, each through a different OAuth client.
 var checkGrants = []grant{
@@ -25,9 +41,9 @@ var checkGrants = []grant{
 }
 
 // runCheck serves one long-lived server to both users, then sends a request without a token.
-// Each user has its own client name, so the asserts hold whether the SDK keeps client windows
-// and counters per wrapped server or per server name.
+// Each user has its own client name: state is kept per server name.
 func runCheck(sink *harness.Sink, stderr io.Writer) error {
+	suffix = runSuffix()
 	client, err := sink.NewClient()
 	if err != nil {
 		return err
@@ -83,7 +99,7 @@ func runCheck(sink *harness.Sink, stderr io.Writer) error {
 	return nil
 }
 
-func clientName(g grant) string { return "agent-" + g.info.Extra["client_id"].(string) }
+func clientName(g grant) string { return "agent-" + g.info.Extra["client_id"].(string) + suffix }
 
 type bearer string
 

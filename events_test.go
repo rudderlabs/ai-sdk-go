@@ -41,7 +41,7 @@ func TestSubscriptionChangesAndExpiry(t *testing.T) {
 	// A refresh resets the timer; an unsubscribe stops it.
 	r.reset()
 	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCreated, SubscriptionID: "sub_2", EventName: "e", TTL: 40 * time.Millisecond})
-	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionUnsubscribed, SubscriptionID: "sub_2", EventName: "e", UserID: "u1", AccountID: "acct"})
+	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionUnsubscribed, SubscriptionID: "sub_2", EventName: "e", EventsIdentity: EventsIdentity{UserID: "u1", AccountID: "acct"}})
 	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCallbackFailed, SubscriptionID: "sub_3", EventName: "e", FailureReason: "challenge_failed"})
 	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCreated, EventName: "e"})
 	time.Sleep(80 * time.Millisecond)
@@ -119,5 +119,32 @@ func TestMCPEventsNeedOptIn(t *testing.T) {
 	}
 	if len(r.all()) != 0 {
 		t.Errorf("events = %v", r.names())
+	}
+}
+
+// Without its required IDs an MCP Events record is skipped, not sent with placeholders; without
+// OccurredAt the latency is left out.
+func TestMCPEventsSkipMissingIDsAndLatency(t *testing.T) {
+	server := workspaceServer("events-ids-mcp", nil)
+	r := wrap(t, server, Options{MCPEvents: true})
+	ctx := context.Background()
+	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCreated, EventName: "e"})
+	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCreated, SubscriptionID: "s"})
+	send := WrapMCPEventSender(server, func(context.Context, EventDelivery) (DeliveryOutcome, error) {
+		return DeliveryOutcome{HTTPStatus: 200}, nil
+	})
+	for _, d := range []EventDelivery{
+		{EventName: "e", EventID: "x"}, {SubscriptionID: "s", EventID: "x"}, {SubscriptionID: "s", EventName: "e"},
+		{SubscriptionID: "s", EventName: "e", EventID: "x"},
+	} {
+		if _, err := send(ctx, d); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := r.names(); len(got) != 1 || got[0] != "mcp_event_delivered" {
+		t.Fatalf("events = %v", got)
+	}
+	if _, ok := r.all()[0].Properties["delivery_latency_ms"]; ok {
+		t.Error("delivery_latency_ms without OccurredAt")
 	}
 }

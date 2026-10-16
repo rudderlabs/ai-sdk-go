@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -21,9 +23,17 @@ import (
 // program as a stdio server from `go test` too.
 const mainEnv = "MCP_SERVER_EXAMPLE_MAIN"
 
-// runCheck runs three legs. Each uses its own client name and interaction ID, so the asserts
-// hold whether the SDK keeps client windows and counters per wrapped server or per server name.
+// runs numbers the checks in this process: state is kept per server name for the whole
+// process, so a second run (--check, then --live, in one test binary) uses fresh client names.
+var runs atomic.Int64
+
+// runCheck runs three legs. Each uses its own client name and interaction ID: state is kept
+// per server name.
 func runCheck(sink *harness.Sink, stderr io.Writer) error {
+	suffix := ""
+	if n := runs.Add(1); n > 1 {
+		suffix = "-" + strconv.FormatInt(n, 10)
+	}
 	for _, leg := range []struct {
 		name, client string
 		run          func(*harness.Sink, string) (string, error)
@@ -33,12 +43,13 @@ func runCheck(sink *harness.Sink, stderr io.Writer) error {
 		{"stdio", "check-client-stdio", func(s *harness.Sink, c string) (string, error) { return stdioLeg(s, c, stderr) }},
 	} {
 		before := len(sink.Messages())
-		protocol, err := leg.run(sink, leg.client)
+		client := leg.client + suffix
+		protocol, err := leg.run(sink, client)
 		if err != nil {
 			return fmt.Errorf("%s: %w", leg.name, err)
 		}
 		msgs := sink.Messages()[before:]
-		if err := expectEvents(msgs, leg.name == "stdio", leg.client, protocol); err != nil {
+		if err := expectEvents(msgs, leg.name == "stdio", client, protocol); err != nil {
 			return fmt.Errorf("%s: %w", leg.name, err)
 		}
 		fmt.Fprintf(stderr, "ok  %s: %d events\n", leg.name, len(msgs))

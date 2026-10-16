@@ -279,6 +279,7 @@ func callTool(t *testing.T, cs *mcp.ClientSession, name string, args any, meta m
 
 func wrap(t *testing.T, server *mcp.Server, opts Options) *recorder {
 	t.Helper()
+	freshState(t)
 	r := newRecorder(t)
 	opts.Analytics = r
 	if err := WrapMCPServer(server, opts); err != nil {

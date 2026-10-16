@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http/httptest"
+	"strconv"
+	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -14,9 +16,19 @@ import (
 
 const protocol = "2026-07-28"
 
+// runs numbers the checks in this process: state is kept per server name for the whole
+// process, so a second run (--check, then --live, in one test binary) uses fresh client names.
+var runs atomic.Int64
+
+func runSuffix() string {
+	if n := runs.Add(1); n > 1 {
+		return "-" + strconv.FormatInt(n, 10)
+	}
+	return ""
+}
+
 // runCheck serves one long-lived server to two agents, one that confirms and one that
-// declines. Each has its own client name and interaction ID, so the asserts hold whether the
-// SDK keeps client windows and counters per wrapped server or per server name.
+// declines. Each has its own client name and interaction ID: state is kept per server name.
 func runCheck(sink *harness.Sink, stderr io.Writer) error {
 	client, err := sink.NewClient()
 	if err != nil {
@@ -28,9 +40,10 @@ func runCheck(sink *harness.Sink, stderr io.Writer) error {
 	}
 	ts := httptest.NewServer(h)
 	defer ts.Close()
+	suffix := runSuffix()
 	legs := []struct{ client, action, result string }{
-		{"agent-confirms", "accept", "deleted"},
-		{"agent-declines", "decline", "kept"},
+		{"agent-confirms" + suffix, "accept", "deleted"},
+		{"agent-declines" + suffix, "decline", "kept"},
 	}
 	for _, leg := range legs {
 		if err := agent(ts.URL, leg.client, leg.action, leg.result); err != nil {

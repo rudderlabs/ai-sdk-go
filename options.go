@@ -80,15 +80,14 @@ type Options struct {
 	// Analytics is the RudderStack client. Required.
 	Analytics analytics.Client
 	// Identify maps a request's verified bearer token (nil without auth) to the user and
-	// workspace. Called once per request; if it fails or panics, only the token's own UserID
-	// and scopes are used.
+	// workspace. Called once per request; if it fails or panics, the request is anonymous.
 	Identify func(ctx context.Context, token *auth.TokenInfo) (Identity, error)
 	// EventRules declares tool events. Names starting with "ai_" or "mcp_" are rejected.
 	EventRules EventRules
 	// RequestContext configures the optional request_context argument, on by default.
 	RequestContext RequestContextOptions
 	// ClientSeenWindow is the window in which a (client, OAuth client, user) is reported once
-	// by mcp_client_seen. Zero means 24 hours.
+	// by mcp_client_seen, per server name and process. Zero means 24 hours.
 	ClientSeenWindow time.Duration
 	// CaptureContent sends agent-written text: call_reason and capability_detail, masked and
 	// capped at 200 characters. Off by default.
@@ -103,6 +102,14 @@ type Options struct {
 	// and SSE cannot be told apart from inside the server, so set TransportStdio or
 	// TransportSSE for those.
 	Transport string
+	// ServerName overrides the name read from the server, sent as server_name. State is kept
+	// per server name, so give each distinct server its own name.
+	ServerName string
+	// Redact runs after the built-in masking of call_reason and capability_detail, for what
+	// the patterns cannot catch. If it returns an error or panics, the field is not sent.
+	Redact func(text string) (string, error)
+	// DisableRedaction turns the built-in masking off; Redact still runs.
+	DisableRedaction bool
 }
 
 // options is the validated form of Options.
@@ -112,6 +119,47 @@ type options struct {
 	intents       []string
 	userSentiment bool
 	capabilities  []string
+	// name is ServerName, else reflectedName (the server's own), else "unknown".
+	name          string
+	reflectedName string
+	version       string
+}
+
+// resolveName sets the server name and version from the server's own.
+func (o *options) resolveName(reflected, version string) {
+	o.reflectedName, o.version = reflected, capID(version)
+	o.name = capID(o.ServerName)
+	if o.name == "" {
+		o.name = capID(reflected)
+	}
+	if o.name == "" {
+		o.name = "unknown"
+	}
+}
+
+// mask masks one opt-in text field; ok is false when it must not be sent.
+func (o *options) mask(text string) (out string, ok bool) {
+	out, ok = text, true
+	if !o.DisableRedaction {
+		if out, ok = maskText(text); !ok {
+			return "", false
+		}
+	}
+	if o.Redact == nil {
+		return out, true
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			debugf("redact panicked; field dropped")
+			out, ok = "", false
+		}
+	}()
+	redacted, err := o.Redact(out)
+	if err != nil {
+		debugf("redact failed; field dropped")
+		return "", false
+	}
+	return redacted, true
 }
 
 func normalizeOptions(o Options) (*options, error) {
@@ -149,24 +197,26 @@ func normalizeOptions(o Options) (*options, error) {
 	return n, nil
 }
 
-// identity calls Identify and fills the defaults.
+// identity calls Identify and fills the defaults. A failing or panicking Identify makes the
+// request anonymous: no user or scopes, not even the token's.
 func (o *options) identity(ctx context.Context, token *auth.TokenInfo) (id Identity) {
+	failed := false
 	if o.Identify != nil {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
 					debugf("identify panicked; request is anonymous")
-					id = Identity{}
+					id, failed = Identity{}, true
 				}
 			}()
 			var err error
 			if id, err = o.Identify(ctx, token); err != nil {
 				debugf("identify failed; request is anonymous")
-				id = Identity{}
+				id, failed = Identity{}, true
 			}
 		}()
 	}
-	if token != nil {
+	if token != nil && !failed {
 		if id.UserID == "" {
 			id.UserID = token.UserID
 		}
@@ -179,6 +229,17 @@ func (o *options) identity(ctx context.Context, token *auth.TokenInfo) (id Ident
 		if token != nil {
 			id.AuthMethod = "oauth"
 		}
+	}
+	id.UserID, id.AnonymousID, id.AccountID = capID(id.UserID), capID(id.AnonymousID), capID(id.AccountID)
+	id.OAuthClientID, id.AuthMethod, id.Country = capID(id.OAuthClientID), capLabel(id.AuthMethod), capLabel(id.Country)
+	if id.TokenScopes != nil {
+		scopes := make([]string, 0, len(id.TokenScopes))
+		for _, s := range id.TokenScopes {
+			if s = capID(s); s != "" {
+				scopes = append(scopes, s)
+			}
+		}
+		id.TokenScopes = scopes
 	}
 	return id
 }

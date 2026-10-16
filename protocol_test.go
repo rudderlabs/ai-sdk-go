@@ -308,3 +308,23 @@ func TestStatefulServerDiscoverProbeFallsBack(t *testing.T) {
 		t.Errorf("events = %v, want only the handshake's and the call's", r.names())
 	}
 }
+
+// On 2026-07-28 the client is reported after a successful request, never a failed one.
+func TestClientSeen2026OnlyAfterSuccess(t *testing.T) {
+	server := workspaceServer("success-mcp", nil)
+	// A window this short reports the client at every request that may report it.
+	r := wrap(t, server, Options{ClientSeenWindow: time.Nanosecond})
+	cs := connect(t, server, "", nil)
+	r.reset()
+	if _, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "missing_tool"}); err == nil {
+		t.Fatal("want a protocol error")
+	}
+	if got := len(r.named("mcp_client_seen")); got != 0 {
+		t.Fatalf("mcp_client_seen after a failed request = %d", got)
+	}
+	time.Sleep(time.Millisecond)
+	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
+	if got := len(r.named("mcp_client_seen")); got != 1 {
+		t.Errorf("mcp_client_seen after a successful request = %d", got)
+	}
+}
