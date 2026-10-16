@@ -20,12 +20,12 @@ Each integration is its own Go module and hooks into its provider SDK's own exte
 
 | Integration     | Module (`go get`)                                    | Attach with                                                       | Minimum Go |
 | --------------- | ---------------------------------------------------- | ----------------------------------------------------------------- | ---------- |
-| OpenAI          | `github.com/rudderlabs/ai-sdk-go/rudderopenai`       | `openai.NewClient(rudderopenai.WithTracking())`                   | 1.25       |
-| Anthropic       | `github.com/rudderlabs/ai-sdk-go/rudderanthropic`    | `anthropic.NewClient(rudderanthropic.WithTracking())`             | 1.24       |
-| Google Gen AI   | `github.com/rudderlabs/ai-sdk-go/ruddergenai`        | `genai.ClientConfig{HTTPClient: ruddergenai.HTTPClient(nil)}`     | 1.24       |
-| Amazon Bedrock  | `github.com/rudderlabs/ai-sdk-go/rudderbedrock`      | `bedrockruntime.NewFromConfig(cfg, rudderbedrock.WithTracking())` | 1.24       |
+| OpenAI          | `github.com/rudderlabs/ai-sdk-go/rudderopenai`       | `openai.NewClient(rudderopenai.WithTracking())`                   | 1.26       |
+| Anthropic       | `github.com/rudderlabs/ai-sdk-go/rudderanthropic`    | `anthropic.NewClient(rudderanthropic.WithTracking())`             | 1.26       |
+| Google Gen AI   | `github.com/rudderlabs/ai-sdk-go/ruddergenai`        | `genai.ClientConfig{HTTPClient: ruddergenai.HTTPClient(nil)}`     | 1.26       |
+| Amazon Bedrock  | `github.com/rudderlabs/ai-sdk-go/rudderbedrock`      | `bedrockruntime.NewFromConfig(cfg, rudderbedrock.WithTracking())` | 1.26       |
 
-Each module's minimum Go version is its provider SDK's.
+Every module needs Go 1.26 or later, as the core does.
 
 - A call made with a context that carries an interaction (`RunInteraction`, `StartInteraction`, `RunTask`) reports into it. A call without one opens its own one-call interaction and ends it when the call (or its stream) ends: `trigger: system` unless the context carries an identity from `WithValues`, no prompt event, never classified. A call made after its interaction ended logs a warning and becomes such a separate answer, with `parent_interaction_id` set to the ended one.
 - Requests and responses reach the provider SDK unchanged, except that a streamed Chat Completions request asks for usage (see [OpenAI](#openai)). Provider errors are returned to your code unchanged.

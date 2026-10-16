@@ -75,6 +75,8 @@ err = rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{
 })
 ```
 
+Unlike the Node.js and Python SDKs, `trace_id` is not read from the active OpenTelemetry span unless you opt in: `rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID))` with the `github.com/rudderlabs/ai-sdk-go/rudderotel` module.
+
 This sends `ai_user_prompt_created` and `ai_response_received` (models, tokens, latency, status, and cost once the model is [priced](docs/configuration.md#pricing)). Pass the same context to every model call: a call made with a context that carries no interaction is reported as its own answer.
 
 ## Integrations

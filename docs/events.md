@@ -2,6 +2,8 @@
 
 Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md). The JSON Schema is [`spec/ai-events-v0.3.schema.json`](../spec/ai-events-v0.3.schema.json), shared with the Node.js and Python SDKs; a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
 
+Every event's `properties` stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget loses its captured text first (`response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive.
+
 - [Common fields](#common-fields)
 - [ai_user_prompt_created](#ai_user_prompt_created)
 - [ai_response_received](#ai_response_received)

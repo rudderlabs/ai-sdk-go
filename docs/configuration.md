@@ -306,4 +306,4 @@ RudderStack warehouse destinations create a column with the type of the first va
 | `.../rudderbedrock`                              | `WithTracking`, `WithAnalytics`                                                                                                                                                                         |
 | `.../rudderotel`                                 | `TraceID`                                                                                                                                                                                               |
 
-The root module (Go 1.24 or later) holds the core and MCP support and depends only on analytics-go and the MCP go-sdk. Each integration and `rudderotel` is a separate module you `go get` on its own, so MCP-only services do not pull provider SDKs.
+The root module (Go 1.26 or later) holds the core and MCP support and depends only on analytics-go and the MCP libraries. Each integration and `rudderotel` is a separate module you `go get` on its own, so MCP-only services do not pull provider SDKs.
