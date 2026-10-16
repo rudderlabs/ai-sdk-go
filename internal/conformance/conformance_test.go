@@ -43,7 +43,9 @@ var apis = map[string]apiDriver{}
 
 // gaps names scenarios a Go integration cannot reproduce, with the reason. Integration test files
 // add theirs in init; keep it short and explain each one.
-var gaps = map[string]string{}
+var gaps = map[string]string{
+	"google_vertex_generate_plain": "expects a google price to apply to google.vertex; the Gemini API and Vertex AI are priced separately (ai-sdk-node PR #31), the fixture follows when that lands",
+}
 
 // Ops and APIs that belong to Node.js and Python integrations with no Go counterpart.
 var platformOps = map[string]string{
