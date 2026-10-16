@@ -1,6 +1,6 @@
 module github.com/rudderlabs/ai-sdk-go/internal/conformance
 
-go 1.27.2
+go 1.26.0
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.78.0

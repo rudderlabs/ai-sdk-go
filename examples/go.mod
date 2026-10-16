@@ -1,11 +1,12 @@
 module github.com/rudderlabs/ai-sdk-go/examples
 
-go 1.27.2
+go 1.26.0
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.78.0
 	github.com/aws/aws-sdk-go-v2 v1.47.1
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.1
+	github.com/mark3labs/mcp-go v1.1.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/openai/openai-go/v3 v3.70.0
 	github.com/rudderlabs/ai-sdk-go v0.1.0
@@ -47,6 +48,7 @@ require (
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/backo-go v1.1.0 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
+	github.com/spf13/cast v1.7.1 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect

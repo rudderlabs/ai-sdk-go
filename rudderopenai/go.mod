@@ -1,6 +1,6 @@
 module github.com/rudderlabs/ai-sdk-go/rudderopenai
 
-go 1.27.2
+go 1.26.0
 
 require (
 	github.com/openai/openai-go/v3 v3.70.0
@@ -24,7 +24,6 @@ require (
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
-	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
