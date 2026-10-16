@@ -262,7 +262,7 @@ func failed(c *kit.Call, sc *streamCall, errorType string) {
 	if sc != nil && sc.end(kit.Errored, errorType) {
 		return
 	}
-	c.Interaction.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, StartedAt: c.StartedAt})
+	c.Interaction.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
 	if c.Ephemeral {
 		kit.EndEphemeral(c.Interaction, errorType)
 	}
@@ -271,7 +271,7 @@ func failed(c *kit.Call, sc *streamCall, errorType string) {
 func recordResponse(c *kit.Call, out *bedrockruntime.ConverseOutput, responseID string) {
 	call := rudderstackai.LLMCall{
 		Provider: c.Provider, Integration: c.Integration, Model: c.Model, FinishReason: finishReason(out.StopReason),
-		ResponseID: responseID, StartedAt: c.StartedAt, UsageUnknown: out.Usage == nil,
+		ResponseID: responseID, UsageUnknown: out.Usage == nil,
 	}
 	if out.Usage != nil {
 		call.InputTokens, call.OutputTokens, call.CachedInputTokens, call.CacheWriteTokens = tokens(out.Usage)

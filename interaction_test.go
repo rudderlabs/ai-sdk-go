@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 

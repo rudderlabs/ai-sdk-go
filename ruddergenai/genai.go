@@ -260,7 +260,7 @@ func recordResponse(c *kit.Call, body map[string]any) {
 	call := rudderstackai.LLMCall{
 		Integration: integration, Provider: c.Provider, Model: model, RequestedModel: c.Model,
 		ResponseID: kit.Str(body["responseId"]), FinishReason: finishReasonOf(body, hasCall(parts)),
-		StartedAt: c.StartedAt, OutputText: textOf(parts), UsageUnknown: u == nil,
+		OutputText: textOf(parts), UsageUnknown: u == nil,
 	}
 	if u != nil {
 		call.InputTokens, call.OutputTokens, call.ReasoningTokens, call.CachedInputTokens = u.input, u.output, u.reasoning, u.cached

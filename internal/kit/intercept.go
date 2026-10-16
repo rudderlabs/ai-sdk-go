@@ -186,7 +186,7 @@ func (s *Spec) Intercept(req *http.Request, next func(*http.Request) (*http.Resp
 
 func (s *Spec) failed(c *Call, errorType string) {
 	safe(func() {
-		c.Interaction.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, StartedAt: c.StartedAt})
+		c.Interaction.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
 		if c.Ephemeral {
 			EndEphemeral(c.Interaction, errorType)
 		}

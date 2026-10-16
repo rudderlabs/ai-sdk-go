@@ -114,7 +114,6 @@ func newHarness(t *testing.T, handler http.HandlerFunc) *harness {
 			c.Interaction.RecordCall(rudderstackai.LLMCall{
 				Provider: c.Provider, Model: Str(body["model"]), RequestedModel: c.Model, Integration: c.Integration,
 				InputTokens: Int(u["prompt_tokens"]), OutputTokens: Int(u["completion_tokens"]), ResponseID: Str(body["id"]),
-				StartedAt: c.StartedAt,
 			})
 			return true
 		},

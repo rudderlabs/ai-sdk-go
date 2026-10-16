@@ -176,7 +176,7 @@ func recordMessage(c *kit.Call, msg map[string]any, _ *http.Response) bool {
 		CachedInputTokens: t.read, CacheWriteTokens: t.write, CacheWrite1hTokens: t.write1h,
 		ServiceTier: serviceTier(usage), ServerToolCalls: serverToolCalls(usage),
 		ResponseID: kit.Str(msg["id"]), FinishReason: kit.Str(msg["stop_reason"]),
-		UsageUnknown: usage == nil, StartedAt: c.StartedAt, OutputText: text.String(),
+		UsageUnknown: usage == nil, OutputText: text.String(),
 	})
 	if recorded && len(tools) > 0 {
 		c.Interaction.RecordToolCalls(tools...)

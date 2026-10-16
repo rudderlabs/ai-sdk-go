@@ -135,9 +135,6 @@ type LLMCall struct {
 	// Integration reporting the call; the first one tags every event of the interaction.
 	// Empty means manual.
 	Integration string
-	// StartedAt and EndedAt bound the call. EndedAt defaults to now.
-	StartedAt time.Time
-	EndedAt   time.Time
 	// OutputText is the answer text, given to a configured classifier or evaluator. Never sent.
 	OutputText string
 }

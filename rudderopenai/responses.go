@@ -148,7 +148,7 @@ func recordResponse(c *kit.Call, response map[string]any, g gateway) bool {
 		CachedInputTokens: kit.Int(kit.Map(usage["input_tokens_details"])["cached_tokens"]),
 		CostUSD:           cost, ServiceTier: kit.Str(response["service_tier"]), ServerToolCalls: counts,
 		ResponseID: kit.Str(response["id"]), FinishReason: finish, ErrorType: errorType,
-		UsageUnknown: usage == nil, StartedAt: c.StartedAt, OutputText: responsesText(response),
+		UsageUnknown: usage == nil, OutputText: responsesText(response),
 	})
 	// A repeated response (same ID) adds no tool calls.
 	if recorded && len(tools) > 0 {

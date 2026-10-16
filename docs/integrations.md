@@ -236,7 +236,6 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 | `UsageUnknown`                                    | Tokens unknown or partial: the call stays unpriced                                                        |
 | `Integration`                                     | Integration name for `context.wrapperLibrary`; empty is `manual`                                          |
 | `OutputText`                                      | Answer text for the classifier and evaluator; never sent                                                  |
-| `StartedAt`, `EndedAt`                            | Accepted; no property is derived from them yet                                                            |
 
 `ToolCall`: `ID` (merges repeated reports), `Name` (flat `mcp__server__tool` names are split), `MCPServer`, `ParentTool`, `AgentName`, `Error` (`*bool`), `ErrorType`, `Duration` (`*time.Duration`, measured only), `Args` and `Result` (given to declared tool rules, never sent). `ToolResult`: `Error`, `ErrorType`, `Duration`, `Result`. A failure from any report sticks; the first measured duration and the first result win.
 

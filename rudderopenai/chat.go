@@ -136,7 +136,7 @@ func onChatResponse(c *kit.Call, body map[string]any, resp *http.Response) bool 
 		ReasoningTokens:   kit.IntPtr(kit.Map(usage["completion_tokens_details"])["reasoning_tokens"]),
 		CachedInputTokens: kit.Int(kit.Map(usage["prompt_tokens_details"])["cached_tokens"]),
 		CostUSD:           cost, ServiceTier: kit.Str(body["service_tier"]), ResponseID: kit.Str(body["id"]),
-		FinishReason: finish, UsageUnknown: usage == nil, StartedAt: c.StartedAt,
+		FinishReason: finish, UsageUnknown: usage == nil,
 		OutputText: kit.Str(message["content"]),
 	})
 	// Every returned choice was generated: count the tool calls of all of them. A repeated

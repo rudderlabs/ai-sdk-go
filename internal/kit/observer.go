@@ -70,7 +70,7 @@ type Observer struct {
 func NewObserver(c *Call) *Observer {
 	o := &Observer{
 		Interaction: c.Interaction, Ephemeral: c.Ephemeral, Provider: c.Provider, Integration: c.Integration,
-		Model: c.Model, RequestedModel: c.Model, StartedAt: c.StartedAt, toolKeys: map[string]*streamTool{},
+		Model: c.Model, RequestedModel: c.Model, toolKeys: map[string]*streamTool{},
 		keepText: KeepsText(c.Interaction),
 	}
 	OnBeforeEnd(c.Interaction, func() {
@@ -186,7 +186,7 @@ func (o *Observer) Finish(end End, errorType string) {
 	if end == Errored {
 		call := rudderstackai.LLMCall{
 			Provider: o.Provider, Model: o.Model, RequestedModel: o.RequestedModel, ResponseID: o.ResponseID,
-			ErrorType: errorType, Integration: o.Integration, StartedAt: o.StartedAt,
+			ErrorType: errorType, Integration: o.Integration,
 		}
 		if !truncated {
 			call.InputTokens, call.OutputTokens = deref(o.InputTokens), deref(o.OutputTokens)
@@ -208,7 +208,7 @@ func (o *Observer) Finish(end End, errorType string) {
 		InputTokens: deref(o.InputTokens), OutputTokens: deref(o.OutputTokens), ReasoningTokens: o.ReasoningTokens,
 		CallCount: o.CallCount, CachedInputTokens: o.CachedInputTokens, CacheWriteTokens: o.CacheWriteTokens,
 		CacheWrite1hTokens: o.CacheWrite1hTokens, ServiceTier: o.ServiceTier, ServerToolCalls: o.ServerToolCalls,
-		ResponseID: o.ResponseID, FinishReason: o.FinishReason, StartedAt: o.StartedAt,
+		ResponseID: o.ResponseID, FinishReason: o.FinishReason,
 		UsageUnknown: cancelled || o.UsageIncomplete || (o.InputTokens == nil && o.OutputTokens == nil),
 	}
 	if !cancelled {
