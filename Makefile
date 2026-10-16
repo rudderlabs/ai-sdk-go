@@ -20,7 +20,7 @@ cover: test
 vulncheck:
 	$(GO) run $(govulncheck) ./...
 
-EXAMPLES = mcp-server mcp-server-mcpgo mcp-stateless-http mcp-auth
+EXAMPLES = mcp-server mcp-server-mcpgo mcp-stateless-http mcp-auth openai anthropic google-genai bedrock-converse background-agent manual
 
 example:
 	for e in $(EXAMPLES); do $(GO) run ./examples/$$e --check || exit 1; done
