@@ -97,7 +97,7 @@ func Run(stderr io.Writer, live bool, check func(*Sink) error) int {
 }
 
 // Validate checks each event's context and its properties against the spec schema; declared
-// tool events use mcp_declared_tool_event.
+// tool events use mcp_declared_tool_event from an MCP server, declared_tool_event otherwise.
 func Validate(msgs []dataplane.Message) error {
 	if len(msgs) == 0 {
 		return errors.New("no events")
@@ -109,12 +109,17 @@ func Validate(msgs []dataplane.Message) error {
 	for _, m := range msgs {
 		wl, _ := m.Context["wrapperLibrary"].(map[string]any)
 		lib, _ := m.Context["library"].(map[string]any)
-		if m.Type != "track" || wl["name"] != "ai-sdk-go" || wl["integration"] != "mcp" || wl["specVersion"] != "0.3.0" || lib["name"] != "analytics-go" {
+		integration, _ := wl["integration"].(string)
+		if m.Type != "track" || wl["name"] != "ai-sdk-go" || integration == "" || wl["specVersion"] != "0.3.0" || lib["name"] != "analytics-go" {
 			return fmt.Errorf("%s: type %q, context %v", m.Event, m.Type, m.Context)
 		}
 		def := m.Event
-		if !strings.HasPrefix(def, "mcp_") {
+		switch {
+		case strings.HasPrefix(def, "mcp_"), strings.HasPrefix(def, "ai_"):
+		case integration == "mcp":
 			def = "mcp_declared_tool_event"
+		default:
+			def = "declared_tool_event"
 		}
 		schema, err := c.Compile(schemaURL + "#/$defs/" + def)
 		if err != nil {
