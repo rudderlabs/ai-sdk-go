@@ -14,7 +14,7 @@ import (
 
 const schemaURL = "https://rudderstack.com/schemas/ai-events/0.3.0"
 
-// RepoRoot returns the nearest directory at or above the working directory that holds go.mod.
+// RepoRoot returns the nearest directory at or above the working directory that holds the spec.
 // It panics when there is none: tests always run inside the module.
 func RepoRoot() string {
 	dir, err := os.Getwd()
@@ -26,12 +26,13 @@ func RepoRoot() string {
 
 func findRoot(dir string) string {
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+		// The repository root holds the spec; integration modules have their own go.mod.
+		if _, err := os.Stat(filepath.Join(dir, "spec", "ai-events-v0.3.schema.json")); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			panic("testkit: no go.mod above " + dir)
+			panic("testkit: no spec/ai-events-v0.3.schema.json above " + dir)
 		}
 		dir = parent
 	}
