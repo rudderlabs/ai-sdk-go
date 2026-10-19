@@ -1,8 +1,10 @@
 package ruddermcpgo
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"runtime"
 	"slices"
 	"strconv"
@@ -398,6 +400,32 @@ func TestMCPEventsHelpers(t *testing.T) {
 	TrackMCPEventSubscription(ctx, unwrapped, rudderstackai.SubscriptionChange{Action: "created", SubscriptionID: "s", EventName: "e"})
 	if len(r.all()) != 2 {
 		t.Errorf("events = %v", r.names())
+	}
+}
+
+// A record without its required IDs is dropped with a warning, as on the go-sdk.
+func TestMCPEventsMissingIDsDropped(t *testing.T) {
+	s := workspaceServer("events-ids-mcp", nil)
+	r := wrap(t, s, Options{MCPEvents: true})
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	ctx := context.Background()
+	TrackMCPEventSubscription(ctx, s, rudderstackai.SubscriptionChange{Action: rudderstackai.SubscriptionCreated, EventName: "e"})
+	send := WrapMCPEventSender(s, func(context.Context, rudderstackai.EventDelivery) (rudderstackai.DeliveryOutcome, error) {
+		return rudderstackai.DeliveryOutcome{HTTPStatus: 200}, nil
+	})
+	if _, err := send(ctx, rudderstackai.EventDelivery{SubscriptionID: "s", EventName: "e"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.all()) != 0 {
+		t.Errorf("events = %v", r.names())
+	}
+	for _, want := range []string{"mcp_event_subscription_changed dropped", "mcp_event_delivered dropped"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("no warning %q in %s", want, logs.String())
+		}
 	}
 }
 

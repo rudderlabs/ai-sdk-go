@@ -43,7 +43,7 @@ type EventsIdentity struct {
 }
 
 // SubscriptionChange is one MCP Events subscription change. SubscriptionID and EventName are
-// required: a change without them is not sent.
+// required: a change without them is dropped with a warning.
 type SubscriptionChange struct {
 	EventsIdentity
 	// Action is one of the Subscription* constants.
@@ -72,7 +72,7 @@ type SubscriptionChange struct {
 }
 
 // EventDelivery is one update to deliver, as passed to an [EventSender]. SubscriptionID,
-// EventName and EventID are required: a delivery without them is not recorded.
+// EventName and EventID are required: a delivery without them is dropped with a warning.
 type EventDelivery struct {
 	EventsIdentity
 	SubscriptionID string
@@ -143,6 +143,7 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 	}
 	id, event := capID(change.SubscriptionID), capID(change.EventName)
 	if id == "" || event == "" {
+		warnf("mcp_event_subscription_changed dropped: SubscriptionID and EventName are required")
 		return
 	}
 	opts, whom, base := w.eventsBase(ctx, change.EventsIdentity)
@@ -256,6 +257,7 @@ func (w *wrapped) DeliveryDone(ctx context.Context, delivery, result any, failed
 	}
 	id, event, eventID := capID(d.SubscriptionID), capID(d.EventName), capID(d.EventID)
 	if id == "" || event == "" || eventID == "" {
+		warnf("mcp_event_delivered dropped: SubscriptionID, EventName and EventID are required")
 		return
 	}
 	opts, whom, base := w.eventsBase(ctx, d.EventsIdentity)

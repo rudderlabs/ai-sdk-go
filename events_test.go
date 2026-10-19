@@ -122,11 +122,12 @@ func TestMCPEventsNeedOptIn(t *testing.T) {
 	}
 }
 
-// Without its required IDs an MCP Events record is skipped, not sent with placeholders; without
-// OccurredAt the latency is left out.
+// Without its required IDs an MCP Events record is dropped with a warning, not sent with
+// placeholders; without OccurredAt the latency is left out.
 func TestMCPEventsSkipMissingIDsAndLatency(t *testing.T) {
 	server := workspaceServer("events-ids-mcp", nil)
 	r := wrap(t, server, Options{MCPEvents: true})
+	logs := captureLogs(t)
 	ctx := context.Background()
 	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCreated, EventName: "e"})
 	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCreated, SubscriptionID: "s"})
@@ -143,6 +144,12 @@ func TestMCPEventsSkipMissingIDsAndLatency(t *testing.T) {
 	}
 	if got := r.names(); len(got) != 1 || got[0] != "mcp_event_delivered" {
 		t.Fatalf("events = %v", got)
+	}
+	if n := logs.count("mcp_event_subscription_changed dropped"); n != 2 {
+		t.Errorf("subscription warnings = %d, want 2: %s", n, logs)
+	}
+	if n := logs.count("mcp_event_delivered dropped"); n != 3 {
+		t.Errorf("delivery warnings = %d, want 3: %s", n, logs)
 	}
 	if _, ok := r.all()[0].Properties["delivery_latency_ms"]; ok {
 		t.Error("delivery_latency_ms without OccurredAt")
