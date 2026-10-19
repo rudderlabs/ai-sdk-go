@@ -117,7 +117,7 @@ Each emitted event must also validate against `spec/ai-events-v0.3.schema.json` 
 
 ## Rules the expected events encode
 
-- No `spec_version` property: every event carries `context.wrapperLibrary.specVersion: "0.2.0"` on the SDK's own level.
+- No `spec_version` property: every event carries `context.wrapperLibrary.specVersion: "0.3.0"` on the SDK's own level.
 - Minted `interaction_id` and fallback `conversation_id` values are UUID v4; the SDK never invents an `anonymousId` when a `userId` is set (`ai_system` only when there is no identity).
 - Every `usage_breakdown` entry has `total_tokens` (input + output).
 - `reasoning_tokens` (per call and per `usage_breakdown` entry) and `total_reasoning_tokens` are provider-reported reasoning tokens, a subset of output tokens (never added to them again, never more than them). A reported `0` is sent; a provider or call that reports no count (Anthropic, Bedrock, a failed call) has no field, and an entry or answer has one when at least one of its calls reports a count (the sum of those).
