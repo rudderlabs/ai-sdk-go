@@ -176,7 +176,7 @@ func TestGenerateContentGemini(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := rec.response(t)
-	want(t, p, "primary_provider", "google")
+	want(t, p, "primary_provider", "gcp.gemini")
 	want(t, p, "primary_model", model+"-001")
 	want(t, p, "total_input_tokens", 35)
 	want(t, p, "total_output_tokens", 10)
@@ -200,7 +200,7 @@ func TestVertexExpressAndProviderOverride(t *testing.T) {
 		opts     []ruddergenai.Option
 		provider string
 	}{
-		{"detected", nil, "google.vertex"},
+		{"detected", nil, "gcp.vertex_ai"},
 		{"override", []ruddergenai.Option{ruddergenai.WithProvider("my.gateway")}, "my.gateway"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -239,7 +239,7 @@ func TestVertexHost(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := rec.response(t)
-	want(t, p, "primary_provider", "google.vertex")
+	want(t, p, "primary_provider", "gcp.vertex_ai")
 	want(t, p, "primary_model", "123")
 }
 

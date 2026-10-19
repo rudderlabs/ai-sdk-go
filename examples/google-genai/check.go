@@ -42,7 +42,7 @@ func expectEvents(msgs []dataplane.Message, res result) error {
 	}{
 		{"ai_user_prompt_created", map[string]any{"feature": "travel_assistant", "surface": "mobile"}},
 		{"ai_response_received", map[string]any{
-			"response_status": "success", "trigger": "user", "primary_provider": "google", "primary_model": model,
+			"response_status": "success", "trigger": "user", "primary_provider": "gcp.gemini", "primary_model": model,
 			"finish_reason": "stop", "llm_call_count": 2, "tool_call_count": 1,
 			"total_input_tokens": 55 + 99, "total_output_tokens": 16 + 16, "total_tokens": 186, "total_cached_input_tokens": 0,
 			// (154 × $0.10 + 32 × $0.40) per million tokens.
