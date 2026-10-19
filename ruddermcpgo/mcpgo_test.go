@@ -17,6 +17,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 const (
@@ -407,6 +408,7 @@ func TestMCPEventsHelpers(t *testing.T) {
 func TestMCPEventsMissingIDsDropped(t *testing.T) {
 	s := workspaceServer("events-ids-mcp", nil)
 	r := wrap(t, s, Options{MCPEvents: true})
+	hook.Reset() // fresh once-per-process warnings
 	var logs bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
