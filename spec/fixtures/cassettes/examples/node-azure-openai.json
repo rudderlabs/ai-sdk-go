@@ -1,0 +1,317 @@
+{
+  "synthetic": true,
+  "description": "Azure OpenAI chat completion streamed from a deployment with stream_options.include_usage: the first chunk carries only prompt_filter_results (empty model), the content chunks the deployment's base model, the last chunk the usage. Written from the Azure OpenAI reference.",
+  "sources": [
+    "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/reference#chat-completions",
+    "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter",
+    "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/chatgpt#working-with-the-chat-completion-api"
+  ],
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/openai/deployments/support-chat/chat/completions"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "events": [
+          {
+            "payload": {
+              "choices": [],
+              "created": 0,
+              "id": "",
+              "model": "",
+              "object": "",
+              "prompt_filter_results": [
+                {
+                  "prompt_index": 0,
+                  "content_filter_results": {
+                    "hate": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "self_harm": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "sexual": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "violence": {
+                      "filtered": false,
+                      "severity": "safe"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "payload": {
+              "created": 1760425260,
+              "id": "chatcmpl-CQ7mZ3kV9tY2bN5xR1pL8sW4dH6fA",
+              "model": "gpt-4o-mini-2024-07-18",
+              "object": "chat.completion.chunk",
+              "system_fingerprint": "fp_efad92c60b",
+              "usage": null,
+              "choices": [
+                {
+                  "content_filter_results": {},
+                  "delta": {
+                    "content": "",
+                    "refusal": null,
+                    "role": "assistant"
+                  },
+                  "finish_reason": null,
+                  "index": 0,
+                  "logprobs": null
+                }
+              ]
+            }
+          },
+          {
+            "payload": {
+              "created": 1760425260,
+              "id": "chatcmpl-CQ7mZ3kV9tY2bN5xR1pL8sW4dH6fA",
+              "model": "gpt-4o-mini-2024-07-18",
+              "object": "chat.completion.chunk",
+              "system_fingerprint": "fp_efad92c60b",
+              "usage": null,
+              "choices": [
+                {
+                  "content_filter_results": {
+                    "hate": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "self_harm": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "sexual": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "violence": {
+                      "filtered": false,
+                      "severity": "safe"
+                    }
+                  },
+                  "delta": {
+                    "content": "Yes"
+                  },
+                  "finish_reason": null,
+                  "index": 0,
+                  "logprobs": null
+                }
+              ]
+            }
+          },
+          {
+            "payload": {
+              "created": 1760425260,
+              "id": "chatcmpl-CQ7mZ3kV9tY2bN5xR1pL8sW4dH6fA",
+              "model": "gpt-4o-mini-2024-07-18",
+              "object": "chat.completion.chunk",
+              "system_fingerprint": "fp_efad92c60b",
+              "usage": null,
+              "choices": [
+                {
+                  "content_filter_results": {
+                    "hate": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "self_harm": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "sexual": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "violence": {
+                      "filtered": false,
+                      "severity": "safe"
+                    }
+                  },
+                  "delta": {
+                    "content": ", you can change"
+                  },
+                  "finish_reason": null,
+                  "index": 0,
+                  "logprobs": null
+                }
+              ]
+            }
+          },
+          {
+            "payload": {
+              "created": 1760425260,
+              "id": "chatcmpl-CQ7mZ3kV9tY2bN5xR1pL8sW4dH6fA",
+              "model": "gpt-4o-mini-2024-07-18",
+              "object": "chat.completion.chunk",
+              "system_fingerprint": "fp_efad92c60b",
+              "usage": null,
+              "choices": [
+                {
+                  "content_filter_results": {
+                    "hate": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "self_harm": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "sexual": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "violence": {
+                      "filtered": false,
+                      "severity": "safe"
+                    }
+                  },
+                  "delta": {
+                    "content": " the delivery address"
+                  },
+                  "finish_reason": null,
+                  "index": 0,
+                  "logprobs": null
+                }
+              ]
+            }
+          },
+          {
+            "payload": {
+              "created": 1760425260,
+              "id": "chatcmpl-CQ7mZ3kV9tY2bN5xR1pL8sW4dH6fA",
+              "model": "gpt-4o-mini-2024-07-18",
+              "object": "chat.completion.chunk",
+              "system_fingerprint": "fp_efad92c60b",
+              "usage": null,
+              "choices": [
+                {
+                  "content_filter_results": {
+                    "hate": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "self_harm": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "sexual": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "violence": {
+                      "filtered": false,
+                      "severity": "safe"
+                    }
+                  },
+                  "delta": {
+                    "content": " until the order ships"
+                  },
+                  "finish_reason": null,
+                  "index": 0,
+                  "logprobs": null
+                }
+              ]
+            }
+          },
+          {
+            "payload": {
+              "created": 1760425260,
+              "id": "chatcmpl-CQ7mZ3kV9tY2bN5xR1pL8sW4dH6fA",
+              "model": "gpt-4o-mini-2024-07-18",
+              "object": "chat.completion.chunk",
+              "system_fingerprint": "fp_efad92c60b",
+              "usage": null,
+              "choices": [
+                {
+                  "content_filter_results": {
+                    "hate": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "self_harm": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "sexual": {
+                      "filtered": false,
+                      "severity": "safe"
+                    },
+                    "violence": {
+                      "filtered": false,
+                      "severity": "safe"
+                    }
+                  },
+                  "delta": {
+                    "content": "."
+                  },
+                  "finish_reason": null,
+                  "index": 0,
+                  "logprobs": null
+                }
+              ]
+            }
+          },
+          {
+            "payload": {
+              "created": 1760425260,
+              "id": "chatcmpl-CQ7mZ3kV9tY2bN5xR1pL8sW4dH6fA",
+              "model": "gpt-4o-mini-2024-07-18",
+              "object": "chat.completion.chunk",
+              "system_fingerprint": "fp_efad92c60b",
+              "usage": null,
+              "choices": [
+                {
+                  "content_filter_results": {},
+                  "delta": {},
+                  "finish_reason": "stop",
+                  "index": 0,
+                  "logprobs": null
+                }
+              ]
+            }
+          },
+          {
+            "payload": {
+              "created": 1760425260,
+              "id": "chatcmpl-CQ7mZ3kV9tY2bN5xR1pL8sW4dH6fA",
+              "model": "gpt-4o-mini-2024-07-18",
+              "object": "chat.completion.chunk",
+              "system_fingerprint": "fp_efad92c60b",
+              "usage": {
+                "completion_tokens": 14,
+                "completion_tokens_details": {
+                  "accepted_prediction_tokens": 0,
+                  "audio_tokens": 0,
+                  "reasoning_tokens": 0,
+                  "rejected_prediction_tokens": 0
+                },
+                "prompt_tokens": 33,
+                "prompt_tokens_details": {
+                  "audio_tokens": 0,
+                  "cached_tokens": 0
+                },
+                "total_tokens": 47
+              },
+              "choices": []
+            }
+          },
+          {
+            "payload": "[DONE]"
+          }
+        ]
+      }
+    }
+  ]
+}

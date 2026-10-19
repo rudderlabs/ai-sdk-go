@@ -1,0 +1,80 @@
+{
+  "synthetic": true,
+  "description": "One OpenAI Responses API answer for a serverless handler invocation (Lambda). Written from the API reference's response object.",
+  "sources": [
+    "https://platform.openai.com/docs/api-reference/responses/create",
+    "https://platform.openai.com/docs/api-reference/responses/object"
+  ],
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "resp_68f0b2c4d1e08190a7b6c5d4e3f20118",
+          "object": "response",
+          "created_at": 1760604868,
+          "status": "completed",
+          "background": false,
+          "error": null,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "model": "gpt-4.1-mini-2025-04-14",
+          "output": [
+            {
+              "id": "msg_68f0b2c5a2f48190b8c7d6e5f4031229",
+              "type": "message",
+              "status": "completed",
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "output_text",
+                  "text": "RudderStack is a customer data platform that collects events from your apps and routes them to your warehouse and tools.",
+                  "annotations": [],
+                  "logprobs": []
+                }
+              ]
+            }
+          ],
+          "parallel_tool_calls": true,
+          "previous_response_id": null,
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "store": true,
+          "temperature": 1.0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 1.0,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 14,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 24,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 38
+          },
+          "metadata": {}
+        }
+      }
+    }
+  ]
+}

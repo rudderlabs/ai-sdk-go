@@ -43,9 +43,7 @@ var apis = map[string]apiDriver{}
 
 // gaps names scenarios a Go integration cannot reproduce, with the reason. Integration test files
 // add theirs in init; keep it short and explain each one.
-var gaps = map[string]string{
-	"google_vertex_generate_plain": "expects a google price to apply to google.vertex; the Gemini API and Vertex AI are priced separately (ai-sdk-node PR #31), the fixture follows when that lands",
-}
+var gaps = map[string]string{}
 
 // Ops and APIs that belong to Node.js and Python integrations with no Go counterpart.
 var platformOps = map[string]string{
@@ -54,6 +52,7 @@ var platformOps = map[string]string{
 	"langchain_stream":           "LangChain is a Node.js and Python framework",
 	"langchain_retrieve":         "LangChain is a Node.js and Python framework",
 	"langchain_multi_prompt_run": "LangChain is a Node.js and Python framework",
+	"langchain_late_callbacks":   "LangChain is a Node.js and Python framework",
 	"openai_agents_run":          "the OpenAI Agents SDK has no Go version",
 	"claude_messages":            "the Claude Agent SDK has no Go version",
 }

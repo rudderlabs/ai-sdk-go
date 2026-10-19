@@ -1,0 +1,1786 @@
+{
+  "synthetic": false,
+  "recorded_at": "2026-10-14T08:20:34.925Z",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1oZVh15mcCEJG5pXQRc",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "thinking",
+              "thinking": "The customer is asking about changing a delivery address after the order has shipped. Let me check the handbook for this information.\n\nFrom PART 3.1 \"Changing a delivery address\":\n\"Customers can change the delivery address of an order until it ships. Open the order in the account area and choose Edit address. Once the order has shipped, the address can only be changed with the carrier, using the tracking link in the shipping email. Never change an address over chat without confirming the email address on the account.\"\n\nSo the answer is: Yes, but only through the carrier using the tracking link in the shipping email. They cannot change it through the account area after shipping.\n\nI should be friendly and direct, start with the answer, then the one step they take next.",
+              "signature": "EqUICrgBCBIYAipAfCohW/Uojx20emArg8C9QPlgtvH7cyf+XuoyZFFcTnKriXTIUUfxaGrOHUmzItZW57NVajXLqg58jU5aRj85ejIZY2xhdWRlLWhhaWt1LTQtNS0yMDI1MTAwMTgAQgh0aGlua2luZ1okMjMwNDlhMTUtYWYxOS00MmQwLTgwZGYtNGU2OWY1ZDkyYmNhmgEbChljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxqAHN9rzWBhIMaouL2hcWRj2q19DuGgw5N4NmBDChvQT94ngiMJHg/6o9slfIV0mKSBntVT7wgTjpgz08VbT49mOekrtLJSrHFrqCwI/M1DThCm8TZSqZBtOYAjkhUF7WCsuusc36jflSjU3v6KciIgGHPK27COoD3JDI8S+E/Mz046/wILEnBkry9o+/9/cZWOjn9r2iyROyeCQbE7QJkrBwTJ54dqwDP3c87FhKj8071KUDhiDRoelf3gzXuqQVSEhi+PyEU1wVuj1PEG+uWZRfYObhZqHD4jybhvozL9Oc1Z4FNc88LBZoLRaCCsPUubxLTK5laspJ8sUPnYZiJGgat4YYIKP/QB5zDaYyHq56MMdkR95nNtuS53d5Op3sL4aZ54lgEfGpYv3Guza3ndrJ8yQ2ZywyO0OCHBgXYKSWvQr7HhaRerxw82ucQX3XiC0n1mKZpkCi3w+/xuHPC2sWVC2QqgBYN80xe6GiyigUF5d5vG2vS5NS25dGDyUEzqPK0BEyR6E08J73+Kpxh477+szjYHv1FZ4SBZc9BAIOM3FQo2cJUROnYUa7Kj32m17vPN+Rfw5+Vz9P+e8jOA7bhuqo6EbeWk0F01aJdEOapwaWosiJWkvAkhEf6qC30fb7mzxO9A7k6LFX5Wx0qPdBN97jGhV3kpbbdYrgXvUmuvWkjfzXQjn/LK3n7dDG0AopaR2KlmOKrvxgFnb4ZMaTikjwvCBS7A/cCht3qtWIlgmL74DcjOkYGVFWk1MMronAjEEaPfZrOGSHSy5t58wNXbCujXKFHguBYAZgnxwOwYLM9S2FLEADJMf4C14zBRUkKu45HlQeUSkwXfCwc0GVAZZ/I9JLgJ/FSzI3wQ72MOvK8YCgj7F6xc+ffev0/xqXcVdWvB9pL1ngosNKnhWjKghnfwWcXPShB/58Ae0l6ic+xLByLzFl2isGRpjXIQT2yZKpON0seS0PpWESEJqRCqaUfoz4XcbTzjubMYidRxElL3eJNP5Ben8HDnJLh7j0X6L5N2dNYxecpzri5P90HXdcTrBicJ797yX1Nw9YgmxM5jEolWe+yTOgrLzkFq3jkZLozJAFqtUxqCkBd+ajkbTW1hkTOP5lKOeuwkS/hTq6Ep1FpGyjJnifxV308m3Si7lj04I8PsFKBHm6nQYYAQ=="
+            },
+            {
+              "type": "text",
+              "text": "Yes, you can change it with the carrier using the tracking link in your shipping email. Once your order has shipped, you'll no longer be able to edit the address in your account area, but the carrier will give you the option to update it through their tracking page."
+            }
+          ],
+          "container": null,
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 47,
+            "cache_creation_input_tokens": 5581,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 5581
+            },
+            "output_tokens": 229,
+            "output_tokens_details": {
+              "thinking_tokens": 168
+            },
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "events": [
+          {
+            "event": "message_start",
+            "payload": {
+              "type": "message_start",
+              "message": {
+                "model": "claude-haiku-4-5-20251001",
+                "id": "msg_011Cg1oZj4v9s6JYdrXveccs",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "container": null,
+                "stop_reason": null,
+                "stop_sequence": null,
+                "stop_details": null,
+                "usage": {
+                  "input_tokens": 51,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 5581,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 2,
+                  "service_tier": "standard",
+                  "inference_geo": "not_available"
+                },
+                "diagnostics": null
+              }
+            }
+          },
+          {
+            "event": "content_block_start",
+            "payload": {
+              "type": "content_block_start",
+              "index": 0,
+              "content_block": {
+                "type": "thinking",
+                "thinking": "",
+                "signature": ""
+              }
+            }
+          },
+          {
+            "event": "ping",
+            "payload": {
+              "type": "ping"
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "The customer"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " is asking about how"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " long a PayP"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "al refund takes"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " after returning headphones"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "."
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "\n\nLet"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " me find"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " the relevant information:"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "\n\nFrom Section"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " 3"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "."
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "4"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " "
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "Refund"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " timing"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": ":\n\""
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "Refunds are issued"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " to"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " the original payment method"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " within"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " three"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " working"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " days of the"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " return arriving"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " at the warehouse."
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " Card"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " refunds then"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " take up"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " to five"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " working days to appear"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": ","
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " Pay"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "Pal refunds"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " up"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " to one"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " day"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": ","
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " and bank"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " transfers"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " up to three days"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "."
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " Kl"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "arna adjust"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "s the open"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " invoice"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " instead"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " of paying"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " money"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " back"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": ".\""
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "\n\nSo the"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " answer"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " is:\n1"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": ". The"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " refund is issued"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " within 3 "
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "working days of"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " the"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " return arriving"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " at the warehouse"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "\n2. For"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " PayPal specifically"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": ", it takes"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " up to 1"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " day to"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " appear after"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " that"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "\n\nThe customer is asking"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " about"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " head"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "phones returns"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " specifically"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "."
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " From"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " Section"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " 2"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": ","
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " head"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "phones have"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " a 30-"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "day return window"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " with"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " free"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " return labels"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " within"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " that"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " window"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": ".\n\nSo I"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " should"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " tell"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " them:\n-"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " The"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " refund is issued"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " to"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " Pay"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "Pal within "
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "3 working days"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " of"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " the return arriving"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " at"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " our"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " warehouse\n- The"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " refund then"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " takes up to "
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "1 day to"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " appear in"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " their PayPal"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " account"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "\n\nI should"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " be"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " friendly"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " and direct,"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " starting"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": " with the answer."
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "signature_delta",
+                "signature": "ErcKCrgBCBIYAipAy6e1ie3cj/Ex+MEIL7xMYtJ32LphRzJm/hp8hldoJgV9j6fVvQl3mK8Jvhgr/zwawXkQINg1BH3AIJEQVIuBHjIZY2xhdWRlLWhhaWt1LTQtNS0yMDI1MTAwMTgAQgh0aGlua2luZ1okMjMwNDlhMTUtYWYxOS00MmQwLTgwZGYtNGU2OWY1ZDkyYmNhmgEbChljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxqAHS9rzWBhIMp5S6vCaxqlOvfGegGgxT6DatXkyizgOhNjUiMEXTLh0q28UeT81WsgDjPNFmvSLjgFEwJ1WseKTk7N+0qFg0uTdUIeuy0lC4bCoS2CqrCLIWk75VS+xZqSSoPd1w4I94uhAymeekXl+KFXwOBs4uFWAsMIYExExwyS/pO57tX4FrL5+G9mVkMdZ5SWp/ldipk3Znsqk1uCCGZu1MQmxqGtnZwB7zWfezttDdAFxy+sVpzgw4r+fA7qvQHyGFBDHLgJcG3/UfIv3f4v02pkgatsKc/JEoLlzOAUJGopfHjcDcV/y4WK7UvnqV5i2ajlZCGfsSWKl31R/vuIpsB9P5keMOgptBX10fkafmpT8O/J8Vm7CSTkpofsa6iIwagb7c1KP/jytmihbQqPS2IWh1Q0vg0iWIDQDNg5KRDrl2E894OmgBPXdCs98NdBhhpA3Fddp0tQ3dSOyGbBFhmd6CwgyxAjPrpulixyLYWSci2jzGaqItTq/Ze35Z8oxsrBM6zdJW3VwI6OM4iN+b5WlrPF6YXuM3yi8mxO/zUK/e8vgJf5qE5VXllwqDJ6/m/HuBaanrG/YKfBnd0DWiLtm1kOaFUZrc6jAqEDl7vBLYyVct2io8CCtCISVlAG1nSQSMGOxWq2KW6tLU61PNPEJUpdJmV8erRyuEvNLi794OTD/P3fuy1mQ5XjU9AwMkDY77fn0jKdARJRJSM2NiENzTYopF+uMT+pBWm+HGuNZLS7PvGJtBKH94H8S0x8L5QeCeWQ/nr3HNrWtMfQfbZGiIKFzdF6BV9XgBcoaRooI5+90Re7TwqHsyB8Ai8cAeOMVbRg5x8jGlvDUHGvw6iY0wzFVEzn1IoBH06+gJD7pmjSVV69pFMjkzExIapywalZzNPbOJsU0hHhrcHjB+SC6U2yhrwPklinl+tNLt1/QV1KCuoDxGoPsiKgBcA2f4cZMNMoH9Kune7U0ksgdpeNcMROyE/ebTN60JKSj43EPNM5x8QULrRmzKCjYICcnji75SXjRFpyP5tf4Eo0AqpdxA0y27QdF8ydcDwC14PVsbqfbUQzdBL1/TgtCn7388FXUcjnk0vlUX9zuv+NNBNm1NO/8acOv/0eHnJpOEJIkIoFSaGlbOYey6Gr26ecOs5oMpr/EF/adIQWXegI932SNUTg2k48ffk2CJDf4ilhmGpP3sKzKzx6z1k5ZOqrmbWCfY+/BWG83COQ4tkY3d1JrUWipll/tmgqtXpvBkK2+Whr7fvKROg0qbsdZ4cG6MQ1nRWfpjZTPLanBHAFSkxFD4Oq2ISTaGGqUvwG1Rqowdv15dQ8pOgEC3T/qf5lLDP5K4cbOBcK+EIFDBVm7CVnA7i5x1MLJXNPAyqXJOQOSudQGWe0CzBxwGtyhssnvZx5O630rForm0r3h/52NwT1aiJaXhMsPA+DE0Lj6TnjPR+8asUSJ7aotLM1v/RdIHwpMSqcrGWYRKr0cwUGZFFXuiCERAVlrw+qixeiVhsQP1HOd6tys0ju3qwB8BGAE="
+              }
+            }
+          },
+          {
+            "event": "content_block_stop",
+            "payload": {
+              "type": "content_block_stop",
+              "index": 0
+            }
+          },
+          {
+            "event": "content_block_start",
+            "payload": {
+              "type": "content_block_start",
+              "index": 1,
+              "content_block": {
+                "type": "text",
+                "text": ""
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "Your"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " ref"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "und will"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " be issued"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " to Pay"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "Pal within three"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " working days of your"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " return arriving at our"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " warehouse,"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " and it"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " typically"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " appears"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " in"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " your account"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " within up"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " to one day after"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " that. Make"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " sure to hand"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " your"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " par"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "cel to the carrier"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " within"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " seven"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " days of creating"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " your"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " return label"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " so"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " it"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " doesn"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "'t expire"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "."
+              }
+            }
+          },
+          {
+            "event": "content_block_stop",
+            "payload": {
+              "type": "content_block_stop",
+              "index": 1
+            }
+          },
+          {
+            "event": "message_delta",
+            "payload": {
+              "type": "message_delta",
+              "delta": {
+                "stop_reason": "end_turn",
+                "stop_sequence": null,
+                "stop_details": null,
+                "container": null
+              },
+              "usage": {
+                "input_tokens": 51,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 5581,
+                "output_tokens": 328,
+                "output_tokens_details": {
+                  "thinking_tokens": 261
+                }
+              }
+            }
+          },
+          {
+            "event": "message_stop",
+            "payload": {
+              "type": "message_stop"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
