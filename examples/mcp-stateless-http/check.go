@@ -126,7 +126,7 @@ func expectEvents(msgs []dataplane.Message, client, action string) error {
 		{"mcp_client_seen", seen, map[string]any{"server_version": "2.0.0", "transport": "streamable_http", "auth_method": "none"}},
 		{"mcp_tool_called", call, map[string]any{
 			"tool_name": "delete_audience", "tool_status": "success", "interaction_id": "int_" + client,
-			"argument_keys": []string{"audience_id"}, "call_index": 1, "retry_count": harness.Absent,
+			"argument_keys": []string{"audience_id"}, "call_index": 0, "retry_count": harness.Absent,
 			"is_error_result": false, "request_id": harness.Present, "duration_ms": harness.Present,
 		}},
 		{"mcp_elicitation_completed", answer, map[string]any{

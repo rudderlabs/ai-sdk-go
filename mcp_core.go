@@ -110,6 +110,9 @@ type pendingInput struct {
 	start     time.Time
 	requestID string
 	toolName  string
+	// position is the input_required leg's call_index and ms_since_previous_call, which the
+	// retry that completes the call takes over: the leg sends no event, so it leaves no gap.
+	position map[string]any
 }
 
 func newServerState() *serverState {
@@ -387,10 +390,17 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 	}
 	t.props["progress_requested"] = progress
 	t.answered = len(answers) > 0
+	var position map[string]any
 	if t.answered {
-		rc.inputResponses(answers, requestState)
+		position = rc.inputResponses(answers, requestState)
 	}
 	if rc.scope == "" || t.skip {
+		return strip, false
+	}
+	if position != nil {
+		for k, v := range position {
+			t.props[k] = v
+		}
 		return strip, false
 	}
 	start := time.Now()
@@ -684,17 +694,29 @@ func (rc *reqCtx) inputKey(key, requestState string) string {
 }
 
 func (rc *reqCtx) inputRequired(keys []string, requestState string) {
+	var position map[string]any
+	if t := rc.tool; t != nil {
+		for _, k := range []string{"call_index", "ms_since_previous_call"} {
+			if v, ok := t.props[k]; ok {
+				if position == nil {
+					position = map[string]any{}
+				}
+				position[k] = v
+			}
+		}
+	}
 	rc.st.Lock()
 	defer rc.st.Unlock()
 	for _, key := range keys {
 		rc.st.inputRequired.set(rc.inputKey(key, requestState), pendingInput{
-			start: time.Now(), requestID: rc.requestID, toolName: rc.toolName,
+			start: time.Now(), requestID: rc.requestID, toolName: rc.toolName, position: position,
 		})
 	}
 }
 
-// inputResponses records the elicitations a 2026-07-28 retry answers.
-func (rc *reqCtx) inputResponses(answers []mcpbridge.Answer, requestState string) {
+// inputResponses records the elicitations a 2026-07-28 retry answers, and returns the position
+// of the input_required leg it continues (nil when none is known).
+func (rc *reqCtx) inputResponses(answers []mcpbridge.Answer, requestState string) (position map[string]any) {
 	sorted := slices.Clone(answers)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Key < sorted[j].Key })
 	for _, a := range sorted {
@@ -711,9 +733,13 @@ func (rc *reqCtx) inputResponses(answers []mcpbridge.Answer, requestState string
 			e.duration = time.Since(pending.start)
 			e.hasDuration = true
 			e.requestID = pending.requestID
+			if position == nil {
+				position = pending.position
+			}
 		}
 		rc.w.elicitationCompleted(rc, e)
 	}
+	return position
 }
 
 func validAction(a string) bool { return a == "accept" || a == "decline" || a == "cancel" }

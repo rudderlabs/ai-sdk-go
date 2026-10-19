@@ -119,7 +119,7 @@ The go-sdk v1.8 and mcp-go v1.x serve both revisions; both are tested end to end
 | `mcp_session_id`               | The transport's session ID (`Mcp-Session-Id` on streamable HTTP) | Absent                                                                                                     |
 | Elicitation                    | The server's `elicitation/create` request and the client's response | A `tools/call` result with `inputRequests`, answered by the client's retry with `inputResponses` (matched by `requestState`, else by client, user and tool) |
 
-The `input_required` leg of a call sends no `mcp_tool_called`; the retry that completes it does, without `retry_count`. The elicitation's `request_id` is the original request's and `duration_ms` runs from the `input_required` result to the retry. A handler that returns `InputRequests` to a 2025-06-18 client is answered by the go-sdk through `elicitation/create`, which is recorded the same way as a direct `session.Elicit`. mcp-go answers it the same way, but with no hook for it: those elicitations are not recorded.
+The `input_required` leg of a call sends no `mcp_tool_called`; the retry that completes it does, without `retry_count`, and takes the leg's `call_index` and `ms_since_previous_call`, so reported calls have no gaps. The elicitation's `request_id` is the original request's and `duration_ms` runs from the `input_required` result to the retry. A handler that returns `InputRequests` to a 2025-06-18 client is answered by the go-sdk through `elicitation/create`, which is recorded the same way as a direct `session.Elicit`. mcp-go answers it the same way, but with no hook for it: those elicitations are not recorded.
 
 ## Identity
 
