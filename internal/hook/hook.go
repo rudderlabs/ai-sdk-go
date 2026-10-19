@@ -5,6 +5,7 @@ package hook
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
@@ -34,3 +35,46 @@ var (
 	// Reset restores the defaults (tests only).
 	Reset func()
 )
+
+var tracked struct {
+	mu   sync.Mutex
+	n    int
+	idle chan struct{}
+}
+
+// Track registers integration work that Flush waits for; call done when it finishes.
+func Track() (done func()) {
+	tracked.mu.Lock()
+	if tracked.n == 0 {
+		tracked.idle = make(chan struct{})
+	}
+	tracked.n++
+	tracked.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			tracked.mu.Lock()
+			if tracked.n--; tracked.n == 0 {
+				close(tracked.idle)
+			}
+			tracked.mu.Unlock()
+		})
+	}
+}
+
+// WaitTracked waits for tracked work, at most d. It reports whether all of it finished.
+func WaitTracked(d time.Duration) bool {
+	tracked.mu.Lock()
+	if tracked.n == 0 {
+		tracked.mu.Unlock()
+		return true
+	}
+	idle := tracked.idle
+	tracked.mu.Unlock()
+	select {
+	case <-idle:
+		return true
+	case <-time.After(d):
+		return false
+	}
+}
