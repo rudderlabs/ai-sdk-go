@@ -46,6 +46,8 @@ CI also runs `gofmt -l .` and `go vet ./...` on their own, and fails if total co
 
 Everything is pinned exactly: `go.mod` versions, tool versions in the `Makefile` and CI, and GitHub Actions (by full commit SHA with a version comment). Dependabot proposes updates weekly after a 7-day cooldown.
 
+The library modules require the oldest MCP and provider SDK versions they are tested against, so adding one never upgrades a consumer's SDK. Raise those minimums deliberately; Dependabot ignores them there and keeps updating the examples, conformance runner and CI tools.
+
 ## Tooling choices
 
 - **golangci-lint v2** with the standard linter set plus revive and misspell, and gofmt/goimports as formatters (`.golangci.yml`).
