@@ -20,9 +20,58 @@ updates:
         patterns:
           - '*'
 
-  # go.mod covers the examples too: they live in the same module.
+  # The library modules. Their MCP and provider SDK requirements are tested minimums, raised
+  # deliberately (CONTRIBUTING.md), so Dependabot leaves them alone.
   - package-ecosystem: 'gomod'
-    directory: '/'
+    directories:
+      - '/'
+      - '/rudderopenai'
+      - '/rudderanthropic'
+      - '/ruddergenai'
+      - '/rudderbedrock'
+      - '/rudderotel'
+    ignore:
+      - dependency-name: 'github.com/mark3labs/mcp-go'
+      - dependency-name: 'github.com/modelcontextprotocol/go-sdk'
+      - dependency-name: 'github.com/openai/openai-go/*'
+      - dependency-name: 'github.com/anthropics/anthropic-sdk-go'
+      - dependency-name: 'google.golang.org/genai'
+      - dependency-name: 'github.com/aws/*'
+      - dependency-name: 'go.opentelemetry.io/otel/*'
+    schedule:
+      interval: 'weekly'
+    cooldown:
+      default-days: 7
+    labels:
+      - 'dependencies'
+    open-pull-requests-limit: 4
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+    groups:
+      gomod-security:
+        applies-to: 'security-updates'
+        patterns:
+          - '*'
+      gomod-non-major:
+        applies-to: 'version-updates'
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+      gomod-major:
+        applies-to: 'version-updates'
+        patterns:
+          - '*'
+        update-types:
+          - 'major'
+
+  # The rest of go.work: the conformance runner and the examples track the latest SDKs.
+  - package-ecosystem: 'gomod'
+    directories:
+      - '/internal/conformance'
+      - '/examples'
     schedule:
       interval: 'weekly'
     cooldown:

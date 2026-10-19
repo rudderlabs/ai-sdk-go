@@ -1,0 +1,47 @@
+{
+  "synthetic": false,
+  "recorded_at": "2026-10-14T08:23:33.201Z",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1oo1rKiJ3KWPmFPP77P",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Yes, you can usually change your delivery address, but **timing is important**:\n\n- **Before shipping**: Contact us immediately with your order number, and we can update it if the order hasn't been processed yet.\n- **After shipping**: Once your package is in transit, you may not be able to change the address. However, you could refuse delivery and request reshipment to a new address.\n\n**How to request a change:**\n1. Reply to your order confirmation email, or\n2. Contact our support team with your order number\n\nThe sooner you reach out, the better chance we have of making the change. What's your order number? I can help check the status."
+            }
+          ],
+          "container": null,
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 28,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 148,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    }
+  ]
+}

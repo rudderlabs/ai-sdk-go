@@ -132,7 +132,7 @@ The server reads exactly these keys from a request's `_meta`:
 - `com.rudderstack/interaction_id` becomes `interaction_id`;
 - the W3C `traceparent` trace-id becomes `trace_id`, else `com.rudderstack/trace_id`.
 
-Values are opaque strings capped at 256 characters, as are IDs and names from the wire and from `Identify` (session ID, client name, title and version, account and user IDs, scopes); short labels (`protocol_version`, `auth_method`, `country`, `delivery_mode`, `failure_reason`) are capped at 64. No other `_meta` content is copied. Without them the server mints a random `interaction_id` per request and sends no `trace_id`. An agent tracked with the Node.js or Python SDK passes its interaction's ID, so each `mcp_tool_called` joins the `ai_response_received` that made the call.
+Values are opaque strings capped at 256 characters, as are IDs and names from the wire and from `Identify` (session ID, client name, title and version, account and user IDs, scopes); short labels (`protocol_version`, `auth_method`, `country`, `delivery_mode`, `failure_reason`) are capped at 64. No other `_meta` content is copied. Without them the server mints a random `interaction_id` per request and sends no `trace_id`. An agent tracked with the Node.js or Python SDK passes its interaction's ID, so each `mcp_tool_called` joins the `ai_response_received` that made the call. A Go agent sends `Interaction.ID()` under `com.rudderstack/interaction_id` itself: no Go integration adds it.
 
 ## Agent-reported context
 

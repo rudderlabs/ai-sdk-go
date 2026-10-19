@@ -114,6 +114,74 @@
       ]
     },
     {
+      "name": "node-anthropic-thinking-cache: thinking tokens as reasoning; 1-hour cache write, then read",
+      "cassette": "examples/node-anthropic-thinking-cache.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 5628, "output": 229, "cached": 0, "cache_write": 5581, "reasoning": 168 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 5632, "output": 328, "cached": 5581, "cache_write": 0, "reasoning": 261 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-anthropic-cloud-bedrock: InvokeModel body, then event-stream chunks carrying Messages events",
+      "cassette": "examples/node-anthropic-cloud-bedrock.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 31, "output": 22, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 14, "output": 10, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-anthropic-cloud-vertex: rawPredict body, then streamRawPredict events",
+      "cassette": "examples/node-anthropic-cloud-vertex.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 31, "output": 22, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 14, "output": 10, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-provider-retries: the recorded answer to a call the client retried after a 429",
+      "cassette": "examples/node-provider-retries.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 28, "output": 148, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-azure-openai: deployment path; the model of the first chunk that names one",
+      "cassette": "examples/node-azure-openai.json",
+      "calls": [
+        { "api": "openai.chat", "status": "success", "model": "gpt-4o-mini-2024-07-18", "finish_reason": "stop", "usage": { "input": 33, "output": 14, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-openai-responses: streamed function call, chained answer, incomplete reasoning",
+      "cassette": "examples/node-openai-responses.json",
+      "calls": [
+        { "api": "openai.responses", "status": "success", "model": "gpt-5-mini-2025-08-07", "finish_reason": "tool_calls", "usage": { "input": 91, "output": 87, "cached": 0, "cache_write": 0, "reasoning": 64 }, "tools": ["lookup_order"] },
+        { "api": "openai.responses", "status": "success", "model": "gpt-5-mini-2025-08-07", "finish_reason": "stop", "usage": { "input": 212, "output": 54, "cached": 0, "cache_write": 0, "reasoning": 32 }, "tools": [] },
+        { "api": "openai.responses", "status": "success", "model": "gpt-5-mini-2025-08-07", "finish_reason": "length", "usage": { "input": 247, "output": 16, "cached": 0, "cache_write": 0, "reasoning": 16 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-lambda-handler: one Responses answer per handler invocation",
+      "cassette": "examples/node-lambda-handler.json",
+      "calls": [
+        { "api": "openai.responses", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "usage": { "input": 14, "output": 24, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "Vertex and Bedrock routes: the count-tokens model and Converse are not Messages calls",
+      "cassette": {
+        "synthetic": true,
+        "interactions": [
+          { "request": { "method": "POST", "path": "/v1/projects/p/locations/us-east5/publishers/anthropic/models/count-tokens:rawPredict" }, "response": { "status": 200, "headers": { "content-type": "application/json" }, "body": { "input_tokens": 12 } } },
+          { "request": { "method": "POST", "path": "/model/anthropic.claude-haiku-4-5-20251001-v1:0/converse" }, "response": { "status": 200, "headers": { "content-type": "application/json" }, "body": { "output": { "message": { "role": "assistant", "content": [{ "text": "Hi" }] } }, "stopReason": "end_turn", "usage": { "inputTokens": 5, "outputTokens": 1, "totalTokens": 6 } } } },
+          { "request": { "method": "POST", "path": "/model/anthropic.claude-haiku-4-5-20251001-v1:0/invoke?trace=1" }, "response": { "status": 429, "headers": { "content-type": "application/json" }, "body": { "message": "Too many requests, please wait before trying again." } } }
+        ]
+      },
+      "calls": [
+        { "api": "anthropic.messages", "status": "error", "model": null, "finish_reason": null, "usage": { "input": 0, "output": 0, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
       "name": "node-langchain-openai: chat tool loop",
       "cassette": "examples/node-langchain-openai.json",
       "calls": [
@@ -301,6 +369,14 @@
       ]
     },
     {
+      "name": "node-claude-agent-sdk-mcp: a tool call on a local MCP server, then the answer; thinking tokens as reasoning",
+      "cassette": "examples/node-claude-agent-sdk-mcp.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 1303, "output": 121, "cached": 0, "cache_write": 0, "reasoning": 59 }, "tools": ["mcp__orders__lookup_order"] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 1490, "output": 63, "cached": 0, "cache_write": 0, "reasoning": 31 }, "tools": [] }
+      ]
+    },
+    {
       "name": "node-cookieless-bot: a Slack mention and a cron digest",
       "cassette": "examples/node-cookieless-bot.json",
       "calls": [
@@ -352,6 +428,14 @@
         { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 2039, "output": 122, "cached": 0, "cache_write": 0, "reasoning": 59 }, "tools": ["mcp__orders__lookup_order"] },
         { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 2222, "output": 62, "cached": 0, "cache_write": 0, "reasoning": 40 }, "tools": [] },
         { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 3839, "output": 58, "cached": 0, "cache_write": 0, "reasoning": 36 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "python-claude-agent-sdk-mcp: a tool call on a local MCP server, then the answer; thinking tokens as reasoning",
+      "cassette": "examples/python-claude-agent-sdk-mcp.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 1304, "output": 100, "cached": 0, "cache_write": 0, "reasoning": 37 }, "tools": ["mcp__orders__lookup_order"] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 1486, "output": 70, "cached": 0, "cache_write": 0, "reasoning": 43 }, "tools": [] }
       ]
     },
     {
@@ -418,7 +502,7 @@
               "headers": { "content-type": "text/event-stream" },
               "events": [
                 { "payload": { "candidates": [{ "content": { "parts": [{ "text": "Let me check." }], "role": "model" }, "index": 0 }], "usageMetadata": { "promptTokenCount": 40, "candidatesTokenCount": 3, "totalTokenCount": 43 }, "modelVersion": "gemini-x-001" } },
-                { "payload": { "candidates": [{ "content": { "parts": [{ "functionCall": { "name": "search_docs", "args": { "query": "refunds" } } }, { "functionCall": { "name": "lookup_invoice", "args": { "invoiceId": "INV-42" } } }], "role": "model" }, "finishReason": "STOP", "index": 0 }], "usageMetadata": { "promptTokenCount": 40, "candidatesTokenCount": 12, "cachedContentTokenCount": 32, "thoughtsTokenCount": 7, "totalTokenCount": 59 }, "modelVersion": "gemini-x-001" } }
+                { "payload": { "candidates": [{ "content": { "parts": [{ "functionCall": { "name": "search_docs", "args": { "query": "refunds" } } }, { "functionCall": { "name": "lookup_invoice", "args": { "invoiceId": "INV-42" } } }], "role": "model" }, "finishReason": "STOP", "index": 0 }], "usageMetadata": { "promptTokenCount": 40, "toolUsePromptTokenCount": 5, "candidatesTokenCount": 12, "cachedContentTokenCount": 32, "thoughtsTokenCount": 7, "totalTokenCount": 64 }, "modelVersion": "gemini-x-001" } }
               ]
             }
           },
@@ -444,7 +528,7 @@
         ]
       },
       "calls": [
-        { "api": "google.stream", "status": "success", "model": "gemini-x-001", "finish_reason": "STOP", "usage": { "input": 40, "output": 19, "cached": 32, "cache_write": 0, "reasoning": 7 }, "tools": ["search_docs", "lookup_invoice"] },
+        { "api": "google.stream", "status": "success", "model": "gemini-x-001", "finish_reason": "STOP", "usage": { "input": 45, "output": 19, "cached": 32, "cache_write": 0, "reasoning": 7 }, "tools": ["search_docs", "lookup_invoice"] },
         { "api": "google.generate", "status": "error", "model": null, "finish_reason": null, "usage": { "input": 0, "output": 0, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
         { "api": "google.stream", "status": "error", "model": "gemini-x-001", "finish_reason": null, "usage": { "input": 10, "output": 1, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
       ]

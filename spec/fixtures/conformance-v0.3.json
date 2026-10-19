@@ -5889,7 +5889,7 @@
     },
     {
       "name": "anthropic_stream_no_message_stop",
-      "description": "An Anthropic stream that ends without message_stop is an api_error call.",
+      "description": "An Anthropic stream that ends without message_stop is an api_error call that keeps the tokens seen so far, unpriced.",
       "config": {},
       "replies": {
         "anthropic.messages": [
@@ -6000,9 +6000,9 @@
             "time_to_first_token_ms": "<number>",
             "llm_call_count": 1,
             "tool_call_count": 0,
-            "total_input_tokens": 0,
-            "total_output_tokens": 0,
-            "total_tokens": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 1,
+            "total_tokens": 26,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
             "error_type": "api_error",
@@ -6011,9 +6011,9 @@
                 "provider": "anthropic",
                 "model": "claude-haiku-4-5",
                 "call_count": 1,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "total_tokens": 0,
+                "input_tokens": 25,
+                "output_tokens": 1,
+                "total_tokens": 26,
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 1
@@ -21648,6 +21648,255 @@
       ]
     },
     {
+      "name": "langchain_gemini_google_price",
+      "description": "A LangChain Gemini call keeps its provider label gcp.gemini and is priced by a price registered for google (the google-genai Gemini API label): labels naming the same service share prices without being renamed.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "register_price",
+          "model": "gemini-2.5-flash",
+          "input_per_mtok": 0.3,
+          "output_per_mtok": 2.5,
+          "provider": "google"
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_langchain_gemini_price"
+          },
+          "steps": [
+            {
+              "op": "langchain_multi_prompt_run",
+              "model": "gemini-2.5-flash",
+              "ls_provider": "google_genai",
+              "prompts": [
+                {
+                  "input_tokens": 1000,
+                  "output_tokens": 200
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_langchain_gemini_price",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_langchain_gemini_price",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gemini-2.5-flash",
+            "primary_provider": "gcp.gemini",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 1000,
+            "total_output_tokens": 200,
+            "total_tokens": 1200,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0008,
+            "usage_breakdown": [
+              {
+                "provider": "gcp.gemini",
+                "model": "gemini-2.5-flash",
+                "call_count": 1,
+                "input_tokens": 1000,
+                "output_tokens": 200,
+                "total_tokens": 1200,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.0008
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "langchain_gemini_thinking_tokens",
+      "description": "LangChain JS Gemini leaves thinking out of output_tokens but not out of total_tokens: the gap is the thinking, counted in output tokens and as reasoning tokens, as Python's langchain-google-genai reports it.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_langchain_gemini_thinking"
+          },
+          "steps": [
+            {
+              "op": "langchain_multi_prompt_run",
+              "model": "gemini-2.5-flash",
+              "ls_provider": "google_genai",
+              "prompts": [
+                {
+                  "input_tokens": 10,
+                  "output_tokens": 7,
+                  "total_tokens": 22
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_langchain_gemini_thinking",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_langchain_gemini_thinking",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gemini-2.5-flash",
+            "primary_provider": "gcp.gemini",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 12,
+            "total_reasoning_tokens": 5,
+            "total_tokens": 22,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "gcp.gemini",
+                "model": "gemini-2.5-flash",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 12,
+                "reasoning_tokens": 5,
+                "total_tokens": 22,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "langchain_late_callbacks",
+      "description": "Callbacks of a LangChain run's descendants that arrive after the root run ended (a model run, a chain and its model run) attach to nothing: no extra empty interaction.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "langchain_late_callbacks",
+          "model": "gpt-4.1-mini",
+          "metadata": {
+            "user_id": "user_1",
+            "conversation_id": "conv_langchain_late_callbacks"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_langchain_late_callbacks",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_langchain_late_callbacks",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "app_error_retry_wrapper_rate_limit",
       "description": "An app error that is a retry wrapper giving up after a 429 (no chaining): the answer's error_type follows the wrapper to its last attempt.",
       "config": {},
@@ -22037,9 +22286,9 @@
             "feature": "parity",
             "provider": "anthropic",
             "model": "claude-haiku-4-5",
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "total_tokens": 0,
+            "input_tokens": 25,
+            "output_tokens": 1,
+            "total_tokens": 26,
             "cached_input_tokens": 0,
             "response_id": "msg_cut",
             "error_type": "api_error",
@@ -22067,9 +22316,9 @@
             "time_to_first_token_ms": "<number>",
             "llm_call_count": 1,
             "tool_call_count": 0,
-            "total_input_tokens": 0,
-            "total_output_tokens": 0,
-            "total_tokens": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 1,
+            "total_tokens": 26,
             "total_cached_input_tokens": 0,
             "error_type": "api_error",
             "usage_breakdown": [
@@ -22077,9 +22326,9 @@
                 "provider": "anthropic",
                 "model": "claude-haiku-4-5",
                 "call_count": 1,
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "total_tokens": 0,
+                "input_tokens": 25,
+                "output_tokens": 1,
+                "total_tokens": 26,
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 1
@@ -24987,7 +25236,7 @@
     },
     {
       "name": "google_vertex_generate_plain",
-      "description": "A Vertex AI client (vertexai: true) reports provider google.vertex, and a price registered for google applies to it.",
+      "description": "A Vertex AI client (vertexai: true) reports provider google.vertex and is priced from a price registered for google.vertex.",
       "config": {},
       "replies": {
         "google.generate": [
@@ -25027,7 +25276,7 @@
           "input_per_mtok": 0.3,
           "output_per_mtok": 2.5,
           "cached_input_per_mtok": 0.03,
-          "provider": "google"
+          "provider": "google.vertex"
         },
         {
           "op": "interaction",
@@ -25099,6 +25348,173 @@
                 "cache_write_tokens": 0,
                 "error_count": 0,
                 "cost_usd": 0.00003534
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "google-genai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "google_vertex_prices_separate",
+      "description": "The Gemini API (google) and Vertex AI (google.vertex) are priced separately: a price registered for google.vertex does not price a google call, and one registered for google does not price a google.vertex call.",
+      "config": {},
+      "replies": {
+        "google.generate": [
+          {
+            "json": {
+              "candidates": [
+                {
+                  "content": {
+                    "role": "model",
+                    "parts": [
+                      {
+                        "text": "Mock answer: Gemini API"
+                      }
+                    ]
+                  },
+                  "index": 0,
+                  "finishReason": "STOP"
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 10,
+                "candidatesTokenCount": 5,
+                "totalTokenCount": 15
+              },
+              "modelVersion": "gemini-2.5-flash",
+              "responseId": "google-separate"
+            }
+          },
+          {
+            "json": {
+              "candidates": [
+                {
+                  "content": {
+                    "role": "model",
+                    "parts": [
+                      {
+                        "text": "Mock answer: Vertex AI"
+                      }
+                    ]
+                  },
+                  "index": 0,
+                  "finishReason": "STOP"
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 10,
+                "candidatesTokenCount": 5,
+                "totalTokenCount": 15
+              },
+              "modelVersion": "gemini-2.5-pro",
+              "responseId": "google-vertex-separate"
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "register_price",
+          "model": "gemini-2.5-flash",
+          "input_per_mtok": 0.3,
+          "output_per_mtok": 2.5,
+          "provider": "google.vertex"
+        },
+        {
+          "op": "register_price",
+          "model": "gemini-2.5-pro",
+          "input_per_mtok": 1.25,
+          "output_per_mtok": 10,
+          "provider": "google"
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_google_vertex_prices_separate"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "google.generate",
+              "params": {
+                "model": "gemini-2.5-flash",
+                "contents": "Where is my refund?"
+              }
+            },
+            {
+              "op": "call",
+              "api": "google.vertex.generate",
+              "params": {
+                "model": "gemini-2.5-pro",
+                "contents": "Where is my refund?"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_google_vertex_prices_separate",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "google-genai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_google_vertex_prices_separate",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gemini-2.5-pro",
+            "primary_provider": "google.vertex",
+            "latency_ms": "<number>",
+            "llm_call_count": 2,
+            "tool_call_count": 0,
+            "total_input_tokens": 20,
+            "total_output_tokens": 10,
+            "total_tokens": 30,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "google",
+                "model": "gemini-2.5-flash",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "total_tokens": 15,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              },
+              {
+                "provider": "google.vertex",
+                "model": "gemini-2.5-pro",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "total_tokens": 15,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
               }
             ]
           },

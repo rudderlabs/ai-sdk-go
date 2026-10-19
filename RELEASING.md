@@ -18,4 +18,10 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 - The tag is the release: `go get github.com/rudderlabs/ai-sdk-go@vX.Y.Z` resolves it. While the repository is private, consumers need `GOPRIVATE=github.com/rudderlabs/*` and git credentials for it; once public, the Go module proxy (`proxy.golang.org`) and `pkg.go.dev` pick the tag up on first request.
 - Never move or delete a published tag: the Go checksum database records each version's hash, and a changed tag breaks every consumer. Fix forward with a new version, or add a `retract` directive to `go.mod` for a bad one.
 
+## Modules
+
+The repository holds several Go modules (see `go.work`): the core `github.com/rudderlabs/ai-sdk-go` (tags `vX.Y.Z`) and one per integration, `rudderopenai`, `rudderanthropic`, `ruddergenai`, `rudderbedrock` and `rudderotel` (tags `<dir>/vX.Y.Z`, as Go requires for a module in a subdirectory). release-please versions each from the commits under its directory. `internal/conformance` and `examples` are never tagged.
+
+Each integration's `go.mod` requires a core release and replaces it with `../` for development; consumers ignore the replace. An integration that needs a new core API must require the core release that has it: release the core first, then bump the requirement (`go get github.com/rudderlabs/ai-sdk-go@vX.Y.Z` in that module) in the integration's release PR.
+
 If release-please ever starts from the wrong commit, set `"bootstrap-sha"` in `release-please-config.json` to the commit of the last release and remove it after the next release PR.

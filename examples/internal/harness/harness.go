@@ -23,6 +23,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/dataplane"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 // Skipped is what a live check without credentials prints.
@@ -96,8 +97,36 @@ func Run(stderr io.Writer, live bool, check func(*Sink) error) int {
 	return 0
 }
 
+// Once runs an example once for real, outside a check: the events go to
+// RUDDERSTACK_DATA_PLANE_URL when it and RUDDERSTACK_WRITE_KEY are set, otherwise to a local data
+// plane. Each event is printed (names and properties only) and validated. It returns the exit code.
+func Once(stderr io.Writer, run func(*Sink) error) int {
+	sink := &Sink{WriteKey: "local"}
+	if key, url := os.Getenv("RUDDERSTACK_WRITE_KEY"), os.Getenv("RUDDERSTACK_DATA_PLANE_URL"); key != "" && url != "" {
+		sink.WriteKey, sink.Server = key, dataplane.StartForwarding(url)
+	} else {
+		fmt.Fprintln(stderr, "RUDDERSTACK_WRITE_KEY or RUDDERSTACK_DATA_PLANE_URL not set: events go to a local data plane")
+		sink.Server = dataplane.Start()
+	}
+	defer sink.Close()
+	err := run(sink)
+	for _, m := range sink.Messages() {
+		b, _ := json.Marshal(m.Properties)
+		fmt.Fprintf(stderr, "%s (%s) %s\n", m.Event, Integration(m), b)
+	}
+	if err == nil {
+		err = Validate(sink.Messages())
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "run failed: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stderr, "sent %d events\n", len(sink.Messages()))
+	return 0
+}
+
 // Validate checks each event's context and its properties against the spec schema; declared
-// tool events use mcp_declared_tool_event.
+// tool events use mcp_declared_tool_event from an MCP server, declared_tool_event otherwise.
 func Validate(msgs []dataplane.Message) error {
 	if len(msgs) == 0 {
 		return errors.New("no events")
@@ -109,12 +138,17 @@ func Validate(msgs []dataplane.Message) error {
 	for _, m := range msgs {
 		wl, _ := m.Context["wrapperLibrary"].(map[string]any)
 		lib, _ := m.Context["library"].(map[string]any)
-		if m.Type != "track" || wl["name"] != "ai-sdk-go" || wl["integration"] != "mcp" || wl["specVersion"] != "0.3.0" || lib["name"] != "analytics-go" {
+		integration := Integration(m)
+		if m.Type != "track" || wl["name"] != "ai-sdk-go" || integration == "" || wl["specVersion"] != "0.3.0" || lib["name"] != "analytics-go" {
 			return fmt.Errorf("%s: type %q, context %v", m.Event, m.Type, m.Context)
 		}
 		def := m.Event
-		if !strings.HasPrefix(def, "mcp_") {
+		switch {
+		case strings.HasPrefix(def, "mcp_"), strings.HasPrefix(def, "ai_"):
+		case integration == "mcp":
 			def = "mcp_declared_tool_event"
+		default:
+			def = "declared_tool_event"
 		}
 		schema, err := c.Compile(schemaURL + "#/$defs/" + def)
 		if err != nil {
@@ -134,30 +168,69 @@ const (
 	schemaPath = "spec/ai-events-v0.3.schema.json"
 )
 
-// compiler loads the schema from the repository, found from the working directory up, so the
-// examples run from the root (go run) and from their own directory (go test).
+// compiler loads the schema from the repository.
 func compiler() (*jsonschema.Compiler, error) {
-	dir, err := os.Getwd()
+	path, err := RepoFile(schemaPath)
 	if err != nil {
 		return nil, err
 	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	doc, err := jsonschema.UnmarshalJSON(f)
+	if err != nil {
+		return nil, err
+	}
+	c := jsonschema.NewCompiler()
+	return c, c.AddResource(schemaURL, doc)
+}
+
+// RepoFile returns the path of a repository file, found from the working directory up, so the
+// examples run from the root (go run) and from their own directory (go test).
+func RepoFile(rel string) (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
 	for {
-		f, err := os.Open(filepath.Join(dir, schemaPath))
-		if err == nil {
-			defer f.Close()
-			doc, err := jsonschema.UnmarshalJSON(f)
-			if err != nil {
-				return nil, err
-			}
-			c := jsonschema.NewCompiler()
-			return c, c.AddResource(schemaURL, doc)
+		path := filepath.Join(dir, rel)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return nil, fmt.Errorf("%s not found; run from the repository", schemaPath)
+			return "", fmt.Errorf("%s not found; run from the repository", rel)
 		}
 		dir = parent
 	}
+}
+
+// MockLLM starts a mock LLM server replaying the cassettes (paths under spec/fixtures/cassettes),
+// in order, so a check's provider calls never reach a real provider. Close it when done.
+func MockLLM(cassettes ...string) (*testkit.LLM, error) {
+	llm := testkit.StartLLM()
+	for _, name := range cassettes {
+		path, err := RepoFile(filepath.Join("spec/fixtures/cassettes", name))
+		if err == nil {
+			var c *testkit.Cassette
+			if c, err = testkit.LoadCassette(path); err == nil {
+				llm.Replay(c)
+				continue
+			}
+		}
+		llm.Close()
+		return nil, err
+	}
+	return llm, nil
+}
+
+// Integration is the integration tag of an event (context.wrapperLibrary.integration).
+func Integration(m dataplane.Message) string {
+	wl, _ := m.Context["wrapperLibrary"].(map[string]any)
+	s, _ := wl["integration"].(string)
+	return s
 }
 
 // ByEvent groups messages by event name.

@@ -1,0 +1,450 @@
+{
+  "synthetic": false,
+  "recorded_at": "2026-10-16T10:18:36.065Z",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "events": [
+          {
+            "event": "message_start",
+            "payload": {
+              "type": "message_start",
+              "message": {
+                "model": "claude-haiku-4-5-20251001",
+                "id": "msg_011Cg5kBdgWqoue4ica6RMAM",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "container": null,
+                "stop_reason": null,
+                "stop_sequence": null,
+                "stop_details": null,
+                "usage": {
+                  "input_tokens": 1303,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 4,
+                  "service_tier": "standard",
+                  "inference_geo": "not_available",
+                  "speed": "standard"
+                },
+                "diagnostics": null,
+                "context_management": null
+              }
+            }
+          },
+          {
+            "event": "content_block_start",
+            "payload": {
+              "type": "content_block_start",
+              "index": 0,
+              "content_block": {
+                "type": "thinking",
+                "thinking": "",
+                "signature": ""
+              }
+            }
+          },
+          {
+            "event": "ping",
+            "payload": {
+              "type": "ping"
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "",
+                "estimated_tokens": 50
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "",
+                "estimated_tokens": null
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "signature_delta",
+                "signature": "EogECtABCBIYAipAerS/xDmrGE3zYL7XaFDxMOPTTtAl0yZm/cTG3IB8unMbf5fdr/h5oW5MCEdta4qzNoRNNzOiFFJUdobnjjvURTIZY2xhdWRlLWhhaWt1LTQtNS0yMDI1MTAwMTgAQgh0aGlua2luZ1okMjMwNDlhMTUtYWYxOS00MmQwLTgwZGYtNGU2OWY1ZDkyYmNhchDb3k2YIjpIAo9S76C0Yi8+iAEBmgEbChljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxqAH688fWBrABAhIMHRz+FKDJbLWNM3xJGgxAN5I6/gEVtMvHq9AiMO6r4N7DbqkP05oxJXhErzstD9v8Lm+nMqrbDlwMQk3pkl6TILL8CbM+o0H+sy7xiyrkAYMKdbAkk26flTKP3alaGqrXc9Bx9HZIg5/uc5Cbt9nZMMrrTj3ZhiXM2HFreQnnt2g2BKbwavpdCzozgbLxUCHEvDgJshcg+C4faQnWVgExWY7JD/QZq+yvu/pRSCmU9GdrZJKka8A/MTeRZ6wyVoWSeSduaHEtIzuPyb1uHvIgMdiMz/nBJyEiC7jfxpKahh1d13cZd/WLeCpSNUJUWdGDnzdtFQJ9JAqFUEvxULkgxqhyEncdQItK8de7rZ/z31sT55yEj0rOj7Cr1DmsdDB1EZQWb6trDF5fFwuLCVnzHlNIzBgB"
+              }
+            }
+          },
+          {
+            "event": "content_block_stop",
+            "payload": {
+              "type": "content_block_stop",
+              "index": 0
+            }
+          },
+          {
+            "event": "content_block_start",
+            "payload": {
+              "type": "content_block_start",
+              "index": 1,
+              "content_block": {
+                "type": "tool_use",
+                "id": "toolu_019pvXy7pZUjGQosvBZrrgHp",
+                "name": "mcp__orders__lookup_order",
+                "input": {},
+                "caller": {
+                  "type": "direct"
+                }
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "input_json_delta",
+                "partial_json": ""
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "input_json_delta",
+                "partial_json": "{\"order"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "input_json_delta",
+                "partial_json": "Id\": \"1"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "input_json_delta",
+                "partial_json": "234\"}"
+              }
+            }
+          },
+          {
+            "event": "content_block_stop",
+            "payload": {
+              "type": "content_block_stop",
+              "index": 1
+            }
+          },
+          {
+            "event": "message_delta",
+            "payload": {
+              "type": "message_delta",
+              "delta": {
+                "stop_reason": "tool_use",
+                "stop_sequence": null,
+                "stop_details": null,
+                "container": null
+              },
+              "usage": {
+                "input_tokens": 1303,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "output_tokens": 121,
+                "output_tokens_details": {
+                  "thinking_tokens": 59
+                }
+              },
+              "context_management": {
+                "applied_edits": []
+              }
+            }
+          },
+          {
+            "event": "message_stop",
+            "payload": {
+              "type": "message_stop"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "events": [
+          {
+            "event": "message_start",
+            "payload": {
+              "type": "message_start",
+              "message": {
+                "model": "claude-haiku-4-5-20251001",
+                "id": "msg_011Cg5kBm3naEtga98qTMoav",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "container": null,
+                "stop_reason": null,
+                "stop_sequence": null,
+                "stop_details": null,
+                "usage": {
+                  "input_tokens": 1490,
+                  "cache_creation_input_tokens": 0,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 0,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 1,
+                  "service_tier": "standard",
+                  "inference_geo": "not_available",
+                  "speed": "standard"
+                },
+                "diagnostics": null,
+                "context_management": null
+              }
+            }
+          },
+          {
+            "event": "content_block_start",
+            "payload": {
+              "type": "content_block_start",
+              "index": 0,
+              "content_block": {
+                "type": "thinking",
+                "thinking": "",
+                "signature": ""
+              }
+            }
+          },
+          {
+            "event": "ping",
+            "payload": {
+              "type": "ping"
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "thinking_delta",
+                "thinking": "",
+                "estimated_tokens": null
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "signature_delta",
+                "signature": "EpMDCtABCBIYAipAymhiNKQ3qV3P9BmXH6RM5xdEaDBcsnPZ1IR31sebplom2ndElvtuCZjFlNPpqSKPds+UrhvmhVxF9FhexwPCvTIZY2xhdWRlLWhhaWt1LTQtNS0yMDI1MTAwMTgAQgh0aGlua2luZ1okMjMwNDlhMTUtYWYxOS00MmQwLTgwZGYtNGU2OWY1ZDkyYmNhchDb3k2YIjpIAo9S76C0Yi8+iAEBmgEbChljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxqAH788fWBrABAhIM8UgZv/T+CDHZ6c2/GgwEy5HzddhMB3rQcgkiMO06ZQtWWtLiqc5yaSVkUCUzqS1DdudjXC5WxT+9sbkl4ExBBJpAVXiEWfrxfRfoESpw6mCN0WdjT6lKxqRAU6WmTPrlBswhzh76/38aBj0xK9lcbXnthVRx5Yjwl1K8Um3UdHOoXAnB37hW1+RQKXWVh1AmO8DTZZHBc48+Qxt75ywr35mfqKT/ysFPZIy0bALmfevNeglNwql6yAD+AQ77HRgB"
+              }
+            }
+          },
+          {
+            "event": "content_block_stop",
+            "payload": {
+              "type": "content_block_stop",
+              "index": 0
+            }
+          },
+          {
+            "event": "content_block_start",
+            "payload": {
+              "type": "content_block_start",
+              "index": 1,
+              "content_block": {
+                "type": "text",
+                "text": ""
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "Your"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " order **"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "1234** has"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " been **"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "shipped**"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " and is on"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " its way! It"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": " should arrive in **"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 1,
+              "delta": {
+                "type": "text_delta",
+                "text": "2 days**."
+              }
+            }
+          },
+          {
+            "event": "content_block_stop",
+            "payload": {
+              "type": "content_block_stop",
+              "index": 1
+            }
+          },
+          {
+            "event": "message_delta",
+            "payload": {
+              "type": "message_delta",
+              "delta": {
+                "stop_reason": "end_turn",
+                "stop_sequence": null,
+                "stop_details": null,
+                "container": null
+              },
+              "usage": {
+                "input_tokens": 1490,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "output_tokens": 63,
+                "output_tokens_details": {
+                  "thinking_tokens": 31
+                }
+              },
+              "context_management": {
+                "applied_edits": []
+              }
+            }
+          },
+          {
+            "event": "message_stop",
+            "payload": {
+              "type": "message_stop"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

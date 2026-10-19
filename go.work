@@ -1,0 +1,12 @@
+go 1.26.0
+
+use (
+	.
+	./examples
+	./internal/conformance
+	./rudderanthropic
+	./rudderbedrock
+	./ruddergenai
+	./rudderopenai
+	./rudderotel
+)

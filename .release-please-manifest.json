@@ -1,3 +1,8 @@
 {
-  ".": "0.0.0"
+  ".": "0.0.0",
+  "rudderopenai": "0.0.0",
+  "rudderanthropic": "0.0.0",
+  "ruddergenai": "0.0.0",
+  "rudderbedrock": "0.0.0",
+  "rudderotel": "0.0.0"
 }

@@ -28,6 +28,8 @@ var mcpEventDefs = []string{
 	"mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
 	"mcp_resource_read", "mcp_prompt_used", "mcp_event_subscription_changed", "mcp_event_delivered",
 	"mcp_declared_tool_event",
+	"ai_user_prompt_created", "ai_response_received", "ai_llm_response_received",
+	"ai_interaction_classified", "ai_interaction_scored", "ai_user_action", "declared_tool_event",
 }
 
 func loadSchemas() {
@@ -55,7 +57,8 @@ func loadSchemas() {
 }
 
 // validateEvent checks one event's properties against its schema definition; customer-named
-// events use mcp_declared_tool_event.
+// events use declared_tool_event when they carry an interaction's conversation_id, else
+// mcp_declared_tool_event.
 func validateEvent(event string, props map[string]any) error {
 	schemaOnce.Do(loadSchemas)
 	if schemaErr != nil {
@@ -67,6 +70,9 @@ func validateEvent(event string, props map[string]any) error {
 			return fmt.Errorf("no schema for reserved event %q", event)
 		}
 		def = "mcp_declared_tool_event"
+		if _, ai := props["conversation_id"]; ai {
+			def = "declared_tool_event"
+		}
 	}
 	b, err := json.Marshal(props)
 	if err != nil {

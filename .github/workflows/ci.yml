@@ -19,6 +19,8 @@ env:
   GOLANGCI_LINT_VERSION: v2.14.0
   GOVULNCHECK_VERSION: v1.8.0
   MIN_COVERAGE: 90
+  # Every module of go.work (./... alone covers only the root module). Keep in sync with the Makefile.
+  PKGS: ./... ./rudderopenai/... ./rudderanthropic/... ./ruddergenai/... ./rudderbedrock/... ./rudderotel/... ./internal/conformance/... ./examples/...
 
 jobs:
   lint:
@@ -45,12 +47,13 @@ jobs:
         run: test -z "$(gofmt -l .)"
 
       - name: Vet
-        run: go vet ./...
+        run: go vet $PKGS
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: ${{ env.GOLANGCI_LINT_VERSION }}
+          args: ${{ env.PKGS }}
 
   test:
     name: Unit tests (Go ${{ matrix.go }})
@@ -78,7 +81,7 @@ jobs:
           go-version: ${{ matrix.go }}
 
       - name: Run unit tests with coverage
-        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: go test -race -coverprofile=coverage.out -covermode=atomic $PKGS
 
       - name: Check coverage threshold
         run: |
@@ -99,6 +102,9 @@ jobs:
     name: mcp-go v1.1.1 (latest)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # -modfile needs module mode.
+    env:
+      GOWORK: 'off'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -122,12 +128,28 @@ jobs:
           cp go.mod go.latest.mod
           cp go.sum go.latest.sum
           go get -modfile=go.latest.mod github.com/mark3labs/mcp-go@v1.1.1
-          go test -race -tags mcpgo_v1 -modfile=go.latest.mod ./ruddermcpgo/... ./examples/mcp-server-mcpgo/...
+          go test -race -tags mcpgo_v1 -modfile=go.latest.mod ./ruddermcpgo/...
 
-  vulncheck:
-    name: Vulnerability check
+      # The examples are their own module.
+      - name: Test the mcp-go example against mcp-go v1.1.1
+        working-directory: examples
+        run: |
+          cp go.mod go.latest.mod
+          cp go.sum go.latest.sum
+          go get -modfile=go.latest.mod github.com/mark3labs/mcp-go@v1.1.1
+          go test -race -tags mcpgo_v1 -modfile=go.latest.mod ./mcp-server-mcpgo/...
+
+  module:
+    name: Module ${{ matrix.module }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [., rudderopenai, rudderanthropic, ruddergenai, rudderbedrock, rudderotel, internal/conformance, examples]
+    # Each module as users build it: its own go.mod, no workspace.
+    env:
+      GOWORK: 'off'
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
@@ -144,7 +166,16 @@ jobs:
         with:
           go-version: stable
 
+      - name: go.mod is tidy
+        working-directory: ${{ matrix.module }}
+        run: go mod tidy -diff
+
+      - name: Build
+        working-directory: ${{ matrix.module }}
+        run: go build ./...
+
       - name: govulncheck
+        working-directory: ${{ matrix.module }}
         run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
 
   example:
@@ -154,7 +185,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [mcp-server, mcp-server-mcpgo, mcp-stateless-http, mcp-auth]
+        example: [mcp-server, mcp-server-mcpgo, mcp-stateless-http, mcp-auth, openai, anthropic, google-genai, bedrock-converse, background-agent, manual]
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1

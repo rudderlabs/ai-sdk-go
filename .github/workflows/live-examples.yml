@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [mcp-server, mcp-server-mcpgo, mcp-stateless-http, mcp-auth]
+        example: [mcp-server, mcp-server-mcpgo, mcp-stateless-http, mcp-auth, openai, anthropic, google-genai, bedrock-converse, background-agent, manual]
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1

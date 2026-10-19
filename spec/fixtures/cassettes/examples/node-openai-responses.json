@@ -1,0 +1,824 @@
+{
+  "synthetic": true,
+  "description": "OpenAI Responses API with a reasoning model: a streamed function call, the streamed answer to its output chained with previous_response_id, then a follow-up cut off at max_output_tokens (status incomplete). Written from the API reference's response object and streaming events.",
+  "sources": [
+    "https://platform.openai.com/docs/api-reference/responses/object",
+    "https://platform.openai.com/docs/api-reference/responses-streaming",
+    "https://platform.openai.com/docs/guides/function-calling",
+    "https://platform.openai.com/docs/guides/conversation-state",
+    "https://platform.openai.com/docs/guides/reasoning"
+  ],
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "events": [
+          {
+            "event": "response.created",
+            "payload": {
+              "type": "response.created",
+              "response": {
+                "id": "resp_68ee1a0f3c5c8190a1b2c3d4e5f60718",
+                "object": "response",
+                "created_at": 1760425200,
+                "status": "in_progress",
+                "background": false,
+                "error": null,
+                "incomplete_details": null,
+                "instructions": null,
+                "max_output_tokens": null,
+                "model": "gpt-5-mini-2025-08-07",
+                "output": [],
+                "output_text": "",
+                "parallel_tool_calls": true,
+                "previous_response_id": null,
+                "reasoning": {
+                  "effort": "low",
+                  "summary": null
+                },
+                "store": true,
+                "temperature": 1.0,
+                "text": {
+                  "format": {
+                    "type": "text"
+                  },
+                  "verbosity": "medium"
+                },
+                "tool_choice": "auto",
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_order",
+                    "description": "Look up an order by its ID.",
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "orderId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "orderId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": true
+                  }
+                ],
+                "top_p": 1.0,
+                "truncation": "disabled",
+                "usage": null,
+                "metadata": {}
+              },
+              "sequence_number": 0
+            }
+          },
+          {
+            "event": "response.in_progress",
+            "payload": {
+              "type": "response.in_progress",
+              "response": {
+                "id": "resp_68ee1a0f3c5c8190a1b2c3d4e5f60718",
+                "object": "response",
+                "created_at": 1760425200,
+                "status": "in_progress",
+                "background": false,
+                "error": null,
+                "incomplete_details": null,
+                "instructions": null,
+                "max_output_tokens": null,
+                "model": "gpt-5-mini-2025-08-07",
+                "output": [],
+                "output_text": "",
+                "parallel_tool_calls": true,
+                "previous_response_id": null,
+                "reasoning": {
+                  "effort": "low",
+                  "summary": null
+                },
+                "store": true,
+                "temperature": 1.0,
+                "text": {
+                  "format": {
+                    "type": "text"
+                  },
+                  "verbosity": "medium"
+                },
+                "tool_choice": "auto",
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_order",
+                    "description": "Look up an order by its ID.",
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "orderId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "orderId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": true
+                  }
+                ],
+                "top_p": 1.0,
+                "truncation": "disabled",
+                "usage": null,
+                "metadata": {}
+              },
+              "sequence_number": 1
+            }
+          },
+          {
+            "event": "response.output_item.added",
+            "payload": {
+              "type": "response.output_item.added",
+              "output_index": 0,
+              "item": {
+                "id": "rs_68ee1a10a4e88190b1c2d3e4f5061728",
+                "type": "reasoning",
+                "summary": []
+              },
+              "sequence_number": 2
+            }
+          },
+          {
+            "event": "response.output_item.done",
+            "payload": {
+              "type": "response.output_item.done",
+              "output_index": 0,
+              "item": {
+                "id": "rs_68ee1a10a4e88190b1c2d3e4f5061728",
+                "type": "reasoning",
+                "summary": []
+              },
+              "sequence_number": 3
+            }
+          },
+          {
+            "event": "response.output_item.added",
+            "payload": {
+              "type": "response.output_item.added",
+              "output_index": 1,
+              "item": {
+                "id": "fc_68ee1a11c7a48190c1d2e3f405162738",
+                "type": "function_call",
+                "status": "in_progress",
+                "arguments": "",
+                "call_id": "call_Qm7xY2pL9sT4vB1nK8dR3wZe",
+                "name": "lookup_order"
+              },
+              "sequence_number": 4
+            }
+          },
+          {
+            "event": "response.function_call_arguments.delta",
+            "payload": {
+              "type": "response.function_call_arguments.delta",
+              "item_id": "fc_68ee1a11c7a48190c1d2e3f405162738",
+              "output_index": 1,
+              "delta": "{\"orderId\":\"1234\"}",
+              "sequence_number": 5
+            }
+          },
+          {
+            "event": "response.function_call_arguments.done",
+            "payload": {
+              "type": "response.function_call_arguments.done",
+              "item_id": "fc_68ee1a11c7a48190c1d2e3f405162738",
+              "output_index": 1,
+              "arguments": "{\"orderId\":\"1234\"}",
+              "sequence_number": 6
+            }
+          },
+          {
+            "event": "response.output_item.done",
+            "payload": {
+              "type": "response.output_item.done",
+              "output_index": 1,
+              "item": {
+                "id": "fc_68ee1a11c7a48190c1d2e3f405162738",
+                "type": "function_call",
+                "status": "completed",
+                "arguments": "{\"orderId\":\"1234\"}",
+                "call_id": "call_Qm7xY2pL9sT4vB1nK8dR3wZe",
+                "name": "lookup_order"
+              },
+              "sequence_number": 7
+            }
+          },
+          {
+            "event": "response.completed",
+            "payload": {
+              "type": "response.completed",
+              "response": {
+                "id": "resp_68ee1a0f3c5c8190a1b2c3d4e5f60718",
+                "object": "response",
+                "created_at": 1760425200,
+                "status": "completed",
+                "background": false,
+                "error": null,
+                "incomplete_details": null,
+                "instructions": null,
+                "max_output_tokens": null,
+                "model": "gpt-5-mini-2025-08-07",
+                "output": [
+                  {
+                    "id": "rs_68ee1a10a4e88190b1c2d3e4f5061728",
+                    "type": "reasoning",
+                    "summary": []
+                  },
+                  {
+                    "id": "fc_68ee1a11c7a48190c1d2e3f405162738",
+                    "type": "function_call",
+                    "status": "completed",
+                    "arguments": "{\"orderId\":\"1234\"}",
+                    "call_id": "call_Qm7xY2pL9sT4vB1nK8dR3wZe",
+                    "name": "lookup_order"
+                  }
+                ],
+                "output_text": "",
+                "parallel_tool_calls": true,
+                "previous_response_id": null,
+                "reasoning": {
+                  "effort": "low",
+                  "summary": null
+                },
+                "store": true,
+                "temperature": 1.0,
+                "text": {
+                  "format": {
+                    "type": "text"
+                  },
+                  "verbosity": "medium"
+                },
+                "tool_choice": "auto",
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_order",
+                    "description": "Look up an order by its ID.",
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "orderId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "orderId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": true
+                  }
+                ],
+                "top_p": 1.0,
+                "truncation": "disabled",
+                "usage": {
+                  "input_tokens": 91,
+                  "input_tokens_details": {
+                    "cached_tokens": 0
+                  },
+                  "output_tokens": 87,
+                  "output_tokens_details": {
+                    "reasoning_tokens": 64
+                  },
+                  "total_tokens": 178
+                },
+                "metadata": {}
+              },
+              "sequence_number": 8
+            }
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "events": [
+          {
+            "event": "response.created",
+            "payload": {
+              "type": "response.created",
+              "response": {
+                "id": "resp_68ee1a13e1f48190d1e2f30415263748",
+                "object": "response",
+                "created_at": 1760425203,
+                "status": "in_progress",
+                "background": false,
+                "error": null,
+                "incomplete_details": null,
+                "instructions": null,
+                "max_output_tokens": null,
+                "model": "gpt-5-mini-2025-08-07",
+                "output": [],
+                "output_text": "",
+                "parallel_tool_calls": true,
+                "previous_response_id": "resp_68ee1a0f3c5c8190a1b2c3d4e5f60718",
+                "reasoning": {
+                  "effort": "low",
+                  "summary": null
+                },
+                "store": true,
+                "temperature": 1.0,
+                "text": {
+                  "format": {
+                    "type": "text"
+                  },
+                  "verbosity": "medium"
+                },
+                "tool_choice": "auto",
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_order",
+                    "description": "Look up an order by its ID.",
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "orderId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "orderId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": true
+                  }
+                ],
+                "top_p": 1.0,
+                "truncation": "disabled",
+                "usage": null,
+                "metadata": {}
+              },
+              "sequence_number": 0
+            }
+          },
+          {
+            "event": "response.in_progress",
+            "payload": {
+              "type": "response.in_progress",
+              "response": {
+                "id": "resp_68ee1a13e1f48190d1e2f30415263748",
+                "object": "response",
+                "created_at": 1760425203,
+                "status": "in_progress",
+                "background": false,
+                "error": null,
+                "incomplete_details": null,
+                "instructions": null,
+                "max_output_tokens": null,
+                "model": "gpt-5-mini-2025-08-07",
+                "output": [],
+                "output_text": "",
+                "parallel_tool_calls": true,
+                "previous_response_id": "resp_68ee1a0f3c5c8190a1b2c3d4e5f60718",
+                "reasoning": {
+                  "effort": "low",
+                  "summary": null
+                },
+                "store": true,
+                "temperature": 1.0,
+                "text": {
+                  "format": {
+                    "type": "text"
+                  },
+                  "verbosity": "medium"
+                },
+                "tool_choice": "auto",
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_order",
+                    "description": "Look up an order by its ID.",
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "orderId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "orderId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": true
+                  }
+                ],
+                "top_p": 1.0,
+                "truncation": "disabled",
+                "usage": null,
+                "metadata": {}
+              },
+              "sequence_number": 1
+            }
+          },
+          {
+            "event": "response.output_item.added",
+            "payload": {
+              "type": "response.output_item.added",
+              "output_index": 0,
+              "item": {
+                "id": "rs_68ee1a145b0c8190e1f2031425364758",
+                "type": "reasoning",
+                "summary": []
+              },
+              "sequence_number": 2
+            }
+          },
+          {
+            "event": "response.output_item.done",
+            "payload": {
+              "type": "response.output_item.done",
+              "output_index": 0,
+              "item": {
+                "id": "rs_68ee1a145b0c8190e1f2031425364758",
+                "type": "reasoning",
+                "summary": []
+              },
+              "sequence_number": 3
+            }
+          },
+          {
+            "event": "response.output_item.added",
+            "payload": {
+              "type": "response.output_item.added",
+              "output_index": 1,
+              "item": {
+                "id": "msg_68ee1a15f2d08190f102132435465768",
+                "type": "message",
+                "status": "in_progress",
+                "role": "assistant",
+                "content": []
+              },
+              "sequence_number": 4
+            }
+          },
+          {
+            "event": "response.content_part.added",
+            "payload": {
+              "type": "response.content_part.added",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "part": {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": ""
+              },
+              "sequence_number": 5
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": "Order",
+              "logprobs": [],
+              "sequence_number": 6
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": " 1234",
+              "logprobs": [],
+              "sequence_number": 7
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": " has",
+              "logprobs": [],
+              "sequence_number": 8
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": " shipped",
+              "logprobs": [],
+              "sequence_number": 9
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": " and",
+              "logprobs": [],
+              "sequence_number": 10
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": " should",
+              "logprobs": [],
+              "sequence_number": 11
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": " arrive",
+              "logprobs": [],
+              "sequence_number": 12
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": " in",
+              "logprobs": [],
+              "sequence_number": 13
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": " 2",
+              "logprobs": [],
+              "sequence_number": 14
+            }
+          },
+          {
+            "event": "response.output_text.delta",
+            "payload": {
+              "type": "response.output_text.delta",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "delta": " days.",
+              "logprobs": [],
+              "sequence_number": 15
+            }
+          },
+          {
+            "event": "response.output_text.done",
+            "payload": {
+              "type": "response.output_text.done",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "text": "Order 1234 has shipped and should arrive in 2 days.",
+              "logprobs": [],
+              "sequence_number": 16
+            }
+          },
+          {
+            "event": "response.content_part.done",
+            "payload": {
+              "type": "response.content_part.done",
+              "item_id": "msg_68ee1a15f2d08190f102132435465768",
+              "output_index": 1,
+              "content_index": 0,
+              "part": {
+                "type": "output_text",
+                "annotations": [],
+                "logprobs": [],
+                "text": "Order 1234 has shipped and should arrive in 2 days."
+              },
+              "sequence_number": 17
+            }
+          },
+          {
+            "event": "response.output_item.done",
+            "payload": {
+              "type": "response.output_item.done",
+              "output_index": 1,
+              "item": {
+                "id": "msg_68ee1a15f2d08190f102132435465768",
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "output_text",
+                    "annotations": [],
+                    "logprobs": [],
+                    "text": "Order 1234 has shipped and should arrive in 2 days."
+                  }
+                ]
+              },
+              "sequence_number": 18
+            }
+          },
+          {
+            "event": "response.completed",
+            "payload": {
+              "type": "response.completed",
+              "response": {
+                "id": "resp_68ee1a13e1f48190d1e2f30415263748",
+                "object": "response",
+                "created_at": 1760425203,
+                "status": "completed",
+                "background": false,
+                "error": null,
+                "incomplete_details": null,
+                "instructions": null,
+                "max_output_tokens": null,
+                "model": "gpt-5-mini-2025-08-07",
+                "output": [
+                  {
+                    "id": "rs_68ee1a145b0c8190e1f2031425364758",
+                    "type": "reasoning",
+                    "summary": []
+                  },
+                  {
+                    "id": "msg_68ee1a15f2d08190f102132435465768",
+                    "type": "message",
+                    "status": "completed",
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "type": "output_text",
+                        "annotations": [],
+                        "logprobs": [],
+                        "text": "Order 1234 has shipped and should arrive in 2 days."
+                      }
+                    ]
+                  }
+                ],
+                "output_text": "Order 1234 has shipped and should arrive in 2 days.",
+                "parallel_tool_calls": true,
+                "previous_response_id": "resp_68ee1a0f3c5c8190a1b2c3d4e5f60718",
+                "reasoning": {
+                  "effort": "low",
+                  "summary": null
+                },
+                "store": true,
+                "temperature": 1.0,
+                "text": {
+                  "format": {
+                    "type": "text"
+                  },
+                  "verbosity": "medium"
+                },
+                "tool_choice": "auto",
+                "tools": [
+                  {
+                    "type": "function",
+                    "name": "lookup_order",
+                    "description": "Look up an order by its ID.",
+                    "parameters": {
+                      "type": "object",
+                      "properties": {
+                        "orderId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "orderId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "strict": true
+                  }
+                ],
+                "top_p": 1.0,
+                "truncation": "disabled",
+                "usage": {
+                  "input_tokens": 212,
+                  "input_tokens_details": {
+                    "cached_tokens": 0
+                  },
+                  "output_tokens": 54,
+                  "output_tokens_details": {
+                    "reasoning_tokens": 32
+                  },
+                  "total_tokens": 266
+                },
+                "metadata": {}
+              },
+              "sequence_number": 19
+            }
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/responses"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "resp_68ee1a18a3b48190a2b3c4d5e6f70819",
+          "object": "response",
+          "created_at": 1760425206,
+          "status": "incomplete",
+          "background": false,
+          "error": null,
+          "incomplete_details": {
+            "reason": "max_output_tokens"
+          },
+          "instructions": null,
+          "max_output_tokens": 16,
+          "model": "gpt-5-mini-2025-08-07",
+          "output": [
+            {
+              "id": "rs_68ee1a19c4d58190b3c4d5e6f708192a",
+              "type": "reasoning",
+              "summary": []
+            }
+          ],
+          "output_text": "",
+          "parallel_tool_calls": true,
+          "previous_response_id": "resp_68ee1a13e1f48190d1e2f30415263748",
+          "reasoning": {
+            "effort": "low",
+            "summary": null
+          },
+          "store": true,
+          "temperature": 1.0,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_p": 1.0,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 247,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 16,
+            "output_tokens_details": {
+              "reasoning_tokens": 16
+            },
+            "total_tokens": 263
+          },
+          "metadata": {}
+        }
+      }
+    }
+  ]
+}
