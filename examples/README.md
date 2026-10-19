@@ -1,6 +1,6 @@
 # Examples
 
-Each example is a `main` package in this module (Go 1.26 or later) that uses `rudderstackai` the way an app would. Run them from a clone of the repository: the checks read the shared schema and cassettes in `spec/`.
+Each example is a `main` package in this module (Go 1.26.9 or later) that uses `rudderstackai` the way an app would. Run them from a clone of the repository: the checks read the shared schema and cassettes in `spec/`.
 
 | Example                                    | Shows                                                                                                          |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
