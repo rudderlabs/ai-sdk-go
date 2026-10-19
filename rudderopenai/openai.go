@@ -35,6 +35,8 @@ const integration = "openai"
 type config struct {
 	provider  string
 	analytics analytics.Client
+	// streamUsage: nil asks with a fallback, true always asks, false never does.
+	streamUsage *bool
 }
 
 // Option configures [Middleware] and [WithTracking].
@@ -54,6 +56,16 @@ func WithProvider(provider string) Option {
 // configured global client should not be used.
 func WithAnalytics(client analytics.Client) Option {
 	return func(c *config) { c.analytics = client }
+}
+
+// WithStreamUsage sets whether streamed Chat Completions ask for usage
+// (stream_options.include_usage), so tokens and cost are known. Without it, usage is asked on
+// every host and a request the host rejects (HTTP 400 or 422 naming the parameter, or with no
+// error code) is sent once more without it; once a host names it, this middleware stops adding it
+// there. true always adds it (no resend); false never does, and streams without usage are
+// recorded with unknown usage, unpriced.
+func WithStreamUsage(on bool) Option {
+	return func(c *config) { c.streamUsage = &on }
 }
 
 // WithTracking returns a client or request option that tracks the client's Chat Completions and
