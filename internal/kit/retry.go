@@ -31,9 +31,20 @@ type attempt struct {
 	mu     sync.Mutex
 	// stop cancels the context watch of an ephemeral attempt.
 	stop func() bool
-	// grace is the wait for a retry after the context ended; done releases Flush.
+	// grace is the wait for a retry after the context ended.
 	grace *time.Timer
-	done  func()
+	// done releases Flush, which waits for a held attempt outside an interaction.
+	done func()
+}
+
+// release lets Flush stop waiting for the attempt.
+func (a *attempt) release() {
+	a.mu.Lock()
+	done := a.done
+	a.mu.Unlock()
+	if done != nil {
+		done()
+	}
 }
 
 // attemptKey matches a retry to its failed attempt: same middleware, same open interaction
@@ -100,13 +111,14 @@ func resume(k attemptKey, n int) *attempt {
 // claimed stops the watches of an attempt that is retried or replaced.
 func (a *attempt) claimed() {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if a.stop != nil {
 		a.stop()
 	}
-	if a.grace != nil && a.grace.Stop() {
-		a.done()
+	if a.grace != nil {
+		a.grace.Stop()
 	}
+	a.mu.Unlock()
+	a.release()
 }
 
 // take removes a from the held attempts; false when a retry or another settle got it first.
@@ -122,6 +134,7 @@ func (a *attempt) take() bool {
 
 // settle records a held attempt as the failed call it turned out to be.
 func (a *attempt) settle() {
+	defer a.release()
 	t := a.errorType
 	if err := a.call.HTTPRequest.Context().Err(); err != nil {
 		t = ErrorTypeOfTransport(err) // the SDK returned the context error instead of retrying
@@ -143,6 +156,9 @@ func (a *attempt) hold() {
 	}
 	if a.call.Ephemeral {
 		a.mu.Lock()
+		// Tracked from now, not from the context watch: Flush right after the SDK returns must
+		// still wait for the attempt the watch is about to settle.
+		a.done = hook.Track()
 		a.stop = context.AfterFunc(a.call.HTTPRequest.Context(), a.contextDone)
 		a.mu.Unlock()
 		return
@@ -155,11 +171,9 @@ func (a *attempt) hold() {
 // retry gets a moment to claim the attempt first.
 func (a *attempt) contextDone() {
 	if a.closed.Load() {
-		done := hook.Track() // Flush waits for it
 		a.mu.Lock()
-		a.done = done
 		a.grace = time.AfterFunc(retryGrace, func() {
-			defer done()
+			defer a.release()
 			a.settleIfTaken()
 		})
 		a.mu.Unlock()

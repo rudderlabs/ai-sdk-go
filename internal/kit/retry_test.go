@@ -107,6 +107,26 @@ func TestHeldAttemptOutsideInteractionSettledOnCancel(t *testing.T) {
 	want(t, h.rec.props(t, "ai_response_received"), map[string]any{"response_status": "cancelled", "llm_call_count": 1})
 }
 
+// Flush waits for a held attempt outside an interaction from the moment it is held, so a Flush
+// right after the SDK returns its context error never misses the call the watch settles.
+func TestFlushWaitsForHeldAttempt(t *testing.T) {
+	h := newHarness(t, failThenServe(1))
+	ctx, cancel := context.WithCancel(context.Background())
+	resp, err := h.attemptPost(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close() // the SDK waits to retry
+	if rudderstackai.Flush(20 * time.Millisecond) {
+		t.Fatal("Flush finished with an attempt still held")
+	}
+	cancel()
+	if !rudderstackai.Flush(5 * time.Second) {
+		t.Fatal("Flush timed out")
+	}
+	want(t, h.rec.props(t, "ai_response_received"), map[string]any{"response_status": "cancelled", "llm_call_count": 1})
+}
+
 func TestConnectionErrorHeldInsideInteraction(t *testing.T) {
 	h := newHarness(t, jsonHandler(200, completion))
 	var calls atomic.Int32
