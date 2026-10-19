@@ -7,10 +7,6 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 1. **GitHub App for release-please.** `release-please.yml` uses a GitHub App token, as in `ai-sdk-node`, so release PRs get CI checks. `vars.RELEASE_APP_CLIENT_ID` and `secrets.RELEASE_PRIVATE_KEY` are available to this repository as organization-level values; the app must also be **installed on this repository** (contents and pull-requests write).
 2. **Branch protection** on `main`: require pull requests and the CI checks. Pull requests are squash-merged, so the PR title becomes the commit release-please reads.
 
-## First release (0.1.0)
-
-`release-please-config.json` pins the first release of every module (the core and each integration) with `"release-as": "0.1.0"` (the manifest starts at `0.0.0`). Remove those pins in a follow-up PR once the `0.1.0` tags exist, so later versions follow the commits.
-
 ## How release-please works here
 
 - On every push to `main`, release-please opens or updates a `chore: release x.y.z` PR that bumps `Version` in `version.go` (`x-release-please-version` marker) and the manifest, and updates `CHANGELOG.md`. Before 1.0, `feat` and breaking changes bump the minor version and `fix` the patch version.

@@ -73,7 +73,6 @@
           "path": "version.go"
         }
       ],
-      "release-as": "0.1.0",
       "exclude-paths": [
         "rudderopenai",
         "rudderanthropic",
@@ -89,40 +88,35 @@
       "component": "rudderopenai",
       "include-component-in-tag": true,
       "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "release-as": "0.1.0"
+      "changelog-path": "CHANGELOG.md"
     },
     "rudderanthropic": {
       "package-name": "rudderanthropic",
       "component": "rudderanthropic",
       "include-component-in-tag": true,
       "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "release-as": "0.1.0"
+      "changelog-path": "CHANGELOG.md"
     },
     "ruddergenai": {
       "package-name": "ruddergenai",
       "component": "ruddergenai",
       "include-component-in-tag": true,
       "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "release-as": "0.1.0"
+      "changelog-path": "CHANGELOG.md"
     },
     "rudderbedrock": {
       "package-name": "rudderbedrock",
       "component": "rudderbedrock",
       "include-component-in-tag": true,
       "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "release-as": "0.1.0"
+      "changelog-path": "CHANGELOG.md"
     },
     "rudderotel": {
       "package-name": "rudderotel",
       "component": "rudderotel",
       "include-component-in-tag": true,
       "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md",
-      "release-as": "0.1.0"
+      "changelog-path": "CHANGELOG.md"
     }
   }
 }
