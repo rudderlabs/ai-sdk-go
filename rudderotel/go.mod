@@ -1,6 +1,6 @@
 module github.com/rudderlabs/ai-sdk-go/rudderotel
 
-go 1.26.0
+go 1.26.9
 
 require go.opentelemetry.io/otel/trace v1.47.0
 

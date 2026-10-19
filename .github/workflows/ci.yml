@@ -15,9 +15,9 @@ permissions:
   contents: read
 
 env:
-  # Must match GOLANGCI_LINT_VERSION in the Makefile.
+  # Must match GOLANGCI_LINT_VERSION and GOVULNCHECK_VERSION in the Makefile.
   GOLANGCI_LINT_VERSION: v2.14.0
-  GOVULNCHECK_VERSION: v1.8.0
+  GOVULNCHECK_VERSION: v1.9.0
   MIN_COVERAGE: 90
   # Every module of go.work (./... alone covers only the root module). Keep in sync with the Makefile.
   PKGS: ./... ./rudderopenai/... ./rudderanthropic/... ./ruddergenai/... ./rudderbedrock/... ./rudderotel/... ./internal/conformance/... ./examples/...
@@ -182,8 +182,59 @@ jobs:
         working-directory: ${{ matrix.module }}
         run: go test -race ./...
 
+  vulncheck:
+    name: Vulnerability scan ${{ matrix.module.dir }} (Go ${{ matrix.toolchain }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [minimum, stable]
+        module:
+          - dir: '.'
+            go-version-file: go.mod
+          - dir: rudderopenai
+            go-version-file: rudderopenai/go.mod
+          - dir: rudderanthropic
+            go-version-file: rudderanthropic/go.mod
+          - dir: ruddergenai
+            go-version-file: ruddergenai/go.mod
+          - dir: rudderbedrock
+            go-version-file: rudderbedrock/go.mod
+          - dir: rudderotel
+            go-version-file: rudderotel/go.mod
+          - dir: internal/conformance
+            go-version-file: internal/conformance/go.mod
+          - dir: examples
+            go-version-file: examples/go.mod
+    # Each module as users build it: its own go.mod, no workspace.
+    env:
+      GOWORK: 'off'
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25 # v2.22.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup minimum Go version
+        if: matrix.toolchain == 'minimum'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ${{ matrix.module['go-version-file'] }}
+
+      - name: Setup stable Go version
+        if: matrix.toolchain == 'stable'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+
       - name: govulncheck
-        working-directory: ${{ matrix.module }}
+        working-directory: ${{ matrix.module.dir }}
         run: go run "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}" ./...
 
   example:
