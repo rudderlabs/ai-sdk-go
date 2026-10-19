@@ -5,9 +5,9 @@ The integration tracks an MCP server: which AI clients call it, which tools they
 | MCP library | Package | Entry point | Versions tested | Protocol revisions |
 | --- | --- | --- | --- | --- |
 | [`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk) (official) | `github.com/rudderlabs/ai-sdk-go` | `rudderstackai.WrapMCPServer` | v1.8.0 | 2025-06-18, 2025-11-25, 2026-07-28 |
-| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v0.55.1 (the minimum) to v1.1.1 | v0.55.1 to v0.x: 2025-06-18, 2025-11-25; v1.x: also 2026-07-28 |
+| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v0.55.1 (the minimum) to v1.2.1 | v0.55.1 to v0.x: 2025-06-18, 2025-11-25; v1.x: also 2026-07-28 |
 
-Both send the same events with the same options, defaults and properties. `ruddermcpgo` requires mcp-go v0.55.1, the oldest version it supports, so adding it never upgrades a server's mcp-go; CI tests v0.55.1 and v1.1.1. Each library lives in its own package, so a go-sdk server never compiles mcp-go; `ruddermcpgo` builds on the root package and so also compiles the go-sdk.
+Both send the same events with the same options, defaults and properties. `ruddermcpgo` requires mcp-go v0.55.1, the oldest version it supports, so adding it never upgrades a server's mcp-go; CI builds the module against v0.55.1 and runs the tests against v1.1.1 and v1.2.1. Each library lives in its own package, so a go-sdk server never compiles mcp-go; `ruddermcpgo` builds on the root package and so also compiles the go-sdk.
 
 - [Setup](#setup)
 - [Options](#options)
@@ -41,7 +41,7 @@ if err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 }
 ```
 
-Call it once, before serving: it adds a receiving middleware (`AddReceivingMiddleware`) and a sending middleware (`AddSendingMiddleware`), so it works with every transport the go-sdk offers. Wrapping the same server again replaces its options and keeps its state. `WrapMCPServer` returns an error for invalid options. Close the analytics client when the process stops (`defer client.Close()`), which flushes queued events.
+Call it once, before serving: it adds a receiving middleware (`AddReceivingMiddleware`) and a sending middleware (`AddSendingMiddleware`), so it works with every transport the go-sdk offers. Wrapping the same server again replaces its options and keeps its state. `WrapMCPServer` returns an error for invalid options. Close the analytics client when the process stops (`defer client.Close()`), which sends queued events; `rudderstackai.Flush` also reaches the clients MCP servers use.
 
 ### mcp-go
 
@@ -81,11 +81,11 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 | `Transport`          | detected   | `TransportStdio` or `TransportSSE`, sent as `transport` on `mcp_client_seen`. Streamable HTTP is detected from the request headers; stdio and SSE look the same from inside the server. |
 | `ServerName`         | the server's | Overrides the name the server was created with, sent as `server_name`. State is kept per server name: give each distinct server its own. |
 | `Redact`             | none       | `func(text string) (string, error)`, run after the built-in masking of `call_reason` and `capability_detail`. If it fails or panics, the field is not sent. |
-| `DisableRedaction`   | off        | Turns the built-in masking off; `Redact` still runs. |
+| `DisableRedaction`   | off        | Turns redaction off: the built-in masking and `Redact`. |
 
 ## Events
 
-Every event is a track call with `context.wrapperLibrary` = `{name: "ai-sdk-go", version, specVersion: "0.3.0", integration: "mcp"}` and, when known, `server_name`, `account_id`, `mcp_session_id`, `client_name`, `client_version`, `protocol_version`, `interaction_id` and `trace_id`. Schemas: [`spec/ai-events-v0.3.schema.json`](../spec/ai-events-v0.3.schema.json). Events without a user are sent with `anonymousId: "ai_system"`.
+Every event is a track call, within the 30,000-byte [properties budget](events.md), with `context.wrapperLibrary` = `{name: "ai-sdk-go", version, specVersion: "0.3.0", integration: "mcp"}` and, when known, `server_name`, `account_id`, `mcp_session_id`, `client_name`, `client_version`, `protocol_version`, `interaction_id` and `trace_id`. Schemas: [`spec/ai-events-v0.3.schema.json`](../spec/ai-events-v0.3.schema.json). Events without a user are sent with `anonymousId: "ai_system"`.
 
 | Event                            | When                                                                   | Main properties |
 | -------------------------------- | ---------------------------------------------------------------------- | --------------- |
@@ -146,7 +146,7 @@ A tool that already has a `request_context` argument keeps its own and receives 
 
 ## Declared tool events
 
-`EventRules.Tools` maps a tool name to a `ToolEventRule{Event, Properties, When}`. `Properties(args, result)` and `When(args, result)` see the call's arguments without `request_context` and the result's `structuredContent`, else its single text block parsed as JSON. The event carries `tool_name`, `tool_status`, the common MCP fields and the rule's properties (it cannot override the integration's own). If `Properties` panics the event is sent without them; if `When` panics the event is not sent.
+`EventRules.Tools` maps a tool name to a `ToolEventRule{Event, Properties, When}`. `Properties(args, result)` and `When(args, result)` see the call's arguments without `request_context` and the result's `structuredContent`, else its single text block parsed as JSON. The event carries `tool_name`, `tool_status`, the common MCP fields and the rule's properties (it cannot override the integration's own). If `Properties` panics, or its output would take the event over the 30,000-byte properties budget, the event is sent without them; if `When` panics the event is not sent.
 
 ## Unmet demand: request_capability
 

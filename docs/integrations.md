@@ -25,7 +25,7 @@ Each integration is its own Go module and hooks into its provider SDK's own exte
 | Google Gen AI   | `github.com/rudderlabs/ai-sdk-go/ruddergenai`        | `genai.ClientConfig{HTTPClient: ruddergenai.HTTPClient(nil)}`     | 1.26       |
 | Amazon Bedrock  | `github.com/rudderlabs/ai-sdk-go/rudderbedrock`      | `bedrockruntime.NewFromConfig(cfg, rudderbedrock.WithTracking())` | 1.26       |
 
-Every module needs Go 1.26 or later, as the core does.
+Every module needs Go 1.26 or later, as the core does, and requires the oldest provider SDK version it supports, so adding it never upgrades yours ([Compatibility](../README.md#compatibility)).
 
 - A call made with a context that carries an interaction (`RunInteraction`, `StartInteraction`, `RunTask`) reports into it. A call without one opens its own one-call interaction and ends it when the call (or its stream) ends: `trigger: system` unless the context carries an identity from `WithValues`, no prompt event, never classified. A call made after its interaction ended logs a warning and becomes such a separate answer, with `parent_interaction_id` set to the ended one.
 - Requests and responses reach the provider SDK unchanged, except that a streamed Chat Completions request asks for usage (see [OpenAI](#openai)). Provider errors are returned to your code unchanged.
@@ -34,7 +34,7 @@ Every module needs Go 1.26 or later, as the core does.
 
 ## OpenAI
 
-`github.com/openai/openai-go/v3`, tested with v3.70.0.
+`github.com/openai/openai-go/v3` v3.70.0 or later.
 
 ```go
 client := openai.NewClient(rudderopenai.WithTracking())
@@ -49,19 +49,19 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 	})
 ```
 
-`WithTracking(opts...)` is `option.WithMiddleware(Middleware(opts...))`; pass it to `openai.NewClient` or to a single request. Options: `WithProvider(label)` (default `openai`) and `WithAnalytics(client)`.
+`WithTracking(opts...)` is `option.WithMiddleware(Middleware(opts...))`; pass it to `openai.NewClient` or to a single request. Options: `WithProvider(label)` (default `openai`), `WithAnalytics(client)` and `WithStreamUsage(on)` (below).
 
 - Tracked: POST requests to `.../chat/completions` (Chat Completions) and `.../responses` (Responses API), streamed or not.
 - Recorded: `model` (the served model, else the requested one), `requested_model` when another model served it, `prompt_tokens` / `input_tokens` as input (they include cached tokens), cached tokens, `reasoning_tokens`, `service_tier`, the response `id`, the answer text (for the classifier and evaluator only), and `usage.cost` as the call's cost when a gateway reports one.
 - `finish_reason`: Chat Completions as sent, `refusal` when the message has a refusal. Responses API: `stop`, `tool_calls` when the output has only tool calls, `refusal` for a refusal part, `length` for `incomplete` at `max_output_tokens`, otherwise the incomplete reason. A `failed` response is a failed call that keeps its usage; a `cancelled` one is a cancelled call.
 - Tool calls: `tool_calls` of every returned choice (function and custom tools); Responses output items whose type ends in `_call` (function, custom and hosted tools, `mcp_call` with its server label as `mcp_server`). Results come from `role: "tool"` messages and `*_call_output` items of a later request; they carry no error flag, so `tool_status` stays `unknown` and `tool_breakdown` has no `error_count`.
 - Server tools: `web_search_call`, `file_search_call`, `code_interpreter_call` and `image_generation_call` count as server tool calls by kind (`web_search`, ...), for `ServerToolPerCall` fees.
-- Streamed Chat Completions: the request gains `stream_options.include_usage` unless you set it, and the extra usage-only chunk is hidden from your code. A host that rejects it (HTTP 400 or 422 naming the parameter, or without an error code) gets the request again as you wrote it; once a host names the parameter, this middleware stops adding it there. Without usage, a streamed call has no tokens and no cost.
+- Streamed Chat Completions: the request gains `stream_options.include_usage` unless you set it, and the extra usage-only chunk is hidden from your code. A host that rejects it (HTTP 400 or 422 naming the parameter, or without an error code) gets the request again as you wrote it; once a host names the parameter, this middleware stops adding it there. `rudderopenai.WithStreamUsage(true)` always adds it, with no resend; `WithStreamUsage(false)` never does. Without usage, a streamed call has no tokens and no cost.
 - Not tracked: non-streamed `background: true` Responses requests (only queued; polling is not intercepted).
 
 ## Anthropic
 
-`github.com/anthropics/anthropic-sdk-go`, tested with v1.78.0.
+`github.com/anthropics/anthropic-sdk-go` v1.78.0 or later.
 
 ```go
 client := anthropic.NewClient(rudderanthropic.WithTracking())
@@ -97,7 +97,7 @@ client := anthropic.NewClient(
 
 ## Google Gen AI
 
-`google.golang.org/genai`, tested with v1.72.0. The genai client has no middleware hook, so tracking sits in its HTTP client.
+`google.golang.org/genai` v1.72.0 or later. The genai client has no middleware hook, so tracking sits in its HTTP client.
 
 ```go
 client, err := genai.NewClient(ctx, &genai.ClientConfig{
@@ -111,7 +111,7 @@ client, err := genai.NewClient(ctx, &genai.ClientConfig{
 
 - Vertex AI with Google Cloud credentials: genai skips its own credential setup when given an `HTTPClient`, so the client must authenticate itself. Wrap an authenticated client, `ruddergenai.HTTPClient(google.DefaultClient(ctx, "https://www.googleapis.com/auth/cloud-platform"))` (`golang.org/x/oauth2/google`), or call `cfg.UseDefaultCredentials()` on the `ClientConfig` after setting `HTTPClient`. An API key (Gemini API, Vertex AI express mode) needs neither.
 - Tracked: `Models.GenerateContent` and `Models.GenerateContentStream`, and chats, which call the same endpoints. Every other method passes through.
-- Provider: `google` for the Gemini API, `google.vertex` for Vertex AI, detected from each request's URL; `WithProvider` overrides it. The two are [priced separately](configuration.md#pricing).
+- Provider: `gcp.gemini` for the Gemini API, `gcp.vertex_ai` for Vertex AI, detected from each request's URL; `WithProvider` overrides it. The two are [priced separately](configuration.md#pricing).
 - Model: `modelVersion` of the response, else the model in the request path (a tuned model's endpoint name).
 - Tokens follow `usageMetadata`: input is `promptTokenCount` (which includes `cachedContentTokenCount`) plus `toolUsePromptTokenCount`, output is `candidatesTokenCount` plus `thoughtsTokenCount`, and `thoughtsTokenCount` is also `reasoning_tokens`, so input + output equals `totalTokenCount` and thinking is priced once, at the output rate. In a stream `usageMetadata` is a running total: the last value wins.
 - `finish_reason`: `STOP` is `stop`, or `tool_calls` when the response calls a function; `MAX_TOKENS` is `length`; `SAFETY`, `RECITATION`, `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII` and the image safety reasons are `content_filter`, and so is a blocked prompt (`promptFeedback.blockReason`); other values pass through.
@@ -120,7 +120,7 @@ client, err := genai.NewClient(ctx, &genai.ClientConfig{
 
 ## Amazon Bedrock
 
-`github.com/aws/aws-sdk-go-v2/service/bedrockruntime`, tested with v1.63.1.
+`github.com/aws/aws-sdk-go-v2/service/bedrockruntime` v1.63.1 or later.
 
 ```go
 client := bedrockruntime.NewFromConfig(cfg, rudderbedrock.WithTracking())
@@ -190,7 +190,11 @@ Tool calls streamed before a failure still count. A provider that reports usage 
 
 ## Retries
 
-openai-go, anthropic-sdk-go and genai retry inside the client, below the tracking middleware or transport, so each attempt is recorded as its own call: a failed attempt is a failed call (in `llm_call_count` and the entry's `error_count`), and a successful retry makes the answer a success because the last call decides. The AWS SDK retries below the Bedrock tracker, so a Bedrock operation is recorded once, with the final outcome. `ClassifierClient` calls disable retries.
+openai-go and anthropic-sdk-go retry inside the client, below the tracking middleware. As in Node.js and Python, one SDK method call is one model call, priced once: an attempt the client retries is not recorded, and the final attempt's outcome is. When retries run out, the answer has one failed call. When the context ends while the client waits to retry, the call is recorded as `cancelled` or `timeout`.
+
+A failed attempt counts as retried when the client sends it again or closes its response unread, which is how both clients behave. Two cases still record each attempt: a connection error (no response) outside an interaction, and a retried failed response that a middleware added before `WithTracking` (outside it) reads.
+
+genai retries below the tracking transport and has no attempt number, so each attempt it retries is recorded as its own failed call. The AWS SDK retries below the Bedrock tracker, so a Bedrock operation is recorded once, with the final outcome. `ClassifierClient` calls turn retries off.
 
 ## Classifier clients
 
@@ -243,12 +247,9 @@ An agent that calls MCP servers can join each `mcp_tool_called` to its answer by
 
 ## Limits and differences from Node.js
 
-- Integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients only. There are no LangChain, LangGraph, OpenAI Agents SDK, Claude Agent SDK or Vercel AI SDK integrations, no OpenTelemetry span processor or exporter, and no HTTP middleware package: pass the request to `WithValues` or `InteractionOptions.Request`.
-- Retries of openai-go, anthropic-sdk-go and genai are recorded per attempt ([Retries](#retries)); Node.js wraps the SDK method and sees one call.
-- Streams must be read inside the interaction; there is no `bind`. `client_disconnected` and `paused` are set only through `EndOptions`.
-- No `streamUsage` option: streamed Chat Completions always ask for usage, with the fallback described above.
-- Gemini API and Vertex AI prices are separate per provider label; in Node.js a price for either label applies to both.
+- Integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients only. There are no LangChain, LangGraph, OpenAI Agents SDK, Claude Agent SDK or Vercel AI SDK integrations, and no OpenTelemetry span processor or exporter.
+- genai retries are recorded per attempt, as are openai-go and anthropic-sdk-go connection-error retries outside an interaction ([Retries](#retries)). Node.js wraps the SDK method and sees one call.
+- Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `EndOptions`; `client_disconnected` also by [`Middleware`](configuration.md#context-values).
 - Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
 - `Flush` cannot send analytics-go's queue (it has no flush method): close the client before exiting.
-- Debug output goes through `log/slog` at debug level; there is no environment variable.
 - Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint.

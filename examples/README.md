@@ -1,6 +1,6 @@
 # Examples
 
-Each example is a `main` package in this module that uses `rudderstackai` the way an app would.
+Each example is a `main` package in this module (Go 1.26 or later) that uses `rudderstackai` the way an app would. Run them from a clone of the repository: the checks read the shared schema and cassettes in `spec/`.
 
 | Example                                    | Shows                                                                                                          |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
@@ -30,7 +30,7 @@ go run ./examples/anthropic          # one real Anthropic call (ANTHROPIC_API_KE
 
 ## How the checks work
 
-`--check` starts a mock data plane (`internal/dataplane`), drives the example with real clients (a go-sdk MCP client, or the provider's own SDK pointed at `internal/testkit`'s mock LLM server, which replays the shared cassette in `spec/fixtures/cassettes/`) and the real analytics-go client, and fails unless every expected event arrives with the expected properties, field by field. Every event is also checked for `context.wrapperLibrary` and validated against `spec/ai-events-v0.3.schema.json`. CI runs every example this way on each pull request (`make example`; `go test ./...` runs them too).
+`--check` starts a mock data plane (`internal/dataplane`), drives the example with real clients (a go-sdk MCP client, or the provider's own SDK pointed at `internal/testkit`'s mock LLM server, which replays the shared cassette in `spec/fixtures/cassettes/`) and the real analytics-go client, and fails unless every expected event arrives with the expected properties, field by field. Every event is also checked for `context.wrapperLibrary` and validated against `spec/ai-events-v0.3.schema.json`. CI runs every example this way on each pull request (locally: `make example`; `go test ./examples/...` runs them too).
 
 `--live` runs the same check, but the local data plane forwards each batch, write key included, to `RUDDERSTACK_DATA_PLANE_URL` and keeps only the batches it accepts, so the asserts cover what your data plane received. Without both variables it prints `skipped: no key` and exits 0. The `Live examples` workflow runs every example this way nightly and on demand, and writes the skip to the job summary when the repository has no secrets.
 
