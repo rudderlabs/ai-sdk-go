@@ -5,6 +5,8 @@ import (
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 // TaskOptions configures [RunTask].
@@ -87,6 +89,7 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 	if cv := valuesFrom(ctx); cv != nil {
 		c := *cv
 		c.userID, c.anonymousID, c.conversationID, c.cookies = "", "", "", nil
+		c.disconnected = nil // a task outlives the request that started it
 		ctx = context.WithValue(ctx, keyValues, &c)
 	}
 	var task *Interaction
@@ -103,10 +106,18 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 	})
 	if flush && task != nil {
 		// An opted-in classification goes out with the flush (bounded by its timeout).
-		task.waitBackground(defaultClassifyTimeout + time.Second)
+		task.waitBackground(flushTimeout())
 		safely(func() { flushClient(task.analytics()) })
 	}
 	return err
+}
+
+// flushTimeout is the classifier timeout plus a second.
+func flushTimeout() time.Duration {
+	if c := cfg().classifier; c != nil {
+		return c.Timeout + time.Second
+	}
+	return defaultClassifyTimeout + time.Second
 }
 
 func flushClient(c analytics.Client) {
@@ -123,12 +134,11 @@ func flushClient(c analytics.Client) {
 // send their queue on Close. It reports whether every classification finished.
 func Flush(timeout time.Duration) bool {
 	if timeout <= 0 {
-		timeout = defaultClassifyTimeout + time.Second
-		if c := cfg().classifier; c != nil {
-			timeout = c.Timeout + time.Second
-		}
+		timeout = flushTimeout()
 	}
+	deadline := time.Now().Add(timeout)
 	finished := waitBackgroundWork(timeout)
+	finished = hook.WaitTracked(time.Until(deadline)) && finished
 	global.mu.RLock()
 	clients := append([]analytics.Client(nil), global.clients...)
 	if global.cfg.analytics != nil {

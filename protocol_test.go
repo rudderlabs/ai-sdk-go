@@ -161,8 +161,9 @@ func TestInputRequired2026(t *testing.T) {
 	if _, ok := calls[0].Properties["retry_count"]; ok {
 		t.Error("retry_count on the retry that answers the server")
 	}
-	if calls[0].Properties["call_index"] != 1 {
-		t.Errorf("call_index = %v", calls[0].Properties["call_index"])
+	// The retry takes the input_required leg's position: the leg sends no event, so no gap.
+	if calls[0].Properties["call_index"] != 0 {
+		t.Errorf("call_index = %v, want 0", calls[0].Properties["call_index"])
 	}
 	p := r.props(t, "mcp_elicitation_completed")
 	if p["elicitation_action"] != "decline" || p["tool_name"] != "confirm" || p["interaction_id"] != "int_2026" || p["protocol_version"] != protocol2026 {

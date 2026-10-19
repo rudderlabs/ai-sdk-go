@@ -42,6 +42,8 @@ type contextValues struct {
 	context                                                             map[string]any
 	cookies                                                             map[string]string
 	identityFromCookies                                                 *bool
+	// disconnected reports whether the client of the request went away ([Middleware]).
+	disconnected func() bool
 }
 
 type ctxKey int

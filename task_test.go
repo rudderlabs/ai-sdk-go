@@ -115,6 +115,22 @@ func TestRunTaskOptions(t *testing.T) {
 	}
 }
 
+// RunTask's own flush waits as long as Flush: the configured classifier timeout plus a second.
+func TestFlushTimeoutFollowsClassifier(t *testing.T) {
+	resetForTest()
+	t.Cleanup(resetForTest)
+	if got := flushTimeout(); got != defaultClassifyTimeout+time.Second {
+		t.Fatalf("default = %v", got)
+	}
+	classify := func(context.Context, ClassifyTurn) (ClassifyResult, error) { return ClassifyResult{}, nil }
+	if err := Configure(WithClassifier(&ClassifierOptions{Classify: classify, Timeout: 30 * time.Second})); err != nil {
+		t.Fatal(err)
+	}
+	if got := flushTimeout(); got != 31*time.Second {
+		t.Fatalf("configured = %v", got)
+	}
+}
+
 func TestFlush(t *testing.T) {
 	r := setupAI(t, WithClassifier(&ClassifierOptions{Timeout: time.Second, Classify: func(context.Context, ClassifyTurn) (ClassifyResult, error) {
 		time.Sleep(20 * time.Millisecond)
@@ -180,6 +196,18 @@ func TestTrackAction(t *testing.T) {
 	TrackAction(actx, TrackActionOptions{ActionType: ActionFeedbackGiven, InteractionID: "i", ActionDetails: map[string]any{"feedback_text": "x"}})
 	if _, has := r.props(t, "ai_user_action")["action_details"]; has {
 		t.Fatal("unmaskable feedback text kept")
+	}
+	// One rule: redaction off skips the built-in masking and the hook alike.
+	if err := Configure(WithRedaction(false)); err != nil {
+		t.Fatal(err)
+	}
+	r.reset()
+	TrackAction(actx, TrackActionOptions{ActionType: ActionFeedbackGiven, InteractionID: "i", ActionDetails: map[string]any{"feedback_text": "mail a@b.com"}})
+	if d := r.props(t, "ai_user_action")["action_details"].(map[string]any); d["feedback_text"] != "mail a@b.com" {
+		t.Fatal(d)
+	}
+	if err := Configure(WithRedaction(true)); err != nil {
+		t.Fatal(err)
 	}
 
 	// A non-standard action type warns and is still sent; server feedback off sends nothing.

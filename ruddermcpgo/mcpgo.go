@@ -74,7 +74,7 @@ type Options struct {
 	// Redact runs after the built-in masking of call_reason and capability_detail; if it fails
 	// or panics, the field is not sent.
 	Redact func(text string) (string, error)
-	// DisableRedaction turns the built-in masking off; Redact still runs.
+	// DisableRedaction turns redaction off: the built-in masking and Redact.
 	DisableRedaction bool
 }
 

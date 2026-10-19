@@ -105,7 +105,7 @@ func getWeather(args map[string]any) map[string]any {
 func weather(ctx context.Context, client *genai.Client, rs analytics.Client) (result, error) {
 	// Example rates in USD per million tokens: use your own.
 	if err := rudderstackai.RegisterPrice(model, rudderstackai.ModelPrice{
-		Provider:   "google",
+		Provider:   "gcp.gemini",
 		TokenPrice: rudderstackai.TokenPrice{InputPerMtok: 0.10, OutputPerMtok: 0.40},
 	}); err != nil {
 		return result{}, err

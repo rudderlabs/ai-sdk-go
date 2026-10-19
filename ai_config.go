@@ -144,10 +144,10 @@ func WithIdentityFromCookies(on bool) ConfigOption {
 	}
 }
 
-// WithRedaction turns the built-in masking of opt-in text (prompt_text, response_text,
-// feedback_text, intent_summary, explanation) on or off. On by default: emails, phone numbers,
-// payment cards, IP addresses, IDs and API keys or tokens become [email], [phone], [card], [ip],
-// [ssn], [iban] and [secret]. Names and addresses are not caught.
+// WithRedaction turns redaction of opt-in text (prompt_text, response_text, feedback_text,
+// intent_summary, explanation) on or off: the built-in masking and the [WithRedactHook] hook. On
+// by default: emails, phone numbers, payment cards, IP addresses, IDs and API keys or tokens become
+// [email], [phone], [card], [ip], [ssn], [iban] and [secret]. Names and addresses are not caught.
 func WithRedaction(on bool) ConfigOption {
 	return func(c *config, _ *pending) error {
 		c.redact = on
@@ -155,8 +155,8 @@ func WithRedaction(on bool) ConfigOption {
 	}
 }
 
-// WithRedactHook runs your own masking after the built-in patterns. If it fails or panics, the
-// text field is dropped. Nil removes it.
+// WithRedactHook runs your own masking after the built-in patterns, while redaction is on. If it
+// fails or panics, the text field is dropped. Nil removes it.
 func WithRedactHook(hook func(text string) (string, error)) ConfigOption {
 	return func(c *config, _ *pending) error {
 		c.redactHook = hook
@@ -309,10 +309,10 @@ func warnOnce(key, msg string, every time.Duration) {
 	}
 	global.mu.Unlock()
 	if again {
-		slog.Warn("rudderstackai: " + msg)
+		slog.Warn(logPrefix + msg)
 		return
 	}
 	debugf(msg)
 }
 
-func warnf(format string, args ...any) { slog.Warn("rudderstackai: " + fmt.Sprintf(format, args...)) }
+func warnf(format string, args ...any) { slog.Warn(logPrefix + fmt.Sprintf(format, args...)) }

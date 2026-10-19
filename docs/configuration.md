@@ -104,7 +104,7 @@ Field reference for `LLMCall`, `ToolCall` and `ToolResult`: [integrations.md](in
 | `Status`             | Final status; derived from the calls when empty ([rules](events.md#status)). An invalid value logs a warning and is ignored. |
 | `ErrorType`          | `error_type` for a non-success status                                                                        |
 | `PauseReason`        | With `StatusPaused`: `PauseApproval`, `PauseHumanInput`, `PauseDeferredTool`, `PauseAuthRequired` or `PauseOther` (default) |
-| `ClientDisconnected` | Sends `client_disconnected: true`; the SDK does not detect disconnects itself                               |
+| `ClientDisconnected` | Sends `client_disconnected: true`; [`Middleware`](#context-values) also sets it when the request is cancelled before the handler returns |
 | `ResponseText`       | Sent as `response_text` only with content capture on; given to the classifier and evaluator                 |
 | `ExtraProperties`    | Your properties for `ai_response_received`; SDK-owned names are ignored                                      |
 
@@ -115,7 +115,7 @@ Field reference for `LLMCall`, `ToolCall` and `ToolResult`: [integrations.md](in
 - The actor is the system: `UserID` and `AnonymousID` come only from the options, never from the context or cookies, so events without them use `anonymousId: "ai_system"`. Put the customer in `AccountID` and the human the work is for in `OnBehalfOf`; both, and `Feature`, `Surface`, `Analytics` and `Context`, still fall back to the context. Set a stable, scoped `ConversationID` for bots and jobs, or each run gets a new one.
 - Chaining: inside another interaction or task, `ParentInteractionID` and `ConversationID` default to it and `TriggerSource` to `agent`. Pass `ParentInteractionID` to link a run started elsewhere, or `NoParent: true` for none.
 - No prompt event. `Classify` is off unless set.
-- `Flush` (`*bool`): when the task ends, wait for its classification and score (up to the default classifier timeout plus a second) and call `Flush()` on its client if the client implements [`Flusher`](#flush-and-shutdown). Default on, except for a task chained to the interaction in its context.
+- `Flush` (`*bool`): when the task ends, wait for its classification and score (up to the configured classifier timeout plus a second, as [`Flush`](#flush-and-shutdown)) and call `Flush()` on its client if the client implements `Flusher`. Default on, except for a task chained to the interaction in its context.
 - Other fields (`InteractionID`, `TraceID`, `TriggerEventID`, `CaptureContent`, `ToolBreakdown`) are as on `InteractionOptions`. An error returned by `fn` fails the answer and is returned unchanged.
 
 ## Context values
@@ -135,6 +135,12 @@ func handler(w http.ResponseWriter, r *http.Request) {
 ```
 
 Fields: `UserID`, `AnonymousID`, `ConversationID`, `Feature`, `AccountID`, `OnBehalfOf`, `Surface`, `Analytics`, `Context` (extra message context such as `{"app": {"build": "7"}}`), and the cookie sources `Request`, `Cookies`, `CookieValues`. A model call made with a context that carries identity but no interaction is reported as its own user-triggered answer; without identity it is system-triggered.
+
+`Middleware(next http.Handler) http.Handler` does the cookie part for every request: handlers get a context as from `WithValues(r.Context(), ContextValues{Request: r})`, and an interaction that ends while the client is gone (the request context is cancelled before the handler returns) is sent with `client_disconnected: true`. An interaction that ends after the handler returned is never marked.
+
+```go
+http.Handle("/chat", rudderstackai.Middleware(http.HandlerFunc(chat)))
+```
 
 ## Identity and cookies
 
@@ -195,7 +201,7 @@ err := rudderstackai.Configure(
 
 - Patterns catch fixed shapes only: names, postal addresses and free-form IDs are not caught, and some order numbers look like phone numbers. Use the hook, or leave capture off.
 - Fail closed: a hook that returns an error or panics drops the field. Text over 32,000 code points is withheld rather than masked.
-- `WithRedaction(false)` sends captured text unmasked and does not run the hook. The patterns are shared with the Node.js and Python SDKs ([`spec/fixtures/redaction-v0.1.json`](../spec/fixtures/redaction-v0.1.json)).
+- One rule: `WithRedaction(false)` sends captured text unmasked and does not run the hook; MCP `Options.DisableRedaction` does the same for `Redact`. The patterns are shared with the Node.js and Python SDKs ([`spec/fixtures/redaction-v0.1.json`](../spec/fixtures/redaction-v0.1.json)).
 
 ## Pricing
 
@@ -232,10 +238,17 @@ Model matching, case-insensitive:
 - A registered name prices that exact model, the same model with a version suffix (`-2024-08-06`, `-20250929`, `-v1`, `-latest`, `:0`, `@20250929`), and the name after a vendor prefix (`openai/gpt-4o`). Never another model of the family: `gpt-4o` does not price `gpt-4o-mini`. The longest matching name wins.
 - Provider `aws.bedrock`: the model ID is tried as is, then without an inference-profile prefix (`us.`, `us-gov.`, `eu.`, `apac.`, `jp.`, `au.`, `global.`), then without the vendor prefix. `us.anthropic.claude-sonnet-4-5-20250929-v1:0` is priced by `claude-sonnet-4-5`, `amazon.nova-pro-v1:0` by `nova-pro`.
 - Vertex AI model IDs such as `claude-sonnet-4-5@20250929` match `claude-sonnet-4-5` (an `@` revision is a version suffix).
-- Google: the Gemini API (provider `google`) and Vertex AI (`google.vertex`) are priced separately. A price with `Provider: "google"` prices Gemini API calls only, one with `Provider: "google.vertex"` Vertex AI calls only (also Anthropic models on Vertex AI, reported as `gcp.vertex_ai`); a price without `Provider` prices both. `gcp.gemini` shares prices with `google`, `gcp.vertex_ai` with `google.vertex`.
+- Google: the Gemini API (provider `gcp.gemini`) and Vertex AI (`gcp.vertex_ai`, also Anthropic models on Vertex AI) are priced separately. A price with `Provider: "gcp.gemini"` prices Gemini API calls only, one with `Provider: "gcp.vertex_ai"` Vertex AI calls only; a price without `Provider` prices both. The earlier labels still work as aliases: `google` shares prices with `gcp.gemini`, `google.vertex` with `gcp.vertex_ai`.
 - Azure OpenAI deployment names are your own: map them with `WithAzureDeploymentModels(map[string]string{"support-prod": "gpt-4o"})` and send the provider label `azure.ai.openai` (`rudderopenai.WithProvider("azure.ai.openai")`). Events keep the deployment name; an unmapped deployment is unpriced.
 
-`EstimateCost(provider, model, input, output, cached, cacheWrite)` prices one call from the registered table (no tier or server-tool fees); `ReportedCost(v)` reads a provider-reported cost (a number or decimal string) for `LLMCall.CostUSD`.
+`EstimateCost(provider, model, input, output, cached, cacheWrite, opts ...CostOptions)` prices one call from the registered table as a recorded call is priced; the optional `CostOptions{CacheWrite1hTokens, ServiceTier, ServerToolCalls}` adds 1-hour cache writes, the tier multiplier and server-tool fees:
+
+```go
+cost, ok := rudderstackai.EstimateCost("anthropic", "claude-sonnet-4-5", 12_000, 800, 0, 4_000,
+	rudderstackai.CostOptions{CacheWrite1hTokens: 4_000, ServiceTier: "batch", ServerToolCalls: map[string]int{"web_search": 2}})
+```
+
+`ReportedCost(v)` reads a provider-reported cost (a number or decimal string) for `LLMCall.CostUSD`.
 
 ## Classifier and evaluator
 
@@ -252,8 +265,8 @@ err := rudderstackai.Configure(rudderstackai.WithClassifier(&rudderstackai.Class
 | ------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `Client`            | A `ClassifierClient` (`Classify(ctx, system, user) (ClassifierReply, error)`); requires `Intents`                   |
 | `Classify`          | Your own `ClassifyFunc(ctx, ClassifyTurn) (ClassifyResult, error)` instead of `Client`; exactly one of the two      |
-| `Intents`           | Closed list; anything else is `other`. Required with `Client`                                                      |
-| `Outcomes`          | Closed list; anything else is `unclear`. Default `DefaultOutcomes`                                                 |
+| `Intents`           | Closed list; anything else is `other`, so `other` is always possible. Required with `Client`                       |
+| `Outcomes`          | Closed list; anything else is `unclear`, so `unclear` is always possible. Default `DefaultOutcomes`                |
 | `IntentSummary`     | With `Client`: also ask for and send a one-sentence, masked `intent_summary`                                       |
 | `Timeout`           | Per classification; zero means 5 seconds                                                                           |
 
@@ -280,13 +293,13 @@ rudderstackai.Flush(0) // wait for pending classifications and scores
 client.Close()         // analytics-go: send queued events, stop the client
 ```
 
-- `Flush(timeout)` waits for pending classifications and scores, at most `timeout` (zero: the classifier timeout plus a second), then calls `Flush()` on every RudderStack client the SDK has used that implements `Flusher` (`Flush() error`). It reports whether all background work finished. With analytics-go, close the client afterwards.
+- `Flush(timeout)` waits for pending classifications and scores, and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), at most `timeout` (zero: the configured classifier timeout plus a second), then calls `Flush()` on every RudderStack client the SDK has used that implements `Flusher` (`Flush() error`). It reports whether all background work finished. With analytics-go, close the client afterwards.
 - A top-level `RunTask` waits for its own classification and score and flushes its client when that client implements `Flusher`; with analytics-go this sends nothing early, so close the client before the process exits.
 - Events are queued in analytics-go, so delivery errors are its own: handle them with its `Config.Callback`.
 
 ## Logging
 
-Warnings (a missing client, a failed `Enqueue`, an invalid status or surface, a dropped `TrackAction` / `TrackScore`, the first classifier failure) go to the default `log/slog` logger, prefixed `rudderstackai:`, mostly once per process. Everything tracking drops or ignores is logged at debug level: `slog.SetLogLoggerLevel(slog.LevelDebug)` shows it.
+Warnings (a missing client, a failed `Enqueue`, an invalid status or surface, a dropped `TrackAction` / `TrackScore`, the first classifier failure) go to the default `log/slog` logger, prefixed `[rudderstack-ai]`, mostly once per process. Everything tracking drops or ignores is logged at debug level, errors by type only, never event payloads or captured text. Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value, read on every log call, as in Node.js and Python) to write it through the default slog handler whatever its level, or `slog.SetLogLoggerLevel(slog.LevelDebug)` to show it.
 
 ## Warehouse column types
 
@@ -299,11 +312,12 @@ RudderStack warehouse destinations create a column with the type of the first va
 
 | Package                                          | Exports                                                                                                                                                                                                 |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `WithValues`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `Flusher`, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
-| `.../rudderopenai`                               | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `ClassifierClient`                                                                                                                       |
+| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `WithValues`, `Middleware`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `Flusher`, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `CostOptions`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
+| `.../rudderopenai`                               | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `WithStreamUsage`, `ClassifierClient`                                                                                                    |
 | `.../rudderanthropic`                            | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `ClassifierClient`                                                                                                                       |
 | `.../ruddergenai`                                | `HTTPClient`, `Transport`, `WithProvider`, `WithAnalytics`                                                                                                                                              |
 | `.../rudderbedrock`                              | `WithTracking`, `WithAnalytics`                                                                                                                                                                         |
 | `.../rudderotel`                                 | `TraceID`                                                                                                                                                                                               |
+| `.../ruddermcpgo` (in the root module)           | `WrapServer`, `Options`, `RequestElicitation`, `TrackMCPEventSubscription`, `WrapMCPEventSender`                                                                                                        |
 
-The root module (Go 1.26 or later) holds the core and MCP support and depends only on analytics-go and the MCP libraries. Each integration and `rudderotel` is a separate module you `go get` on its own, so MCP-only services do not pull provider SDKs.
+The root module (Go 1.26 or later) holds the core, the `net/http` middleware and MCP support (`ruddermcpgo` included). Each provider integration and `rudderotel` is a separate module you `go get` on its own, so MCP-only services do not pull provider SDKs. Minimum versions per module: [README](../README.md#compatibility).

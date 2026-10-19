@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"slices"
@@ -250,6 +251,7 @@ type Interaction struct {
 	toolsByID          map[string]*recordedTool
 	hint               *outcomeHint
 	clientDisconnected bool
+	disconnected       func() bool
 	pending            []pendingEvent
 	settled            bool
 	beforeEnd          []func()
@@ -358,6 +360,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		seen:              map[string]*recordedCall{},
 		toolsByID:         map[string]*recordedTool{},
 		firstToken:        -1,
+		disconnected:      cv.disconnected,
 	}
 	i.fillTraceID(ctx)
 	return i
@@ -788,6 +791,7 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 			}
 		})
 	}
+	keys := slices.Collect(maps.Keys(custom))
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	p := custom
@@ -803,6 +807,7 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	if t.duration != nil && (t.err != nil || *t.duration != 0) {
 		p["tool_duration_ms"] = roundMS(*t.duration)
 	}
+	p = fitToolEventProperties(rule.Event, p, keys)
 	i.sendLocked(rule.Event, func() map[string]any { return p })
 }
 
@@ -932,6 +937,9 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	if o.ClientDisconnected {
 		i.clientDisconnected = true
+	}
+	if !i.clientDisconnected && i.disconnected != nil {
+		safely(func() { i.clientDisconnected = i.disconnected() })
 	}
 	i.ended = true
 	i.settled = true

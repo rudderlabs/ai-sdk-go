@@ -66,7 +66,7 @@ func chatSpec(cfg config, rejected *rejectedHosts) *kit.Spec {
 		PrepareStream: func(c *kit.Call) *kit.Prepared {
 			opts := kit.Map(c.Request["stream_options"])
 			host := c.HTTPRequest.URL.Host
-			if opts["include_usage"] == true || rejected.has(host) {
+			if opts["include_usage"] == true || rejected.has(host) || (cfg.streamUsage != nil && !*cfg.streamUsage) {
 				return nil
 			}
 			body := maps.Clone(c.Request)
@@ -76,6 +76,9 @@ func chatSpec(cfg config, rejected *rejectedHosts) *kit.Spec {
 			}
 			withUsage["include_usage"] = true
 			body["stream_options"] = withUsage
+			if cfg.streamUsage != nil {
+				return &kit.Prepared{Body: body}
+			}
 			return &kit.Prepared{Body: body, Names: []string{"stream_options", "include_usage"}, Accepted: func() { rejected.add(host) }}
 		},
 		OnResponse: onChatResponse,

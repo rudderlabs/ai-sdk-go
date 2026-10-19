@@ -122,6 +122,24 @@ func fitProperties(event string, properties map[string]any) map[string]any {
 	return trimmed()
 }
 
+// fitToolEventProperties keeps a declared tool event within maxPropertiesBytes: when over, the
+// rule's Properties output (the custom keys) is dropped and the SDK-owned fields are kept, as when
+// Properties panics. fitProperties has nothing of its own to trim on these events.
+func fitToolEventProperties(event string, properties map[string]any, custom []string) map[string]any {
+	if propertiesBytes(properties) <= maxPropertiesBytes {
+		return properties
+	}
+	p := make(map[string]any, len(properties))
+	for k, v := range properties {
+		p[k] = v
+	}
+	for _, k := range custom {
+		delete(p, k)
+	}
+	warnOnce("tool-event-too-large", fmt.Sprintf("%s was over %d bytes; sent without its Properties output", event, maxPropertiesBytes), 0)
+	return p
+}
+
 // redactText masks one opt-in text field: the built-in patterns, then the hook. ok is false
 // (drop the field) when the hook fails or the text is too long to mask.
 func redactText(text string) (out string, ok bool) {

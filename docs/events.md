@@ -2,7 +2,7 @@
 
 Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md). The JSON Schema is [`spec/ai-events-v0.3.schema.json`](../spec/ai-events-v0.3.schema.json), shared with the Node.js and Python SDKs; a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
 
-Every event's `properties` stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget loses its captured text first (`response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive.
+Every event's `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget loses its captured text first (`response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process.
 
 - [Common fields](#common-fields)
 - [ai_user_prompt_created](#ai_user_prompt_created)
@@ -298,7 +298,7 @@ Each call of `create_ticket` then sends one `ticket_created`:
 - When: once per de-duplicated tool call, as soon as its outcome (`Error`) or output (`Result`) is known; otherwise when the interaction ends, with `tool_status: "unknown"`. Calls of tools without a rule send nothing.
 - SDK-owned properties: `tool_name`, `tool_call_id` (absent without a provider ID), `tool_status` (`success`, `error` or `unknown`), `tool_duration_ms` (only when a duration was reported), `agent_name` when known, `trigger` and the [common fields](#common-fields). They win over what `Properties` returns.
 - `args` is the call's arguments when they are a JSON object (JSON text is parsed), else nil; `result` is what the integration saw of the tool's output (a later request's tool message or result block, parsed when it is JSON), or `ToolResult.Result`. Neither is sent unless `Properties` returns it.
-- `When` returning false, or panicking, skips the event. If `Properties` panics, the event is sent without your properties.
+- `When` returning false, or panicking, skips the event. If `Properties` panics, or its output would take the event over the 30,000-byte properties budget, the event is sent without your properties.
 - Rule keys are tool names as the model calls them (`mcp__server__tool` for flat MCP names). Event names starting with `ai_` or `mcp_` are rejected by `Configure`. `WithEventRules` replaces earlier rules. These rules are separate from the `Options.EventRules` of [WrapMCPServer](mcp.md#declared-tool-events), which use the same types.
 - Outside an interaction each call is its own answer, so a tool's result, sent in the next request, never reaches the rule: the event goes out with `tool_status: "unknown"` and a nil `result`. Run the whole tool loop inside one `RunInteraction` when a rule needs results.
 
@@ -324,7 +324,7 @@ Opt-in with [`WithClassifier`](configuration.md#classifier-and-evaluator). After
 }
 ```
 
-- `intent` is one of `ClassifierOptions.Intents`, else `other` (with your own `Classify` and no `Intents`, any non-empty value is kept). `outcome` is one of `Outcomes` (default `DefaultOutcomes`: `resolved`, `partial`, `unresolved`, `escalated`, `unclear`), else `unclear`.
+- `intent` is one of `ClassifierOptions.Intents`, else `other` (with your own `Classify` and no `Intents`, any non-empty value is kept). `outcome` is one of `Outcomes` (default `DefaultOutcomes`: `resolved`, `partial`, `unresolved`, `escalated`, `unclear`), else `unclear`. `other` and `unclear` are therefore always possible values, whatever your lists hold: plan reports and warehouse filters for them.
 - `classifier` is `model` for a `ClassifierClient`, `custom` for your `Classify` function. `classifier_model` is the model the reply named, else the configured one. `classifier_duration_ms` times the classification.
 - `classifier_cost_usd`: the classifier call priced with your registered prices, when its usage is known and its model priced. Never added to the interaction's totals; the classifier's own call is never tracked.
 - `intent_summary`: with `IntentSummary` (model client) or from your `Classify` result. One sentence, at most 25 words and 280 characters, masked, and withheld when it still matches a sensitive pattern.

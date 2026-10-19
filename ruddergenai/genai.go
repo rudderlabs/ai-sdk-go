@@ -47,8 +47,8 @@ const integration = "google-genai"
 
 // Provider labels.
 const (
-	providerGemini = "google"
-	providerVertex = "google.vertex"
+	providerGemini = "gcp.gemini"
+	providerVertex = "gcp.vertex_ai"
 )
 
 // codeExecution is Gemini's hosted code execution tool: each executableCode part is one call.
@@ -62,8 +62,8 @@ type options struct {
 	analytics analytics.Client
 }
 
-// WithProvider sets the provider label sent as provider. Default: google for the Gemini API,
-// google.vertex for Vertex AI (detected from each request's URL).
+// WithProvider sets the provider label sent as provider. Default: gcp.gemini for the Gemini API,
+// gcp.vertex_ai for Vertex AI (detected from each request's URL).
 func WithProvider(provider string) Option { return func(o *options) { o.provider = provider } }
 
 // WithAnalytics sets the RudderStack client for calls made outside an interaction or context

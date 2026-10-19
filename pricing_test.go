@@ -193,6 +193,41 @@ func TestPriceCacheLongContextTiersAndServerTools(t *testing.T) {
 	}
 }
 
+func TestEstimateCostOptions(t *testing.T) {
+	r := setupAI(t)
+	mustPrice(t, "claude", ModelPrice{
+		TokenPrice:        TokenPrice{InputPerMtok: 3, OutputPerMtok: 15, CachedInputPerMtok: Ptr(0.3), CacheWritePerMtok: Ptr(3.75), CacheWrite1hPerMtok: Ptr(6.0)},
+		TierMultipliers:   map[string]float64{"batch": 0.5, "fast": 2},
+		ServerToolPerCall: map[string]float64{"web_search": 0.01},
+	})
+	check := func(name string, want float64, in, out, cached, write int, o ...CostOptions) {
+		t.Helper()
+		if got, ok := EstimateCost("anthropic", "claude", in, out, cached, write, o...); !ok || got != want {
+			t.Fatalf("%s: %v %v, want %v", name, got, ok, want)
+		}
+	}
+	check("no options", 0.3, 100_000, 0, 0, 0)
+	check("batch", 0.15, 100_000, 0, 0, 0, CostOptions{ServiceTier: "batch"})
+	check("tier without a multiplier", 0.3, 100_000, 0, 0, 0, CostOptions{ServiceTier: "flex"})
+	check("provider tier normalised", 0.3, 100_000, 0, 0, 0, CostOptions{ServiceTier: "priority"})
+	check("server tools", 0.63, 100_000, 0, 0, 0, CostOptions{ServiceTier: "fast", ServerToolCalls: map[string]int{"web_search": 3, "unused": 0}})
+	check("unpriced server tool kind", 0.3, 100_000, 0, 0, 0, CostOptions{ServerToolCalls: map[string]int{"web_search": 1, "code_execution": 1}})
+	check("1h cache writes", round8((50_000*3+50_000*0.3+80_000*3.75+20_000*6.0)/1e6), 200_000, 0, 50_000, 100_000, CostOptions{CacheWrite1hTokens: 20_000})
+	check("1h capped at cache writes", round8((100_000*3+100_000*6.0)/1e6), 200_000, 0, 0, 100_000, CostOptions{CacheWrite1hTokens: 500_000})
+	if _, ok := EstimateCost("anthropic", "unknown", 1, 1, 0, 0, CostOptions{ServiceTier: "batch"}); ok {
+		t.Fatal("unknown model priced")
+	}
+
+	// Same usage, same cost as a recorded call.
+	call := LLMCall{Provider: "anthropic", Model: "claude", InputTokens: 200_000, OutputTokens: 1000, CachedInputTokens: 50_000, CacheWriteTokens: 100_000, CacheWrite1hTokens: 20_000, ServiceTier: "batch", ServerToolCalls: map[string]int{"web_search": 2}}
+	run(t, InteractionOptions{}, func(_ context.Context, i *Interaction) { i.RecordCall(call) })
+	want, _ := EstimateCost(call.Provider, call.Model, call.InputTokens, call.OutputTokens, call.CachedInputTokens, call.CacheWriteTokens,
+		CostOptions{CacheWrite1hTokens: call.CacheWrite1hTokens, ServiceTier: call.ServiceTier, ServerToolCalls: call.ServerToolCalls})
+	if got := r.response(t)["total_cost_usd"]; got != want {
+		t.Fatalf("recorded %v, estimated %v", got, want)
+	}
+}
+
 func TestRegisterPriceValidation(t *testing.T) {
 	setupAI(t)
 	bad := []float64{-1, math.NaN(), math.Inf(1)}

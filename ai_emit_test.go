@@ -1,8 +1,11 @@
 package rudderstackai
 
 import (
+	"errors"
+	"log/slog"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFitPropertiesKeepsSmallEvents(t *testing.T) {
@@ -71,5 +74,56 @@ func TestFitPropertiesTrimsBreakdownsFromTheEnd(t *testing.T) {
 func TestPropertiesBytesUnserializable(t *testing.T) {
 	if propertiesBytes(map[string]any{"f": func() {}}) != 0 {
 		t.Fatal("unserializable properties count as 0")
+	}
+}
+
+// MCP events go through the same budget, and their client is flushed by Flush.
+func TestEmitMCPFitsAndRemembersClient(t *testing.T) {
+	resetForTest()
+	t.Cleanup(resetForTest)
+	s := &sink{}
+	emit(s, "mcp_tool_called", who{}, map[string]any{"tool_name": "t", "response_text": strings.Repeat("x", 31_000)})
+	got := s.named("mcp_tool_called")
+	if len(got) != 1 || got[0].Properties["response_text"] != nil || got[0].Properties["tool_name"] != "t" {
+		t.Fatalf("events = %v", got)
+	}
+	Flush(time.Second)
+	if s.flushes.Load() != 1 {
+		t.Fatal("MCP client not flushed")
+	}
+}
+
+func TestFitToolEventPropertiesDropsCustom(t *testing.T) {
+	p := map[string]any{"tool_name": "t", "big": strings.Repeat("x", 31_000), "small": 1}
+	got := fitToolEventProperties("order_placed", p, []string{"big", "small"})
+	if _, ok := got["big"]; ok || got["small"] != nil || got["tool_name"] != "t" {
+		t.Fatalf("got %v", got)
+	}
+	if p["big"] == nil {
+		t.Fatal("the caller's map changed")
+	}
+	small := map[string]any{"tool_name": "t", "small": 1}
+	if got := fitToolEventProperties("order_placed", small, []string{"small"}); got["small"] != 1 {
+		t.Fatal("a fitting event lost its properties")
+	}
+}
+
+func TestDebugEnv(t *testing.T) {
+	l := &logBuffer{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(l, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	debugf("quiet", "error", errors.New("secret token"))
+	if l.String() != "" {
+		t.Fatalf("logged without RUDDERSTACK_AI_DEBUG: %s", l)
+	}
+	t.Setenv("RUDDERSTACK_AI_DEBUG", "1")
+	debugf("dropped", "event", "e", "error", errors.New("secret token"))
+	out := l.String()
+	if !strings.Contains(out, "level=DEBUG") || !strings.Contains(out, "[rudderstack-ai] dropped") || !strings.Contains(out, "*errors.errorString") {
+		t.Fatalf("debug output: %s", out)
+	}
+	if strings.Contains(out, "secret token") {
+		t.Fatal("error text logged")
 	}
 }

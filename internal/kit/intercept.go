@@ -57,7 +57,7 @@ type EventFilter interface {
 type Prepared struct {
 	Body map[string]any
 	// Names of the parameters added: a 400 or 422 that names one (or carries no error code) is
-	// sent once more as the caller wrote it.
+	// sent once more as the caller wrote it. Empty: never resent.
 	Names []string
 	// Accepted runs when the resend worked after an error naming one of Names.
 	Accepted func()
@@ -96,13 +96,27 @@ func (s *Spec) Intercept(req *http.Request, next func(*http.Request) (*http.Resp
 	if ctx.Value(trackedKey{s.Integration}) != nil || Untracked(ctx) || req.Method != http.MethodPost {
 		return next(req)
 	}
-	body := readBody(req)
+	body, raw := readBody(req)
 	if s.Untracked != nil && s.Untracked(req, body) {
 		return next(req)
 	}
 	stream := s.IsStream != nil && s.IsStream(req, body)
 	started := time.Now()
-	i, ephemeral := ForCall(ctx, s.Integration, s.Analytics)
+	n, numbered := retryNumber(req)
+	var key attemptKey
+	var prev *attempt
+	if numbered {
+		key = keyFor(ctx, s, req, raw)
+		prev = resume(key, n)
+	}
+	var i *rudderstackai.Interaction
+	var ephemeral bool
+	if prev != nil && prev.call.Ephemeral {
+		// The retry reports into the interaction its first attempt opened.
+		i, ephemeral, started = prev.call.Interaction, true, prev.call.StartedAt
+	} else {
+		i, ephemeral = ForCall(ctx, s.Integration, s.Analytics)
+	}
 	if i == nil {
 		return next(req)
 	}
@@ -134,7 +148,7 @@ func (s *Spec) Intercept(req *http.Request, next func(*http.Request) (*http.Resp
 		}
 	}
 	resp, err := next(req)
-	if err == nil && prepared != nil && refusedParams(resp, prepared.Names) != "" {
+	if err == nil && prepared != nil && len(prepared.Names) > 0 && refusedParams(resp, prepared.Names) != "" {
 		why := refusedParams(resp, prepared.Names)
 		_ = resp.Body.Close()
 		resp, err = next(original)
@@ -143,7 +157,14 @@ func (s *Spec) Intercept(req *http.Request, next func(*http.Request) (*http.Resp
 		}
 	}
 	if err != nil {
-		s.failed(c, ErrorTypeOfTransport(err))
+		t := ErrorTypeOfTransport(err)
+		// A connection error carries no body to tell a retry by: inside an interaction it waits
+		// for the retry, the next call or the end; a call outside one is recorded now.
+		if numbered && !ephemeral && req.Context().Err() == nil {
+			safe((&attempt{spec: s, call: c, errorType: t, key: key}).hold)
+			return resp, err
+		}
+		s.failed(c, t)
 		return resp, err
 	}
 	if resp.StatusCode >= 400 {
@@ -156,6 +177,13 @@ func (s *Spec) Intercept(req *http.Request, next func(*http.Request) (*http.Resp
 		}
 		if t == "" {
 			t = HTTPErrorType(resp.StatusCode, decoded)
+		}
+		if numbered {
+			// Recorded once the SDK shows whether it retries (see retry.go).
+			a := &attempt{spec: s, call: c, errorType: t, key: key}
+			safe(a.hold)
+			resp.Body = &probeBody{ReadCloser: resp.Body, a: a}
+			return resp, nil
 		}
 		s.failed(c, t)
 		return resp, nil
@@ -170,10 +198,10 @@ func (s *Spec) Intercept(req *http.Request, next func(*http.Request) (*http.Resp
 			return resp, nil
 		}
 	}
-	raw := peekBody(resp)
+	reply := peekBody(resp)
 	safe(func() {
 		var decoded map[string]any
-		if json.Unmarshal(raw, &decoded) != nil {
+		if json.Unmarshal(reply, &decoded) != nil {
 			return
 		}
 		recorded := s.OnResponse != nil && s.OnResponse(c, decoded, resp)
@@ -243,20 +271,19 @@ func refusedParams(resp *http.Response, names []string) string {
 	return ""
 }
 
-// readBody decodes a JSON request body and restores it for the SDK.
-func readBody(req *http.Request) map[string]any {
+// readBody decodes a JSON request body and restores it for the SDK; raw is the body as sent.
+func readBody(req *http.Request) (body map[string]any, raw []byte) {
 	if req.Body == nil {
-		return map[string]any{}
+		return map[string]any{}, nil
 	}
-	raw, _ := io.ReadAll(req.Body)
+	raw, _ = io.ReadAll(req.Body)
 	_ = req.Body.Close()
 	req.Body = io.NopCloser(bytes.NewReader(raw))
 	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(raw)), nil }
-	var out map[string]any
-	if json.Unmarshal(raw, &out) != nil || out == nil {
-		return map[string]any{}
+	if json.Unmarshal(raw, &body) != nil || body == nil {
+		return map[string]any{}, raw
 	}
-	return out
+	return body, raw
 }
 
 func withBody(req *http.Request, b []byte) *http.Request {

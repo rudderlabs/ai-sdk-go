@@ -270,6 +270,48 @@ func TestChatStreamUsageRejectedOnce(t *testing.T) {
 	}
 }
 
+func TestChatStreamUsageOff(t *testing.T) {
+	rec, llm := setup(t)
+	client := newClient(llm, rudderopenai.WithStreamUsage(false))
+	llm.Script("openai.chat", reply(t, `{"sse":[
+		{"data":{"id":"c1","model":"gpt-4.1-mini","choices":[{"index":0,"delta":{"content":"Hi"},"finish_reason":"stop"}]}},
+		{"data":"[DONE]"}]}`))
+	err := inInteraction(t, func(ctx context.Context) error {
+		s := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, body(streamBody))
+		return consume(s, func() {})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sent := llm.Requests("openai.chat"); len(sent) != 1 || strings.Contains(string(sent[0]), "stream_options") {
+		t.Fatalf("sent %s", sent)
+	}
+	events := rec.events(t)
+	if call := one(t, events, "ai_llm_response_received"); call["usage_known"] == true || call["cost_usd"] != nil {
+		t.Errorf("call: %v", call)
+	}
+	if answer := one(t, events, "ai_response_received"); num(answer["llm_call_count"]) != 1 || answer["total_cost_usd"] != nil {
+		t.Errorf("answer: %v", answer)
+	}
+}
+
+func TestChatStreamUsageOnNeverResends(t *testing.T) {
+	_, llm := setup(t)
+	client := newClient(llm, rudderopenai.WithStreamUsage(true))
+	llm.Script("openai.chat",
+		reply(t, `{"status":400,"json":{"error":{"message":"Unrecognized request argument supplied: stream_options","type":"invalid_request_error","code":null}}}`))
+	err := inInteraction(t, func(ctx context.Context) error {
+		s := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, body(streamBody))
+		return consume(s, func() {})
+	})
+	if err == nil {
+		t.Fatal("want the host's 400")
+	}
+	if sent := llm.Requests("openai.chat"); len(sent) != 1 || !strings.Contains(string(sent[0]), `"include_usage":true`) {
+		t.Fatalf("sent %s", sent)
+	}
+}
+
 func TestChatStreamErrorEvent(t *testing.T) {
 	rec, llm := setup(t)
 	client := newClient(llm)

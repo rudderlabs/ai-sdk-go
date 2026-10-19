@@ -63,7 +63,8 @@ type ToolEventRule struct {
 	Event string
 	// Properties returns extra properties from the call's arguments (without request_context)
 	// and result (structuredContent, else the single text block parsed as JSON). SDK-owned
-	// property names are ignored. If it panics, the event is sent without them.
+	// property names are ignored. If it panics, or its output would take the event over the
+	// 30,000-byte properties budget, the event is sent without them.
 	Properties func(args map[string]any, result any) map[string]any
 	// When sends the event only when it returns true. If it panics, the event is not sent.
 	When func(args map[string]any, result any) bool
@@ -108,7 +109,7 @@ type Options struct {
 	// Redact runs after the built-in masking of call_reason and capability_detail, for what
 	// the patterns cannot catch. If it returns an error or panics, the field is not sent.
 	Redact func(text string) (string, error)
-	// DisableRedaction turns the built-in masking off; Redact still runs.
+	// DisableRedaction turns redaction off: the built-in masking and Redact.
 	DisableRedaction bool
 }
 
@@ -139,11 +140,11 @@ func (o *options) resolveName(reflected, version string) {
 
 // mask masks one opt-in text field; ok is false when it must not be sent.
 func (o *options) mask(text string) (out string, ok bool) {
-	out, ok = text, true
-	if !o.DisableRedaction {
-		if out, ok = maskText(text); !ok {
-			return "", false
-		}
+	if o.DisableRedaction {
+		return text, true
+	}
+	if out, ok = maskText(text); !ok {
+		return "", false
 	}
 	if o.Redact == nil {
 		return out, true
