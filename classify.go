@@ -84,9 +84,11 @@ type ClassifierOptions struct {
 	Client ClassifierClient
 	// Classify is your own classifier instead of a model client.
 	Classify ClassifyFunc
-	// Intents is your closed list; anything else becomes "other". Required with Client.
+	// Intents is your closed list; anything else becomes "other", so "other" is always possible.
+	// Required with Client.
 	Intents []string
-	// Outcomes; anything else becomes "unclear". Defaults to [DefaultOutcomes].
+	// Outcomes; anything else becomes "unclear", so "unclear" is always possible. Defaults to
+	// [DefaultOutcomes].
 	Outcomes []string
 	// IntentSummary (with Client) also sends intent_summary: one masked sentence about what the
 	// user tried to do.

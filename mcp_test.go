@@ -685,6 +685,7 @@ func TestRedactOptions(t *testing.T) {
 		{"built-in", Options{}, "mail [email] now"},
 		{"hook after masking", Options{Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "now", "[time]"), nil }}, "mail [email] [time]"},
 		{"masking off", Options{DisableRedaction: true}, "mail ann@example.com now"},
+		{"redaction off skips the hook", Options{DisableRedaction: true, Redact: func(string) (string, error) { return "", errors.New("x") }}, "mail ann@example.com now"},
 		{"failing hook drops", Options{Redact: func(string) (string, error) { return "", errors.New("x") }}, nil},
 		{"panicking hook drops", Options{Redact: func(string) (string, error) { panic("x") }}, nil},
 	}

@@ -3,6 +3,7 @@ package rudderstackai
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"runtime"
 	"slices"
 	"sort"
@@ -658,12 +659,13 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 			}
 		})
 	}
+	custom := slices.Collect(maps.Keys(p))
 	for k, v := range rc.base {
 		p[k] = v
 	}
 	p["tool_name"] = rc.toolName
 	p["tool_status"] = status
-	emit(rc.opts.Analytics, rule.Event, rc.who, p)
+	emit(rc.opts.Analytics, rule.Event, rc.who, fitToolEventProperties(rule.Event, p, custom))
 }
 
 func (rc *reqCtx) inputKey(key, requestState string) string {

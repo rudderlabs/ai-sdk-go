@@ -1,19 +1,43 @@
 package rudderstackai
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 const (
+	// logPrefix starts every log line, as in Node.js and Python.
+	logPrefix      = "[rudderstack-ai] "
 	integrationMCP = "mcp"
 	// systemAnonymousID is the anonymousId of events without a user.
 	systemAnonymousID = "ai_system"
 )
 
-func debugf(msg string, args ...any) { slog.Debug("rudderstackai: "+msg, args...) }
+// debugf logs what tracking drops or decides at debug level. RUDDERSTACK_AI_DEBUG set to any
+// non-empty value (read on every call, as in Node.js and Python) writes it even when the slog
+// handler's level is above debug.
+func debugf(msg string, args ...any) {
+	// Errors by type only: their text may carry request credentials or headers.
+	for k, a := range args {
+		if err, ok := a.(error); ok {
+			args[k] = fmt.Sprintf("%T", err)
+		}
+	}
+	ctx := context.Background()
+	h := slog.Default().Handler()
+	if h.Enabled(ctx, slog.LevelDebug) || os.Getenv("RUDDERSTACK_AI_DEBUG") == "" {
+		slog.Debug(logPrefix+msg, args...)
+		return
+	}
+	r := slog.NewRecord(time.Now(), slog.LevelDebug, logPrefix+msg, 0)
+	r.Add(args...)
+	_ = h.Handle(ctx, r)
+}
 
 // safely runs f and swallows its panic, so analytics never breaks the host server.
 func safely(f func()) {
@@ -31,14 +55,16 @@ type who struct {
 	anonymousID string
 }
 
-// emit sends one track call. Never panics; a client error drops the event.
+// emit sends one MCP track call, within the properties budget. Never panics; a client error
+// drops the event.
 func emit(client analytics.Client, event string, w who, properties map[string]any) {
 	safely(func() {
+		rememberClient(client)
 		msg := analytics.Track{
 			Event:             event,
 			UserId:            w.userID,
 			AnonymousId:       w.anonymousID,
-			Properties:        analytics.Properties(properties),
+			Properties:        analytics.Properties(fitProperties(event, properties)),
 			OriginalTimestamp: time.Now().UTC(),
 			Context: &analytics.Context{Extra: map[string]any{
 				"wrapperLibrary": map[string]any{
