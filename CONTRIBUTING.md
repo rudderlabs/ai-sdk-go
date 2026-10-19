@@ -45,7 +45,7 @@ Each target covers every module of `go.work`.
 | `make tidy`      | `go mod tidy` on each module alone                                               |
 | `make example`   | Runs every example with `--check`                                                |
 
-CI also runs `gofmt -l .` and `go vet` on their own, tests on the minimum and latest supported Go, builds and vulnchecks each module alone, tests `ruddermcpgo` against the latest mcp-go, and fails if total coverage drops below 90%.
+CI also runs `gofmt -l .` and `go vet` on their own, tests on the minimum and latest supported Go, builds, tests and vulnchecks each module alone at the minimum versions in its `go.mod`, tests `ruddermcpgo` against the latest mcp-go, and fails if total coverage drops below 90%.
 
 ## Testing rules
 

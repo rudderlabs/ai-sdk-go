@@ -335,9 +335,9 @@ Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value turns it on; it is read on eve
 
 ## Compatibility
 
-Each module requires the oldest version it supports, so adding it never upgrades your SDK. CI builds every module alone at that minimum and runs the tests with the newer versions the examples use.
+Each module requires the oldest version it supports, so adding it never upgrades your SDK. CI runs every module's tests twice: alone, at the minimums in its `go.mod`, and in the workspace, with the newer versions the examples use.
 
-| Module                                        | Requires (minimum)                                             | Also tested with |
+| Module                                        | Requires and tested at (minimum)                               | Also tested with |
 | --------------------------------------------- | -------------------------------------------------------------- | ---------------- |
 | All modules                                   | Go 1.26                                                        | Go 1.26, 1.27    |
 | `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.3.1, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.2.1 |
