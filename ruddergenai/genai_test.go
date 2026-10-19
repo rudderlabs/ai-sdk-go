@@ -194,6 +194,48 @@ func TestGenerateContentGemini(t *testing.T) {
 	}
 }
 
+func TestRequestedModel(t *testing.T) {
+	rec := setup(t, rudderstackai.WithLLMCallEvents(true))
+	// Gemini serves an alias under another model name.
+	served := func(id string) m {
+		r := reply([]any{m{"text": "Hi"}}, m{"promptTokenCount": 3, "candidatesTokenCount": 1}, "STOP")
+		r["modelVersion"], r["responseId"] = "gemini-3.6-flash", id
+		return r
+	}
+	llm.Script("google.generate", jsonReply(served("r1")))
+	llm.Script("google.stream", sseReply(served("r2")))
+	client := newClient(t, genai.BackendGeminiAPI, ruddergenai.HTTPClient(nil))
+	if err := interaction(t, func(ctx context.Context) error {
+		if _, err := client.Models.GenerateContent(ctx, "gemini-3.5-flash", genai.Text("Hi"), nil); err != nil {
+			return err
+		}
+		for _, err := range client.Models.GenerateContentStream(ctx, "gemini-3.5-flash", genai.Text("Hi"), nil) {
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var calls []m
+	for _, e := range rec.events(t) {
+		if e.Event == "ai_llm_response_received" {
+			var props m
+			b, _ := json.Marshal(e.Properties)
+			_ = json.Unmarshal(b, &props)
+			calls = append(calls, props)
+		}
+	}
+	if len(calls) != 2 {
+		t.Fatalf("ai_llm_response_received: %d", len(calls))
+	}
+	for _, p := range calls {
+		want(t, p, "model", "gemini-3.6-flash")
+		want(t, p, "requested_model", "gemini-3.5-flash")
+	}
+}
+
 func TestVertexExpressAndProviderOverride(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

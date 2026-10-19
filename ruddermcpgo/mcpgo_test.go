@@ -199,6 +199,21 @@ func TestStdio(t *testing.T) {
 	}
 }
 
+func TestDeclaredToolEventOnValidationFailure(t *testing.T) {
+	s := workspaceServer("workspace-mcp", nil)
+	r := wrap(t, s, Options{EventRules: rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
+		"create_audience": {Event: "audience_created"},
+	}}})
+	cs := connectStdio(t, s, "2025-06-18", nil)
+	if res := callTool(t, cs, "create_audience", map[string]any{"type": "computed"}, nil); !res.IsError {
+		t.Fatal("want a validation error result")
+	}
+	p := r.props(t, "audience_created")
+	if p["tool_name"] != "create_audience" || p["tool_status"] != "error" {
+		t.Errorf("declared event = %v", p)
+	}
+}
+
 func TestStreamableHTTP(t *testing.T) {
 	for _, protocol := range []string{"2025-06-18", ""} {
 		t.Run("protocol "+protocol, func(t *testing.T) {

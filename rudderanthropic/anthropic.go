@@ -171,7 +171,7 @@ func recordMessage(c *kit.Call, msg map[string]any, _ *http.Response) bool {
 		}
 	}
 	recorded := c.Interaction.RecordCall(rudderstackai.LLMCall{
-		Integration: integration, Provider: c.Provider, Model: model,
+		Integration: integration, Provider: c.Provider, Model: model, RequestedModel: c.Model,
 		InputTokens: t.total, OutputTokens: kit.Int(usage["output_tokens"]), ReasoningTokens: thinkingTokens(usage),
 		CachedInputTokens: t.read, CacheWriteTokens: t.write, CacheWrite1hTokens: t.write1h,
 		ServiceTier: serviceTier(usage), ServerToolCalls: serverToolCalls(usage),
@@ -206,8 +206,6 @@ type stream struct {
 
 func newStream(c *kit.Call, _ *http.Response) kit.StreamHandler {
 	s := &stream{Observer: kit.NewObserver(c), usage: map[string]any{}}
-	// Node reports no requested model for Anthropic.
-	s.RequestedModel = ""
 	// Until message_stop arrives, a stream that just stops is a cut-off answer.
 	s.Incomplete = true
 	return s

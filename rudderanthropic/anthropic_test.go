@@ -216,6 +216,46 @@ func TestMessageUsageAndTools(t *testing.T) {
 	eq(t, map[string]any{"e": errorsByTool}, "e", map[string]any{"<nil>/lookup": 1, "<nil>/web_search": nil, "docs/search": nil})
 }
 
+func TestRequestedModel(t *testing.T) {
+	llm, rec := setup(t, rudderstackai.WithLLMCallEvents(true))
+	message := func(model string) testkit.Reply {
+		return jsonReply(t, map[string]any{
+			"id": "msg_" + model, "type": "message", "role": "assistant", "model": model,
+			"content": []any{map[string]any{"type": "text", "text": "Hi"}}, "stop_reason": "end_turn",
+			"usage": map[string]any{"input_tokens": 5, "output_tokens": 1},
+		})
+	}
+	llm.Script("anthropic.messages", message("claude-haiku-4-5-20251001"), message("claude-x"), sse(t,
+		map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_s", "model": "claude-x", "usage": map[string]any{"input_tokens": 5, "output_tokens": 1}}},
+		map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": "end_turn"}, "usage": map[string]any{"output_tokens": 1}},
+		map[string]any{"type": "message_stop"},
+	))
+	c := newClient(llm)
+	err := run(t, func(ctx context.Context) error {
+		for range 2 {
+			if _, err := c.Messages.New(ctx, anthropic.MessageNewParams{}, body(t, request(nil))); err != nil {
+				return err
+			}
+		}
+		st := c.Messages.NewStreaming(ctx, anthropic.MessageNewParams{}, body(t, request(map[string]any{"stream": true})))
+		for st.Next() {
+		}
+		_ = st.Close()
+		return st.Err()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := rec.events(t)["ai_llm_response_received"]
+	if len(calls) != 3 {
+		t.Fatalf("ai_llm_response_received: %d", len(calls))
+	}
+	// A dated snapshot of the requested alias is the same model: no requested_model.
+	eq(t, calls[0], "requested_model", nil)
+	eq(t, calls[1], "requested_model", "claude-haiku-4-5")
+	eq(t, calls[2], "requested_model", "claude-haiku-4-5")
+}
+
 func TestStream(t *testing.T) {
 	llm, rec := setup(t, rudderstackai.WithLLMCallEvents(true))
 	llm.Script("anthropic.messages", sse(t,
