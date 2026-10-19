@@ -164,7 +164,7 @@ func deref(p *int) int {
 }
 
 // Finish records the call once: a completed stream with its usage, a cancelled one unpriced, a
-// failed one with the tokens seen so far (none when it was cut off).
+// failed or cut-off one with the tokens seen so far, unpriced.
 func (o *Observer) Finish(end End, errorType string) {
 	o.mu.Lock()
 	if o.finished {
@@ -176,8 +176,7 @@ func (o *Observer) Finish(end End, errorType string) {
 	if o.Record != nil && o.Record(end, errorType) {
 		return
 	}
-	truncated := end == Completed && o.Incomplete
-	if truncated {
+	if end == Completed && o.Incomplete {
 		end, errorType = Errored, "api_error"
 	}
 	if end == Errored && errorType == "cancelled" {
@@ -187,12 +186,9 @@ func (o *Observer) Finish(end End, errorType string) {
 		call := rudderstackai.LLMCall{
 			Provider: o.Provider, Model: o.Model, RequestedModel: o.RequestedModel, ResponseID: o.ResponseID,
 			ErrorType: errorType, Integration: o.Integration,
-		}
-		if !truncated {
-			call.InputTokens, call.OutputTokens = deref(o.InputTokens), deref(o.OutputTokens)
-			call.ReasoningTokens = o.ReasoningTokens
-			call.CachedInputTokens, call.CacheWriteTokens, call.CacheWrite1hTokens = o.CachedInputTokens, o.CacheWriteTokens, o.CacheWrite1hTokens
-			call.UsageUnknown = true
+			InputTokens: deref(o.InputTokens), OutputTokens: deref(o.OutputTokens), ReasoningTokens: o.ReasoningTokens,
+			CachedInputTokens: o.CachedInputTokens, CacheWriteTokens: o.CacheWriteTokens, CacheWrite1hTokens: o.CacheWrite1hTokens,
+			UsageUnknown: true,
 		}
 		o.Interaction.RecordCall(call)
 		// Tools the model already invoked still count.
