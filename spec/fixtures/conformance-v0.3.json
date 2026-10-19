@@ -15588,6 +15588,275 @@
       ]
     },
     {
+      "name": "claude_thinking_tokens",
+      "description": "Claude Agent SDK: modelUsage thinkingTokens (already inside outputTokens) is the model's reasoning_tokens, as a turn delta like the other counters. A CLI that does not record it (no thinkingTokens) sends no reasoning_tokens: never estimated from thinking blocks, never 0.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "claude_messages",
+          "prompt": "How long do refunds take?",
+          "frames": [
+            {
+              "type": "assistant",
+              "message": {
+                "id": "msg-sess-thinking-on",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-sonnet-4-5-20250929",
+                "content": [
+                  {
+                    "type": "thinking",
+                    "thinking": "Refunds take five days.",
+                    "signature": "sig"
+                  },
+                  {
+                    "type": "text",
+                    "text": "Five days."
+                  }
+                ],
+                "stop_reason": "end_turn",
+                "stop_sequence": null,
+                "usage": {
+                  "input_tokens": 10,
+                  "output_tokens": 50,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation_input_tokens": 0
+                }
+              },
+              "parent_tool_use_id": null,
+              "session_id": "sess-thinking-on",
+              "uuid": "sess-thinking-on-msg"
+            },
+            {
+              "type": "result",
+              "subtype": "success",
+              "is_error": false,
+              "duration_ms": 500,
+              "duration_api_ms": 400,
+              "num_turns": 1,
+              "result": "Five days.",
+              "stop_reason": "end_turn",
+              "session_id": "sess-thinking-on",
+              "total_cost_usd": 0.02,
+              "usage": {
+                "input_tokens": 10,
+                "output_tokens": 50,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              },
+              "modelUsage": {
+                "claude-sonnet-4-5": {
+                  "inputTokens": 10,
+                  "outputTokens": 50,
+                  "cacheReadInputTokens": 0,
+                  "cacheCreationInputTokens": 0,
+                  "costUSD": 0.02,
+                  "provider": "firstParty",
+                  "thinkingTokens": 30
+                }
+              },
+              "permission_denials": [],
+              "uuid": "sess-thinking-on-result"
+            }
+          ],
+          "tracking": {
+            "user_id": "user_1",
+            "conversation_id": "conv_claude_thinking"
+          }
+        },
+        {
+          "op": "claude_messages",
+          "prompt": "How long do refunds take?",
+          "frames": [
+            {
+              "type": "assistant",
+              "message": {
+                "id": "msg-sess-thinking-off",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-sonnet-4-5-20250929",
+                "content": [
+                  {
+                    "type": "thinking",
+                    "thinking": "Refunds take five days.",
+                    "signature": "sig"
+                  },
+                  {
+                    "type": "text",
+                    "text": "Five days."
+                  }
+                ],
+                "stop_reason": "end_turn",
+                "stop_sequence": null,
+                "usage": {
+                  "input_tokens": 10,
+                  "output_tokens": 50,
+                  "cache_read_input_tokens": 0,
+                  "cache_creation_input_tokens": 0
+                }
+              },
+              "parent_tool_use_id": null,
+              "session_id": "sess-thinking-off",
+              "uuid": "sess-thinking-off-msg"
+            },
+            {
+              "type": "result",
+              "subtype": "success",
+              "is_error": false,
+              "duration_ms": 500,
+              "duration_api_ms": 400,
+              "num_turns": 1,
+              "result": "Five days.",
+              "stop_reason": "end_turn",
+              "session_id": "sess-thinking-off",
+              "total_cost_usd": 0.02,
+              "usage": {
+                "input_tokens": 10,
+                "output_tokens": 50,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              },
+              "modelUsage": {
+                "claude-sonnet-4-5": {
+                  "inputTokens": 10,
+                  "outputTokens": 50,
+                  "cacheReadInputTokens": 0,
+                  "cacheCreationInputTokens": 0,
+                  "costUSD": 0.02,
+                  "provider": "firstParty"
+                }
+              },
+              "permission_denials": [],
+              "uuid": "sess-thinking-off-result"
+            }
+          ],
+          "tracking": {
+            "user_id": "user_1",
+            "conversation_id": "conv_claude_no_thinking"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_claude_thinking",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "claude-agent-sdk"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_claude_thinking",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_provider": "anthropic",
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 50,
+            "total_tokens": 60,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.02,
+            "finish_reason": "end_turn",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-sonnet-4-5-20250929",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 50,
+                "total_tokens": 60,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.02,
+                "reasoning_tokens": 30
+              }
+            ],
+            "total_reasoning_tokens": 30
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "claude-agent-sdk"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_claude_no_thinking",
+            "interaction_id": "$int2"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "claude-agent-sdk"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_claude_no_thinking",
+            "interaction_id": "$int2",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_provider": "anthropic",
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 50,
+            "total_tokens": 60,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.02,
+            "finish_reason": "end_turn",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-sonnet-4-5-20250929",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 50,
+                "total_tokens": 60,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.02
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "claude-agent-sdk"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "claude_internal_cli_call_excluded",
       "description": "A Claude CLI bookkeeping modelUsage row without an assistant message is excluded from customer-visible call count, tokens and cost.",
       "config": {},
