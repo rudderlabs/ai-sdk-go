@@ -347,7 +347,10 @@ var background = struct {
 	mu       sync.Mutex
 	queue    []func()
 	inFlight int
-	wg       sync.WaitGroup
+	// pending counts queued and running work; idle closes when it drops to zero. Not a
+	// sync.WaitGroup: work is added while Flush waits, which a WaitGroup forbids (it panics).
+	pending int
+	idle    chan struct{}
 }{}
 
 // enqueue queues work after an answer (classification, evaluation) under one concurrency cap;
@@ -360,10 +363,13 @@ func enqueue(job func()) chan struct{} {
 		warnOnce("classify-dropped", fmt.Sprintf("classification and evaluation queue full (%d waiting); interactions are left unlabelled", maxQueued), dropWarnEvery)
 		return nil
 	}
-	background.wg.Add(1)
+	if background.pending == 0 {
+		background.idle = make(chan struct{})
+	}
+	background.pending++
 	background.queue = append(background.queue, func() {
 		defer close(done)
-		defer background.wg.Done()
+		defer finishBackground()
 		safely(job)
 	})
 	background.mu.Unlock()
@@ -388,16 +394,26 @@ func pump() {
 	}
 }
 
+func finishBackground() {
+	background.mu.Lock()
+	defer background.mu.Unlock()
+	if background.pending--; background.pending == 0 {
+		close(background.idle)
+	}
+}
+
 // waitBackgroundWork waits for queued and running background work, at most d. It reports
 // whether everything finished.
 func waitBackgroundWork(d time.Duration) bool {
-	done := make(chan struct{})
-	go func() {
-		background.wg.Wait()
-		close(done)
-	}()
+	background.mu.Lock()
+	if background.pending == 0 {
+		background.mu.Unlock()
+		return true
+	}
+	idle := background.idle
+	background.mu.Unlock()
 	select {
-	case <-done:
+	case <-idle:
 		return true
 	case <-time.After(d):
 		return false

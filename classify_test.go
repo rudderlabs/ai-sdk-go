@@ -296,6 +296,35 @@ func TestBackgroundQueueLimit(t *testing.T) {
 	}
 }
 
+// Work queued while Flush waits must not crash: a sync.WaitGroup panics when Add follows a
+// Wait that has not returned.
+func TestBackgroundWorkAddedWhileWaiting(t *testing.T) {
+	setupAI(t)
+	stop := make(chan struct{})
+	waiters := make(chan struct{})
+	go func() {
+		defer close(waiters)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				waitBackgroundWork(time.Millisecond)
+			}
+		}
+	}()
+	for range 20000 {
+		if done := enqueue(func() {}); done != nil {
+			<-done
+		}
+	}
+	close(stop)
+	<-waiters
+	if !waitBackgroundWork(time.Second) {
+		t.Fatal("work left pending")
+	}
+}
+
 func TestEvaluator(t *testing.T) {
 	r := setupAI(t, WithCaptureContent(true), WithEvaluator(func(_ context.Context, turn EvaluationTurn) ([]Score, error) {
 		if turn.Prompt == "fail" {
