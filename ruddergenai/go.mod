@@ -1,6 +1,6 @@
 module github.com/rudderlabs/ai-sdk-go/ruddergenai
 
-go 1.26.0
+go 1.26.9
 
 require (
 	github.com/rudderlabs/ai-sdk-go v0.1.0

@@ -1,7 +1,7 @@
 GO ?= go
 # Must match GOLANGCI_LINT_VERSION and GOVULNCHECK_VERSION in .github/workflows/ci.yml.
 GOLANGCI = github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0
-govulncheck = golang.org/x/vuln/cmd/govulncheck@v1.8.0
+govulncheck = golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
 # Every module of go.work; ./... alone covers only the root module.
 MODULES = . rudderopenai rudderanthropic ruddergenai rudderbedrock rudderotel internal/conformance examples
