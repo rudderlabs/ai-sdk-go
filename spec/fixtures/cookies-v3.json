@@ -1,0 +1,297 @@
+{
+  "fixture_version": 1,
+  "description": "RudderStack JavaScript SDK (v3) cookies: each `raw` value (as in a Cookie header) URL-decodes, then decrypts (\"RS_ENC_v3_\" + base64 of UTF-8 JSON, or plain JSON without the prefix) to `decoded`; null means unreadable. Each `cookies` input (a Cookie header or a name-to-value map) yields `expected`: anonymous_id from rl_anonymous_id, user_id from rl_user_id, session_id from rl_session.id unless the session has ended (a numeric expiresAt in the past, or an enabled cutOff whose numeric expiresAt is in the past). Legacy v1.1 \"RudderEncrypt:\" (AES) values are not supported.",
+  "generated_with": "@rudderstack/analytics-js-cookies@0.5.16 getEncryptedValue / getDecryptedValue (scripts/generate-cookies-fixture.mjs)",
+  "values": [
+    {
+      "name": "anonymous_id",
+      "description": "An anonymousId as the browser writes it: encrypted, then URL-encoded.",
+      "raw": "RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI%3D",
+      "decoded": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b"
+    },
+    {
+      "name": "anonymous_id_not_url_encoded",
+      "description": "The same value without URL encoding (base64 \"=\" kept), as some servers set it.",
+      "raw": "RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI=",
+      "decoded": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b"
+    },
+    {
+      "name": "user_id_unicode",
+      "description": "A userId with non-ASCII characters: base64 of the UTF-8 JSON.",
+      "raw": "RS_ENC_v3_InVzw6lyXzQyIOKckyI%3D",
+      "decoded": "usér_42 ✓"
+    },
+    {
+      "name": "session_auto",
+      "description": "An auto-tracked session object.",
+      "raw": "RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsInNlc3Npb25TdGFydCI6dHJ1ZX0%3D",
+      "decoded": {
+        "id": 1760342400123,
+        "expiresAt": 4102444800000,
+        "timeout": 1800000,
+        "autoTrack": true,
+        "sessionStart": true
+      }
+    },
+    {
+      "name": "session_manual",
+      "description": "A manual session object.",
+      "raw": "RS_ENC_v3_eyJpZCI6MTc2MDM0MjQ5OTk5OSwibWFudWFsVHJhY2siOnRydWV9",
+      "decoded": {
+        "id": 1760342499999,
+        "manualTrack": true
+      }
+    },
+    {
+      "name": "session_cut_off",
+      "description": "A session object with a cut-off.",
+      "raw": "RS_ENC_v3_eyJpZCI6MTc2MDM0MjQ1NTU1NSwiZXhwaXJlc0F0Ijo0MTAyNDQ0ODU1NTU1LCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsImN1dE9mZiI6eyJlbmFibGVkIjp0cnVlLCJkdXJhdGlvbiI6NDMyMDAwMDAsImV4cGlyZXNBdCI6NDEwMjQ4ODA1NTU1NX19",
+      "decoded": {
+        "id": 1760342455555,
+        "expiresAt": 4102444855555,
+        "timeout": 1800000,
+        "autoTrack": true,
+        "cutOff": {
+          "enabled": true,
+          "duration": 43200000,
+          "expiresAt": 4102488055555
+        }
+      }
+    },
+    {
+      "name": "encrypted_number",
+      "description": "An encrypted JSON number.",
+      "raw": "RS_ENC_v3_NDI%3D",
+      "decoded": 42
+    },
+    {
+      "name": "encrypted_null",
+      "description": "An encrypted JSON null.",
+      "raw": "RS_ENC_v3_bnVsbA%3D%3D",
+      "decoded": null
+    },
+    {
+      "name": "encrypted_empty_string",
+      "description": "An encrypted empty string.",
+      "raw": "RS_ENC_v3_IiI%3D",
+      "decoded": ""
+    },
+    {
+      "name": "missing_base64_padding",
+      "description": "Base64 without its \"=\" padding still decodes.",
+      "raw": "RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI",
+      "decoded": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b"
+    },
+    {
+      "name": "unencrypted_json_string",
+      "description": "No prefix: the value is parsed as JSON (a quoted string).",
+      "raw": "%22plain-anonymous-id%22",
+      "decoded": "plain-anonymous-id"
+    },
+    {
+      "name": "unencrypted_json_number",
+      "description": "No prefix: a JSON number.",
+      "raw": "1760342400123",
+      "decoded": 1760342400123
+    },
+    {
+      "name": "unencrypted_bare_string",
+      "description": "No prefix and not JSON: unreadable.",
+      "raw": "plain-anonymous-id",
+      "decoded": null
+    },
+    {
+      "name": "prefix_only",
+      "description": "The prefix with nothing after it: unreadable.",
+      "raw": "RS_ENC_v3_",
+      "decoded": null
+    },
+    {
+      "name": "malformed_base64",
+      "description": "Not base64 after the prefix: unreadable.",
+      "raw": "RS_ENC_v3_not*base64!",
+      "decoded": null
+    },
+    {
+      "name": "truncated",
+      "description": "Base64 of a JSON value cut short: unreadable.",
+      "raw": "RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZX",
+      "decoded": null
+    },
+    {
+      "name": "malformed_url_encoding",
+      "description": "Invalid percent-encoding: unreadable.",
+      "raw": "RS_ENC_v3_IjlmN2UxYz%E0%A4%A",
+      "decoded": null
+    },
+    {
+      "name": "legacy_v1_1",
+      "description": "A legacy v1.1 AES value (\"RudderEncrypt:\"): not supported, unreadable.",
+      "raw": "RudderEncrypt%3AU2FsdGVkX1%2B5q8gZ3tqk6H5Hc5m3Qm1XbQkGd0Q5Hq0%3D",
+      "decoded": null
+    },
+    {
+      "name": "empty",
+      "description": "An empty value: unreadable.",
+      "raw": "",
+      "decoded": null
+    }
+  ],
+  "identities": [
+    {
+      "name": "all_three",
+      "description": "All three cookies among unrelated ones.",
+      "cookies": "_ga=GA1.1.1; rl_anonymous_id=RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI%3D; rl_user_id=RS_ENC_v3_InVzw6lyXzQyIOKckyI%3D; rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsInNlc3Npb25TdGFydCI6dHJ1ZX0%3D; theme=dark",
+      "expected": {
+        "anonymous_id": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b",
+        "user_id": "usér_42 ✓",
+        "session_id": 1760342400123
+      }
+    },
+    {
+      "name": "no_spaces_and_padding",
+      "description": "No space after \";\", unencoded base64 padding in values: split on the first \"=\" only.",
+      "cookies": "rl_anonymous_id=RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI=;rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQ5OTk5OSwibWFudWFsVHJhY2siOnRydWV9",
+      "expected": {
+        "anonymous_id": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b",
+        "session_id": 1760342499999
+      }
+    },
+    {
+      "name": "whitespace_around_names_and_values",
+      "description": "Whitespace around names and values is trimmed; a segment without \"=\" is skipped.",
+      "cookies": " flag ;  rl_anonymous_id = RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI%3D ; rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQ1NTU1NSwiZXhwaXJlc0F0Ijo0MTAyNDQ0ODU1NTU1LCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsImN1dE9mZiI6eyJlbmFibGVkIjp0cnVlLCJkdXJhdGlvbiI6NDMyMDAwMDAsImV4cGlyZXNBdCI6NDEwMjQ4ODA1NTU1NX19  ",
+      "expected": {
+        "anonymous_id": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b",
+        "session_id": 1760342455555
+      }
+    },
+    {
+      "name": "duplicate_name_last_wins",
+      "description": "A repeated cookie name keeps the last value, as the browser SDK reads it.",
+      "cookies": "rl_anonymous_id=RS_ENC_v3_ImZpcnN0LWFub255bW91cy1pZCI%3D; rl_anonymous_id=RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI%3D",
+      "expected": {
+        "anonymous_id": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b"
+      }
+    },
+    {
+      "name": "map_decoded_values",
+      "description": "A name-to-value map with values already URL-decoded (cookie-parser, Next.js cookies()).",
+      "cookies": {
+        "rl_anonymous_id": "RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI=",
+        "rl_user_id": "RS_ENC_v3_InVzw6lyXzQyIOKckyI=",
+        "rl_session": "RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsInNlc3Npb25TdGFydCI6dHJ1ZX0=",
+        "other": "x"
+      },
+      "expected": {
+        "anonymous_id": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b",
+        "user_id": "usér_42 ✓",
+        "session_id": 1760342400123
+      }
+    },
+    {
+      "name": "map_url_encoded_values",
+      "description": "A name-to-value map with raw URL-encoded values.",
+      "cookies": {
+        "rl_anonymous_id": "RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI%3D",
+        "rl_session": "RS_ENC_v3_eyJpZCI6MTc2MDM0MjQ5OTk5OSwibWFudWFsVHJhY2siOnRydWV9"
+      },
+      "expected": {
+        "anonymous_id": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b",
+        "session_id": 1760342499999
+      }
+    },
+    {
+      "name": "malformed_anonymous_id_valid_session",
+      "description": "An unreadable cookie is skipped; the others are still read.",
+      "cookies": "rl_anonymous_id=RS_ENC_v3_not*base64!; rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsInNlc3Npb25TdGFydCI6dHJ1ZX0%3D",
+      "expected": {
+        "session_id": 1760342400123
+      }
+    },
+    {
+      "name": "session_expired",
+      "description": "A session whose expiresAt is in the past has ended: no sessionId.",
+      "cookies": "rl_anonymous_id=RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI%3D; rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQxMTExMSwiZXhwaXJlc0F0IjoxNzYwMzQ0MjExMTExLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWV9",
+      "expected": {
+        "anonymous_id": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b"
+      }
+    },
+    {
+      "name": "session_cut_off_passed",
+      "description": "A session past its enabled cut-off (cutOff.expiresAt) has ended: no sessionId.",
+      "cookies": "rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQyMjIyMiwiZXhwaXJlc0F0Ijo0MTAyNDQ0ODIyMjIyLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsImN1dE9mZiI6eyJlbmFibGVkIjp0cnVlLCJkdXJhdGlvbiI6NDMyMDAwMDAsImV4cGlyZXNBdCI6MTc2MDM4NTYyMjIyMn19",
+      "expected": {}
+    },
+    {
+      "name": "session_manual_no_expiry",
+      "description": "A manual session has no expiresAt and stays valid.",
+      "cookies": "rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQ5OTk5OSwibWFudWFsVHJhY2siOnRydWV9",
+      "expected": {
+        "session_id": 1760342499999
+      }
+    },
+    {
+      "name": "session_without_id",
+      "description": "A session object without an id gives no sessionId.",
+      "cookies": "rl_session=RS_ENC_v3_eyJhdXRvVHJhY2siOnRydWUsInRpbWVvdXQiOjE4MDAwMDB9",
+      "expected": {}
+    },
+    {
+      "name": "session_id_string",
+      "description": "A string session id is not a session id (the JavaScript SDK always stores a number).",
+      "cookies": "rl_session=RS_ENC_v3_eyJpZCI6IjE3NjAzNDI0MDAxMjMiLCJhdXRvVHJhY2siOnRydWV9",
+      "expected": {}
+    },
+    {
+      "name": "session_id_zero",
+      "description": "Session id 0, as the JavaScript SDK drops it (`id || undefined`).",
+      "cookies": "rl_session=RS_ENC_v3_eyJpZCI6MH0%3D",
+      "expected": {}
+    },
+    {
+      "name": "session_id_not_integer",
+      "description": "A non-integer session id is ignored.",
+      "cookies": "rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMC41fQ%3D%3D",
+      "expected": {}
+    },
+    {
+      "name": "session_number_not_object",
+      "description": "A bare number in rl_session is not a session object.",
+      "cookies": "rl_session=RS_ENC_v3_MTc2MDM0MjQwMDEyMw%3D%3D",
+      "expected": {}
+    },
+    {
+      "name": "non_string_ids",
+      "description": "Ids that are not non-empty strings are ignored.",
+      "cookies": "rl_anonymous_id=RS_ENC_v3_NDI%3D; rl_user_id=RS_ENC_v3_IiI%3D",
+      "expected": {}
+    },
+    {
+      "name": "user_id_null",
+      "description": "rl_user_id holding null (after a reset) gives no userId.",
+      "cookies": "rl_anonymous_id=RS_ENC_v3_IjlmN2UxYzJhLTRiM2QtNGU1Zi04YTZiLTdjOGQ5ZTBmMWEyYiI%3D; rl_user_id=RS_ENC_v3_bnVsbA%3D%3D",
+      "expected": {
+        "anonymous_id": "9f7e1c2a-4b3d-4e5f-8a6b-7c8d9e0f1a2b"
+      }
+    },
+    {
+      "name": "legacy_cookies",
+      "description": "Legacy v1.1 AES cookies are not supported: no identity.",
+      "cookies": "rl_anonymous_id=RudderEncrypt%3AU2FsdGVkX1%2B5q8gZ3tqk6H5Hc5m3Qm1XbQkGd0Q5Hq0%3D",
+      "expected": {}
+    },
+    {
+      "name": "no_rudderstack_cookies",
+      "description": "Only unrelated cookies.",
+      "cookies": "_ga=GA1.1.1; theme=dark",
+      "expected": {}
+    },
+    {
+      "name": "empty_header",
+      "description": "An empty header.",
+      "cookies": "",
+      "expected": {}
+    }
+  ]
+}

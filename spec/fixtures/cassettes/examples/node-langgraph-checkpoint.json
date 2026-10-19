@@ -1,0 +1,170 @@
+{
+  "synthetic": false,
+  "recorded_at": "2026-10-14T08:18:43.007Z",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1oRVdZmsh5hBJLwKNM4",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "# Checkout Outage Report\n\n**Issue:** Our checkout system experienced a service disruption last week that prevented customers from completing purchases for approximately 4 hours during peak traffic."
+            }
+          ],
+          "container": null,
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 31,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 40,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1oRaV1Wi3Tke7ASSmFf",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "# Checkout Outage Report\n\n**Summary:** The checkout system was unavailable for 4 hours during peak traffic, preventing customers from completing purchases."
+            }
+          ],
+          "container": null,
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 59,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 35,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1oRb31LcAt5vWCHNe6c",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "# Checkout Outage Report\n\n**Issue:** Our checkout system experienced a service disruption last week that prevented customers from completing purchases for approximately 4 hours during peak traffic.\n\n**Risks:** Extended outages during peak shopping periods could result in significant revenue loss, damaged customer trust, and increased churn to competitors."
+            }
+          ],
+          "container": null,
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 59,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 70,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1oRiYSmJtvYBC3LsMRa",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "# Checkout Outage Report\n\nThe checkout system was unavailable for 4 hours during peak traffic last week, preventing customers from completing purchases and resulting in potential revenue loss. Extended outages during peak shopping periods pose significant risks to customer trust and retention, as dissatisfied customers may switch to competitors."
+            }
+          ],
+          "container": null,
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 123,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 66,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    }
+  ]
+}

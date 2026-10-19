@@ -1,0 +1,45 @@
+{
+  "synthetic": true,
+  "description": "Python examples/anthropic-quickstart: a tool loop of two Messages calls (lookup_order, then the answer, with a cache write and a cache read), then a streamed answer (two interactions). Synthetic: written from the documented response shapes, not recorded. Replace with a scrubbed recording from the live workflow once an Anthropic key exists.",
+  "sources": [
+    "https://docs.anthropic.com/en/api/messages-examples",
+    "https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview",
+    "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching",
+    "https://docs.anthropic.com/en/docs/build-with-claude/streaming"
+  ],
+  "interactions": [
+    {
+      "request": { "method": "POST", "path": "/v1/messages" },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json" },
+        "body": { "id": "msg_01Aq9w3bT6xK2mR7pL4vN8cZ", "type": "message", "role": "assistant", "model": "claude-haiku-4-5-20251001", "content": [{ "type": "text", "text": "I'll look up order 7." }, { "type": "tool_use", "id": "toolu_01T5kWq8mZ3xP7vR2nB6yL9c", "name": "lookup_order", "input": { "order_id": "7" } }], "stop_reason": "tool_use", "stop_sequence": null, "usage": { "input_tokens": 380, "cache_creation_input_tokens": 1200, "cache_read_input_tokens": 0, "cache_creation": { "ephemeral_5m_input_tokens": 1200, "ephemeral_1h_input_tokens": 0 }, "output_tokens": 58, "service_tier": "standard" } }
+      }
+    },
+    {
+      "request": { "method": "POST", "path": "/v1/messages" },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "application/json" },
+        "body": { "id": "msg_01Bt2x5cU8yL4nS9qM6wP0dA", "type": "message", "role": "assistant", "model": "claude-haiku-4-5-20251001", "content": [{ "type": "text", "text": "The refund for order 7 was issued on 2026-10-01." }], "stop_reason": "end_turn", "stop_sequence": null, "usage": { "input_tokens": 92, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 1200, "cache_creation": { "ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 0 }, "output_tokens": 21, "service_tier": "standard" } }
+      }
+    },
+    {
+      "request": { "method": "POST", "path": "/v1/messages" },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "text/event-stream; charset=utf-8" },
+        "events": [
+          { "event": "message_start", "payload": { "type": "message_start", "message": { "id": "msg_01Cu3y6dV9zM5oT0rN7xQ1eB", "type": "message", "role": "assistant", "model": "claude-haiku-4-5-20251001", "content": [], "stop_reason": null, "stop_sequence": null, "usage": { "input_tokens": 13, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "cache_creation": { "ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 0 }, "output_tokens": 1, "service_tier": "standard" } } } },
+          { "event": "content_block_start", "payload": { "type": "content_block_start", "index": 0, "content_block": { "type": "text", "text": "" } } },
+          { "event": "ping", "payload": { "type": "ping" } },
+          { "event": "content_block_delta", "payload": { "type": "content_block_delta", "index": 0, "delta": { "type": "text_delta", "text": "Hello there, how are" } } },
+          { "event": "content_block_delta", "payload": { "type": "content_block_delta", "index": 0, "delta": { "type": "text_delta", "text": " you?" } } },
+          { "event": "content_block_stop", "payload": { "type": "content_block_stop", "index": 0 } },
+          { "event": "message_delta", "payload": { "type": "message_delta", "delta": { "stop_reason": "end_turn", "stop_sequence": null }, "usage": { "output_tokens": 9 } } },
+          { "event": "message_stop", "payload": { "type": "message_stop" } }
+        ]
+      }
+    }
+  ]
+}

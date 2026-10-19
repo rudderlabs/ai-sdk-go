@@ -1,0 +1,25 @@
+{
+  "synthetic": true,
+  "description": "Node.js examples/openai: one streamed Chat Completions answer with stream_options.include_usage. Synthetic: written from the documented chunk shapes, not recorded. Replace with a scrubbed recording from the live workflow once an OpenAI key exists.",
+  "sources": [
+    "https://platform.openai.com/docs/api-reference/chat/streaming",
+    "https://platform.openai.com/docs/api-reference/chat/create#chat-create-stream_options"
+  ],
+  "interactions": [
+    {
+      "request": { "method": "POST", "path": "/v1/chat/completions" },
+      "response": {
+        "status": 200,
+        "headers": { "content-type": "text/event-stream; charset=utf-8" },
+        "events": [
+          { "payload": { "id": "chatcmpl-AbC1dEf2GhI3jKl4MnO5pQr6StU7v", "object": "chat.completion.chunk", "created": 1760400000, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [{ "index": 0, "delta": { "role": "assistant", "content": "", "refusal": null }, "logprobs": null, "finish_reason": null }], "usage": null } },
+          { "payload": { "id": "chatcmpl-AbC1dEf2GhI3jKl4MnO5pQr6StU7v", "object": "chat.completion.chunk", "created": 1760400000, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [{ "index": 0, "delta": { "content": "Standard shipping usually takes" }, "logprobs": null, "finish_reason": null }], "usage": null } },
+          { "payload": { "id": "chatcmpl-AbC1dEf2GhI3jKl4MnO5pQr6StU7v", "object": "chat.completion.chunk", "created": 1760400000, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [{ "index": 0, "delta": { "content": " 3 to 5 business days." }, "logprobs": null, "finish_reason": null }], "usage": null } },
+          { "payload": { "id": "chatcmpl-AbC1dEf2GhI3jKl4MnO5pQr6StU7v", "object": "chat.completion.chunk", "created": 1760400000, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [{ "index": 0, "delta": {}, "logprobs": null, "finish_reason": "stop" }], "usage": null } },
+          { "payload": { "id": "chatcmpl-AbC1dEf2GhI3jKl4MnO5pQr6StU7v", "object": "chat.completion.chunk", "created": 1760400000, "model": "gpt-4.1-mini-2025-04-14", "service_tier": "default", "system_fingerprint": "fp_6f2eabb9a5", "choices": [], "usage": { "prompt_tokens": 29, "completion_tokens": 11, "total_tokens": 40, "prompt_tokens_details": { "cached_tokens": 0, "audio_tokens": 0 }, "completion_tokens_details": { "reasoning_tokens": 0, "audio_tokens": 0, "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0 } } } },
+          { "payload": "[DONE]" }
+        ]
+      }
+    }
+  ]
+}

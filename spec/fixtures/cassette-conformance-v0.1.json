@@ -1,0 +1,557 @@
+{
+  "fixture_version": 1,
+  "description": "Test vectors for spec/fixtures/CASSETTE-FORMAT.md: scrubbing, provider facts, expected interactions and assert_ai_events. Both SDKs run every vector.",
+  "scrub": [
+    {
+      "name": "request keeps method and path only; response headers keep content-type only",
+      "env": {},
+      "input": {
+        "synthetic": false,
+        "recorded_at": "2026-10-14T03:17:00Z",
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1/chat/completions?api-version=2024-10-21", "headers": { "authorization": "Bearer sk-live-abcdefghijklmnopqrstuvwx" }, "body": { "model": "gpt-4.1-mini" } },
+            "response": { "status": 200, "headers": { "Content-Type": "application/json", "openai-organization": "org-AbCdEfGhIjKlMnOpQrSt", "openai-project": "proj_AbCdEfGhIjKlMnOpQrSt", "x-request-id": "req_0123456789abcdef0123", "set-cookie": "__cf_bm=abc" }, "body": { "id": "chatcmpl-1", "usage": { "prompt_tokens": 5, "completion_tokens": 2 } } }
+          }
+        ]
+      },
+      "output": {
+        "synthetic": false,
+        "recorded_at": "2026-10-14T03:17:00Z",
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1/chat/completions" },
+            "response": { "status": 200, "headers": { "content-type": "application/json" }, "body": { "id": "chatcmpl-1", "usage": { "prompt_tokens": 5, "completion_tokens": 2 } } }
+          }
+        ]
+      }
+    },
+    {
+      "name": "sensitive keys are redacted at any depth; token counts and other keys stay",
+      "env": {},
+      "input": {
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1/messages" },
+            "response": { "status": 200, "headers": {}, "body": { "organization": "acme", "Project-Id": "p1", "X-Api-Key": "k", "Request_Id": "r", "nested": [{ "api_key": "abc", "access_token": { "value": "t" } }], "usage": { "input_tokens": 3, "output_tokens": 4, "cache_read_input_tokens": 1 }, "max_tokens": 10, "token_count": 2, "project_name": "kept" } }
+          }
+        ]
+      },
+      "output": {
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1/messages" },
+            "response": { "status": 200, "headers": {}, "body": { "organization": "<redacted>", "Project-Id": "<redacted>", "X-Api-Key": "<redacted>", "Request_Id": "<redacted>", "nested": [{ "api_key": "<redacted>", "access_token": "<redacted>" }], "usage": { "input_tokens": 3, "output_tokens": 4, "cache_read_input_tokens": 1 }, "max_tokens": 10, "token_count": 2, "project_name": "kept" } }
+          }
+        ]
+      }
+    },
+    {
+      "name": "key-shaped strings and configured secret values are redacted inside strings and stream payloads",
+      "env": { "OPENAI_API_KEY": "ollama-local-secret", "ANTHROPIC_API_KEY": "short" },
+      "input": {
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1/chat/completions" },
+            "response": { "status": 401, "headers": { "content-type": "application/json" }, "body": { "error": { "message": "Incorrect API key provided: sk-proj-exampleexampleexample01. Org org-AbCdEfGhIjKlMnOpQrSt, project proj_AbCdEfGhIjKlMnOpQrSt, request req_011CTkbs3HWw7nQ9xYz1. Key ollama-local-secret. Short sk-test and short stay.", "type": "invalid_request_error" } } }
+          },
+          {
+            "request": { "method": "POST", "path": "/v1/messages" },
+            "response": { "status": 200, "headers": { "content-type": "text/event-stream" }, "events": [{ "event": "message_start", "payload": { "type": "message_start", "request_id": "req_1", "note": "sk-ant-api03-AbCdEfGhIjKlMnOpQrSt" } }, { "payload": "[DONE]" }] }
+          }
+        ]
+      },
+      "output": {
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1/chat/completions" },
+            "response": { "status": 401, "headers": { "content-type": "application/json" }, "body": { "error": { "message": "Incorrect API key provided: <redacted>. Org <redacted>, project <redacted>, request <redacted>. Key <redacted>. Short sk-test and short stay.", "type": "invalid_request_error" } } }
+          },
+          {
+            "request": { "method": "POST", "path": "/v1/messages" },
+            "response": { "status": 200, "headers": { "content-type": "text/event-stream" }, "events": [{ "event": "message_start", "payload": { "type": "message_start", "request_id": "<redacted>", "note": "<redacted>" } }, { "payload": "[DONE]" }] }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Gemini: a key query parameter goes with the query; GOOGLE_API_KEY and GEMINI_API_KEY values are redacted",
+      "env": { "GOOGLE_API_KEY": "google-example-key-0123456789", "GEMINI_API_KEY": "gemini-example-key-0123" },
+      "input": {
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1beta/models/gemini-x:streamGenerateContent?alt=sse&key=google-example-key-0123456789", "headers": { "x-goog-api-key": "gemini-example-key-0123" } },
+            "response": { "status": 400, "headers": { "content-type": "application/json; charset=UTF-8", "x-goog-api-key": "gemini-example-key-0123" }, "body": { "error": { "code": 400, "message": "API key google-example-key-0123456789 or gemini-example-key-0123 not valid.", "status": "INVALID_ARGUMENT" } } }
+          }
+        ]
+      },
+      "output": {
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1beta/models/gemini-x:streamGenerateContent" },
+            "response": { "status": 400, "headers": { "content-type": "application/json; charset=UTF-8" }, "body": { "error": { "code": 400, "message": "API key <redacted> or <redacted> not valid.", "status": "INVALID_ARGUMENT" } } }
+          }
+        ]
+      }
+    }
+  ],
+  "facts": [
+    {"name": "node-openrouter: streamed chat, final usage chunk repeating finish_reason", "cassette": "examples/node-openrouter.json", "calls": [{"api": "openai.chat", "status": "success", "model": "openai/gpt-oss-20b", "finish_reason": "stop", "usage": {"input": 81, "output": 14, "cached": 0, "cache_write": 0, "reasoning": 0}, "tools": []}]},
+    {"name": "node-litellm-proxy: x-litellm-model-name names the served deployment", "cassette": "examples/node-litellm-proxy.json", "calls": [{"api": "openai.chat", "status": "success", "model": "openai/qwen3:1.7b", "finish_reason": "stop", "usage": {"input": 18, "output": 13, "cached": 0, "cache_write": 0, "reasoning": 0}, "tools": []}]},
+    {"name": "python-openrouter-quickstart: streamed chat, final usage chunk repeating finish_reason", "cassette": "examples/python-openrouter-quickstart.json", "calls": [{"api": "openai.chat", "status": "success", "model": "openai/gpt-oss-20b", "finish_reason": "stop", "usage": {"input": 81, "output": 14, "cached": 0, "cache_write": 0, "reasoning": 0}, "tools": []}]},
+    {
+      "name": "node-openai: streamed chat with include_usage",
+      "cassette": "examples/node-openai.json",
+      "calls": [
+        { "api": "openai.chat", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "usage": { "input": 29, "output": 11, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-anthropic: streamed messages, cache read and write",
+      "cassette": "examples/node-anthropic.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 1166, "output": 14, "cached": 1024, "cache_write": 120, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-langchain-openai: chat tool loop",
+      "cassette": "examples/node-langchain-openai.json",
+      "calls": [
+        { "api": "openai.chat", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "tool_calls", "usage": { "input": 64, "output": 17, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_order"] },
+        { "api": "openai.chat", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "usage": { "input": 108, "output": 14, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-vercel-ai-sdk-openai: chat tool loop",
+      "cassette": "examples/node-vercel-ai-sdk-openai.json",
+      "calls": [
+        { "api": "openai.chat", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "tool_calls", "usage": { "input": 71, "output": 18, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_order"] },
+        { "api": "openai.chat", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "usage": { "input": 118, "output": 15, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "python-openai-quickstart: chat, then streamed chat",
+      "cassette": "examples/python-openai-quickstart.json",
+      "calls": [
+        { "api": "openai.chat", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "usage": { "input": 15, "output": 20, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "openai.chat", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "usage": { "input": 14, "output": 17, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "python-anthropic-quickstart: messages tool loop with cache write then read, then a stream",
+      "cassette": "examples/python-anthropic-quickstart.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 1580, "output": 58, "cached": 0, "cache_write": 1200, "reasoning": 0 }, "tools": ["lookup_order"] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 1292, "output": 21, "cached": 1200, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 13, "output": 9, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "python-langchain-agent-openai: chat tool loop with a cache read",
+      "cassette": "examples/python-langchain-agent-openai.json",
+      "calls": [
+        { "api": "openai.chat", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "tool_calls", "usage": { "input": 70, "output": 16, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_order"] },
+        { "api": "openai.chat", "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "usage": { "input": 112, "output": 13, "cached": 64, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "streamed chat tool-call deltas and reasoning tokens",
+      "cassette": {
+        "synthetic": true,
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1/chat/completions" },
+            "response": {
+              "status": 200,
+              "headers": { "content-type": "text/event-stream" },
+              "events": [
+                { "payload": { "id": "c1", "model": "o4-mini-2025-04-16", "choices": [{ "index": 0, "delta": { "role": "assistant", "tool_calls": [{ "index": 0, "id": "call_a", "type": "function", "function": { "name": "lookup_order", "arguments": "" } }] }, "finish_reason": null }], "usage": null } },
+                { "payload": { "id": "c1", "model": "o4-mini-2025-04-16", "choices": [{ "index": 0, "delta": { "tool_calls": [{ "index": 0, "function": { "arguments": "{\"orderId\":\"1\"}" } }] }, "finish_reason": null }], "usage": null } },
+                { "payload": { "id": "c1", "model": "o4-mini-2025-04-16", "choices": [{ "index": 0, "delta": { "tool_calls": [{ "index": 1, "id": "call_b", "type": "function", "function": { "name": "get_weather", "arguments": "{}" } }] }, "finish_reason": null }], "usage": null } },
+                { "payload": { "id": "c1", "model": "o4-mini-2025-04-16", "choices": [{ "index": 0, "delta": {}, "finish_reason": "tool_calls" }], "usage": null } },
+                { "payload": { "id": "c1", "model": "o4-mini-2025-04-16", "choices": [], "usage": { "prompt_tokens": 50, "completion_tokens": 40, "total_tokens": 90, "prompt_tokens_details": { "cached_tokens": 10 }, "completion_tokens_details": { "reasoning_tokens": 24 } } } },
+                { "payload": "[DONE]" }
+              ]
+            }
+          }
+        ]
+      },
+      "calls": [
+        { "api": "openai.chat", "status": "success", "model": "o4-mini-2025-04-16", "finish_reason": "tool_calls", "usage": { "input": 50, "output": 40, "cached": 10, "cache_write": 0, "reasoning": 24 }, "tools": ["lookup_order", "get_weather"] }
+      ]
+    },
+    {
+      "name": "streamed responses: facts from response.completed; incomplete JSON response is length",
+      "cassette": {
+        "synthetic": true,
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1/responses" },
+            "response": {
+              "status": 200,
+              "headers": { "content-type": "text/event-stream" },
+              "events": [
+                { "event": "response.created", "payload": { "type": "response.created", "response": { "id": "resp_1", "status": "in_progress", "model": "gpt-4.1-2025-04-14", "output": [], "usage": null } } },
+                { "event": "response.output_item.done", "payload": { "type": "response.output_item.done", "output_index": 0, "item": { "type": "function_call", "name": "lookup_order", "arguments": "{}", "call_id": "call_1" } } },
+                { "event": "response.completed", "payload": { "type": "response.completed", "response": { "id": "resp_1", "status": "completed", "model": "gpt-4.1-2025-04-14", "output": [{ "type": "function_call", "name": "lookup_order", "arguments": "{}", "call_id": "call_1" }], "usage": { "input_tokens": 30, "input_tokens_details": { "cached_tokens": 0 }, "output_tokens": 9, "output_tokens_details": { "reasoning_tokens": 0 }, "total_tokens": 39 } } } }
+              ]
+            }
+          },
+          {
+            "request": { "method": "POST", "path": "/v1/responses" },
+            "response": {
+              "status": 200,
+              "headers": { "content-type": "application/json" },
+              "body": { "id": "resp_2", "status": "incomplete", "incomplete_details": { "reason": "max_output_tokens" }, "model": "gpt-4.1-2025-04-14", "output": [{ "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "Partial" }] }], "usage": { "input_tokens": 40, "input_tokens_details": { "cached_tokens": 32 }, "output_tokens": 16, "output_tokens_details": { "reasoning_tokens": 6 }, "total_tokens": 56 } }
+            }
+          }
+        ]
+      },
+      "calls": [
+        { "api": "openai.responses", "status": "success", "model": "gpt-4.1-2025-04-14", "finish_reason": "tool_calls", "usage": { "input": 30, "output": 9, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_order"] },
+        { "api": "openai.responses", "status": "success", "model": "gpt-4.1-2025-04-14", "finish_reason": "length", "usage": { "input": 40, "output": 16, "cached": 32, "cache_write": 0, "reasoning": 6 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "failures: HTTP error, Anthropic mid-stream error event, OpenAI error payload; non-model routes ignored",
+      "cassette": {
+        "synthetic": true,
+        "interactions": [
+          { "request": { "method": "POST", "path": "/v1/embeddings" }, "response": { "status": 200, "headers": { "content-type": "application/json" }, "body": { "model": "nomic-embed-text", "usage": { "prompt_tokens": 4, "total_tokens": 4 } } } },
+          { "request": { "method": "POST", "path": "/v1/messages/count_tokens" }, "response": { "status": 200, "headers": { "content-type": "application/json" }, "body": { "input_tokens": 12 } } },
+          { "request": { "method": "POST", "path": "/v1/chat/completions" }, "response": { "status": 429, "headers": { "content-type": "application/json" }, "body": { "error": { "message": "Rate limit reached", "type": "requests", "code": "rate_limit_exceeded" } } } },
+          {
+            "request": { "method": "POST", "path": "/v1/messages" },
+            "response": {
+              "status": 200,
+              "headers": { "content-type": "text/event-stream" },
+              "events": [
+                { "event": "message_start", "payload": { "type": "message_start", "message": { "id": "msg_1", "model": "claude-sonnet-4-5-20250929", "content": [], "usage": { "input_tokens": 10, "cache_read_input_tokens": 5, "cache_creation_input_tokens": 0, "output_tokens": 1 } } } },
+                { "event": "ping", "payload": { "type": "ping" } },
+                { "event": "error", "payload": { "type": "error", "error": { "type": "overloaded_error", "message": "Overloaded" } } }
+              ]
+            }
+          },
+          {
+            "request": { "method": "POST", "path": "/v1/chat/completions" },
+            "response": {
+              "status": 200,
+              "headers": { "content-type": "text/event-stream" },
+              "events": [
+                { "payload": { "id": "c2", "model": "gpt-4.1-mini-2025-04-14", "choices": [{ "index": 0, "delta": { "role": "assistant", "content": "Hi" }, "finish_reason": null }] } },
+                { "payload": { "error": { "message": "The server had an error while processing your request.", "type": "server_error" } } }
+              ]
+            }
+          }
+        ]
+      },
+      "calls": [
+        { "api": "openai.chat", "status": "error", "model": null, "finish_reason": null, "usage": { "input": 0, "output": 0, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "error", "model": "claude-sonnet-4-5-20250929", "finish_reason": null, "usage": { "input": 15, "output": 1, "cached": 5, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "openai.chat", "status": "error", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": null, "usage": { "input": 0, "output": 0, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "Anthropic message_delta overrides only the usage fields it carries",
+      "cassette": {
+        "synthetic": true,
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1/messages" },
+            "response": {
+              "status": 200,
+              "headers": { "content-type": "text/event-stream" },
+              "events": [
+                { "event": "message_start", "payload": { "type": "message_start", "message": { "id": "msg_2", "model": "claude-sonnet-4-5-20250929", "content": [], "usage": { "input_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "output_tokens": 1 } } } },
+                { "event": "content_block_start", "payload": { "type": "content_block_start", "index": 0, "content_block": { "type": "thinking", "thinking": "", "signature": "" } } },
+                { "event": "content_block_stop", "payload": { "type": "content_block_stop", "index": 0 } },
+                { "event": "content_block_start", "payload": { "type": "content_block_start", "index": 1, "content_block": { "type": "tool_use", "id": "toolu_1", "name": "lookup_order", "input": {} } } },
+                { "event": "content_block_stop", "payload": { "type": "content_block_stop", "index": 1 } },
+                { "event": "message_delta", "payload": { "type": "message_delta", "delta": { "stop_reason": "tool_use", "stop_sequence": null }, "usage": { "input_tokens": 300, "cache_read_input_tokens": 200, "output_tokens": 40 } } },
+                { "event": "message_stop", "payload": { "type": "message_stop" } }
+              ]
+            }
+          }
+        ]
+      },
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-sonnet-4-5-20250929", "finish_reason": "tool_use", "usage": { "input": 500, "output": 40, "cached": 200, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_order"] }
+      ]
+    },
+    {
+      "name": "anthropic thinking tokens are the call's reasoning tokens",
+      "cassette": {
+        "synthetic": true,
+        "interactions": [
+          { "request": { "method": "POST", "path": "/v1/messages" }, "response": { "status": 200, "headers": { "content-type": "application/json" }, "body": { "id": "msg_1", "type": "message", "role": "assistant", "model": "claude-haiku-4-5-20251001", "content": [{ "type": "thinking", "thinking": "Three days.", "signature": "sig_1" }, { "type": "text", "text": "Within three days." }], "stop_reason": "end_turn", "stop_sequence": null, "usage": { "input_tokens": 30, "output_tokens": 50, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0, "output_tokens_details": { "thinking_tokens": 30 } } } } }
+        ]
+      },
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 30, "output": 50, "cached": 0, "cache_write": 0, "reasoning": 30 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-claude-agent-sdk-subagents: main loop, Agent call, the subagent's MCP tool call, then the answer; thinking tokens as reasoning",
+      "cassette": "examples/node-claude-agent-sdk-subagents.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 3452, "output": 176, "cached": 0, "cache_write": 0, "reasoning": 65 }, "tools": ["Agent"] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 1947, "output": 132, "cached": 0, "cache_write": 0, "reasoning": 70 }, "tools": ["mcp__orders__lookup_order"] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 2145, "output": 74, "cached": 0, "cache_write": 0, "reasoning": 49 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 3852, "output": 72, "cached": 0, "cache_write": 0, "reasoning": 48 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-cookieless-bot: a Slack mention and a cron digest",
+      "cassette": "examples/node-cookieless-bot.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 33, "output": 46, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 48, "output": 55, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-deep-agents: a Claude root asks a Claude and a Gemini subagent through task, each calls its tool, then the root answers",
+      "cassette": "examples/node-deep-agents.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 3329, "output": 201, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["task", "task"] },
+        { "api": "google.generate", "status": "success", "model": "gemini-3.5-flash-lite", "finish_reason": "STOP", "usage": { "input": 80, "output": 21, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["search_docs"] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 2592, "output": 59, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_invoice"] },
+        { "api": "google.generate", "status": "success", "model": "gemini-3.5-flash-lite", "finish_reason": "STOP", "usage": { "input": 167, "output": 58, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 2730, "output": 206, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 3854, "output": 107, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-langgraph-checkpoint: plan and Send branches before interrupt(), then the resumed report",
+      "cassette": "examples/node-langgraph-checkpoint.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 31, "output": 40, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 59, "output": 35, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 59, "output": 70, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 123, "output": 66, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "node-streaming-failures-provider-error: parallel tool calls, then a stream error event",
+      "cassette": "examples/node-streaming-failures-provider-error.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "error", "model": "claude-haiku-4-5-20251001", "finish_reason": null, "usage": { "input": 652, "output": 22, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_customer", "lookup_order"] }
+      ]
+    },
+    {
+      "name": "node-streaming-failures: parallel tool calls in a stream the user aborts",
+      "cassette": "examples/node-streaming-failures.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 652, "output": 97, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_customer", "lookup_order"] }
+      ]
+    },
+    {
+      "name": "python-claude-agent-sdk-subagents: main loop, Agent call, the subagent's MCP tool call, then the answer; thinking tokens as reasoning",
+      "cassette": "examples/python-claude-agent-sdk-subagents.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 3434, "output": 186, "cached": 0, "cache_write": 0, "reasoning": 78 }, "tools": ["Agent"] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 2039, "output": 122, "cached": 0, "cache_write": 0, "reasoning": 59 }, "tools": ["mcp__orders__lookup_order"] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 2222, "output": 62, "cached": 0, "cache_write": 0, "reasoning": 40 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 3839, "output": 58, "cached": 0, "cache_write": 0, "reasoning": 36 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "python-cookieless-bot: a Slack mention and a cron digest",
+      "cassette": "examples/python-cookieless-bot.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 33, "output": 46, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 48, "output": 49, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "python-deep-agents: a Claude root asks a Claude and a Gemini subagent through task, each calls its tool, then the root answers",
+      "cassette": "examples/python-deep-agents.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 3626, "output": 204, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["task", "task"] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 3177, "output": 59, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_invoice"] },
+        { "api": "google.generate", "status": "success", "model": "gemini-3.5-flash-lite", "finish_reason": "STOP", "usage": { "input": 81, "output": 20, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["search_docs"] },
+        { "api": "google.generate", "status": "success", "model": "gemini-3.5-flash-lite", "finish_reason": "STOP", "usage": { "input": 167, "output": 59, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 3328, "output": 155, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 4102, "output": 109, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "python-langgraph-checkpoint: plan and Send branches before interrupt(), then the resumed report",
+      "cassette": "examples/python-langgraph-checkpoint.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 31, "output": 65, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 84, "output": 46, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 84, "output": 102, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "usage": { "input": 166, "output": 76, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "python-streaming-failures-provider-error: parallel tool calls, then a stream error event",
+      "cassette": "examples/python-streaming-failures-provider-error.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "error", "model": "claude-haiku-4-5-20251001", "finish_reason": null, "usage": { "input": 652, "output": 22, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_customer", "lookup_order"] }
+      ]
+    },
+    {
+      "name": "python-streaming-failures: parallel tool calls in a stream the user aborts",
+      "cassette": "examples/python-streaming-failures.json",
+      "calls": [
+        { "api": "anthropic.messages", "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "tool_use", "usage": { "input": 652, "output": 97, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["lookup_customer", "lookup_order"] }
+      ]
+    },
+    {
+      "name": "google-genai: Gemini generateContent function call, then a streamed answer with running-total usage",
+      "cassette": "google-genai.json",
+      "calls": [
+        { "api": "google.generate", "status": "success", "model": "gemini-3.5-flash-lite", "finish_reason": "STOP", "usage": { "input": 55, "output": 16, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": ["get_weather"] },
+        { "api": "google.stream", "status": "success", "model": "gemini-3.5-flash-lite", "finish_reason": "STOP", "usage": { "input": 99, "output": 16, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    },
+    {
+      "name": "Gemini: streamed function calls and thinking and cached tokens from the last usageMetadata; HTTP error; streamed error payload; countTokens ignored",
+      "cassette": {
+        "synthetic": true,
+        "interactions": [
+          {
+            "request": { "method": "POST", "path": "/v1beta/models/gemini-x:streamGenerateContent" },
+            "response": {
+              "status": 200,
+              "headers": { "content-type": "text/event-stream" },
+              "events": [
+                { "payload": { "candidates": [{ "content": { "parts": [{ "text": "Let me check." }], "role": "model" }, "index": 0 }], "usageMetadata": { "promptTokenCount": 40, "candidatesTokenCount": 3, "totalTokenCount": 43 }, "modelVersion": "gemini-x-001" } },
+                { "payload": { "candidates": [{ "content": { "parts": [{ "functionCall": { "name": "search_docs", "args": { "query": "refunds" } } }, { "functionCall": { "name": "lookup_invoice", "args": { "invoiceId": "INV-42" } } }], "role": "model" }, "finishReason": "STOP", "index": 0 }], "usageMetadata": { "promptTokenCount": 40, "candidatesTokenCount": 12, "cachedContentTokenCount": 32, "thoughtsTokenCount": 7, "totalTokenCount": 59 }, "modelVersion": "gemini-x-001" } }
+              ]
+            }
+          },
+          {
+            "request": { "method": "POST", "path": "/v1beta/models/gemini-x:generateContent" },
+            "response": { "status": 429, "headers": { "content-type": "application/json" }, "body": { "error": { "code": 429, "message": "Resource exhausted", "status": "RESOURCE_EXHAUSTED" } } }
+          },
+          {
+            "request": { "method": "POST", "path": "/v1beta/models/gemini-x:streamGenerateContent" },
+            "response": {
+              "status": 200,
+              "headers": { "content-type": "text/event-stream" },
+              "events": [
+                { "payload": { "candidates": [{ "content": { "parts": [{ "text": "Partial" }], "role": "model" }, "index": 0 }], "usageMetadata": { "promptTokenCount": 10, "candidatesTokenCount": 1, "totalTokenCount": 11 }, "modelVersion": "gemini-x-001" } },
+                { "payload": { "error": { "code": 500, "message": "Internal error", "status": "INTERNAL" } } }
+              ]
+            }
+          },
+          {
+            "request": { "method": "POST", "path": "/v1beta/models/gemini-x:countTokens" },
+            "response": { "status": 200, "headers": { "content-type": "application/json" }, "body": { "totalTokens": 5 } }
+          }
+        ]
+      },
+      "calls": [
+        { "api": "google.stream", "status": "success", "model": "gemini-x-001", "finish_reason": "STOP", "usage": { "input": 40, "output": 19, "cached": 32, "cache_write": 0, "reasoning": 7 }, "tools": ["search_docs", "lookup_invoice"] },
+        { "api": "google.generate", "status": "error", "model": null, "finish_reason": null, "usage": { "input": 0, "output": 0, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] },
+        { "api": "google.stream", "status": "error", "model": "gemini-x-001", "finish_reason": null, "usage": { "input": 10, "output": 1, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": [] }
+      ]
+    }
+  ],
+  "expected_interactions": [
+    {
+      "name": "two interactions of one call each",
+      "cassette": "examples/python-openai-quickstart.json",
+      "llm_call_counts": [1, 1],
+      "expected": [
+        { "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "llm_call_count": 1, "usage": { "input": 15, "output": 20, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": {} },
+        { "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "llm_call_count": 1, "usage": { "input": 14, "output": 17, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": {} }
+      ]
+    },
+    {
+      "name": "a tool loop then a stream: usage summed per interaction, model and finish from the last call",
+      "cassette": "examples/python-anthropic-quickstart.json",
+      "llm_call_counts": [2, 1],
+      "expected": [
+        { "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "llm_call_count": 2, "usage": { "input": 2872, "output": 79, "cached": 1200, "cache_write": 1200, "reasoning": 0 }, "tools": { "lookup_order": 1 } },
+        { "status": "success", "model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "llm_call_count": 1, "usage": { "input": 13, "output": 9, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": {} }
+      ]
+    },
+    {
+      "name": "a retry that succeeded is a success; a failed last call is an error with the last successful model",
+      "cassette": {
+        "synthetic": true,
+        "interactions": [
+          { "request": { "method": "POST", "path": "/v1/chat/completions" }, "response": { "status": 429, "headers": { "content-type": "application/json" }, "body": { "error": { "message": "slow down", "type": "requests" } } } },
+          { "request": { "method": "POST", "path": "/v1/chat/completions" }, "response": { "status": 200, "headers": { "content-type": "application/json" }, "body": { "model": "gpt-4.1-mini-2025-04-14", "choices": [{ "index": 0, "message": { "role": "assistant", "content": "Hi" }, "finish_reason": "stop" }], "usage": { "prompt_tokens": 8, "completion_tokens": 2 } } } },
+          { "request": { "method": "POST", "path": "/v1/chat/completions" }, "response": { "status": 200, "headers": { "content-type": "application/json" }, "body": { "model": "gpt-4.1-mini-2025-04-14", "choices": [{ "index": 0, "message": { "role": "assistant", "content": "Hello" }, "finish_reason": "stop" }], "usage": { "prompt_tokens": 9, "completion_tokens": 3 } } } },
+          { "request": { "method": "POST", "path": "/v1/chat/completions" }, "response": { "status": 500, "headers": { "content-type": "application/json" }, "body": { "error": { "message": "boom", "type": "server_error" } } } }
+        ]
+      },
+      "llm_call_counts": [2, 2],
+      "expected": [
+        { "status": "success", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "llm_call_count": 2, "usage": { "input": 8, "output": 2, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": {} },
+        { "status": "error", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "llm_call_count": 2, "usage": { "input": 9, "output": 3, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": {} }
+      ]
+    },
+    {
+      "name": "a call no interaction took fails",
+      "cassette": "examples/python-anthropic-quickstart.json",
+      "llm_call_counts": [1, 1],
+      "error": "llm_call_count"
+    },
+    {
+      "name": "an interaction with more calls than the cassette fails",
+      "cassette": "examples/python-anthropic-quickstart.json",
+      "llm_call_counts": [2, 2],
+      "error": "llm_call_count"
+    }
+  ],
+  "assert": {
+    "base_events": [
+      { "event": "ai_user_prompt_created", "userId": "user_42", "anonymousId": "3f2b8c1e-7a4d-4e9b-b6c5-0d1e2f3a4b5c", "properties": { "interaction_id": "i-1", "conversation_id": "c-1", "prompt_text": "Where is my order 1234?" } },
+      { "event": "ai_response_received", "userId": "user_42", "anonymousId": "3f2b8c1e-7a4d-4e9b-b6c5-0d1e2f3a4b5c", "properties": { "interaction_id": "i-1", "conversation_id": "c-1", "response_status": "success", "primary_provider": "openai", "primary_model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "llm_call_count": 2, "tool_call_count": 1, "total_input_tokens": 172, "total_output_tokens": 31, "total_tokens": 203, "total_cached_input_tokens": 0, "total_cost_usd": 0.0001184, "usage_breakdown": [{ "model": "gpt-4.1-mini-2025-04-14", "provider": "openai", "call_count": 2, "input_tokens": 172, "output_tokens": 31, "total_tokens": 203, "cached_input_tokens": 0 }], "tool_breakdown": [{ "tool_name": "lookup_order", "call_count": 1 }], "response_text": "Order 1234 has shipped and should arrive in 2 days." } },
+      { "event": "ai_user_action", "userId": "user_42", "properties": { "interaction_id": "i-1", "conversation_id": "c-1", "action_type": "feedback_given" } }
+    ],
+    "base_expected": { "identity": { "user_id": "user_42", "anonymous_id": "3f2b8c1e-7a4d-4e9b-b6c5-0d1e2f3a4b5c" }, "conversation_id": "c-1", "status": "success", "provider": "openai", "model": "gpt-4.1-mini-2025-04-14", "finish_reason": "stop", "llm_call_count": 2, "usage": { "input": 172, "output": 31, "cached": 0, "cache_write": 0, "reasoning": 0 }, "cost_usd": 0.0001184, "tools": { "lookup_order": 1 }, "prompt": "Where is my order 1234?", "response": "Order 1234 has shipped and should arrive in 2 days." },
+    "cases": [
+      { "name": "events that match pass", "error": null },
+      { "name": "an empty expectation checks only the response count", "expected_replace": {}, "set": { "1.properties.total_input_tokens": 1 }, "error": null },
+      { "name": "a second response event fails", "duplicate": [1], "error": "ai_response_received" },
+      { "name": "no response event fails", "remove": [1], "error": "ai_response_received" },
+      { "name": "a wrong userId fails", "set": { "0.userId": "user_9" }, "error": "userId" },
+      { "name": "a missing anonymousId fails", "delete": ["1.anonymousId"], "error": "anonymousId" },
+      { "name": "ai_user_action is exempt from identity", "set": { "2.userId": "someone_else" }, "error": null },
+      { "name": "anonymous_id null requires the field to be absent", "expected": { "identity": { "user_id": "user_42", "anonymous_id": null } }, "delete": ["0.anonymousId", "1.anonymousId"], "error": null },
+      { "name": "anonymous_id null fails when present", "expected": { "identity": { "user_id": "user_42", "anonymous_id": null } }, "error": "anonymousId" },
+      { "name": "another interaction_id fails", "set": { "2.properties.interaction_id": "i-2" }, "error": "interaction_id" },
+      { "name": "an empty conversation_id fails", "set": { "0.properties.conversation_id": "", "1.properties.conversation_id": "", "2.properties.conversation_id": "" }, "expected": { "conversation_id": "" }, "error": "conversation_id" },
+      { "name": "another expected conversation_id fails", "expected": { "conversation_id": "c-2" }, "error": "conversation_id" },
+      { "name": "a wrong status fails", "set": { "1.properties.response_status": "error" }, "error": "response_status" },
+      { "name": "a wrong provider fails", "set": { "1.properties.primary_provider": "ollama" }, "error": "primary_provider" },
+      { "name": "a wrong model fails", "set": { "1.properties.primary_model": "gpt-4.1-mini" }, "error": "primary_model" },
+      { "name": "finish reasons compare normalised", "set": { "1.properties.finish_reason": "Tool-Calls" }, "expected": { "finish_reason": "tool_calls" }, "error": null },
+      { "name": "a wrong finish reason fails", "set": { "1.properties.finish_reason": "length" }, "error": "finish_reason" },
+      { "name": "a wrong llm_call_count fails", "set": { "1.properties.llm_call_count": 3 }, "error": "llm_call_count" },
+      { "name": "wrong input tokens fail", "set": { "1.properties.total_input_tokens": 171 }, "error": "total_input_tokens" },
+      { "name": "wrong output tokens fail", "set": { "1.properties.total_output_tokens": 30 }, "error": "total_output_tokens" },
+      { "name": "wrong cached tokens fail", "set": { "1.properties.total_cached_input_tokens": 5 }, "error": "total_cached_input_tokens" },
+      { "name": "an inconsistent total fails", "set": { "1.properties.total_tokens": 204 }, "error": "total_tokens" },
+      { "name": "reasoning is not checked while the schema lacks it", "expected": { "usage": { "input": 172, "output": 31, "cached": 0, "cache_write": 0, "reasoning": 4 } }, "optional_fields": [], "error": null },
+      { "name": "missing reasoning tokens fail once the schema has them", "expected": { "usage": { "input": 172, "output": 31, "cached": 0, "cache_write": 0, "reasoning": 4 } }, "optional_fields": ["total_reasoning_tokens"], "error": "total_reasoning_tokens" },
+      { "name": "breakdown reasoning tokens must sum too", "expected": { "usage": { "input": 172, "output": 31, "cached": 0, "cache_write": 0, "reasoning": 4 } }, "optional_fields": ["total_reasoning_tokens"], "set": { "1.properties.total_reasoning_tokens": 4 }, "error": "usage_breakdown" },
+      { "name": "reasoning tokens in totals and rows pass", "expected": { "usage": { "input": 172, "output": 31, "cached": 0, "cache_write": 0, "reasoning": 4 } }, "optional_fields": ["total_reasoning_tokens"], "set": { "1.properties.total_reasoning_tokens": 4, "1.properties.usage_breakdown.0.reasoning_tokens": 4 }, "error": null },
+      { "name": "zero reasoning tokens may be absent", "optional_fields": ["total_reasoning_tokens", "total_cache_write_tokens"], "error": null },
+      { "name": "wrong cache-write tokens fail once the schema has them", "expected": { "usage": { "input": 172, "output": 31, "cached": 0, "cache_write": 50, "reasoning": 0 } }, "optional_fields": ["total_cache_write_tokens"], "error": "total_cache_write_tokens" },
+      { "name": "a wrong cost fails", "set": { "1.properties.total_cost_usd": 0.0002 }, "error": "total_cost_usd" },
+      { "name": "a cost within 1e-9 passes", "set": { "1.properties.total_cost_usd": 0.00011840000001 }, "error": null },
+      { "name": "cost_usd null requires no cost", "expected": { "cost_usd": null }, "error": "total_cost_usd" },
+      { "name": "cost_usd null passes without a cost", "expected": { "cost_usd": null }, "delete": ["1.properties.total_cost_usd"], "error": null },
+      { "name": "a missing usage_breakdown fails", "delete": ["1.properties.usage_breakdown"], "error": "usage_breakdown" },
+      { "name": "breakdown input tokens must sum to the total", "set": { "1.properties.usage_breakdown.0.input_tokens": 170, "1.properties.usage_breakdown.0.total_tokens": 201 }, "error": "usage_breakdown" },
+      { "name": "a breakdown row total must be input plus output", "set": { "1.properties.usage_breakdown.0.total_tokens": 200 }, "error": "usage_breakdown" },
+      { "name": "breakdown call counts must sum to llm_call_count", "set": { "1.properties.usage_breakdown.0.call_count": 1 }, "error": "usage_breakdown" },
+      { "name": "no breakdown is needed without calls", "expected": { "llm_call_count": 0, "usage": { "input": 0, "output": 0, "cached": 0, "cache_write": 0, "reasoning": 0 }, "tools": {}, "cost_usd": null }, "set": { "1.properties.llm_call_count": 0, "1.properties.tool_call_count": 0, "1.properties.total_input_tokens": 0, "1.properties.total_output_tokens": 0, "1.properties.total_tokens": 0 }, "delete": ["1.properties.usage_breakdown", "1.properties.tool_breakdown", "1.properties.total_cost_usd"], "error": null },
+      { "name": "a wrong tool_call_count fails", "set": { "1.properties.tool_call_count": 2 }, "error": "tool_call_count" },
+      { "name": "a wrong tool_breakdown fails", "set": { "1.properties.tool_breakdown.0.call_count": 2 }, "error": "tool_breakdown" },
+      { "name": "an extra tool in tool_breakdown fails", "set": { "1.properties.tool_breakdown": [{ "tool_name": "lookup_order", "call_count": 1 }, { "tool_name": "get_weather", "call_count": 0 }] }, "error": "tool_breakdown" },
+      { "name": "tool_breakdown may be absent", "delete": ["1.properties.tool_breakdown"], "error": null },
+      { "name": "an MCP tool name matches the row of its tool on its server", "expected": { "tools": { "mcp__orders__lookup_order": 1 } }, "set": { "1.properties.tool_breakdown": [{ "tool_name": "lookup_order", "mcp_server": "orders", "call_count": 1 }] }, "error": null },
+      { "name": "an MCP tool name does not match a row on another server", "expected": { "tools": { "mcp__orders__lookup_order": 1 } }, "set": { "1.properties.tool_breakdown": [{ "tool_name": "lookup_order", "mcp_server": "crm", "call_count": 1 }] }, "error": "tool_breakdown" },
+      { "name": "a wrong prompt_text fails", "set": { "0.properties.prompt_text": "Where is order 1?" }, "error": "prompt_text" },
+      { "name": "a wrong response_text fails", "set": { "1.properties.response_text": "Shipped." }, "error": "response_text" }
+    ]
+  }
+}

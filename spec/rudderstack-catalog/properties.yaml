@@ -1,0 +1,730 @@
+# AI events spec v0.3 properties for the RudderStack data catalog (rudder-cli, rudder/v1).
+# Shared byte for byte by @rudderstack/ai (Node.js) and rudderstack-ai (Python).
+version: rudder/v1
+kind: properties
+metadata:
+  name: ai_events
+spec:
+  properties:
+    # Identity of the answer
+    - id: conversation_id
+      name: conversation_id
+      type: string
+      description: Conversation (thread, chat) the interaction belongs to.
+      config:
+        min_length: 1
+    - id: interaction_id
+      name: interaction_id
+      type: string
+      description: One user prompt and the one answer it gets; joins feedback to the answer.
+      config:
+        min_length: 1
+    - id: feature
+      name: feature
+      type: string
+      description: Product surface, for example support_bot.
+    - id: account_id
+      name: account_id
+      type: string
+      description: Customer, workspace or tenant the work is for.
+    - id: on_behalf_of
+      name: on_behalf_of
+      type: string
+      description: The human who requested or owns the work; not the actor.
+    - id: trigger_source
+      name: trigger_source
+      type: string
+      description: Why the run started, for example schedule, webhook, queue, agent, user or mcp_event.
+    - id: trigger_event_id
+      name: trigger_event_id
+      type: string
+      description: The ID of the update that started the run; with trigger_source mcp_event, the event_id from mcp_event_delivered.
+      config:
+        min_length: 1
+    - id: surface
+      name: surface
+      type: string
+      description: Where the user met the AI. Set by the app.
+      config:
+        enum: [web, mobile, slack, teams, email, chatgpt_app, claude_app, ide, api, other]
+    - id: source
+      name: source
+      type: string
+      description: Which side sent the event; absent means server.
+      config:
+        enum: [client, server]
+    - id: task_name
+      name: task_name
+      type: string
+      description: The background job or task being run, for example alert-triage.
+    - id: parent_interaction_id
+      name: parent_interaction_id
+      type: string
+      description: The interaction that started this one (agent hand-offs, sub-tasks).
+    - id: intent
+      name: intent
+      type: string
+      description: What the user wants, set by the app, for example refund_request.
+    - id: outcome
+      name: outcome
+      type: string
+      description: Result set by the app, for example resolved, partial, unresolved, escalated or unclear.
+    - id: trace_id
+      name: trace_id
+      type: string
+      description: Link to the same interaction in a tracing tool (Langfuse, LangSmith, OpenTelemetry).
+    - id: input_method
+      name: input_method
+      type: string
+      description: How the prompt was entered, for example text, voice or button.
+    - id: attachment_count
+      name: attachment_count
+      type: integer
+      description: Files the user attached to the prompt.
+      config:
+        minimum: 0
+    - id: attachment_types
+      name: attachment_types
+      type: array
+      item_types: [string]
+      description: Kinds attached, each listed once (image, audio, video, pdf, file). Never file names or content.
+    - id: prompt_source
+      name: prompt_source
+      type: string
+      description: Client copy only. Where the prompt came from.
+      config:
+        enum: [composer, starter_suggestion, follow_up_action, retry]
+    - id: suggestion_id
+      name: suggestion_id
+      type: string
+      description: Client copy only. The starter suggestion used.
+    - id: prompt_length
+      name: prompt_length
+      type: integer
+      description: Client copy only. Prompt characters, measured before any truncation.
+      config:
+        minimum: 0
+    - id: prompt_text
+      name: prompt_text
+      type: string
+      description: Opt-in prompt text. Treat as personal data.
+    - id: response_text
+      name: response_text
+      type: string
+      description: Opt-in answer text. Treat as personal data.
+    - id: intent_summary
+      name: intent_summary
+      type: string
+      description: Opt-in classifier summary of what the user tried to do; masked, at most 280 characters. Treat as personal data.
+      config:
+        min_length: 1
+        max_length: 280
+
+    # Answer status and models
+    - id: response_status
+      name: response_status
+      type: string
+      description: Final status of the answer.
+      config:
+        enum: [success, error, timeout, cancelled, paused, incomplete]
+    - id: pause_reason
+      name: pause_reason
+      type: string
+      description: With response_status paused, what the run waits for.
+      config:
+        enum: [approval, human_input, deferred_tool, auth_required, other]
+    - id: client_disconnected
+      name: client_disconnected
+      type: boolean
+      description: Server only. The SDK observed the request close or the stream abort before the answer finished.
+    - id: client_error_kind
+      name: client_error_kind
+      type: string
+      description: Client copy only, on error. The browser's view of the failure.
+      config:
+        enum: [offline, interrupted, http_4xx, http_5xx, agent_error, unknown]
+    - id: time_to_first_render_ms
+      name: time_to_first_render_ms
+      type: integer
+      description: Client copy only. From submit until the user saw anything.
+      config:
+        minimum: 0
+    - id: trigger
+      name: trigger
+      type: string
+      description: Who started the interaction.
+      config:
+        enum: [user, system]
+    - id: primary_model
+      name: primary_model
+      type: string
+      description: Model of the last successful call, or of the last attempted one when none succeeded.
+    - id: primary_provider
+      name: primary_provider
+      type: string
+      description: Provider of the primary model, as an OpenTelemetry gen_ai.provider.name value.
+    - id: provider
+      name: provider
+      types: [string, 'null']
+      description: Provider of the call, as an OpenTelemetry gen_ai.provider.name value.
+    - id: model
+      name: model
+      types: [string, 'null']
+      description: Model the provider reported, or the requested model.
+    - id: requested_model
+      name: requested_model
+      type: string
+      description: Model the application requested; present only when a router or fallback served another model.
+      config:
+        min_length: 1
+    - id: agent_name
+      name: agent_name
+      type: string
+      description: Agent or step label.
+    - id: finish_reason
+      name: finish_reason
+      type: string
+      description: Why the model stopped, as the provider reports it.
+    - id: error_type
+      name: error_type
+      type: string
+      description: Failure category, for example rate_limit, timeout, cancelled, api_error, max_turns, length, content_filter or guardrail_trip.
+    - id: response_id
+      name: response_id
+      type: string
+      description: Provider response ID, for debugging only.
+
+    # Metrics
+    - id: latency_ms
+      name: latency_ms
+      type: integer
+      description: Milliseconds from the prompt to the end of the answer.
+      config:
+        minimum: 0
+    - id: time_to_first_token_ms
+      name: time_to_first_token_ms
+      type: integer
+      description: Milliseconds from the prompt to the first streamed token.
+      config:
+        minimum: 0
+    - id: llm_call_count
+      name: llm_call_count
+      type: integer
+      description: Model calls the answer took.
+      config:
+        minimum: 0
+    - id: tool_call_count
+      name: tool_call_count
+      type: integer
+      description: Tools the model invoked.
+      config:
+        minimum: 0
+    - id: call_count
+      name: call_count
+      type: integer
+      description: Model calls in this usage_breakdown entry, or tool calls in this tool_breakdown entry.
+      config:
+        minimum: 1
+    - id: total_input_tokens
+      name: total_input_tokens
+      type: integer
+      description: Input tokens of every call, including cached and cache-write tokens.
+      config:
+        minimum: 0
+    - id: total_output_tokens
+      name: total_output_tokens
+      type: integer
+      description: Output tokens of every call.
+      config:
+        minimum: 0
+    - id: total_reasoning_tokens
+      name: total_reasoning_tokens
+      type: integer
+      description: Provider-reported reasoning tokens, a subset of output tokens; absent when unavailable.
+      config:
+        minimum: 0
+    - id: total_tokens
+      name: total_tokens
+      type: integer
+      description: Input plus output tokens.
+      config:
+        minimum: 0
+    - id: total_cached_input_tokens
+      name: total_cached_input_tokens
+      type: integer
+      description: Cache-read input tokens, a subset of the input tokens.
+      config:
+        minimum: 0
+    - id: total_cache_write_tokens
+      name: total_cache_write_tokens
+      type: integer
+      description: Cache-write input tokens across every call, a subset of input tokens.
+      config:
+        minimum: 0
+    - id: input_tokens
+      name: input_tokens
+      type: integer
+      description: Input tokens, including cached and cache-write tokens.
+      config:
+        minimum: 0
+    - id: output_tokens
+      name: output_tokens
+      type: integer
+      description: Output tokens.
+      config:
+        minimum: 0
+    - id: reasoning_tokens
+      name: reasoning_tokens
+      type: integer
+      description: Provider-reported reasoning or thinking tokens, a subset of output_tokens; absent when unavailable.
+      config:
+        minimum: 0
+    - id: cached_input_tokens
+      name: cached_input_tokens
+      type: integer
+      description: Cache-read input tokens, a subset of the input tokens.
+      config:
+        minimum: 0
+    - id: cache_write_tokens
+      name: cache_write_tokens
+      type: integer
+      description: Cache-write input tokens, a subset of input tokens.
+      config:
+        minimum: 0
+    - id: cache_write_1h_tokens
+      name: cache_write_1h_tokens
+      type: integer
+      description: Subset of cache_write_tokens written with a 1-hour lifetime.
+      config:
+        minimum: 0
+    - id: service_tier
+      name: service_tier
+      type: string
+      description: The tier that served the calls, as the provider reports it.
+      config:
+        enum: [batch, flex, standard, fast, other]
+    - id: server_tool_call_count
+      name: server_tool_call_count
+      type: integer
+      description: Calls to provider-hosted tools, such as web search, which bill per call.
+      config:
+        minimum: 0
+    - id: server_tool_cost_usd
+      name: server_tool_cost_usd
+      type: number
+      description: Fees of the provider-hosted tool calls in USD (decimal); included in cost_usd.
+      config:
+        minimum: 0
+    # Costs are decimals. Absent when unknown, never a placeholder 0.
+    - id: total_cost_usd
+      name: total_cost_usd
+      type: number
+      description: Cost of the answer in USD (decimal). Sent only when every successful call was priced.
+      config:
+        minimum: 0
+    - id: cost_usd
+      name: cost_usd
+      type: number
+      description: Cost of a call or usage_breakdown entry in USD (decimal), as the provider or gateway reported it, else from the registered price. Absent when unknown.
+      config:
+        minimum: 0
+    - id: usage_breakdown
+      name: usage_breakdown
+      type: array
+      item_types: [object]
+      description: Usage per agent, provider and model.
+    - id: tool_breakdown
+      name: tool_breakdown
+      type: array
+      item_types: [object]
+      description: Opt-in. Calls per agent, MCP server, tool and parent; call_count sums to tool_call_count.
+    - id: tool_name
+      name: tool_name
+      type: string
+      description: Tool name only, never inputs or outputs. unknown for calls reported without a name.
+      config:
+        min_length: 1
+    - id: error_count
+      name: error_count
+      type: integer
+      description: Failed model or tool calls in this breakdown entry.
+      config:
+        minimum: 0
+    - id: mcp_server
+      name: mcp_server
+      type: string
+      description: MCP server identity, split from a flat MCP tool name when necessary.
+    - id: parent_tool
+      name: parent_tool
+      type: string
+      description: Inclusive parent tool for a nested or sub-agent tool call.
+    - id: error_types
+      name: error_types
+      type: object
+      description: Failed tool calls by fixed category; never exception text.
+    - id: duration_ms
+      name: duration_ms
+      type: number
+      description: Sum of all measured tool execution durations, including partial coverage; on MCP events, the request's server-side duration.
+      config:
+        minimum: 0
+    - id: measured_count
+      name: measured_count
+      type: integer
+      description: Tool calls whose duration contributes to duration_ms.
+      config:
+        minimum: 1
+    - id: max_duration_ms
+      name: max_duration_ms
+      type: number
+      description: Largest measured tool duration in the entry.
+      config:
+        minimum: 0
+
+    # Intent classification (ai_interaction_classified)
+    - id: classifier
+      name: classifier
+      type: string
+      description: Who labelled the interaction, the customer's model client or their classify function.
+      config:
+        enum: [model, custom]
+    - id: classifier_model
+      name: classifier_model
+      type: string
+      description: Model the classifier used.
+    - id: classifier_duration_ms
+      name: classifier_duration_ms
+      type: integer
+      description: How long the classification took.
+      config:
+        minimum: 0
+    - id: classifier_cost_usd
+      name: classifier_cost_usd
+      type: number
+      description: Classifier call cost when priced. Never part of the interaction's total_cost_usd.
+      config:
+        minimum: 0
+
+    # Quality scores (ai_interaction_scored)
+    - id: evaluation_name
+      name: evaluation_name
+      type: string
+      description: What was scored, for example groundedness (OpenTelemetry gen_ai.evaluation.name).
+      config:
+        min_length: 1
+    - id: score_value
+      name: score_value
+      type: number
+      description: The numeric score (gen_ai.evaluation.score.value).
+    - id: score_label
+      name: score_label
+      type: string
+      description: The score label, for example pass (gen_ai.evaluation.score.label).
+      config:
+        min_length: 1
+    - id: evaluator
+      name: evaluator
+      type: string
+      description: Who scored it, an LLM judge, a deterministic check or a person.
+      config:
+        enum: [model, code, human]
+    - id: sampled
+      name: sampled
+      type: boolean
+      description: The interaction was picked by sampling rather than scored every time.
+    - id: explanation
+      name: explanation
+      type: string
+      description: Opt-in reason for the score; masked, at most 280 characters. Treat as personal data.
+      config:
+        min_length: 1
+        max_length: 280
+
+    # Declared tool events (customer-named events, one per tool call)
+    - id: tool_call_id
+      name: tool_call_id
+      type: string
+      description: The provider's tool-call ID, when known.
+      config:
+        min_length: 1
+    - id: tool_status
+      name: tool_status
+      type: string
+      description: How the tool call went; unknown when the integration never saw its outcome.
+      config:
+        enum: [success, error, unknown]
+    - id: tool_duration_ms
+      name: tool_duration_ms
+      type: number
+      description: Measured tool execution time. Absent unless measured; never 0 for unknown.
+      config:
+        minimum: 0
+
+    # User actions
+    - id: action_type
+      name: action_type
+      type: string
+      description: What the user did with the answer.
+      config:
+        enum: [feedback_given, feedback_retracted, copied_response, shared, reported, regenerated, accepted, rejected, edited, clicked_through]
+    - id: action_details
+      name: action_details
+      type: object
+      description: Details of the action, such as feedback type and value.
+    - id: feedback_type
+      name: feedback_type
+      type: string
+      description: Kind of feedback, for example thumbs or rating.
+    - id: feedback_value
+      name: feedback_value
+      types: [string, number, boolean, 'null']
+      description: The feedback given, for example 1, -1, 4 or true.
+    - id: feedback_text
+      name: feedback_text
+      type: string
+      description: Opt-in free-text feedback. Treat as personal data.
+    - id: card_kind
+      name: card_kind
+      type: string
+      description: On clicked_through, which card or component, for example a source card, a chart or an MCP Apps widget.
+    - id: target_type
+      name: target_type
+      type: string
+      description: On clicked_through, the kind of object opened, for example resource or doc. Never a URL.
+
+    # MCP server events
+    - id: mcp_session_id
+      name: mcp_session_id
+      type: string
+      description: From the Mcp-Session-Id header or a host-provided session key; absent otherwise.
+    - id: server_name
+      name: server_name
+      type: string
+      description: The MCP server.
+    - id: server_version
+      name: server_version
+      type: string
+      description: The MCP server's version.
+    - id: client_name
+      name: client_name
+      type: string
+      description: The MCP client, from clientInfo.
+    - id: client_title
+      name: client_title
+      type: string
+      description: The MCP client's display title, from clientInfo.
+    - id: client_version
+      name: client_version
+      type: string
+      description: The MCP client's version, from clientInfo.
+    - id: client_capabilities
+      name: client_capabilities
+      type: array
+      item_types: [string]
+      description: Features the MCP client declared, for example elicitation.
+    - id: protocol_version
+      name: protocol_version
+      type: string
+      description: The request's or negotiated MCP protocol version.
+    - id: transport
+      name: transport
+      type: string
+      description: MCP transport.
+      config:
+        enum: [stdio, streamable_http, sse]
+    - id: auth_method
+      name: auth_method
+      type: string
+      description: How the client authenticated, for example oauth, api_key or none.
+    - id: oauth_client_id
+      name: oauth_client_id
+      type: string
+      description: The registered app behind the OAuth token.
+    - id: token_scopes
+      name: token_scopes
+      type: array
+      item_types: [string]
+      description: Scopes granted to the token.
+    - id: country
+      name: country
+      type: string
+      description: Coarse country derived from the request IP, which is never sent.
+    - id: request_id
+      name: request_id
+      type: string
+      description: The JSON-RPC request ID.
+    - id: is_error_result
+      name: is_error_result
+      type: boolean
+      description: The tool returned a result flagged isError, as opposed to a protocol error.
+    - id: time_to_cancel_ms
+      name: time_to_cancel_ms
+      type: number
+      description: How long a cancelled call had run.
+      config:
+        minimum: 0
+    - id: argument_keys
+      name: argument_keys
+      type: array
+      item_types: [string]
+      description: Names of the arguments supplied. Never the values.
+    - id: invalid_arguments
+      name: invalid_arguments
+      type: array
+      item_types: [string]
+      description: Names of the arguments that failed schema validation. Never the values.
+    - id: retry_count
+      name: retry_count
+      type: integer
+      description: Earlier calls with the same tool and arguments in the same session or interaction.
+      config:
+        minimum: 0
+    - id: call_index
+      name: call_index
+      type: integer
+      description: Position of the call within its session, else its interaction.
+      config:
+        minimum: 0
+    - id: ms_since_previous_call
+      name: ms_since_previous_call
+      type: number
+      description: Gap since the previous request in the same scope as call_index.
+      config:
+        minimum: 0
+    - id: progress_requested
+      name: progress_requested
+      type: boolean
+      description: The client sent a progressToken.
+    - id: result_size_bytes
+      name: result_size_bytes
+      type: integer
+      description: Size of the result, never its content.
+      config:
+        minimum: 0
+    - id: result_tokens_estimate
+      name: result_tokens_estimate
+      type: integer
+      description: Rough tokens the result adds to the agent's context.
+      config:
+        minimum: 0
+    - id: result_content_types
+      name: result_content_types
+      type: array
+      item_types: [string]
+      description: Content types in the result (text, image, audio, resource_link, resource, structured).
+    - id: result_paginated
+      name: result_paginated
+      type: boolean
+      description: The result carried a cursor for more.
+    - id: user_sentiment
+      name: user_sentiment
+      type: string
+      description: The agent's read of the user's mood in the latest turn.
+      config:
+        enum: [negative, neutral, positive]
+    - id: call_reason
+      name: call_reason
+      type: string
+      description: Opt-in. The agent's one-sentence reason for the call; masked and capped.
+    - id: elicitation_action
+      name: elicitation_action
+      type: string
+      description: How the client answered an elicitation.
+      config:
+        enum: [accept, decline, cancel]
+    - id: capability
+      name: capability
+      type: string
+      description: The missing capability, from the server owner's list, or other.
+      config:
+        min_length: 1
+    - id: capability_detail
+      name: capability_detail
+      type: string
+      description: Opt-in, for other only. A short, masked description of the need.
+    - id: resource_name
+      name: resource_name
+      type: string
+      description: The MCP resource template or name, never a URI carrying IDs.
+      config:
+        min_length: 1
+    - id: prompt_name
+      name: prompt_name
+      type: string
+      description: The MCP prompt name.
+      config:
+        min_length: 1
+    - id: subscription_action
+      name: subscription_action
+      type: string
+      description: What happened to an MCP Events subscription.
+      config:
+        enum: [created, refreshed, unsubscribed, revoked, expired, callback_failed]
+    - id: subscription_id
+      name: subscription_id
+      type: string
+      description: The server's MCP Events subscription ID.
+      config:
+        min_length: 1
+    - id: event_name
+      name: event_name
+      type: string
+      description: The MCP Events update, for example comment.created.
+      config:
+        min_length: 1
+    - id: delivery_mode
+      name: delivery_mode
+      type: string
+      description: How updates are delivered, for example webhook.
+    - id: ttl_ms
+      name: ttl_ms
+      type: integer
+      description: Granted subscription lifetime; absent when it never expires.
+      config:
+        minimum: 0
+    - id: resumed_from_cursor
+      name: resumed_from_cursor
+      type: boolean
+      description: The client resumed the subscription from a cursor.
+    - id: history_truncated
+      name: history_truncated
+      type: boolean
+      description: Part of the requested history was gone.
+    - id: failure_reason
+      name: failure_reason
+      type: string
+      description: For callback_failed, for example challenge_failed or timeout.
+    - id: event_id
+      name: event_id
+      type: string
+      description: The MCP Events protocol event ID, kept across retries.
+      config:
+        min_length: 1
+    - id: delivery_status
+      name: delivery_status
+      type: string
+      description: How delivery of one update ended.
+      config:
+        enum: [acknowledged, rejected, gave_up]
+    - id: http_status
+      name: http_status
+      type: integer
+      description: The final webhook response status.
+    - id: attempt_count
+      name: attempt_count
+      type: integer
+      description: Deliveries tried, including retries.
+      config:
+        minimum: 1
+    - id: delivery_latency_ms
+      name: delivery_latency_ms
+      type: number
+      description: From when the update happened to acknowledgement.
+      config:
+        minimum: 0
+    - id: payload_size_bytes
+      name: payload_size_bytes
+      type: integer
+      description: Delivered body size. Never the payload.
+      config:
+        minimum: 0

@@ -1,0 +1,294 @@
+{
+  "synthetic": false,
+  "description": "Node examples/deep-agents against the real Anthropic and Gemini APIs: the support agent (claude-haiku-4-5) asks billing (claude-haiku-4-5) and researcher (gemini-3.5-flash-lite) through task in one turn, each calls its tool, then support answers.",
+  "recorded_at": "2026-10-14T09:30:14.789Z",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1tsaHuEzKMcZReAyuXq",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "I'll help you with both of those questions. Let me look into your invoice and get you information about our refund policy."
+            },
+            {
+              "type": "tool_use",
+              "id": "toolu_011DDqaXTEJTKPcrJgsoGx8W",
+              "name": "task",
+              "input": {
+                "description": "Look up invoice INV-42 and explain what charges are on it. The customer says it looks wrong, so provide a detailed breakdown.",
+                "subagent_type": "billing"
+              },
+              "caller": {
+                "type": "direct"
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "toolu_01L5JjKTdnQpyVgdrAmfVcFR",
+              "name": "task",
+              "input": {
+                "description": "Explain how refunds work - the policy, process, timeline, and any conditions or eligibility requirements.",
+                "subagent_type": "researcher"
+              },
+              "caller": {
+                "type": "direct"
+              }
+            }
+          ],
+          "container": null,
+          "stop_reason": "tool_use",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 3329,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 201,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.5-flash-lite:generateContent"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "search_docs",
+                      "args": {
+                        "query": "refund policy process timeline conditions eligibility"
+                      },
+                      "id": "call_2173865"
+                    },
+                    "thoughtSignature": "EmAKXgFpFH0T5yuDgXBmUgWi4f2gKtrvpEOvJysvGajFS4wZ+3q+atXMNaw3NtZFtuQ1BF8ajFVobErONNcFRo65jmsnpf8BJ1vi5fc8WTHAzgc8Da7zxTlwV+9nrSMHngg="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 80,
+            "candidatesTokenCount": 21,
+            "totalTokenCount": 101,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 80
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.5-flash-lite",
+          "responseId": "oUvPaqiYLaijg8UPmMTC4Q0"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1tsmfH5uWbdXmfs3RWg",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_01TQpgeLsKSszeuyJC4Z2EKW",
+              "name": "lookup_invoice",
+              "input": {
+                "invoiceId": "INV-42"
+              },
+              "caller": {
+                "type": "direct"
+              }
+            }
+          ],
+          "container": null,
+          "stop_reason": "tool_use",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 2592,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 59,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.5-flash-lite:generateContent"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "Refunds are available within 30 days of the invoice date for verified billing errors, and requests can be submitted through Settings > Billing or by replying to support. Once the error is confirmed, full refunds are processed back to the original payment method within 5 to 7 business days."
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 167,
+            "candidatesTokenCount": 58,
+            "totalTokenCount": 225,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 167
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.5-flash-lite",
+          "responseId": "okvPapmyGdOsjuMP96GBqQY"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1tsrCNzbwqKX1BvjRkV",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "I found the issue! Here's the detailed breakdown of invoice INV-42:\n\n**Invoice Details:**\n- **Invoice Date:** September 30, 2026\n- **Currency:** USD\n- **Total Amount:** $98.00\n\n**Charges Breakdown:**\n1. Pro plan (September) - $49.00\n2. Pro plan (September) - $49.00\n\n**The Problem:**\nThe customer is correct to question this invoice. The \"Pro plan (September)\" charge appears **twice** for $49 each, totaling $98. This is a duplicate charge error. The Pro plan should only be charged once per month, so the invoice should show just one $49 charge instead of two identical line items.\n\n**Recommendation:** You should issue a corrected invoice showing only a single $49 charge for the Pro plan in September, or provide a credit memo for the duplicate $49 charge to the customer's account."
+            }
+          ],
+          "container": null,
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 2730,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 206,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "id": "msg_011Cg1tt39vvTRZuDSyEPKrc",
+          "type": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "You're right to be concerned—your invoice INV-42 has a duplicate charge error with the Pro plan (September) charged twice for $49 each instead of once. We can issue you a refund for the duplicate $49 charge; refunds for billing errors are available within 30 days of the invoice date and are processed back to your original payment method within 5-7 business days. You can request this refund through Settings > Billing or by replying to support."
+            }
+          ],
+          "container": null,
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "stop_details": null,
+          "usage": {
+            "input_tokens": 3854,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 107,
+            "service_tier": "standard",
+            "inference_geo": "not_available"
+          },
+          "diagnostics": null
+        }
+      }
+    }
+  ]
+}

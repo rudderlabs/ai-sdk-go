@@ -1,0 +1,189 @@
+{
+  "description": "examples/openai-agents triage run: triage hands off to orders, which calls lookup_order and answers (Responses API). Replayed by both SDKs' example tests; expected holds the ai_response_received properties they assert.",
+  "synthetic": true,
+  "source": "Written from OpenAI's documented response shapes; replace with a recorded run once keys exist.",
+  "route": "openai.responses",
+  "replies": [
+    {
+      "json": {
+        "id": "resp_triage_1",
+        "object": "response",
+        "created_at": 1760400001,
+        "status": "completed",
+        "model": "gpt-4.1-mini-2025-04-14",
+        "output": [
+          {
+            "type": "function_call",
+            "id": "fc_triage_1",
+            "call_id": "call_triage_1",
+            "name": "transfer_to_orders",
+            "arguments": "{}",
+            "status": "completed"
+          }
+        ],
+        "usage": {
+          "input_tokens": 312,
+          "input_tokens_details": {
+            "cached_tokens": 0
+          },
+          "output_tokens": 15,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 327
+        },
+        "error": null,
+        "incomplete_details": null,
+        "instructions": null,
+        "metadata": {},
+        "parallel_tool_calls": true,
+        "temperature": 1.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 1.0
+      }
+    },
+    {
+      "json": {
+        "id": "resp_triage_2",
+        "object": "response",
+        "created_at": 1760400002,
+        "status": "completed",
+        "model": "gpt-4.1-mini-2025-04-14",
+        "output": [
+          {
+            "type": "function_call",
+            "id": "fc_triage_2",
+            "call_id": "call_triage_2",
+            "name": "lookup_order",
+            "arguments": "{\"order_id\":\"1234\"}",
+            "status": "completed"
+          }
+        ],
+        "usage": {
+          "input_tokens": 287,
+          "input_tokens_details": {
+            "cached_tokens": 128
+          },
+          "output_tokens": 18,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 305
+        },
+        "error": null,
+        "incomplete_details": null,
+        "instructions": null,
+        "metadata": {},
+        "parallel_tool_calls": true,
+        "temperature": 1.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 1.0
+      }
+    },
+    {
+      "json": {
+        "id": "resp_triage_3",
+        "object": "response",
+        "created_at": 1760400003,
+        "status": "completed",
+        "model": "gpt-4.1-mini-2025-04-14",
+        "output": [
+          {
+            "type": "message",
+            "id": "msg_triage_3",
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+              {
+                "type": "output_text",
+                "text": "Order 1234 shipped and arrives Friday.",
+                "annotations": []
+              }
+            ]
+          }
+        ],
+        "usage": {
+          "input_tokens": 330,
+          "input_tokens_details": {
+            "cached_tokens": 256
+          },
+          "output_tokens": 14,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 344
+        },
+        "error": null,
+        "incomplete_details": null,
+        "instructions": null,
+        "metadata": {},
+        "parallel_tool_calls": true,
+        "temperature": 1.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 1.0
+      }
+    }
+  ],
+  "expected": {
+    "response_status": "success",
+    "llm_call_count": 3,
+    "tool_call_count": 2,
+    "total_input_tokens": 929,
+    "total_output_tokens": 47,
+    "total_reasoning_tokens": 0,
+    "total_tokens": 976,
+    "total_cached_input_tokens": 384,
+    "total_cache_write_tokens": 0,
+    "finish_reason": "stop",
+    "primary_model": "gpt-4.1-mini",
+    "primary_provider": "openai",
+    "response_text": "Order 1234 shipped and arrives Friday.",
+    "usage_breakdown": [
+      {
+        "agent_name": "triage",
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "call_count": 1,
+        "input_tokens": 312,
+        "output_tokens": 15,
+        "reasoning_tokens": 0,
+        "total_tokens": 327,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "error_count": 0
+      },
+      {
+        "agent_name": "orders",
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "call_count": 2,
+        "input_tokens": 617,
+        "output_tokens": 32,
+        "reasoning_tokens": 0,
+        "total_tokens": 649,
+        "cached_input_tokens": 384,
+        "cache_write_tokens": 0,
+        "error_count": 0
+      }
+    ],
+    "tool_breakdown": [
+      {
+        "agent_name": "orders",
+        "tool_name": "lookup_order",
+        "call_count": 1,
+        "error_count": 0,
+        "duration_ms": "<number>",
+        "measured_count": 1,
+        "max_duration_ms": "<number>"
+      },
+      {
+        "agent_name": "triage",
+        "tool_name": "transfer_to_orders",
+        "call_count": 1
+      }
+    ]
+  }
+}

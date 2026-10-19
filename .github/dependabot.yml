@@ -1,0 +1,53 @@
+version: 2
+updates:
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    cooldown:
+      default-days: 7
+    labels:
+      - 'dependencies'
+      - 'github_actions'
+    open-pull-requests-limit: 2
+    groups:
+      github-actions-security:
+        applies-to: 'security-updates'
+        patterns:
+          - '*'
+      github-actions-version:
+        applies-to: 'version-updates'
+        patterns:
+          - '*'
+
+  # go.mod covers the examples too: they live in the same module.
+  - package-ecosystem: 'gomod'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    cooldown:
+      default-days: 7
+    labels:
+      - 'dependencies'
+    open-pull-requests-limit: 4
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+    groups:
+      gomod-security:
+        applies-to: 'security-updates'
+        patterns:
+          - '*'
+      gomod-non-major:
+        applies-to: 'version-updates'
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+      gomod-major:
+        applies-to: 'version-updates'
+        patterns:
+          - '*'
+        update-types:
+          - 'major'

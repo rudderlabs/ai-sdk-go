@@ -1,0 +1,406 @@
+# AI events spec v0.3 tracking plan (rudder-cli, rudder/v1). Mirrors spec/ai-events-v0.3.schema.json.
+# Custom properties are allowed, as in the schema. The tracking plan validates events; it does not set
+# warehouse column types (see the README's "Warehouse column types").
+# Conditional rules stay in the schema only: conversation_id is optional on a client copy of
+# ai_user_prompt_created, and ai_interaction_scored needs score_value or score_label.
+version: rudder/v1
+kind: tracking-plan
+metadata:
+  name: ai_events
+spec:
+  id: ai_events_v0_3
+  display_name: AI events v0.3
+  description: Events from the RudderStack AI SDKs (@rudderstack/ai, rudderstack-ai), spec v0.3.
+  rules:
+    - type: event_rule
+      id: ai_user_prompt_created_rule
+      event: '#event:ai_user_prompt_created'
+      properties:
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:source'
+        - property: '#property:account_id'
+        - property: '#property:on_behalf_of'
+        - property: '#property:trigger_source'
+        - property: '#property:trigger_event_id'
+        - property: '#property:task_name'
+        - property: '#property:parent_interaction_id'
+        - property: '#property:input_method'
+        - property: '#property:attachment_count'
+        - property: '#property:attachment_types'
+        - property: '#property:intent'
+        - property: '#property:prompt_text'
+        - property: '#property:prompt_source'
+        - property: '#property:suggestion_id'
+        - property: '#property:prompt_length'
+
+    - type: event_rule
+      id: ai_response_received_rule
+      event: '#event:ai_response_received'
+      properties:
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:source'
+        - property: '#property:account_id'
+        - property: '#property:on_behalf_of'
+        - property: '#property:trigger_source'
+        - property: '#property:trigger_event_id'
+        - property: '#property:task_name'
+        - property: '#property:parent_interaction_id'
+        - property: '#property:response_status'
+          required: true
+        - property: '#property:pause_reason'
+        - property: '#property:trigger'
+        - property: '#property:client_disconnected'
+        - property: '#property:primary_model'
+        - property: '#property:primary_provider'
+        - property: '#property:latency_ms'
+        - property: '#property:time_to_first_token_ms'
+        - property: '#property:llm_call_count'
+        - property: '#property:tool_call_count'
+        - property: '#property:total_input_tokens'
+        - property: '#property:total_output_tokens'
+        - property: '#property:total_reasoning_tokens'
+        - property: '#property:total_tokens'
+        - property: '#property:total_cached_input_tokens'
+        - property: '#property:total_cache_write_tokens'
+        - property: '#property:total_cost_usd'
+        - property: '#property:finish_reason'
+        - property: '#property:error_type'
+        - property: '#property:intent'
+        - property: '#property:outcome'
+        - property: '#property:response_text'
+        - property: '#property:trace_id'
+        - property: '#property:client_error_kind'
+        - property: '#property:time_to_first_render_ms'
+        - property: '#property:usage_breakdown'
+          properties:
+            - property: '#property:agent_name'
+            - property: '#property:provider'
+            - property: '#property:model'
+              required: true
+            - property: '#property:requested_model'
+            - property: '#property:call_count'
+              required: true
+            - property: '#property:input_tokens'
+              required: true
+            - property: '#property:output_tokens'
+              required: true
+            - property: '#property:reasoning_tokens'
+            - property: '#property:total_tokens'
+              required: true
+            - property: '#property:cached_input_tokens'
+            - property: '#property:cache_write_tokens'
+            - property: '#property:cache_write_1h_tokens'
+            - property: '#property:service_tier'
+            - property: '#property:server_tool_call_count'
+            - property: '#property:server_tool_cost_usd'
+            - property: '#property:error_count'
+            - property: '#property:cost_usd'
+        - property: '#property:tool_breakdown'
+          properties:
+            - property: '#property:agent_name'
+            - property: '#property:tool_name'
+              required: true
+            - property: '#property:mcp_server'
+            - property: '#property:parent_tool'
+            - property: '#property:call_count'
+              required: true
+            - property: '#property:error_count'
+            - property: '#property:error_types'
+            - property: '#property:duration_ms'
+            - property: '#property:measured_count'
+            - property: '#property:max_duration_ms'
+
+    - type: event_rule
+      id: ai_llm_response_received_rule
+      event: '#event:ai_llm_response_received'
+      properties:
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:account_id'
+        - property: '#property:on_behalf_of'
+        - property: '#property:trigger_source'
+        - property: '#property:trigger_event_id'
+        - property: '#property:task_name'
+        - property: '#property:parent_interaction_id'
+        - property: '#property:agent_name'
+        - property: '#property:provider'
+        - property: '#property:model'
+          required: true
+        - property: '#property:requested_model'
+        - property: '#property:input_tokens'
+          required: true
+        - property: '#property:output_tokens'
+          required: true
+        - property: '#property:reasoning_tokens'
+        - property: '#property:total_tokens'
+        - property: '#property:cached_input_tokens'
+        - property: '#property:cache_write_tokens'
+        - property: '#property:cache_write_1h_tokens'
+        - property: '#property:service_tier'
+        - property: '#property:server_tool_call_count'
+        - property: '#property:server_tool_cost_usd'
+        - property: '#property:cost_usd'
+        - property: '#property:response_id'
+        - property: '#property:finish_reason'
+        - property: '#property:error_type'
+
+    - type: event_rule
+      id: ai_interaction_classified_rule
+      event: '#event:ai_interaction_classified'
+      properties:
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:account_id'
+        - property: '#property:on_behalf_of'
+        - property: '#property:trigger_source'
+        - property: '#property:trigger_event_id'
+        - property: '#property:task_name'
+        - property: '#property:parent_interaction_id'
+        - property: '#property:trigger'
+        - property: '#property:intent'
+          required: true
+        - property: '#property:outcome'
+          required: true
+        - property: '#property:intent_summary'
+        - property: '#property:classifier'
+          required: true
+        - property: '#property:classifier_model'
+        - property: '#property:classifier_duration_ms'
+        - property: '#property:classifier_cost_usd'
+
+    - type: event_rule
+      id: ai_interaction_scored_rule
+      event: '#event:ai_interaction_scored'
+      properties:
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:account_id'
+        - property: '#property:on_behalf_of'
+        - property: '#property:trigger_source'
+        - property: '#property:trigger_event_id'
+        - property: '#property:task_name'
+        - property: '#property:parent_interaction_id'
+        - property: '#property:trigger'
+        - property: '#property:evaluation_name'
+          required: true
+        - property: '#property:score_value'
+        - property: '#property:score_label'
+        - property: '#property:evaluator'
+          required: true
+        - property: '#property:sampled'
+        - property: '#property:explanation'
+
+    - type: event_rule
+      id: ai_user_action_rule
+      event: '#event:ai_user_action'
+      properties:
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:source'
+        - property: '#property:account_id'
+        - property: '#property:on_behalf_of'
+        - property: '#property:action_type'
+          required: true
+        - property: '#property:action_details'
+          properties:
+            - property: '#property:feedback_type'
+            - property: '#property:feedback_value'
+            - property: '#property:feedback_text'
+            - property: '#property:card_kind'
+            - property: '#property:target_type'
+
+    - type: event_rule
+      id: mcp_client_seen_rule
+      event: '#event:mcp_client_seen'
+      properties:
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_name'
+          required: true
+        - property: '#property:server_version'
+        - property: '#property:account_id'
+        - property: '#property:client_name'
+        - property: '#property:client_title'
+        - property: '#property:client_version'
+        - property: '#property:client_capabilities'
+        - property: '#property:protocol_version'
+        - property: '#property:transport'
+        - property: '#property:auth_method'
+        - property: '#property:oauth_client_id'
+        - property: '#property:token_scopes'
+        - property: '#property:country'
+
+    - type: event_rule
+      id: mcp_tool_called_rule
+      event: '#event:mcp_tool_called'
+      properties:
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_name'
+        - property: '#property:account_id'
+        - property: '#property:client_name'
+        - property: '#property:client_version'
+        - property: '#property:protocol_version'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
+        - property: '#property:request_id'
+          required: true
+        - property: '#property:tool_name'
+          required: true
+        - property: '#property:tool_status'
+          required: true
+        - property: '#property:error_type'
+        - property: '#property:is_error_result'
+        - property: '#property:duration_ms'
+        - property: '#property:time_to_cancel_ms'
+        - property: '#property:argument_keys'
+        - property: '#property:invalid_arguments'
+        - property: '#property:retry_count'
+        - property: '#property:call_index'
+        - property: '#property:ms_since_previous_call'
+        - property: '#property:progress_requested'
+        - property: '#property:result_size_bytes'
+        - property: '#property:result_tokens_estimate'
+        - property: '#property:result_content_types'
+        - property: '#property:result_paginated'
+        - property: '#property:intent'
+        - property: '#property:user_sentiment'
+        - property: '#property:call_reason'
+
+    - type: event_rule
+      id: mcp_elicitation_completed_rule
+      event: '#event:mcp_elicitation_completed'
+      properties:
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_name'
+        - property: '#property:account_id'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
+        - property: '#property:elicitation_action'
+          required: true
+        - property: '#property:tool_name'
+        - property: '#property:request_id'
+        - property: '#property:duration_ms'
+        - property: '#property:error_type'
+
+    - type: event_rule
+      id: mcp_capability_requested_rule
+      event: '#event:mcp_capability_requested'
+      properties:
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_name'
+        - property: '#property:account_id'
+        - property: '#property:client_name'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
+        - property: '#property:capability'
+          required: true
+        - property: '#property:capability_detail'
+
+    - type: event_rule
+      id: mcp_resource_read_rule
+      event: '#event:mcp_resource_read'
+      properties:
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_name'
+        - property: '#property:account_id'
+        - property: '#property:client_name'
+        - property: '#property:client_version'
+        - property: '#property:protocol_version'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
+        - property: '#property:request_id'
+          required: true
+        - property: '#property:resource_name'
+          required: true
+        - property: '#property:tool_status'
+          required: true
+        - property: '#property:error_type'
+        - property: '#property:duration_ms'
+        - property: '#property:result_size_bytes'
+
+    - type: event_rule
+      id: mcp_prompt_used_rule
+      event: '#event:mcp_prompt_used'
+      properties:
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_name'
+        - property: '#property:account_id'
+        - property: '#property:client_name'
+        - property: '#property:client_version'
+        - property: '#property:protocol_version'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
+        - property: '#property:request_id'
+          required: true
+        - property: '#property:prompt_name'
+          required: true
+        - property: '#property:tool_status'
+          required: true
+        - property: '#property:error_type'
+        - property: '#property:duration_ms'
+        - property: '#property:result_size_bytes'
+
+    - type: event_rule
+      id: mcp_event_subscription_changed_rule
+      event: '#event:mcp_event_subscription_changed'
+      properties:
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_name'
+        - property: '#property:account_id'
+        - property: '#property:client_name'
+        - property: '#property:subscription_action'
+          required: true
+        - property: '#property:subscription_id'
+          required: true
+        - property: '#property:event_name'
+          required: true
+        - property: '#property:argument_keys'
+        - property: '#property:delivery_mode'
+        - property: '#property:ttl_ms'
+        - property: '#property:resumed_from_cursor'
+        - property: '#property:history_truncated'
+        - property: '#property:failure_reason'
+
+    - type: event_rule
+      id: mcp_event_delivered_rule
+      event: '#event:mcp_event_delivered'
+      properties:
+        - property: '#property:server_name'
+        - property: '#property:account_id'
+        - property: '#property:subscription_id'
+          required: true
+        - property: '#property:event_name'
+          required: true
+        - property: '#property:event_id'
+          required: true
+        - property: '#property:delivery_status'
+          required: true
+        - property: '#property:http_status'
+        - property: '#property:attempt_count'
+        - property: '#property:delivery_latency_ms'
+        - property: '#property:payload_size_bytes'

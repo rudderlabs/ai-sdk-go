@@ -1,0 +1,35 @@
+{
+  "synthetic": true,
+  "description": "Node.js examples/litellm-proxy: one Chat Completions call to a LiteLLM proxy model group (unavailable-model) that failed over to qwen3:1.7b on Ollama. The proxy names the served deployment in x-litellm-model-name and its cost in x-litellm-response-cost. Synthetic: written from LiteLLM's documented response headers, not recorded; the LiteLLM CI tier records the real traffic.",
+  "sources": [
+    "https://docs.litellm.ai/docs/proxy/response_headers",
+    "https://docs.litellm.ai/docs/proxy/reliability"
+  ],
+  "interactions": [
+    {
+      "request": { "method": "POST", "path": "/v1/chat/completions" },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json",
+          "x-litellm-model-name": "openai/qwen3:1.7b",
+          "x-litellm-response-cost": "0.0"
+        },
+        "body": {
+          "id": "chatcmpl-7d1c2b3a-4e5f-4a6b-8c9d-0e1f2a3b4c5d",
+          "created": 1760400000,
+          "model": "qwen3:1.7b",
+          "object": "chat.completion",
+          "choices": [
+            {
+              "finish_reason": "stop",
+              "index": 0,
+              "message": { "content": "Standard shipping usually takes 3-5 business days.", "role": "assistant" }
+            }
+          ],
+          "usage": { "completion_tokens": 13, "prompt_tokens": 18, "total_tokens": 31 }
+        }
+      }
+    }
+  ]
+}
