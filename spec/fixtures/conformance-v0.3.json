@@ -22386,6 +22386,211 @@
       ]
     },
     {
+      "name": "langchain_gemini_finish_reasons",
+      "description": "A LangChain Gemini model's own finish reasons are mapped as the google-genai integration maps them: MAX_TOKENS is finish_reason length (the answer is incomplete with error_type length), SAFETY and the other blocked reasons are content_filter (an error with error_type content_filter).",
+      "config": {},
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-lc-gemini-max",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gemini-2.5-flash",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Refunds take"
+                  },
+                  "finish_reason": "MAX_TOKENS"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 20,
+                "completion_tokens": 8,
+                "total_tokens": 28,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-lc-gemini-safety",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gemini-2.5-flash",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Refunds take"
+                  },
+                  "finish_reason": "SAFETY"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 20,
+                "completion_tokens": 8,
+                "total_tokens": 28,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_lc_gemini_max_tokens"
+          },
+          "steps": [
+            {
+              "op": "langchain_invoke",
+              "model": "gemini-2.5-flash",
+              "input": "How long do refunds take?",
+              "ls_provider": "google_genai"
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_lc_gemini_safety"
+          },
+          "steps": [
+            {
+              "op": "langchain_invoke",
+              "model": "gemini-2.5-flash",
+              "input": "How long do refunds take?",
+              "ls_provider": "google_genai"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_lc_gemini_max_tokens",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_lc_gemini_max_tokens",
+            "interaction_id": "$int1",
+            "response_status": "incomplete",
+            "trigger": "user",
+            "primary_model": "gemini-2.5-flash",
+            "primary_provider": "gcp.gemini",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 20,
+            "total_output_tokens": 8,
+            "total_tokens": 28,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "length",
+            "error_type": "length",
+            "usage_breakdown": [
+              {
+                "provider": "gcp.gemini",
+                "model": "gemini-2.5-flash",
+                "call_count": 1,
+                "input_tokens": 20,
+                "output_tokens": 8,
+                "total_tokens": 28,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_lc_gemini_safety",
+            "interaction_id": "$int2"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_lc_gemini_safety",
+            "interaction_id": "$int2",
+            "response_status": "error",
+            "trigger": "user",
+            "primary_model": "gemini-2.5-flash",
+            "primary_provider": "gcp.gemini",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 20,
+            "total_output_tokens": 8,
+            "total_tokens": 28,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "content_filter",
+            "error_type": "content_filter",
+            "usage_breakdown": [
+              {
+                "provider": "gcp.gemini",
+                "model": "gemini-2.5-flash",
+                "call_count": 1,
+                "input_tokens": 20,
+                "output_tokens": 8,
+                "total_tokens": 28,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "langchain"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "langchain_gemini_thinking_tokens",
       "description": "LangChain JS Gemini leaves thinking out of output_tokens but not out of total_tokens: the gap is the thinking, counted in output tokens and as reasoning tokens, as Python's langchain-google-genai reports it.",
       "config": {},
