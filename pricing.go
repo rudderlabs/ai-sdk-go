@@ -140,7 +140,8 @@ func ClearPrices() {
 }
 
 // Labels naming the same service share prices; emitted labels stay as they are. The Gemini API
-// ("google") and Vertex AI ("google.vertex") are priced separately.
+// ("gcp.gemini", formerly "google") and Vertex AI ("gcp.vertex_ai", formerly "google.vertex") are
+// priced separately.
 var sameService = map[string]string{"gcp.gemini": "google", "gcp.vertex_ai": "google.vertex"}
 
 func service(provider string) string {
@@ -273,10 +274,35 @@ func priceCall(provider, model string, input, output, cached, cacheWrite, cacheW
 	return round8(tokens * multiplier), nil, true
 }
 
-// EstimateCost estimates the cost of a call in USD from the registered prices. inputTokens
-// includes cached and cache-write tokens. ok is false for an unpriced model.
-func EstimateCost(provider, model string, inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens int) (cost float64, ok bool) {
-	c, _, ok := priceCall(provider, model, inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens, 0, "", nil)
+// CostOptions is the usage detail [EstimateCost] prices beyond tokens.
+type CostOptions struct {
+	// CacheWrite1hTokens is the part of cacheWriteTokens written to Anthropic's 1-hour cache.
+	CacheWrite1hTokens int
+	// ServiceTier of the call, as the provider reports it or normalised (batch, flex, standard,
+	// fast, other); applies the price's TierMultipliers.
+	ServiceTier string
+	// ServerToolCalls counts provider-hosted tool calls by kind ({"web_search": 2}), priced with
+	// ServerToolPerCall when every kind used has a fee.
+	ServerToolCalls map[string]int
+}
+
+// EstimateCost estimates the cost of a call in USD from the registered prices, as a recorded call
+// is priced: long-context rates, the service tier's multiplier and server-tool fees apply.
+// inputTokens includes cached and cache-write tokens. Only the first opts is used. ok is false
+// for an unpriced model.
+func EstimateCost(provider, model string, inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens int, opts ...CostOptions) (cost float64, ok bool) {
+	var o CostOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	input, output, cached, write := nonNegative(inputTokens), nonNegative(outputTokens), nonNegative(cachedInputTokens), nonNegative(cacheWriteTokens)
+	serverTools := map[string]int{}
+	for kind, n := range o.ServerToolCalls {
+		if n > 0 {
+			serverTools[kind] = n
+		}
+	}
+	c, _, ok := priceCall(provider, model, input, output, cached, write, min(nonNegative(o.CacheWrite1hTokens), write), normalizeServiceTier(provider, o.ServiceTier), serverTools)
 	return c, ok
 }
 
