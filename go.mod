@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/dlclark/regexp2 v1.12.0
 	github.com/google/uuid v1.6.0
-	github.com/mark3labs/mcp-go v0.55.1
+	github.com/mark3labs/mcp-go v1.2.1
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/rudderlabs/analytics-go/v4 v4.3.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
