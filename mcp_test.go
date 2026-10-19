@@ -519,6 +519,21 @@ func TestDeclaredToolEvent(t *testing.T) {
 	}
 }
 
+func TestDeclaredToolEventOnValidationFailure(t *testing.T) {
+	server := workspaceServer("workspace-mcp", nil)
+	r := wrap(t, server, Options{EventRules: EventRules{Tools: map[string]ToolEventRule{
+		"create_audience": {Event: "audience_created"},
+	}}})
+	cs := connect(t, server, "2025-06-18", nil)
+	if res := callTool(t, cs, "create_audience", map[string]any{"type": 1}, nil); !res.IsError {
+		t.Fatal("want a validation error result")
+	}
+	p := r.props(t, "audience_created")
+	if p["tool_name"] != "create_audience" || p["tool_status"] != "error" {
+		t.Errorf("declared event = %v", p)
+	}
+}
+
 func TestDeclaredRulePanics(t *testing.T) {
 	server := workspaceServer("workspace-mcp", nil)
 	r := wrap(t, server, Options{EventRules: EventRules{Tools: map[string]ToolEventRule{
