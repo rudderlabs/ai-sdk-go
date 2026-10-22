@@ -115,6 +115,7 @@ func TestPriceBedrockAndAzureModelIDs(t *testing.T) {
 		{"aws.bedrock", "us.anthropic.claude-sonnet-4-5-20250929-v1:0", 5},
 		{"aws.bedrock", "eu.anthropic.claude-sonnet-4-5-20250929-v1:0", 4},
 		{"aws.bedrock", "global.anthropic.claude-sonnet-4-5-20250929-v1:0", 4},
+		{"aws.bedrock", "in.amazon.nova-pro-v1:0", 0.8},
 		{"aws.bedrock", "claude-sonnet-4-5-20250929-v1:0", 3},
 		{"aws.bedrock", "xx.anthropic.us.claude-sonnet-4-5", -1},
 		{"anthropic", "eu.anthropic.claude-sonnet-4-5", -1},

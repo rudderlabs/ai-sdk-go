@@ -152,7 +152,7 @@ func service(provider string) string {
 }
 
 // Bedrock cross-region inference profile prefixes (us.anthropic.claude-...).
-var bedrockProfiles = []string{"us.", "us-gov.", "eu.", "apac.", "jp.", "au.", "global."}
+var bedrockProfiles = []string{"us.", "us-gov.", "eu.", "apac.", "jp.", "au.", "in.", "global."}
 
 // lookupPrice finds the registered price of a call: a registered name matches the model exactly
 // or followed by a version suffix; the longest name wins, then a price for the call's provider,
