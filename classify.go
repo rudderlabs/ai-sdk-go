@@ -480,7 +480,7 @@ func classify(i *Interaction, turn ClassifyTurn, c *classifierConfig) {
 		return outcome{parsed: parsed, reply: &reply}, nil
 	})
 	if err != nil {
-		warnOnce("classify-failed", "intent classification failed ("+err.Error()+"); no label is sent", 0)
+		report(KindUserCallback, "classifier", err)
 		return
 	}
 	p := map[string]any{}

@@ -15,6 +15,7 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 // Call is one intercepted model request.
@@ -90,7 +91,35 @@ type trackedKey struct{ integration string }
 // Intercept runs one HTTP exchange through the provider's middleware chain and records it. The
 // request and response reach the SDK unchanged, except a streamed request may gain
 // stream_options. Never fails the request because of tracking.
-func (s *Spec) Intercept(req *http.Request, next func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Response, error)) (resp *http.Response, err error) {
+	// A panic in the SDK's own steps is contained: before the request went out it is sent
+	// untracked, after it the caller gets the provider's response or error as it came. A panic
+	// in the next handler is the caller's own and keeps unwinding.
+	in := req
+	var sent, inNext bool
+	var got *http.Response
+	var gotErr error
+	next := func(r *http.Request) (*http.Response, error) {
+		sent, inNext = true, true
+		got, gotErr = send(r)
+		inNext = false
+		return got, gotErr
+	}
+	defer func() {
+		if inNext {
+			return
+		}
+		r := recover()
+		if r == nil {
+			return
+		}
+		hook.Recovered(r, "kit.Intercept")
+		if sent {
+			resp, err = got, gotErr
+			return
+		}
+		resp, err = send(in)
+	}()
 	ctx := req.Context()
 	// Seen by an outer copy of this middleware (a client wrapped twice), or the SDK's own call.
 	if ctx.Value(trackedKey{s.Integration}) != nil || Untracked(ctx) || req.Method != http.MethodPost {
@@ -147,7 +176,7 @@ func (s *Spec) Intercept(req *http.Request, next func(*http.Request) (*http.Resp
 			prepared = nil
 		}
 	}
-	resp, err := next(req)
+	resp, err = next(req)
 	if err == nil && prepared != nil && len(prepared.Names) > 0 && refusedParams(resp, prepared.Names) != "" {
 		why := refusedParams(resp, prepared.Names)
 		_ = resp.Body.Close()
@@ -306,7 +335,11 @@ func peekBody(resp *http.Response) []byte {
 }
 
 func safe(fn func()) {
-	defer func() { _ = recover() }()
+	defer func() {
+		if r := recover(); r != nil {
+			hook.Recovered(r, "safe")
+		}
+	}()
 	fn()
 }
 
@@ -327,6 +360,8 @@ type sseBody struct {
 	filter EventFilter
 	held   bytes.Buffer
 	hide   bool
+	// broken: parsing panicked; the rest of the stream passes through unobserved.
+	broken bool
 }
 
 func (b *sseBody) Read(p []byte) (int, error) {
@@ -335,7 +370,7 @@ func (b *sseBody) Read(p []byte) (int, error) {
 	for b.buf.Len() == 0 {
 		line, err := b.reader.ReadBytes('\n')
 		if len(line) > 0 {
-			b.take(line)
+			b.takeSafely(line)
 		}
 		if err != nil {
 			b.buf.Write(b.held.Bytes())
@@ -349,6 +384,28 @@ func (b *sseBody) Read(p []byte) (int, error) {
 		}
 	}
 	return b.buf.Read(p)
+}
+
+// takeSafely takes a line; a panic in the SDK's parsing stops observing the stream, and the app
+// still gets every byte.
+func (b *sseBody) takeSafely(line []byte) {
+	if b.broken {
+		b.buf.Write(line)
+		return
+	}
+	bufLen, heldLen := b.buf.Len(), b.held.Len()
+	defer func() {
+		if r := recover(); r != nil {
+			hook.Recovered(r, "kit.sseBody")
+			b.broken = true
+			b.buf.Truncate(bufLen)
+			b.held.Truncate(heldLen)
+			b.buf.Write(b.held.Bytes())
+			b.held.Reset()
+			b.buf.Write(line)
+		}
+	}()
+	b.take(line)
 }
 
 func (b *sseBody) take(line []byte) {
@@ -394,7 +451,9 @@ func (b *sseBody) end(err error) {
 	b.once.Do(func() {
 		if errors.Is(err, io.EOF) {
 			// A last event without its blank line still counts.
-			b.parse([]byte("\n"))
+			if !b.broken {
+				safe(func() { b.parse([]byte("\n")) })
+			}
 			safe(func() { b.h.Finish(Completed, "") })
 			return
 		}

@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
@@ -10,12 +11,13 @@ import (
 )
 
 func init() {
-	hook.ForCall = func(ctx context.Context, integration string, client analytics.Client) (any, bool) {
-		i, ephemeral := forCall(ctx, integration, client)
-		if i == nil {
-			return nil, false
-		}
-		return i, ephemeral
+	hook.ForCall = func(ctx context.Context, integration string, client analytics.Client) (interaction any, ephemeral bool) {
+		safely(func() {
+			if i, e := forCall(ctx, integration, client); i != nil {
+				interaction, ephemeral = i, e
+			}
+		})
+		return interaction, ephemeral
 	}
 	hook.KeepMessages = func(i any, messages any) { i.(*Interaction).keepMessages(messages) }
 	hook.KeepsText = func(i any) bool { return i.(*Interaction).keepsText() }
@@ -27,5 +29,12 @@ func init() {
 	hook.StatusForErrorType = func(t string) string { return string(statusForErrorType(t)) }
 	hook.RegisterErrorClassifier = registerErrorClassifier
 	hook.Untracked = func(ctx context.Context) bool { return ctx != nil && isUntracked(ctx) }
+	hook.Recovered = func(r any, where string) {
+		if !strings.Contains(where, ".") {
+			where = callerOf(where)
+		}
+		report(KindInternal, where, recovered(r))
+	}
+	hook.Report = report
 	hook.Reset = resetForTest
 }

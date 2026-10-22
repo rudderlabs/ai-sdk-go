@@ -143,7 +143,7 @@ func TestModelClassifierFailures(t *testing.T) {
 			if !Flush(0) {
 				t.Fatal("classification did not finish")
 			}
-			if len(r.named("ai_interaction_classified")) != 0 || logs.count("intent classification failed") != 1 {
+			if len(r.named("ai_interaction_classified")) != 0 || logs.count("user_callback error in classifier") != 1 {
 				t.Fatalf("events %v logs %s", r.names(), logs)
 			}
 		})
@@ -353,7 +353,7 @@ func TestEvaluator(t *testing.T) {
 	if g["interaction_id"] != i.ID() || g["score_value"] != 0.9 || g["sampled"] != true || len([]rune(g["explanation"].(string))) != explanationChars {
 		t.Fatalf("score: %v", g)
 	}
-	if logs.count("evaluation failed") != 1 || logs.count("ai_interaction_scored dropped") != 3 {
+	if logs.count("user_callback error in evaluator") != 1 || logs.count("judge down") != 0 || logs.count("ai_interaction_scored dropped") != 3 {
 		t.Fatalf("logs: %s", logs)
 	}
 }
@@ -371,7 +371,7 @@ func TestEvaluatorTimeout(t *testing.T) {
 	if !waitBackgroundWork(evaluateTimeout + 5*time.Second) {
 		t.Fatal("evaluation never finished")
 	}
-	if len(r.named("ai_interaction_scored")) != 0 || logs.count("timed out after") != 1 {
+	if len(r.named("ai_interaction_scored")) != 0 || logs.count("user_callback error in evaluator") != 1 {
 		t.Fatalf("events %v logs %s", r.names(), logs)
 	}
 }

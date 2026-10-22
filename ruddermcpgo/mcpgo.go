@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"reflect"
 	"runtime"
@@ -30,6 +29,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/auth"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
 
@@ -187,7 +187,7 @@ func serverImpl(s *server.MCPServer) (name, version string) {
 func safely(f func()) {
 	defer func() {
 		if r := recover(); r != nil {
-			slog.Debug("ruddermcpgo: recovered from a panic in the integration", "panic", r)
+			hook.Recovered(r, "safely")
 		}
 	}()
 	f()

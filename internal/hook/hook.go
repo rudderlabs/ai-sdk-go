@@ -32,6 +32,11 @@ var (
 	RegisterErrorClassifier func(fn func(error) (string, bool))
 	// Untracked reports whether calls with this context are the SDK's own.
 	Untracked func(ctx context.Context) bool
+	// Recovered reports a contained panic as kind internal. where names the step; a bare guard
+	// function name (safe, safely) stands for the function that called it.
+	Recovered func(r any, where string)
+	// Report reports a contained error of the given kind (an onError kind).
+	Report func(kind, where string, err error)
 	// Reset restores the defaults (tests only).
 	Reset func()
 )

@@ -379,7 +379,7 @@ func (i *Interaction) fillTraceID(ctx context.Context) {
 		return
 	}
 	if from := cfg().traceIDFrom; from != nil {
-		safely(func() { i.traceID = from(ctx) })
+		callback("WithTraceIDFrom", func() error { i.traceID = from(ctx); return nil })
 	}
 }
 
@@ -776,20 +776,21 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	args, _ := t.args.(map[string]any)
 	if rule.When != nil {
 		send := false
-		safely(func() { send = rule.When(args, t.result) })
+		callback("ToolEventRule.When", func() error { send = rule.When(args, t.result); return nil })
 		if !send {
 			return
 		}
 	}
 	custom := map[string]any{}
 	if rule.Properties != nil {
-		safely(func() {
-			for k, v := range rule.Properties(args, t.result) {
+		var out map[string]any
+		if callback("ToolEventRule.Properties", func() error { out = rule.Properties(args, t.result); return nil }) {
+			for k, v := range out {
 				if !toolEventReserved[k] {
 					custom[k] = v
 				}
 			}
-		})
+		}
 	}
 	keys := slices.Collect(maps.Keys(custom))
 	i.mu.Lock()

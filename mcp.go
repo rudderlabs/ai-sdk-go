@@ -109,7 +109,7 @@ func (w *wrapped) receiving(next mcp.MethodHandler) mcp.MethodHandler {
 			req = h.req
 		}
 		ctx = context.WithValue(ctx, reqCtxKey{}, h.rc)
-		h.rc.Started()
+		safely(h.rc.Started)
 		res, err := next(ctx, method, req)
 		// Read now: the transport may cancel the context after the call returned.
 		ctxErr := ctx.Err()

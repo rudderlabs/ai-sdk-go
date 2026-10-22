@@ -149,15 +149,8 @@ func (o *options) mask(text string) (out string, ok bool) {
 	if o.Redact == nil {
 		return out, true
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			debugf("redact panicked; field dropped")
-			out, ok = "", false
-		}
-	}()
-	redacted, err := o.Redact(out)
-	if err != nil {
-		debugf("redact failed; field dropped")
+	var redacted string
+	if !callback("Options.Redact", func() (err error) { redacted, err = o.Redact(out); return err }) {
 		return "", false
 	}
 	return redacted, true
@@ -203,19 +196,9 @@ func normalizeOptions(o Options) (*options, error) {
 func (o *options) identity(ctx context.Context, token *auth.TokenInfo) (id Identity) {
 	failed := false
 	if o.Identify != nil {
-		func() {
-			defer func() {
-				if r := recover(); r != nil {
-					debugf("identify panicked; request is anonymous")
-					id, failed = Identity{}, true
-				}
-			}()
-			var err error
-			if id, err = o.Identify(ctx, token); err != nil {
-				debugf("identify failed; request is anonymous")
-				id, failed = Identity{}, true
-			}
-		}()
+		if !callback("Options.Identify", func() (err error) { id, err = o.Identify(ctx, token); return err }) {
+			id, failed = Identity{}, true
+		}
 	}
 	if token != nil && !failed {
 		if id.UserID == "" {

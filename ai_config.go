@@ -28,6 +28,7 @@ type config struct {
 	serverFeedback      bool
 	evaluator           EvaluateFunc
 	traceIDFrom         func(context.Context) string
+	onError             func(error, ErrorInfo)
 }
 
 func defaultConfig() config {
@@ -90,7 +91,7 @@ func Configure(options ...ConfigOption) error {
 		delete(global.warned, "track-failed")
 	}
 	if todo.rearmClassifier {
-		delete(global.warned, "classify-failed")
+		delete(global.warned, "error:"+KindUserCallback)
 	}
 	global.cfg = next
 	for k, v := range entries {
@@ -272,6 +273,9 @@ func resetForTest() {
 	global.clients = nil
 	global.warned = map[string]time.Time{}
 	global.mu.Unlock()
+	reported.mu.Lock()
+	reported.last = map[string]time.Time{}
+	reported.mu.Unlock()
 }
 
 // sameClient compares clients without panicking on uncomparable implementations.

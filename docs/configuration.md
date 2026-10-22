@@ -15,6 +15,7 @@ Process-wide settings, per-interaction options, identity, pricing, classificatio
 - [Pricing](#pricing)
 - [Classifier and evaluator](#classifier-and-evaluator)
 - [Flush and shutdown](#flush-and-shutdown)
+- [Errors](#errors)
 - [Logging](#logging)
 - [Warehouse column types](#warehouse-column-types)
 - [API reference](#api-reference)
@@ -49,6 +50,7 @@ err := rudderstackai.Configure(
 | `WithServerFeedback(on)`                | on      | `TrackAction` sends `ai_user_action`. Off when the browser sends its own copy (`source: "client"`).                           |
 | `WithPrices(map[string]ModelPrice)`     | none    | Registers prices, as [`RegisterPrice`](#pricing) for each. Merged into the registered ones.                                   |
 | `WithTraceIDFrom(fn)`                   | none    | Reads [`trace_id`](#trace_id) from the context, for example `rudderotel.TraceID` for the active OpenTelemetry span.        |
+| `WithOnError(fn)`                       | none    | `func(err error, info ErrorInfo)` sees [errors the SDK contained](#errors), at most once per kind a minute. Nil removes it.     |
 | `WithAzureDeploymentModels(map)`        | none    | Azure OpenAI deployment name to base model, used only to price calls with provider `azure.ai.openai`. Replaces the previous mapping; nil clears it; empty names or models are rejected; matched case-insensitively. |
 
 ## Which client is used
@@ -297,6 +299,23 @@ client.Close()         // analytics-go: send queued events, stop the client
 - A top-level `RunTask` waits for its own classification and score and flushes its client when that client implements `Flusher`; with analytics-go this sends nothing early, so close the client before the process exits.
 - Events are queued in analytics-go, so delivery errors are its own: handle them with its `Config.Callback`.
 
+## Errors
+
+Tracking never panics into your code: a panic in the SDK, in an integration (including the AWS SDK's stream-decoding goroutine) or in a hook you configured is contained, and your call's own result or error is returned unchanged. Event values are encoded before they reach the RudderStack client, so a `MarshalJSON` that panics or fails drops that property, never the process.
+
+Each contained error has an `ErrorInfo{Kind, Where}`. Kinds, identical in Node.js and Python:
+
+| Kind                | Meaning                                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `internal`          | A panic in the SDK or an integration.                                                                |
+| `user_callback`     | A hook you configured (redact, identify, event rules, classifier, evaluator, trace ID, `MarshalJSON`) failed or panicked; its documented fallback was used. |
+| `limit_reached`     | A memory cap was hit.                                                                                |
+| `redaction_timeout` | A masking pattern ran out of time; the field was sent as `[redaction timed out]`.                    |
+| `flush_timeout`     | `Flush` or `Shutdown` hit its deadline.                                                              |
+| `client_outdated`   | The RudderStack client cannot do what the SDK asked of it.                                           |
+
+`WithOnError(fn)` gets the error and its `ErrorInfo`, at most once per kind a minute; a panic in `fn` is swallowed. Without it, each kind is logged once as a warning with the error's type, never its text (it may carry credentials).
+
 ## Logging
 
 Warnings (a missing client, a failed `Enqueue`, an invalid status or surface, a dropped `TrackAction` / `TrackScore`, the first classifier failure) go to the default `log/slog` logger, prefixed `[rudderstack-ai]`, mostly once per process. Everything tracking drops or ignores is logged at debug level, errors by type only, never event payloads or captured text. Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value, read on every log call, as in Node.js and Python) to write it through the default slog handler whatever its level, or `slog.SetLogLoggerLevel(slog.LevelDebug)` to show it.
@@ -312,7 +331,7 @@ RudderStack warehouse destinations create a column with the type of the first va
 
 | Package                                          | Exports                                                                                                                                                                                                 |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `WithValues`, `Middleware`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `Flusher`, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `CostOptions`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
+| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `WithValues`, `Middleware`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `Flusher`, `ErrorInfo`, the `Kind*` constants, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `CostOptions`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
 | `.../rudderopenai`                               | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `WithStreamUsage`, `ClassifierClient`                                                                                                    |
 | `.../rudderanthropic`                            | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `ClassifierClient`                                                                                                                       |
 | `.../ruddergenai`                                | `HTTPClient`, `Transport`, `WithProvider`, `WithAnalytics`                                                                                                                                              |
