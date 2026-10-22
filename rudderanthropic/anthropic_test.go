@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -40,7 +39,7 @@ func (r *recorder) Close() error { return nil }
 // events flushes and returns every event's properties by name, schema-checked.
 func (r *recorder) events(t *testing.T) map[string][]map[string]any {
 	t.Helper()
-	rudderstackai.Flush(5 * time.Second)
+	rudderstackai.Flush(context.Background())
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := map[string][]map[string]any{}

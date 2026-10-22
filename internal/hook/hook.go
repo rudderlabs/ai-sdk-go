@@ -69,8 +69,8 @@ func Track() (done func()) {
 	}
 }
 
-// WaitTracked waits for tracked work, at most d. It reports whether all of it finished.
-func WaitTracked(d time.Duration) bool {
+// WaitTracked waits for tracked work until ctx ends. It reports whether all of it finished.
+func WaitTracked(ctx context.Context) bool {
 	tracked.mu.Lock()
 	if tracked.n == 0 {
 		tracked.mu.Unlock()
@@ -81,7 +81,7 @@ func WaitTracked(d time.Duration) bool {
 	select {
 	case <-idle:
 		return true
-	case <-time.After(d):
+	case <-ctx.Done():
 		return false
 	}
 }

@@ -356,6 +356,10 @@ var background = struct {
 // enqueue queues work after an answer (classification, evaluation) under one concurrency cap;
 // beyond the queue it is dropped with a warning. The channel closes when the work is done.
 func enqueue(job func()) chan struct{} {
+	if shuttingDown.Load() {
+		debugf("shutting down; background work dropped")
+		return nil
+	}
 	done := make(chan struct{})
 	background.mu.Lock()
 	if len(background.queue) >= maxQueued {
@@ -405,6 +409,13 @@ func finishBackground() {
 // waitBackgroundWork waits for queued and running background work, at most d. It reports
 // whether everything finished.
 func waitBackgroundWork(d time.Duration) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
+	defer cancel()
+	return waitBackgroundUntil(ctx)
+}
+
+// waitBackgroundUntil waits for queued and running background work until ctx ends.
+func waitBackgroundUntil(ctx context.Context) bool {
 	background.mu.Lock()
 	if background.pending == 0 {
 		background.mu.Unlock()
@@ -415,7 +426,7 @@ func waitBackgroundWork(d time.Duration) bool {
 	select {
 	case <-idle:
 		return true
-	case <-time.After(d):
+	case <-ctx.Done():
 		return false
 	}
 }

@@ -117,11 +117,13 @@ func TestFlushWaitsForHeldAttempt(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = resp.Body.Close() // the SDK waits to retry
-	if rudderstackai.Flush(20 * time.Millisecond) {
+	short, stop := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer stop()
+	if rudderstackai.Flush(short) {
 		t.Fatal("Flush finished with an attempt still held")
 	}
 	cancel()
-	if !rudderstackai.Flush(5 * time.Second) {
+	if !rudderstackai.Flush(context.Background()) {
 		t.Fatal("Flush timed out")
 	}
 	want(t, h.rec.props(t, "ai_response_received"), map[string]any{"response_status": "cancelled", "llm_call_count": 1})

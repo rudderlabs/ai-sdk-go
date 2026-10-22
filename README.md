@@ -261,14 +261,17 @@ Sent by default: IDs, models, token counts, latency, cost, status, tool names. N
 
 ## Serverless and workers
 
-analytics-go batches in the background and sends its queue on `Close()`; it has no flush method. Before a script, worker or serverless handler exits:
+Before a script, worker or serverless handler exits, flush within a deadline; on SIGTERM, shut down. The SDK installs no exit or signal hooks.
 
 ```go
-rudderstackai.Flush(0) // wait for pending classifications, scores and held retries; false if they did not finish
-client.Close()         // analytics-go: send queued events
+ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+defer cancel()
+rudderstackai.Flush(ctx)    // classifications, scores, held retries, then each client; false on timeout
+rudderstackai.Shutdown(ctx) // on SIGTERM: also ends open interactions as incomplete (end_reason shutdown)
+client.Close()              // the SDK never closes your client
 ```
 
-`Flush(timeout)` waits at most `timeout` (zero: the classifier timeout plus a second), then calls `Flush()` on every RudderStack client the SDK has used that implements `Flusher`. A top-level `RunTask` does the same for its own work and client ([details](docs/configuration.md#flush-and-shutdown)).
+An analytics-go client with `Flush(ctx)` sends its queue on `Flush`; an older one cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
 
 ## Events
 
@@ -325,7 +328,7 @@ A value you set always wins. No span is created or exported ([trace_id](docs/con
 | Symptom                                    | Cause and fix                                                                                                                         |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | No events, warning `no RudderStack client` | No client anywhere: `Configure(WithAnalytics(client))`.                                                                               |
-| Events missing from a job or script        | The process exited before analytics-go sent its batch: `Flush(0)`, then `client.Close()`.                                             |
+| Events missing from a job or script        | The process exited before analytics-go sent its batch: `Flush(ctx)` (or `Shutdown(ctx)`), then `client.Close()`.                      |
 | One answer split into many                 | Calls ran with a context that carries no interaction, or a stream was read after the interaction ended. Pass the interaction's `ctx`. |
 | No `total_cost_usd`                        | A model is not priced and no gateway reported a cost, a call failed or was cancelled, or a streamed call had no usage.                 |
 | No `ai_interaction_classified`             | No classifier, a call outside an interaction, an answer that failed, or a classifier error (logged once).                             |

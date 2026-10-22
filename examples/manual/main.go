@@ -68,7 +68,7 @@ func runSink(sink *harness.Sink) (result, error) {
 	}
 	res := helpdesk(context.Background(), rs)
 	// Flush waits for the classification; Close then sends the queue.
-	rudderstackai.Flush(0)
+	rudderstackai.Flush(context.Background())
 	return res, rs.Close()
 }
 

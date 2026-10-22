@@ -277,6 +277,7 @@ func resetForTest() {
 	clients.order = nil
 	clients.mu.Unlock()
 	resetOpenForTest()
+	shuttingDown.Store(false)
 	reported.mu.Lock()
 	reported.last = map[string]time.Time{}
 	reported.mu.Unlock()

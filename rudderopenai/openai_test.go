@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
@@ -44,7 +43,7 @@ func (r *recorder) Close() error { return nil }
 // events flushes, schema-checks every event and returns them as name + JSON properties.
 func (r *recorder) events(t *testing.T) []event {
 	t.Helper()
-	rudderstackai.Flush(5 * time.Second)
+	rudderstackai.Flush(context.Background())
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	out := make([]event, 0, len(r.msgs))

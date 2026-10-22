@@ -52,7 +52,7 @@ func (r *recorder) Close() error { return nil }
 // events flushes and returns every event, each checked against the spec schema.
 func (r *recorder) events(t *testing.T) []analytics.Track {
 	t.Helper()
-	rudderstackai.Flush(5 * time.Second)
+	rudderstackai.Flush(context.Background())
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, m := range r.msgs {

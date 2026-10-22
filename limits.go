@@ -115,8 +115,25 @@ func sweepExpired() {
 	}
 }
 
-// endReasonTTL is the end_reason of an interaction the TTL sweep ended.
-const endReasonTTL = "ttl_expired"
+// Values of end_reason, for interactions the SDK ended itself.
+const (
+	endReasonTTL      = "ttl_expired"
+	endReasonShutdown = "shutdown"
+)
+
+// takeOpen takes every open interaction off the open list.
+func takeOpen() []*Interaction {
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	out := make([]*Interaction, 0, open.list.Len())
+	for e := open.list.Front(); e != nil; e = e.Next() {
+		i := e.Value.(*Interaction)
+		i.elem = nil
+		out = append(out, i)
+	}
+	open.list = list.New()
+	return out
+}
 
 // expiredInteractions takes the interactions open longer than ttl off the open list.
 func expiredInteractions(ttl time.Duration) []*Interaction {

@@ -140,7 +140,7 @@ func TestModelClassifierFailures(t *testing.T) {
 			logs := captureLogs(t)
 			answer(t, InteractionOptions{PromptText: "p"}, "a")
 			answer(t, InteractionOptions{PromptText: "p"}, "a")
-			if !Flush(0) {
+			if !Flush(context.Background()) {
 				t.Fatal("classification did not finish")
 			}
 			if len(r.named("ai_interaction_classified")) != 0 || logs.count("user_callback error in classifier") != 1 {
@@ -341,7 +341,7 @@ func TestEvaluator(t *testing.T) {
 	logs := captureLogs(t)
 	i := answer(t, InteractionOptions{PromptText: "p"}, "a")
 	answer(t, InteractionOptions{PromptText: "fail"}, "a")
-	Flush(time.Second)
+	FlushTimeout(time.Second)
 	scores := r.named("ai_interaction_scored")
 	if len(scores) != 2 {
 		t.Fatalf("scores: %d", len(scores))
