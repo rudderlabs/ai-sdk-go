@@ -30,9 +30,8 @@ const (
 	capabilityReply = "Recorded for the server owner. No tool here can do this yet; tell the user."
 	capabilityDesc  = "Call this when no available tool can do what the user needs. It records the missing capability for the server's owner and performs no action."
 
-	// maxEntries bounds each per-server-name map; maxServers the server names; maxTemplates
-	// the resource templates per name. The least recently set entries go first.
-	maxEntries   = 10_000
+	// Limits.MaxMapEntries bounds each per-server-name map; maxServers the server names;
+	// maxTemplates the resource templates per name. The least recently set entries go first.
 	maxServers   = 1_000
 	maxTemplates = 1_000
 )
@@ -116,7 +115,8 @@ type pendingInput struct {
 }
 
 func newServerState() *serverState {
-	return &serverState{
+	maxEntries := cfg().limits.MaxMapEntries
+	st := &serverState{
 		toolSchemas:   newBoundedMap[map[string]any](maxEntries),
 		nativeContext: newBoundedMap[bool](maxEntries),
 		resources:     newBoundedMap[string](maxEntries),
@@ -127,6 +127,8 @@ func newServerState() *serverState {
 		inputRequired: newBoundedMap[pendingInput](maxEntries),
 		expiries:      newBoundedMap[*time.Timer](maxEntries),
 	}
+	st.expiries.evicted = func(t *time.Timer) { t.Stop() }
+	return st
 }
 
 // servers is the process-wide state by server name.

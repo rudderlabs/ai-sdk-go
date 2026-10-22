@@ -85,3 +85,42 @@ func TestInterceptTransportErrorIsReturnedUnchanged(t *testing.T) {
 		t.Fatalf("err = %v; want the transport's error", err)
 	}
 }
+
+func TestHeldRetriesCapped(t *testing.T) {
+	seen := onErrors(t)
+	if err := rudderstackai.Configure(rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 1})); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rudderstackai.Configure(rudderstackai.WithLimits(rudderstackai.Limits{})) })
+	h := newHarness(t, jsonHandler(200, `{}`))
+	ctx, in := interaction(h.rec)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, h.srv.URL, nil)
+	for n := range 2 {
+		a := &attempt{spec: h.spec, call: &Call{Interaction: in, Provider: "openai", Model: "m", HTTPRequest: req}, errorType: "rate_limit",
+			key: attemptKey{spec: h.spec, interaction: in, request: [32]byte{byte(n)}}}
+		a.hold()
+	}
+	retried.mu.Lock()
+	held, indexed := len(retried.m), len(retried.byInteraction[in])
+	retried.mu.Unlock()
+	if held != 1 || indexed != 1 {
+		t.Fatalf("held %d (indexed %d); want the cap", held, indexed)
+	}
+	// The attempt past the cap is recorded at once rather than held.
+	if got := h.rec.named("ai_llm_response_received"); len(got) != 1 || got[0].Properties["error_type"] != "rate_limit" {
+		t.Fatalf("events %v", h.rec.names())
+	}
+	in.End(rudderstackai.EndOptions{})
+	retried.mu.Lock()
+	defer retried.mu.Unlock()
+	if len(retried.m) != 0 || len(retried.byInteraction) != 0 {
+		t.Fatal("ending the interaction left attempts held")
+	}
+	found := false
+	for _, s := range seen() {
+		found = found || s == (rudderstackai.ErrorInfo{Kind: rudderstackai.KindLimitReached, Where: "MaxMapEntries (held retries)"})
+	}
+	if !found {
+		t.Fatalf("onError saw %+v", seen())
+	}
+}

@@ -152,7 +152,7 @@ func redactText(text string) (out string, ok bool) {
 		return "", false
 	}
 	masked := maskBuiltIn(text)
-	if c.redactHook == nil {
+	if c.redactHook == nil || masked == redactionTimedOut {
 		return masked, true
 	}
 	if !callback("WithRedactHook", func() (err error) { out, err = c.redactHook(masked); return err }) {

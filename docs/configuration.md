@@ -15,6 +15,7 @@ Process-wide settings, per-interaction options, identity, pricing, classificatio
 - [Pricing](#pricing)
 - [Classifier and evaluator](#classifier-and-evaluator)
 - [Flush and shutdown](#flush-and-shutdown)
+- [Limits](#limits)
 - [Errors](#errors)
 - [Logging](#logging)
 - [Warehouse column types](#warehouse-column-types)
@@ -50,6 +51,7 @@ err := rudderstackai.Configure(
 | `WithServerFeedback(on)`                | on      | `TrackAction` sends `ai_user_action`. Off when the browser sends its own copy (`source: "client"`).                           |
 | `WithPrices(map[string]ModelPrice)`     | none    | Registers prices, as [`RegisterPrice`](#pricing) for each. Merged into the registered ones.                                   |
 | `WithTraceIDFrom(fn)`                   | none    | Reads [`trace_id`](#trace_id) from the context, for example `rudderotel.TraceID` for the active OpenTelemetry span.        |
+| `WithLimits(Limits)`                    | see [Limits](#limits) | Memory caps. A zero field keeps its default.                                                                  |
 | `WithOnError(fn)`                       | none    | `func(err error, info ErrorInfo)` sees [errors the SDK contained](#errors), at most once per kind a minute. Nil removes it.     |
 | `WithAzureDeploymentModels(map)`        | none    | Azure OpenAI deployment name to base model, used only to price calls with provider `azure.ai.openai`. Replaces the previous mapping; nil clears it; empty names or models are rejected; matched case-insensitively. |
 
@@ -299,6 +301,19 @@ client.Close()         // analytics-go: send queued events, stop the client
 - A top-level `RunTask` waits for its own classification and score and flushes its client when that client implements `Flusher`; with analytics-go this sends nothing early, so close the client before the process exits.
 - Events are queued in analytics-go, so delivery errors are its own: handle them with its `Config.Callback`.
 
+## Limits
+
+`WithLimits(Limits{...})` bounds what the SDK holds in memory, whatever the traffic. Defaults are identical in Node.js and Python; reaching a cap is reported as `limit_reached` ([errors](#errors)).
+
+| Field                    | Default  | At the cap                                                                                                                        |
+| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `MaxOpenInteractions`    | 10,000   | New interactions are not tracked: your code runs as usual, the open ones keep their data.                                         |
+| `InteractionTTL`         | 1 hour   | An interaction open longer (never ended) is sent with `response_status: incomplete` and `end_reason: ttl_expired`, checked as interactions start and end (no timer). |
+| `MaxCallsPerInteraction` | 1,000    | Model calls and tool calls past it still count in the totals and `usage_breakdown`; their per-call detail is not kept (no `tool_breakdown` entry or declared tool event). |
+| `MaxMapEntries`          | 10,000   | Remembered clients, failed attempts held for a retry, each MCP map per server and mcp-go sessions: the oldest entry goes first (a held attempt is recorded at once). |
+
+Captured text is masked with a 100 ms budget per pattern; a text that runs out of it is sent as `[redaction timed out]`, never unmasked (`redaction_timeout`). Events are sent outside the SDK's locks: when analytics-go's queue is full, only the goroutine sending waits.
+
 ## Errors
 
 Tracking never panics into your code: a panic in the SDK, in an integration (including the AWS SDK's stream-decoding goroutine) or in a hook you configured is contained, and your call's own result or error is returned unchanged. Event values are encoded before they reach the RudderStack client, so a `MarshalJSON` that panics or fails drops that property, never the process.
@@ -331,7 +346,7 @@ RudderStack warehouse destinations create a column with the type of the first va
 
 | Package                                          | Exports                                                                                                                                                                                                 |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `WithValues`, `Middleware`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `Flusher`, `ErrorInfo`, the `Kind*` constants, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `CostOptions`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
+| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `WithValues`, `Middleware`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `Flusher`, `ErrorInfo`, the `Kind*` constants, `Limits`, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `CostOptions`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
 | `.../rudderopenai`                               | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `WithStreamUsage`, `ClassifierClient`                                                                                                    |
 | `.../rudderanthropic`                            | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `ClassifierClient`                                                                                                                       |
 | `.../ruddergenai`                                | `HTTPClient`, `Transport`, `WithProvider`, `WithAnalytics`                                                                                                                                              |

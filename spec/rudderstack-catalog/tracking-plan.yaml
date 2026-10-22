@@ -58,6 +58,7 @@ spec:
         - property: '#property:response_status'
           required: true
         - property: '#property:pause_reason'
+        - property: '#property:end_reason'
         - property: '#property:trigger'
         - property: '#property:client_disconnected'
         - property: '#property:primary_model'

@@ -29,18 +29,18 @@ type config struct {
 	evaluator           EvaluateFunc
 	traceIDFrom         func(context.Context) string
 	onError             func(error, ErrorInfo)
+	limits              Limits
 }
 
 func defaultConfig() config {
-	return config{identityFromCookies: true, redact: true, serverFeedback: true}
+	return config{identityFromCookies: true, redact: true, serverFeedback: true, limits: defaultLimits}
 }
 
 var global = struct {
-	mu      sync.RWMutex
-	cfg     config
-	prices  map[string]price
-	clients []analytics.Client
-	warned  map[string]time.Time
+	mu     sync.RWMutex
+	cfg    config
+	prices map[string]price
+	warned map[string]time.Time
 }{cfg: defaultConfig(), prices: map[string]price{}, warned: map[string]time.Time{}}
 
 // cfg returns a snapshot of the configuration.
@@ -270,9 +270,13 @@ func resetForTest() {
 	global.mu.Lock()
 	global.cfg = defaultConfig()
 	global.prices = map[string]price{}
-	global.clients = nil
 	global.warned = map[string]time.Time{}
 	global.mu.Unlock()
+	clients.mu.Lock()
+	clients.m.Clear()
+	clients.order = nil
+	clients.mu.Unlock()
+	resetOpenForTest()
 	reported.mu.Lock()
 	reported.last = map[string]time.Time{}
 	reported.mu.Unlock()
@@ -287,19 +291,45 @@ func sameClient(a, b analytics.Client) bool {
 	return ta == tb && ta.Comparable() && a == b
 }
 
+// clients are the clients the SDK sent through, for [Flush]: at most MaxMapEntries, oldest
+// forgotten first. A client seen before costs one lock-free lookup.
+var clients = struct {
+	m     sync.Map // analytics.Client -> struct{}
+	mu    sync.Mutex
+	order []analytics.Client
+}{}
+
 // rememberClient keeps a client the SDK sent through, for [Flush].
 func rememberClient(c analytics.Client) {
 	if c == nil || !reflect.TypeOf(c).Comparable() {
 		return
 	}
-	global.mu.Lock()
-	defer global.mu.Unlock()
-	for _, k := range global.clients {
-		if sameClient(k, c) {
-			return
-		}
+	if _, ok := clients.m.Load(c); ok {
+		return
 	}
-	global.clients = append(global.clients, c)
+	limit := cfg().limits.MaxMapEntries
+	clients.mu.Lock()
+	if _, loaded := clients.m.LoadOrStore(c, struct{}{}); loaded {
+		clients.mu.Unlock()
+		return
+	}
+	clients.order = append(clients.order, c)
+	full := len(clients.order) > limit
+	if full {
+		clients.m.Delete(clients.order[0])
+		clients.order = clients.order[1:]
+	}
+	clients.mu.Unlock()
+	if full {
+		limitReached("MaxMapEntries (clients)")
+	}
+}
+
+// rememberedClients are the clients rememberClient kept.
+func rememberedClients() []analytics.Client {
+	clients.mu.Lock()
+	defer clients.mu.Unlock()
+	return append([]analytics.Client(nil), clients.order...)
 }
 
 // warnOnce warns once per key, or again after every (zero: never again); otherwise logs at debug.

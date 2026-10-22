@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"cmp"
+	"container/list"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -140,6 +141,60 @@ type LLMCall struct {
 	OutputText string
 }
 
+// capLocked reports, once per interaction, that MaxCallsPerInteraction was reached.
+func (i *Interaction) capLocked() {
+	if !i.capped {
+		i.capped = true
+		limitReached("MaxCallsPerInteraction")
+	}
+}
+
+// mergeCallLocked adds a call past MaxCallsPerInteraction to a kept one of its usage group
+// (else the last kept), so totals and usage_breakdown keep counting.
+func (i *Interaction) mergeCallLocked(r *recordedCall) {
+	dst := i.calls[len(i.calls)-1]
+	for _, c := range i.calls {
+		if c.agentName == r.agentName && c.provider == r.provider && c.model == r.model && c.requestedModel == r.requestedModel && c.serviceTier == r.serviceTier {
+			dst = c
+			break
+		}
+	}
+	dst.callCount += r.callCount
+	dst.errorCount += r.errorCount
+	dst.inputTokens += r.inputTokens
+	dst.outputTokens += r.outputTokens
+	if r.reasoningTokens != nil {
+		dst.reasoningTokens = Ptr(derefInt(dst.reasoningTokens) + *r.reasoningTokens)
+	}
+	dst.cachedInputTokens += r.cachedInputTokens
+	dst.cacheWriteTokens += r.cacheWriteTokens
+	dst.cacheWrite1 += r.cacheWrite1
+	if r.serverToolCallCount > 0 {
+		dst.serverToolCallCount += r.serverToolCallCount
+		if r.serverToolCostUSD == nil {
+			dst.feesUnknown = true
+		} else {
+			dst.serverToolCostUSD = Ptr(round8(derefFloat(dst.serverToolCostUSD) + *r.serverToolCostUSD))
+		}
+	}
+	if dst.costUSD == nil && dst.errorType == "" {
+		dst.unpriced = true
+	}
+	switch {
+	case r.costUSD != nil:
+		dst.costUSD = Ptr(round8(derefFloat(dst.costUSD) + *r.costUSD))
+	case r.errorType == "":
+		dst.unpriced = true
+	}
+}
+
+func derefFloat(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
 // ToolCall is one tool call the model made, for [Interaction.RecordToolCalls].
 type ToolCall struct {
 	// ID is the provider tool-call ID: a call already recorded under it is merged, not counted
@@ -188,6 +243,9 @@ type EndOptions struct {
 	// ExtraProperties are custom properties for ai_response_received. SDK-owned names are
 	// ignored.
 	ExtraProperties map[string]any
+
+	// endReason is set when the SDK ends the interaction itself (end_reason).
+	endReason string
 }
 
 type recordedCall struct {
@@ -200,6 +258,9 @@ type recordedCall struct {
 	serverToolCallCount                              int
 	serverToolCostUSD, costUSD                       *float64
 	finishReason, errorType, responseID              string
+	// Past MaxCallsPerInteraction, calls are merged into one of the same group: unpriced (a
+	// successful call had no cost) and feesUnknown (server-tool fees missing) then stick.
+	unpriced, feesUnknown bool
 }
 
 type recordedTool struct {
@@ -237,6 +298,11 @@ type Interaction struct {
 	explicitAnalytics                                                      analytics.Client
 	msgContext                                                             map[string]any
 	started                                                                time.Time
+	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
+	untracked bool
+	// opened and elem place it among the open interactions (guarded by open.mu).
+	opened time.Time
+	elem   *list.Element
 
 	mu                 sync.Mutex
 	adapterAnalytics   analytics.Client
@@ -246,13 +312,18 @@ type Interaction struct {
 	ended              bool
 	firstToken         time.Duration
 	calls              []*recordedCall
+	callCount          int
+	lastCall, lastOK   *recordedCall
 	seen               map[string]*recordedCall
 	tools              []*recordedTool
+	extraToolCalls     int
+	capped             bool
 	toolsByID          map[string]*recordedTool
 	hint               *outcomeHint
 	clientDisconnected bool
 	disconnected       func() bool
 	pending            []pendingEvent
+	outbox             []outgoing
 	settled            bool
 	beforeEnd          []func()
 	prompt, answer     string
@@ -404,10 +475,17 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 		ctx = context.Background()
 	}
 	var i *Interaction
-	safely(func() { i = newInteraction(ctx, o) })
+	safely(func() {
+		sweepExpired()
+		if i = newInteraction(ctx, o); !register(i) {
+			i = nil
+		}
+	})
 	if i == nil {
-		// Tracking failed: a detached interaction keeps the caller's code working.
-		i = &Interaction{id: uuid.NewString(), conversationID: uuid.NewString(), trigger: TriggerUser, ended: true, seen: map[string]*recordedCall{}, toolsByID: map[string]*recordedTool{}}
+		// Untracked (tracking failed, or MaxOpenInteractions): a detached interaction keeps the
+		// caller's code working, and its calls are not tracked either.
+		i = &Interaction{id: uuid.NewString(), conversationID: uuid.NewString(), trigger: TriggerUser, ended: true, untracked: true, seen: map[string]*recordedCall{}, toolsByID: map[string]*recordedTool{}}
+		return context.WithValue(ctx, keyInteraction, i), i
 	}
 	i.mu.Lock()
 	if i.keepsTextLocked() && o.PromptText != "" {
@@ -507,8 +585,14 @@ func (i *Interaction) emitPrompt(o InteractionOptions) {
 			kinds = append(kinds, k)
 		}
 	}
+	// Masked now, outside the lock.
+	var promptText string
+	var promptOK bool
+	if o.PromptText != "" && i.captureContent {
+		promptText, promptOK = redactText(o.PromptText)
+	}
 	i.mu.Lock()
-	defer i.mu.Unlock()
+	defer i.unlock()
 	i.sendLocked("ai_user_prompt_created", func() map[string]any {
 		p := i.baseLocked()
 		put(p, "input_method", o.InputMethod)
@@ -519,10 +603,8 @@ func (i *Interaction) emitPrompt(o InteractionOptions) {
 			p["attachment_types"] = kinds
 		}
 		put(p, "intent", i.intent)
-		if o.PromptText != "" && i.captureContent {
-			if text, ok := redactText(o.PromptText); ok {
-				p["prompt_text"] = text
-			}
+		if promptOK {
+			p["prompt_text"] = promptText
 		}
 		return p
 	})
@@ -542,7 +624,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	call.Provider = routedProvider(call.Provider, call.Model)
 	call.RequestedModel = routedModel(call.RequestedModel, call.Model)
 	i.mu.Lock()
-	defer i.mu.Unlock()
+	defer i.unlock()
 	if i.ended {
 		debugf("call reported after interaction ended", "interaction_id", i.id)
 		return false
@@ -606,9 +688,19 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		serverToolCallCount: serverToolCalls, serverToolCostUSD: serverToolCost, costUSD: cost,
 		finishReason: call.FinishReason, errorType: call.ErrorType, responseID: call.ResponseID,
 	}
-	i.calls = append(i.calls, r)
-	if call.ResponseID != "" {
-		i.seen[call.Provider+"\x00"+call.ResponseID] = r
+	i.callCount++
+	i.lastCall = r
+	if r.errorType == "" {
+		i.lastOK = r
+	}
+	if len(i.calls) < cfg().limits.MaxCallsPerInteraction {
+		i.calls = append(i.calls, r)
+		if call.ResponseID != "" {
+			i.seen[call.Provider+"\x00"+call.ResponseID] = r
+		}
+	} else {
+		i.capLocked()
+		i.mergeCallLocked(r)
 	}
 	if c.emitLLMCalls {
 		props := i.callEventLocked(r)
@@ -632,6 +724,12 @@ func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
 				tool = i.toolsByID[call.ID]
 			}
 			if tool == nil {
+				if len(i.tools) >= cfg().limits.MaxCallsPerInteraction {
+					// Counted, not kept: no breakdown entry or declared event.
+					i.extraToolCalls++
+					i.capLocked()
+					continue
+				}
 				tool = &recordedTool{calls: 1}
 				i.tools = append(i.tools, tool)
 				if call.ID != "" {
@@ -661,7 +759,12 @@ func (i *Interaction) RecordToolCallCount(n int) {
 		return
 	}
 	i.mu.Lock()
-	i.tools = append(i.tools, &recordedTool{calls: n})
+	if len(i.tools) < cfg().limits.MaxCallsPerInteraction {
+		i.tools = append(i.tools, &recordedTool{calls: n})
+	} else {
+		i.extraToolCalls += n
+		i.capLocked()
+	}
 	i.mu.Unlock()
 }
 
@@ -731,7 +834,7 @@ var reservedProperties = set(
 	"finish_reason", "error_type", "intent", "outcome", "usage_breakdown", "tool_breakdown",
 	"response_text", "prompt_text", "input_method", "trace_id", "account_id", "on_behalf_of",
 	"trigger_source", "task_name", "parent_interaction_id", "trigger_event_id", "source", "surface",
-	"pause_reason", "client_disconnected", "attachment_count", "attachment_types",
+	"pause_reason", "client_disconnected", "attachment_count", "attachment_types", "end_reason",
 )
 
 var toolEventReserved = func() map[string]bool {
@@ -794,7 +897,7 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	}
 	keys := slices.Collect(maps.Keys(custom))
 	i.mu.Lock()
-	defer i.mu.Unlock()
+	defer i.unlock()
 	p := custom
 	for k, v := range i.baseLocked() {
 		p[k] = v
@@ -836,15 +939,35 @@ func (i *Interaction) sendLocked(event string, props func() map[string]any) {
 	i.flushLocked()
 }
 
+// outgoing is an event built under the lock, sent after it is released.
+type outgoing struct {
+	client      analytics.Client
+	event       string
+	props       map[string]any
+	integration string
+	at          time.Time
+}
+
+// flushLocked builds the pending events; unlock sends them.
 func (i *Interaction) flushLocked() {
 	if !i.settled || len(i.pending) == 0 {
 		return
 	}
 	client := i.analytics()
-	batch := i.pending
+	for _, e := range i.pending {
+		i.outbox = append(i.outbox, outgoing{client, e.event, e.props(), i.integration, e.at})
+	}
 	i.pending = nil
-	for _, e := range batch {
-		emitAI(client, e.event, i.userID, i.anonymousID, e.props(), i.msgContext, i.integration, e.at)
+}
+
+// unlock releases i.mu, then sends what flushLocked built: Enqueue blocks when the RudderStack
+// client's queue is full, and that must hold up only the caller, never the interaction.
+func (i *Interaction) unlock() {
+	out := i.outbox
+	i.outbox = nil
+	i.mu.Unlock()
+	for _, e := range out {
+		emitAI(e.client, e.event, i.userID, i.anonymousID, e.props, i.msgContext, e.integration, e.at)
 	}
 }
 
@@ -927,6 +1050,12 @@ func (i *Interaction) end(o EndOptions) {
 	// Calls whose outcome never arrived are sent now, as unknown.
 	i.fireToolEvents(tools, true)
 
+	// Masked before the lock: masking is the slowest step of the end.
+	var responseText string
+	var responseOK bool
+	if o.ResponseText != "" && i.captureContent {
+		responseText, responseOK = redactText(o.ResponseText)
+	}
 	if o.Status != "" && !responseStatuses[o.Status] {
 		warnOnce("invalid-status", fmt.Sprintf("End: invalid status %q; using the status derived from the calls", o.Status), 0)
 		o.Status = ""
@@ -952,7 +1081,7 @@ func (i *Interaction) end(o EndOptions) {
 				props[k] = v
 			}
 		}
-		for k, v := range i.buildLocked(o) {
+		for k, v := range i.buildLocked(o, responseText, responseOK) {
 			props[k] = v
 		}
 	})
@@ -967,7 +1096,9 @@ func (i *Interaction) end(o EndOptions) {
 		}
 	}
 	i.prompt, i.answer, i.messages = "", "", nil
-	i.mu.Unlock()
+	i.unlock()
+	unregister(i)
+	sweepExpired()
 
 	if props == nil || props["response_status"] != string(StatusSuccess) {
 		return
@@ -1001,7 +1132,7 @@ func (i *Interaction) end(o EndOptions) {
 // sendBackground sends a classification or score of an ended interaction.
 func (i *Interaction) sendBackground(event string, extra map[string]any) {
 	i.mu.Lock()
-	defer i.mu.Unlock()
+	defer i.unlock()
 	p := i.baseLocked()
 	p["trigger"] = string(i.trigger)
 	for k, v := range extra {
@@ -1024,17 +1155,11 @@ func (i *Interaction) waitBackground(d time.Duration) {
 	}
 }
 
-func (i *Interaction) buildLocked(o EndOptions) map[string]any {
+func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK bool) map[string]any {
 	calls := i.calls
-	var last, lastOK *recordedCall
-	for _, c := range calls {
-		last = c
-		if c.errorType == "" {
-			lastOK = c
-		}
-	}
+	last, lastOK := i.lastCall, i.lastOK
 	status, errorType, pauseReason := o.Status, o.ErrorType, o.PauseReason
-	if status == "" && i.hint != nil && i.hint.calls == len(calls) {
+	if status == "" && i.hint != nil && i.hint.calls == i.callCount {
 		status = i.hint.status
 		errorType = first(errorType, i.hint.errorType)
 	}
@@ -1090,7 +1215,7 @@ func (i *Interaction) buildLocked(o EndOptions) map[string]any {
 		return n
 	}
 	p["llm_call_count"] = sum(func(c *recordedCall) int { return c.callCount })
-	tools := 0
+	tools := i.extraToolCalls
 	for _, t := range i.tools {
 		tools += t.calls
 	}
@@ -1130,12 +1255,11 @@ func (i *Interaction) buildLocked(o EndOptions) map[string]any {
 	if i.toolBreakdown && len(i.tools) > 0 {
 		p["tool_breakdown"] = toolBreakdown(i.tools)
 	}
-	if o.ResponseText != "" && i.captureContent {
-		if text, ok := redactText(o.ResponseText); ok {
-			p["response_text"] = text
-		}
+	if responseOK {
+		p["response_text"] = responseText
 	}
 	put(p, "trace_id", i.traceID)
+	put(p, "end_reason", o.endReason)
 	return p
 }
 
@@ -1144,6 +1268,9 @@ func pricedTotal(calls []*recordedCall) (float64, bool) {
 	priced := false
 	total := 0.0
 	for _, c := range calls {
+		if c.unpriced {
+			return 0, false
+		}
 		if c.costUSD == nil {
 			if c.errorType == "" {
 				return 0, false
@@ -1215,7 +1342,7 @@ func usageBreakdown(calls []*recordedCall) []map[string]any {
 				if c.serverToolCallCount == 0 {
 					continue
 				}
-				if c.serverToolCostUSD == nil {
+				if c.serverToolCostUSD == nil || c.feesUnknown {
 					all = false
 					break
 				}
@@ -1354,7 +1481,7 @@ func (i *Interaction) adoptAnalytics(c analytics.Client) {
 		return
 	}
 	i.mu.Lock()
-	defer i.mu.Unlock()
+	defer i.unlock()
 	if i.adapterAnalytics == nil {
 		i.adapterAnalytics = c
 		i.flushLocked()
@@ -1364,7 +1491,7 @@ func (i *Interaction) adoptAnalytics(c analytics.Client) {
 // callStarted: a model call of this interaction starts; the held prompt event goes out now.
 func (i *Interaction) callStarted(ctx context.Context, integration string) {
 	i.mu.Lock()
-	defer i.mu.Unlock()
+	defer i.unlock()
 	if i.ended {
 		return
 	}
@@ -1386,6 +1513,9 @@ func forCall(ctx context.Context, integration string, client analytics.Client) (
 		return nil, false
 	}
 	active := FromContext(ctx)
+	if active != nil && active.untracked {
+		return nil, false
+	}
 	if active != nil && !active.Ended() {
 		active.adoptAnalytics(client)
 		active.callStarted(ctx, integration)
@@ -1404,7 +1534,12 @@ func forCall(ctx context.Context, integration string, client analytics.Client) (
 		o.ParentInteractionID = active.id
 	}
 	var i *Interaction
-	safely(func() { i = newInteraction(ctx, o) })
+	safely(func() {
+		sweepExpired()
+		if i = newInteraction(ctx, o); !register(i) {
+			i = nil
+		}
+	})
 	if i == nil {
 		return nil, false
 	}
@@ -1444,7 +1579,7 @@ func (i *Interaction) firstTokenAt(at time.Time) {
 // hintOutcome sets the status End reports unless a call is recorded afterwards.
 func (i *Interaction) hintOutcome(status ResponseStatus, errorType string) {
 	i.mu.Lock()
-	i.hint = &outcomeHint{status: status, errorType: errorType, calls: len(i.calls)}
+	i.hint = &outcomeHint{status: status, errorType: errorType, calls: i.callCount}
 	i.mu.Unlock()
 }
 

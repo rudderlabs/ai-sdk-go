@@ -3,6 +3,7 @@ package kit
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -55,10 +56,38 @@ type attemptKey struct {
 	request     [sha256.Size]byte
 }
 
+// retried holds the failed attempts, indexed by interaction so a new call settles its own in
+// O(its attempts). At most hook.MaxMapEntries are held; past it an attempt is recorded at once.
 var retried = struct {
-	mu sync.Mutex
-	m  map[attemptKey]*attempt
-}{m: map[attemptKey]*attempt{}}
+	mu            sync.Mutex
+	m             map[attemptKey]*attempt
+	byInteraction map[*rudderstackai.Interaction]map[attemptKey]struct{}
+}{m: map[attemptKey]*attempt{}, byInteraction: map[*rudderstackai.Interaction]map[attemptKey]struct{}{}}
+
+// heldLocked holds a under k.
+func heldLocked(k attemptKey, a *attempt) {
+	retried.m[k] = a
+	if k.interaction == nil {
+		return
+	}
+	keys := retried.byInteraction[k.interaction]
+	if keys == nil {
+		keys = map[attemptKey]struct{}{}
+		retried.byInteraction[k.interaction] = keys
+	}
+	keys[k] = struct{}{}
+}
+
+// releasedLocked forgets the attempt held under k.
+func releasedLocked(k attemptKey) {
+	delete(retried.m, k)
+	if keys := retried.byInteraction[k.interaction]; keys != nil {
+		delete(keys, k)
+		if len(keys) == 0 {
+			delete(retried.byInteraction, k.interaction)
+		}
+	}
+}
 
 // retryNumber is the attempt number the SDK sent; ok is false without the header.
 func retryNumber(req *http.Request) (n int, ok bool) {
@@ -86,16 +115,14 @@ func resume(k attemptKey, n int) *attempt {
 	if n > 0 {
 		if a, ok := retried.m[k]; ok {
 			prev = a
-			delete(retried.m, k)
+			releasedLocked(k)
 		}
 	}
 	var stale []*attempt
 	if k.interaction != nil {
-		for key, a := range retried.m {
-			if key.interaction == k.interaction {
-				stale = append(stale, a)
-				delete(retried.m, key)
-			}
+		for key := range retried.byInteraction[k.interaction] {
+			stale = append(stale, retried.m[key])
+			releasedLocked(key)
 		}
 	}
 	retried.mu.Unlock()
@@ -128,7 +155,7 @@ func (a *attempt) take() bool {
 	if retried.m[a.key] != a {
 		return false
 	}
-	delete(retried.m, a.key)
+	releasedLocked(a.key)
 	return true
 }
 
@@ -148,7 +175,13 @@ func (a *attempt) settle() {
 func (a *attempt) hold() {
 	retried.mu.Lock()
 	old := retried.m[a.key]
-	retried.m[a.key] = a
+	if old == nil && len(retried.m) >= hook.MaxMapEntries() {
+		retried.mu.Unlock()
+		hook.Report("limit_reached", "MaxMapEntries (held retries)", errHeldFull)
+		a.settle()
+		return
+	}
+	heldLocked(a.key, a)
 	retried.mu.Unlock()
 	if old != nil { // an identical request that was never retried
 		old.claimed()
@@ -183,6 +216,8 @@ func (a *attempt) contextDone() {
 }
 
 const retryGrace = time.Second
+
+var errHeldFull = errors.New("rudderstackai: too many failed attempts held for a retry; recorded at once")
 
 func (a *attempt) settleIfTaken() {
 	if a.take() {
