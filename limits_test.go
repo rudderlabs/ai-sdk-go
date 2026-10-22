@@ -239,7 +239,7 @@ func TestRedactionTimeoutSendsPlaceholder(t *testing.T) {
 		t.Fatalf("hook saw %+v", got)
 	}
 	for _, re := range compiledRules {
-		if re.MatchTimeout != redactMatchTimeout {
+		if re.MatchTimeout != redactMatchTimeout*raceSlowdown {
 			t.Fatal("a built-in pattern has no timeout")
 		}
 	}

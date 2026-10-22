@@ -57,7 +57,7 @@ var compiledRules = func() []*regexp2.Regexp {
 	out := make([]*regexp2.Regexp, len(redactRules))
 	for i, r := range redactRules {
 		out[i] = regexp2.MustCompile(r.pattern, regexp2.None)
-		out[i].MatchTimeout = redactMatchTimeout
+		out[i].MatchTimeout = redactMatchTimeout * raceSlowdown
 	}
 	return out
 }()
