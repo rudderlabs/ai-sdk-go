@@ -31,6 +31,8 @@ const (
 	maxLabelLength = 64
 	// maxTextLength caps agent-written text (call_reason, capability_detail), in code points.
 	maxTextLength = 200
+	// maxListItems caps name lists: argument_keys, client_capabilities.
+	maxListItems = 100
 
 	metaInteractionID      = "com.rudderstack/interaction_id"
 	metaTraceID            = "com.rudderstack/trace_id"
@@ -154,8 +156,18 @@ func capabilityNames(v any) []string {
 	for k := range m {
 		out = append(out, k)
 	}
-	sort.Strings(out)
-	return out
+	return sortedNames(out)
+}
+
+// sortedNames sorts names by code point, then keeps maxListItems of them, each capped at
+// maxLabelLength code points, so every SDK sends the same list whatever the client's order.
+func sortedNames(names []string) []string {
+	sort.Strings(names)
+	names = names[:min(len(names), maxListItems)]
+	for i, n := range names {
+		names[i] = capText(n, maxLabelLength)
+	}
+	return names
 }
 
 var contentTypes = map[string]bool{"text": true, "image": true, "audio": true, "resource_link": true, "resource": true}

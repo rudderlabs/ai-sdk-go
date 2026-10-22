@@ -35,7 +35,7 @@ func TestClientSeenOncePerClientAtInitialize(t *testing.T) {
 			t.Errorf("%s = %v, want %v", k, p[k], v)
 		}
 	}
-	if caps := p["client_capabilities"].([]string); !slices.Contains(caps, "elicitation") {
+	if caps := p["client_capabilities"].([]string); !slices.Equal(caps, []string{"elicitation", "roots"}) {
 		t.Errorf("client_capabilities = %v", caps)
 	}
 	if _, ok := p["mcp_session_id"]; ok {

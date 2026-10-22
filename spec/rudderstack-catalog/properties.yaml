@@ -521,7 +521,7 @@ spec:
       name: client_capabilities
       type: array
       item_types: [string]
-      description: Features the MCP client declared, for example elicitation.
+      description: Features the MCP client declared, for example elicitation, sorted by Unicode code point.
     - id: protocol_version
       name: protocol_version
       type: string
@@ -567,7 +567,7 @@ spec:
       name: argument_keys
       type: array
       item_types: [string]
-      description: Names of the arguments supplied. Never the values.
+      description: Names of the arguments supplied, sorted by Unicode code point. Never the values.
     - id: invalid_arguments
       name: invalid_arguments
       type: array

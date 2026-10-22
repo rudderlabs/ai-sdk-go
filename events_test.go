@@ -3,6 +3,7 @@ package rudderstackai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -54,6 +55,34 @@ func TestSubscriptionChangesAndExpiry(t *testing.T) {
 	}
 	if p := r.named("mcp_event_subscription_changed")[1]; p.UserId != "u1" || p.Properties["account_id"] != "acct" {
 		t.Errorf("explicit identity = %v", mustJSON(p))
+	}
+}
+
+// argument_keys and client_capabilities are sorted by code point in every SDK, whatever the client sent.
+func TestNameListsSortedByCodePoint(t *testing.T) {
+	keys := map[string]any{"b": 1, "\U0001F600": 1, "a": 1, "～": 1, "B": 1}
+	want := []string{"B", "a", "b", "～", "\U0001F600"}
+	if got := capabilityNames(keys); !slices.Equal(got, want) {
+		t.Errorf("capabilityNames = %q", got)
+	}
+	server := workspaceServer("events-mcp", nil)
+	r := wrap(t, server, Options{MCPEvents: true})
+	TrackMCPEventSubscription(context.Background(), server, SubscriptionChange{Action: SubscriptionCreated, SubscriptionID: "s", EventName: "e", Arguments: keys})
+	if got := r.props(t, "mcp_event_subscription_changed")["argument_keys"].([]string); !slices.Equal(got, want) {
+		t.Errorf("argument_keys = %q", got)
+	}
+
+	// Sorted first, then capped at 100 names of 64 code points.
+	many := map[string]any{strings.Repeat("é", 70): 1}
+	for i := range 150 {
+		many[fmt.Sprintf("k%03d", 149-i)] = 1
+	}
+	got := capabilityNames(many)
+	if len(got) != 100 || got[0] != "k000" || got[99] != "k099" {
+		t.Errorf("capped capabilityNames = %q…", got[:3])
+	}
+	if got := sortedNames([]string{strings.Repeat("é", 70)}); got[0] != strings.Repeat("é", 64) {
+		t.Errorf("long name = %q", got[0])
 	}
 }
 

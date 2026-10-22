@@ -385,8 +385,7 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 			t.args[k] = x
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
-		t.props["argument_keys"] = keys
+		t.props["argument_keys"] = sortedNames(keys)
 	}
 	t.props["progress_requested"] = progress
 	t.answered = len(answers) > 0
