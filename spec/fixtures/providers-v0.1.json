@@ -55,6 +55,12 @@
     { "requested": "gpt-4o", "served": "gpt-4o-mini", "expected": "gpt-4o" },
     { "requested": "openrouter/auto", "served": "anthropic/claude-sonnet-4-5", "expected": "openrouter/auto" },
     { "requested": "fast", "served": "openai/qwen3:1.7b", "expected": "fast" },
-    { "requested": "gpt-5", "served": null, "expected": null }
+    { "requested": "gpt-5", "served": null, "expected": null },
+    { "requested": "us.anthropic.claude-haiku-4-5-20251001-v1:0", "served": "claude-haiku-4-5-20251001", "expected": null },
+    { "requested": "global.anthropic.claude-sonnet-4-5-20250929-v1:0", "served": "claude-sonnet-4-5-20250929", "expected": null },
+    { "requested": "anthropic.claude-3-5-sonnet-20240620-v1:0", "served": "claude-3-5-sonnet-20240620", "expected": null },
+    { "requested": "us.anthropic.claude-haiku-4-5-20251001-v1:0", "served": "claude-sonnet-4-5-20250929", "expected": "us.anthropic.claude-haiku-4-5-20251001-v1:0" },
+    { "requested": "claude-haiku-4-5@20251001", "served": "claude-haiku-4-5-20251001", "expected": null },
+    { "requested": "claude-haiku-4-5@20251001", "served": "claude-sonnet-4-5-20250929", "expected": "claude-haiku-4-5@20251001" }
   ]
 }

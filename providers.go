@@ -57,7 +57,18 @@ func routedProvider(provider, model string) string {
 	return normalizeProvider(model[:slash])
 }
 
-func bareModel(model string) string { return strings.ToLower(model[strings.LastIndex(model, "/")+1:]) }
+// Bedrock's [region.]anthropic. prefix and -v1:0 suffix, and Vertex's @<date>, name the same model
+// Anthropic serves as claude-…-<date>.
+var (
+	bedrockAnthropicID = regexp.MustCompile(`^(?:[a-z-]+\.)?anthropic\.(claude-.*?)(?:-v[0-9]+:[0-9]+)?$`)
+	vertexAnthropicID  = regexp.MustCompile(`^(claude-.*)@([0-9]{8})$`)
+)
+
+func bareModel(model string) string {
+	m := strings.ToLower(model[strings.LastIndex(model, "/")+1:])
+	m = bedrockAnthropicID.ReplaceAllString(m, "$1")
+	return vertexAnthropicID.ReplaceAllString(m, "$1-$2")
+}
 
 // What may follow a model name without changing its identity: dates, snapshots, versions, tags.
 var versionSuffix = regexp.MustCompile(`^(?:-[0-9]{4}-[0-9]{2}-[0-9]{2}|-[0-9]{8}|-[0-9]{3,4}|-v[0-9]+(?:\.[0-9]+)*|-latest)*(?:[:@][0-9a-z._-]+)?$`)
