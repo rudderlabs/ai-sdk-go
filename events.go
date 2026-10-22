@@ -1,6 +1,7 @@
 package rudderstackai
 
 import (
+	"cmp"
 	"context"
 	"sort"
 	"time"
@@ -71,8 +72,9 @@ type SubscriptionChange struct {
 	ClientName string
 }
 
-// EventDelivery is one update to deliver, as passed to an [EventSender]. SubscriptionID,
-// EventName and EventID are required: a delivery without them is dropped (one warning per process).
+// EventDelivery is one update to deliver, as passed to an [EventSender]. SubscriptionID and
+// EventID are required: a delivery without them is dropped (one warning per process). A missing
+// EventName is sent as unknown.
 type EventDelivery struct {
 	EventsIdentity
 	SubscriptionID string
@@ -255,11 +257,12 @@ func (w *wrapped) DeliveryDone(ctx context.Context, delivery, result any, failed
 	if !ok || !w.opts.Load().MCPEvents {
 		return
 	}
-	id, event, eventID := capID(d.SubscriptionID), capID(d.EventName), capID(d.EventID)
-	if id == "" || event == "" || eventID == "" {
-		warnOnce("mcp-delivery-ids", "mcp_event_delivered dropped: SubscriptionID, EventName and EventID are required", 0)
+	id, eventID := capID(d.SubscriptionID), capID(d.EventID)
+	if id == "" || eventID == "" {
+		warnOnce("mcp-delivery-ids", "mcp_event_delivered dropped: SubscriptionID and EventID are required", 0)
 		return
 	}
+	event := cmp.Or(capID(d.EventName), "unknown")
 	opts, whom, base := w.eventsBase(ctx, d.EventsIdentity)
 	p := map[string]any{
 		"subscription_id": id,

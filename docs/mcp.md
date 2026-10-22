@@ -180,7 +180,7 @@ deliver := rudderstackai.WrapMCPEventSender(server, func(ctx context.Context, d 
 ```
 
 - Subscription actions: `created`, `refreshed`, `unsubscribed`, `revoked`, `expired`, `callback_failed` (with `FailureReason`). With `TTL` on `created` or `refreshed`, an `expired` change is sent when the lifetime passes without a refresh, unsubscribe or revoke in this process.
-- `SubscriptionID` and `EventName` (and `EventID` for a delivery) are required: a record without them is dropped (one warning per process), never sent with placeholder IDs; the sender still runs and its result is returned unchanged.
+- A subscription change needs `SubscriptionID` and `EventName`; a delivery needs `SubscriptionID` and `EventID`, and a missing `EventName` is sent as `unknown`. A record without its required IDs is dropped (one warning per process), never sent with placeholder IDs; the sender still runs and its result is returned unchanged.
 - `delivery_status` comes from `HTTPStatus` (2xx `acknowledged`, 410 and 413 `rejected`, anything else `gave_up`) unless the sender returns `DeliveryStatus`; a sender that returns an error is `gave_up`, and the error is returned unchanged. `delivery_latency_ms` (acknowledged only) runs from `OccurredAt`, and is left out without it; `payload_size_bytes` is the payload's size, never the payload.
 
 ## Limits
