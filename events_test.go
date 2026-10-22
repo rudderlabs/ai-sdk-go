@@ -123,7 +123,8 @@ func TestMCPEventsNeedOptIn(t *testing.T) {
 }
 
 // Without its required IDs an MCP Events record is dropped with a warning, not sent with
-// placeholders; without OccurredAt the latency is left out.
+// placeholders; a delivery without EventName is sent as unknown, without a warning; without
+// OccurredAt the latency is left out.
 func TestMCPEventsSkipMissingIDsAndLatency(t *testing.T) {
 	server := workspaceServer("events-ids-mcp", nil)
 	r := wrap(t, server, Options{MCPEvents: true})
@@ -135,16 +136,25 @@ func TestMCPEventsSkipMissingIDsAndLatency(t *testing.T) {
 	send := WrapMCPEventSender(server, func(context.Context, EventDelivery) (DeliveryOutcome, error) {
 		return DeliveryOutcome{HTTPStatus: 200}, nil
 	})
+	if _, err := send(ctx, EventDelivery{SubscriptionID: "s", EventID: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := logs.count("mcp_event_delivered dropped"); n != 0 {
+		t.Errorf("unnamed delivery warned: %s", logs)
+	}
 	for _, d := range []EventDelivery{
-		{EventName: "e", EventID: "x"}, {SubscriptionID: "s", EventID: "x"}, {SubscriptionID: "s", EventName: "e"},
+		{EventName: "e", EventID: "x"}, {SubscriptionID: "s", EventName: "e"},
 		{SubscriptionID: "s", EventName: "e", EventID: "x"},
 	} {
 		if _, err := send(ctx, d); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if got := r.names(); len(got) != 1 || got[0] != "mcp_event_delivered" {
+	if got := r.names(); !slices.Equal(got, []string{"mcp_event_delivered", "mcp_event_delivered"}) {
 		t.Fatalf("events = %v", got)
+	}
+	if got := r.all()[0].Properties; got["event_name"] != "unknown" || got["subscription_id"] != "s" || got["event_id"] != "x" {
+		t.Errorf("unnamed delivery = %v", got)
 	}
 	// One warning per process for each kind.
 	if n := logs.count("mcp_event_subscription_changed dropped"); n != 1 {

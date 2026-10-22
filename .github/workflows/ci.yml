@@ -79,6 +79,8 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ matrix.go }}
+          # The runner cache can lag the latest patch, which may be below the go.mod minimum.
+          check-latest: true
 
       - name: Run unit tests with coverage
         run: go test -race -coverprofile=coverage.out -covermode=atomic $PKGS

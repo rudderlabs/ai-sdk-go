@@ -11,7 +11,7 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 
 - On every push to `main`, release-please opens or updates a `chore: release x.y.z` PR that bumps `Version` in `version.go` (`x-release-please-version` marker) and the manifest, and updates `CHANGELOG.md`. Before 1.0, `feat` and breaking changes bump the minor version and `fix` the patch version.
 - Merging that PR tags `vX.Y.Z` (no component prefix, as Go modules require) and publishes a GitHub release.
-- The tag is the release: `go get github.com/rudderlabs/ai-sdk-go@vX.Y.Z` resolves it. While the repository is not public, consumers need `GOPRIVATE=github.com/rudderlabs/*` and git credentials for it; once public, the Go module proxy (`proxy.golang.org`) and `pkg.go.dev` pick the tag up on first request.
+- The tag is the release: `go get github.com/rudderlabs/ai-sdk-go@vX.Y.Z` resolves it. The Go module proxy (`proxy.golang.org`) and `pkg.go.dev` pick the tag up on first request.
 - Never move or delete a published tag: the Go checksum database records each version's hash, and a changed tag breaks every consumer. Fix forward with a new version, or add a `retract` directive to `go.mod` for a bad one.
 
 ## Modules
