@@ -124,7 +124,7 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 
 ## Identity
 
-Every event needs `userId` or `anonymousId`. Pass them in `InteractionOptions`, or set them once per request with `WithValues(ctx, ContextValues{UserID, AccountID, ...})`; nested values inherit. Runs with neither use `anonymousId: "ai_system"`.
+Every event needs `userId` or `anonymousId`. Pass them in `InteractionOptions`, or set them once per request with `WithValues(ctx, ContextValues{UserID, AccountID, ...})`; nested values inherit. Runs with neither use `anonymousId: "ai_system"`. With only a `UserID`, analytics-go fills a random `anonymousId` on every event, so it never matches the user's other events; pass a stable `AnonymousID` (or use the cookies below) when you join on it.
 
 When the browser runs the RudderStack JavaScript SDK (v3), its cookies give server-side AI events the browser's `anonymousId` and session, so they join the same user journey. Wrap your handlers:
 
