@@ -23,7 +23,7 @@ go get github.com/rudderlabs/ai-sdk-go github.com/rudderlabs/analytics-go/v4
 go get github.com/rudderlabs/ai-sdk-go/rudderopenai # plus the integration module for each provider SDK you use
 ```
 
-Go 1.26.9 or later. `go get` needs read access to the `rudderlabs/ai-sdk-go` repository: while it is not public, set `GOPRIVATE=github.com/rudderlabs/*` and give git credentials for it (for example a `~/.netrc` entry or `git config url."git@github.com:".insteadOf "https://github.com/"`).
+Go 1.26.10 or later.
 
 The root module holds the interaction API, the `net/http` middleware and MCP support. It depends on analytics-go, the MCP libraries (go-sdk and mcp-go), regexp2 (redaction patterns), google/uuid, and santhosh-tekuri/jsonschema (used only by the SDK's own schema tests, so it is not compiled into your binary). Each provider integration, and the OpenTelemetry helper `rudderotel`, is its own module, so an MCP-only service does not pull provider SDKs.
 
@@ -339,7 +339,7 @@ Each module requires the oldest version it supports, so adding it never upgrades
 
 | Module                                        | Requires and tested at (minimum)                               | Also tested with |
 | --------------------------------------------- | -------------------------------------------------------------- | ---------------- |
-| All modules                                   | Go 1.26.9                                                      | Go 1.26, 1.27    |
+| All modules                                   | Go 1.26.10                                                      | Go 1.26, 1.27    |
 | `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.3.1, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.2.1 |
 | `.../rudderopenai`                            | `github.com/openai/openai-go/v3` v3.70.0                        | v3.77.0          |
 | `.../rudderanthropic`                         | `github.com/anthropics/anthropic-sdk-go` v1.78.0                | v1.80.0          |
