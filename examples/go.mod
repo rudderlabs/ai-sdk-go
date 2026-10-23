@@ -3,12 +3,12 @@ module github.com/rudderlabs/ai-sdk-go/examples
 go 1.26.10
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.80.0
+	github.com/anthropics/anthropic-sdk-go v1.82.0
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.4
-	github.com/mark3labs/mcp-go v1.2.1
+	github.com/mark3labs/mcp-go v1.3.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/openai/openai-go/v3 v3.77.0
+	github.com/openai/openai-go/v3 v3.78.0
 	github.com/rudderlabs/ai-sdk-go v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderanthropic v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderbedrock v0.1.0
@@ -16,7 +16,7 @@ require (
 	github.com/rudderlabs/ai-sdk-go/rudderopenai v0.1.0
 	github.com/rudderlabs/analytics-go/v4 v4.3.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
-	google.golang.org/genai v1.73.0
+	google.golang.org/genai v1.75.0
 )
 
 require (
