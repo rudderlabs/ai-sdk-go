@@ -8,6 +8,7 @@ import (
 
 	"github.com/rudderlabs/ai-sdk-go/examples/internal/harness"
 	"github.com/rudderlabs/ai-sdk-go/internal/dataplane"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 // runCheck runs the example against the mock LLM server replaying the shared cassette, with
@@ -24,7 +25,8 @@ func runCheck(sink *harness.Sink) error {
 		Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
 			return aws.Credentials{AccessKeyID: "check", SecretAccessKey: "check"}, nil
 		}),
-		Retryer: func() aws.Retryer { return aws.NopRetryer{} },
+		Retryer:    func() aws.Retryer { return aws.NopRetryer{} },
+		HTTPClient: testkit.HTTPClient(),
 	})
 	if err != nil {
 		return err

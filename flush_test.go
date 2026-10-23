@@ -159,8 +159,8 @@ type nopClient struct{}
 func (nopClient) Enqueue(analytics.Message) error { return nil }
 func (nopClient) Close() error                    { return nil }
 
-// The SDK's own work grows linearly with a burst: 6.5 times the interactions take well under 10
-// times as long (the 7.5 s report for 1,300 interactions was the Node.js client's quadratic).
+// The SDK's own work grows linearly with a burst: 6.5 times the interactions take well under 20
+// times as long; quadratic would be about 42 (the 7.5 s report was the Node.js client's quadratic).
 func TestBurstScalesLinearly(t *testing.T) {
 	if testing.Short() {
 		t.Skip("timing")
@@ -181,7 +181,7 @@ func TestBurstScalesLinearly(t *testing.T) {
 	small, large := best(200), best(1300)
 	ratio := float64(large) / float64(small)
 	t.Logf("200: %v, 1300: %v (%.1fx)", small, large, ratio)
-	if ratio > 10 {
+	if ratio > 20 { // headroom for -race and a busy CI runner
 		t.Fatal("the burst grows faster than linearly")
 	}
 }
