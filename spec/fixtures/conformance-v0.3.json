@@ -36388,6 +36388,89 @@
           }
         }
       ]
+    },
+    {
+      "name": "shutdown_ends_open_interaction",
+      "description": "shutdown() inside an open interaction ends it now: response_status incomplete with end_reason shutdown, the calls so far keep their usage, no error_type; the interaction's own end afterwards sends nothing more.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "u1",
+            "conversation_id": "conv_sd"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 3,
+              "output_tokens": 2
+            },
+            {
+              "op": "shutdown"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "u1",
+          "properties": {
+            "conversation_id": "conv_sd",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "u1",
+          "properties": {
+            "conversation_id": "conv_sd",
+            "interaction_id": "$int1",
+            "response_status": "incomplete",
+            "end_reason": "shutdown",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 3,
+            "total_output_tokens": 2,
+            "total_tokens": 5,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 3,
+                "output_tokens": 2,
+                "total_tokens": 5,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
     }
   ]
 }

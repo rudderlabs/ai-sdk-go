@@ -87,7 +87,7 @@ func TestEmitMCPFitsAndRemembersClient(t *testing.T) {
 	if len(got) != 1 || got[0].Properties["response_text"] != nil || got[0].Properties["tool_name"] != "t" {
 		t.Fatalf("events = %v", got)
 	}
-	Flush(time.Second)
+	FlushTimeout(time.Second)
 	if s.flushes.Load() != 1 {
 		t.Fatal("MCP client not flushed")
 	}

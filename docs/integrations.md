@@ -251,5 +251,5 @@ An agent that calls MCP servers can join each `mcp_tool_called` to its answer by
 - genai retries are recorded per attempt, as are openai-go and anthropic-sdk-go connection-error retries outside an interaction ([Retries](#retries)). Node.js wraps the SDK method and sees one call.
 - Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `EndOptions`; `client_disconnected` also by [`Middleware`](configuration.md#context-values).
 - Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
-- `Flush` cannot send analytics-go's queue (it has no flush method): close the client before exiting.
+- `Flush` sends analytics-go's queue only on a release with `Flush(ctx)`; with an older one, close the client before exiting. There is no exit hook: call `Flush` or `Shutdown` yourself.
 - Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint.

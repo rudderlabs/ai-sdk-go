@@ -1157,17 +1157,20 @@ func (i *Interaction) sendBackground(event string, extra map[string]any) {
 	i.sendLocked(event, func() map[string]any { return p })
 }
 
-// waitBackground waits for this interaction's classification and scores, at most d.
-func (i *Interaction) waitBackground(d time.Duration) {
+// waitBackground waits for this interaction's classification and scores until ctx ends; false
+// when they did not finish.
+func (i *Interaction) waitBackground(ctx context.Context) bool {
 	i.mu.Lock()
 	ch := i.background
 	i.mu.Unlock()
 	if ch == nil {
-		return
+		return true
 	}
 	select {
 	case <-ch:
-	case <-time.After(d):
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 

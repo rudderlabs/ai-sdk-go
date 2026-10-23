@@ -291,7 +291,7 @@ func runScenario(t *testing.T, sc scenario) {
 	if err := r.steps(context.Background(), sc.Steps); err != nil {
 		t.Fatalf("steps: %v", err)
 	}
-	rudderstackai.Flush(10 * time.Second)
+	rudderstackai.Flush(context.Background())
 	actual := normalise(rec.all())
 	for _, m := range rec.all() {
 		props := map[string]any(m.Properties)
@@ -335,13 +335,13 @@ func (r *run) step(ctx context.Context, s obj) error {
 		err := rudderstackai.RunInteraction(ctx, interactionOptions(obj0(s["options"])), func(ctx context.Context, i *rudderstackai.Interaction) error {
 			return r.inside(ctx, i, objs0(s["steps"]))
 		})
-		rudderstackai.Flush(10 * time.Second)
+		rudderstackai.Flush(context.Background())
 		return expectError(s, err)
 	case "task":
 		err := rudderstackai.RunTask(ctx, str(s["task_name"]), taskOptions(obj0(s["options"])), func(ctx context.Context, i *rudderstackai.Interaction) error {
 			return r.inside(ctx, i, objs0(s["steps"]))
 		})
-		rudderstackai.Flush(10 * time.Second)
+		rudderstackai.Flush(context.Background())
 		return expectError(s, err)
 	case "context":
 		v := obj0(s["values"])
@@ -353,7 +353,7 @@ func (r *run) step(ctx context.Context, s obj) error {
 		cv.Cookies, cv.CookieValues = cookies(v["cookies"])
 		err := r.steps(rudderstackai.WithValues(ctx, cv), objs0(s["steps"]))
 		if r.cur == nil {
-			rudderstackai.Flush(10 * time.Second)
+			rudderstackai.Flush(context.Background())
 		}
 		return err
 	case "raise":
@@ -435,6 +435,8 @@ func (r *run) step(ctx context.Context, s obj) error {
 		return rudderstackai.Configure(rudderstackai.WithPrices(prices))
 	case "clear_prices":
 		rudderstackai.ClearPrices()
+	case "shutdown":
+		rudderstackai.Shutdown(context.Background())
 	default:
 		return fmt.Errorf("unknown op %s", op)
 	}

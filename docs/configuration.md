@@ -119,7 +119,8 @@ Field reference for `LLMCall`, `ToolCall` and `ToolResult`: [integrations.md](in
 - The actor is the system: `UserID` and `AnonymousID` come only from the options, never from the context or cookies, so events without them use `anonymousId: "ai_system"`. Put the customer in `AccountID` and the human the work is for in `OnBehalfOf`; both, and `Feature`, `Surface`, `Analytics` and `Context`, still fall back to the context. Set a stable, scoped `ConversationID` for bots and jobs, or each run gets a new one.
 - Chaining: inside another interaction or task, `ParentInteractionID` and `ConversationID` default to it and `TriggerSource` to `agent`. Pass `ParentInteractionID` to link a run started elsewhere, or `NoParent: true` for none.
 - No prompt event. `Classify` is off unless set.
-- `Flush` (`*bool`): when the task ends, wait for its classification and score (up to the configured classifier timeout plus a second, as [`Flush`](#flush-and-shutdown)) and call `Flush()` on its client if the client implements `Flusher`. Default on, except for a task chained to the interaction in its context.
+- `Flush` (`*bool`): when the task ends, wait for its classification and score and flush its client, as [`Flush`](#flush-and-shutdown) does. Default on, except for a task chained to the interaction in its context.
+- `FlushTimeout` (`time.Duration`): bounds that wait and flush together. Zero: 2 seconds.
 - Other fields (`InteractionID`, `TraceID`, `TriggerEventID`, `CaptureContent`, `ToolBreakdown`) are as on `InteractionOptions`. An error returned by `fn` fails the answer and is returned unchanged.
 
 ## Context values
@@ -290,15 +291,19 @@ The evaluator gets an `EvaluationTurn` (`InteractionID`, `ConversationID`, `Prom
 
 ## Flush and shutdown
 
-analytics-go batches events in the background and sends its queue on `Close()`; it has no flush method. Before a script, worker or serverless handler exits:
+The SDK installs no exit or signal hooks (Go has no reliable exit hook): call these yourself before the process exits.
 
 ```go
-rudderstackai.Flush(0) // wait for pending classifications and scores
-client.Close()         // analytics-go: send queued events, stop the client
+ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+defer cancel()
+rudderstackai.Flush(ctx)    // or Shutdown(ctx) when the process is stopping
+client.Close()              // analytics-go: stop the client; the SDK never closes it
 ```
 
-- `Flush(timeout)` waits for pending classifications and scores, and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), at most `timeout` (zero: the configured classifier timeout plus a second), then calls `Flush()` on every RudderStack client the SDK has used that implements `Flusher` (`Flush() error`). It reports whether all background work finished. With analytics-go, close the client afterwards.
-- A top-level `RunTask` waits for its own classification and score and flushes its client when that client implements `Flusher`; with analytics-go this sends nothing early, so close the client before the process exits.
+- `Flush(ctx) bool` waits for pending classifications and scores and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), then flushes every RudderStack client the SDK has used, in parallel, all within one deadline: `ctx`'s, or 10 seconds when it has none. A client implementing `ContextFlusher` (`Flush(ctx) error`, analytics-go from the release that adds it) sends its whole queue; one implementing `Flusher` (`Flush() error`) is flushed as before; an older analytics-go client has no flush, is reported once as `client_outdated` and sends its queue on `Close()`. It returns false, and reports `flush_timeout`, when the deadline passed first. It never ends open interactions. `FlushTimeout(d)` is the deprecated duration form.
+- `Shutdown(ctx) bool` stops queueing new classifications and scores, ends every open interaction as `response_status: incomplete` with `end_reason: shutdown`, then flushes as above. Calling it again is safe. Call it from your SIGTERM handling.
+- A top-level `RunTask` waits for its own classification and score and flushes its client, at most `TaskOptions.FlushTimeout` (default 2 seconds) for both; running out is reported as `flush_timeout`.
+- Serverless: on Lambda, `Flush` before returning with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM.
 - Events are queued in analytics-go, so delivery errors are its own: handle them with its `Config.Callback`.
 
 ## Limits
@@ -326,7 +331,7 @@ Each contained error has an `ErrorInfo{Kind, Where}`. Kinds, identical in Node.j
 | `user_callback`     | A hook you configured (redact, identify, event rules, classifier, evaluator, trace ID, `MarshalJSON`) failed or panicked; its documented fallback was used. |
 | `limit_reached`     | A memory cap was hit.                                                                                |
 | `redaction_timeout` | A masking pattern ran out of time; the field was sent as `[redaction timed out]`.                    |
-| `flush_timeout`     | `Flush` or `Shutdown` hit its deadline.                                                              |
+| `flush_timeout`     | `Flush`, `Shutdown` or a `RunTask` flush hit its deadline.                                           |
 | `client_outdated`   | The RudderStack client cannot do what the SDK asked of it.                                           |
 
 `WithOnError(fn)` gets the error and its `ErrorInfo`, at most once per kind a minute; a panic in `fn` is swallowed. Without it, each kind is logged once as a warning with the error's type, never its text (it may carry credentials).
@@ -346,7 +351,7 @@ RudderStack warehouse destinations create a column with the type of the first va
 
 | Package                                          | Exports                                                                                                                                                                                                 |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `WithValues`, `Middleware`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `Flusher`, `ErrorInfo`, the `Kind*` constants, `Limits`, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `CostOptions`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
+| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `WithValues`, `Middleware`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `FlushTimeout`, `Shutdown`, `Flusher`, `ContextFlusher`, `ErrorInfo`, the `Kind*` constants, `Limits`, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `CostOptions`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
 | `.../rudderopenai`                               | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `WithStreamUsage`, `ClassifierClient`                                                                                                    |
 | `.../rudderanthropic`                            | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `ClassifierClient`                                                                                                                       |
 | `.../ruddergenai`                                | `HTTPClient`, `Transport`, `WithProvider`, `WithAnalytics`                                                                                                                                              |
