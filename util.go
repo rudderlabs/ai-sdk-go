@@ -31,7 +31,7 @@ const (
 	maxLabelLength = 64
 	// maxTextLength caps agent-written text (call_reason, capability_detail), in code points.
 	maxTextLength = 200
-	// maxListItems caps name lists: argument_keys, client_capabilities.
+	// maxListItems caps name lists: argument_keys, client_capabilities, invalid_arguments, token_scopes.
 	maxListItems = 100
 
 	metaInteractionID      = "com.rudderstack/interaction_id"
@@ -146,28 +146,39 @@ func argumentsHash(tool string, args map[string]any) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// capabilityNames lists the keys of a declared capabilities object, sorted.
+// capabilityNames lists the keys of a declared capabilities object, sorted. A null value is
+// not a declared capability; none declared is nil.
 func capabilityNames(v any) []string {
 	m, ok := toJSONValue(v).(map[string]any)
 	if !ok {
 		return nil
 	}
 	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
+	for k, c := range m {
+		if c != nil {
+			out = append(out, k)
+		}
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return sortedNames(out)
 }
 
-// sortedNames sorts names by code point, then keeps maxListItems of them, each capped at
-// maxLabelLength code points, so every SDK sends the same list whatever the client's order.
-func sortedNames(names []string) []string {
-	sort.Strings(names)
-	names = names[:min(len(names), maxListItems)]
-	for i, n := range names {
-		names[i] = capText(n, maxLabelLength)
+// sortedNames sorts names by code point before capping them with names, so every SDK sends the
+// same list whatever the client's order.
+func sortedNames(list []string) []string {
+	sort.Strings(list)
+	return names(list)
+}
+
+// names keeps the first maxListItems names, each capped at maxLabelLength code points.
+func names(list []string) []string {
+	list = list[:min(len(list), maxListItems)]
+	for i, n := range list {
+		list[i] = capText(n, maxLabelLength)
 	}
-	return names
+	return list
 }
 
 var contentTypes = map[string]bool{"text": true, "image": true, "audio": true, "resource_link": true, "resource": true}

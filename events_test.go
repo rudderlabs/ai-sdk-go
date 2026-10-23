@@ -86,6 +86,16 @@ func TestNameListsSortedByCodePoint(t *testing.T) {
 	}
 }
 
+// A capability declared as null is not declared, as in Node and Python.
+func TestNullCapabilitiesDropped(t *testing.T) {
+	if got := capabilityNames(map[string]any{"roots": nil, "sampling": map[string]any{}}); !slices.Equal(got, []string{"sampling"}) {
+		t.Errorf("capabilityNames = %q", got)
+	}
+	if got := capabilityNames(map[string]any{"roots": nil}); got != nil {
+		t.Errorf("only nulls = %q, want nil", got)
+	}
+}
+
 func TestEventSenderDeliveries(t *testing.T) {
 	server := workspaceServer("events-mcp", nil)
 	r := wrap(t, server, Options{MCPEvents: true})

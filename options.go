@@ -236,11 +236,11 @@ func (o *options) identity(ctx context.Context, token *auth.TokenInfo) (id Ident
 	if id.TokenScopes != nil {
 		scopes := make([]string, 0, len(id.TokenScopes))
 		for _, s := range id.TokenScopes {
-			if s = capID(s); s != "" {
+			if s = strings.TrimSpace(s); s != "" {
 				scopes = append(scopes, s)
 			}
 		}
-		id.TokenScopes = scopes
+		id.TokenScopes = names(scopes)
 	}
 	return id
 }

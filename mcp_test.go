@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -198,6 +199,25 @@ func TestInvalidArgumentsNamesNotValues(t *testing.T) {
 	}
 }
 
+// invalid_arguments keeps its order but is capped at 100 names of 64 code points, as in Node and Python.
+func TestInvalidArgumentsCapped(t *testing.T) {
+	server := workspaceServer("workspace-mcp", nil)
+	r := wrap(t, server, Options{})
+	cs := connect(t, server, "2025-06-18", nil)
+	if _, err := cs.ListTools(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	args := map[string]any{"name": "vip", strings.Repeat("é", 70): 1}
+	for i := range 150 {
+		args[fmt.Sprintf("x%03d", i)] = 1
+	}
+	callTool(t, cs, "create_audience", args, nil)
+	got := r.props(t, "mcp_tool_called")["invalid_arguments"].([]string)
+	if len(got) != 100 || got[0] != "x000" || got[99] != "x099" {
+		t.Errorf("invalid_arguments = %d names, %q…", len(got), got[:min(len(got), 3)])
+	}
+}
+
 func TestCancelledCall(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "slow-mcp", Version: "1"}, nil)
 	started := make(chan struct{})
@@ -305,6 +325,16 @@ func TestIdentifyTokenAndFailures(t *testing.T) {
 	// A failing Identify makes the request anonymous: not even the token's user or scopes.
 	if id := opts.identity(context.Background(), tok); id.UserID != "" || id.TokenScopes != nil || id.AuthMethod != "oauth" {
 		t.Errorf("failed identify with a token = %+v", id)
+	}
+	// token_scopes keep their order, capped at 100 names of 64 code points.
+	scopes := []string{strings.Repeat("é", 70)}
+	for i := range 150 {
+		scopes = append(scopes, fmt.Sprintf("s%03d", 149-i))
+	}
+	opts.Identify = nil
+	id = opts.identity(context.Background(), &auth.TokenInfo{Scopes: scopes})
+	if len(id.TokenScopes) != 100 || id.TokenScopes[0] != strings.Repeat("é", 64) || id.TokenScopes[1] != "s149" {
+		t.Errorf("capped token_scopes = %d, %q…", len(id.TokenScopes), id.TokenScopes[:min(len(id.TokenScopes), 2)])
 	}
 	opts.Identify = func(context.Context, *auth.TokenInfo) (Identity, error) { panic("boom") }
 	if id := opts.identity(context.Background(), tok); id.UserID != "" || id.AccountID != "" || id.TokenScopes != nil {

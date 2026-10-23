@@ -558,7 +558,7 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 			schema, _ := rc.st.toolSchemas.get(rc.toolName)
 			rc.st.Unlock()
 			if invalid := invalidArguments(schema, t.args); len(invalid) > 0 {
-				extra["invalid_arguments"] = invalid
+				extra["invalid_arguments"] = names(invalid)
 				extra["error_type"] = "invalid_request"
 			} else {
 				extra["error_type"] = "api_error"
