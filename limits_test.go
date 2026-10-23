@@ -127,11 +127,20 @@ func TestMaxCallsPerInteractionKeepsTotals(t *testing.T) {
 	if p["response_status"] != "error" || p["error_type"] != "rate_limit" {
 		t.Fatalf("the last call past the cap still decides the status: %v", p)
 	}
-	if b := p["usage_breakdown"].([]map[string]any); len(b) != 1 || b[0]["call_count"] != 4 {
+	// Calls past the cap are folded per breakdown group, not into a kept call, as in Node and Python.
+	b := p["usage_breakdown"].([]map[string]any)
+	if len(b) != 2 || b[0]["model"] != "m" || b[0]["call_count"] != 3 || b[0]["cost_usd"] != 6.0 || b[1]["model"] != "other" || b[1]["call_count"] != 1 || b[1]["error_count"] != 1 {
 		t.Fatalf("usage_breakdown: %v", b)
+	}
+	tb := p["tool_breakdown"].([]map[string]any)
+	if len(tb) != 2 || tb[0]["tool_name"] != "search" || tb[0]["call_count"] != 3 || tb[1]["tool_name"] != "unknown" || tb[1]["call_count"] != 2 {
+		t.Fatalf("tool_breakdown: %v", tb)
 	}
 	if len(in.calls) != 2 || len(in.tools) != 2 {
 		t.Fatalf("kept %d calls, %d tools; want the cap", len(in.calls), len(in.tools))
+	}
+	if in.calls[0].callCount != 1 || in.calls[1].callCount != 1 {
+		t.Fatal("a kept call absorbed a call past the cap")
 	}
 	if seen.count(ErrorInfo{Kind: KindLimitReached, Where: "MaxCallsPerInteraction"}) != 1 {
 		t.Fatalf("hook saw %+v", seen.all())

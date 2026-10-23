@@ -149,15 +149,20 @@ func (i *Interaction) capLocked() {
 	}
 }
 
-// mergeCallLocked adds a call past MaxCallsPerInteraction to a kept one of its usage group
-// (else the last kept), so totals and usage_breakdown keep counting.
-func (i *Interaction) mergeCallLocked(r *recordedCall) {
-	dst := i.calls[len(i.calls)-1]
-	for _, c := range i.calls {
+// foldCallLocked folds a call past MaxCallsPerInteraction into its usage group's overflow
+// record, so totals and usage_breakdown keep counting without storing the call.
+func (i *Interaction) foldCallLocked(r *recordedCall) {
+	var dst *recordedCall
+	for _, c := range i.overflow {
 		if c.agentName == r.agentName && c.provider == r.provider && c.model == r.model && c.requestedModel == r.requestedModel && c.serviceTier == r.serviceTier {
 			dst = c
 			break
 		}
+	}
+	if dst == nil {
+		first := *r // a copy: lastCall and lastOK may point at r
+		i.overflow = append(i.overflow, &first)
+		return
 	}
 	dst.callCount += r.callCount
 	dst.errorCount += r.errorCount
@@ -186,6 +191,18 @@ func (i *Interaction) mergeCallLocked(r *recordedCall) {
 	case r.errorType == "":
 		dst.unpriced = true
 	}
+}
+
+// foldToolLocked counts a tool call past MaxCallsPerInteraction in its tool_breakdown identity.
+func (i *Interaction) foldToolLocked(t *recordedTool) {
+	i.capLocked()
+	for _, o := range i.toolOverflow {
+		if o.name == t.name && o.mcpServer == t.mcpServer && o.parentTool == t.parentTool && o.agentName == t.agentName {
+			o.calls += t.calls
+			return
+		}
+	}
+	i.toolOverflow = append(i.toolOverflow, t)
 }
 
 func derefFloat(p *float64) float64 {
@@ -258,8 +275,8 @@ type recordedCall struct {
 	serverToolCallCount                              int
 	serverToolCostUSD, costUSD                       *float64
 	finishReason, errorType, responseID              string
-	// Past MaxCallsPerInteraction, calls are merged into one of the same group: unpriced (a
-	// successful call had no cost) and feesUnknown (server-tool fees missing) then stick.
+	// Past MaxCallsPerInteraction, calls are folded into an overflow record per group: unpriced
+	// (a successful call had no cost) and feesUnknown (server-tool fees missing) then stick.
 	unpriced, feesUnknown bool
 }
 
@@ -316,7 +333,8 @@ type Interaction struct {
 	lastCall, lastOK   *recordedCall
 	seen               map[string]*recordedCall
 	tools              []*recordedTool
-	extraToolCalls     int
+	overflow           []*recordedCall // calls past MaxCallsPerInteraction, one per usage group
+	toolOverflow       []*recordedTool // tool calls past it, one per tool_breakdown identity
 	capped             bool
 	toolsByID          map[string]*recordedTool
 	hint               *outcomeHint
@@ -700,7 +718,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		}
 	} else {
 		i.capLocked()
-		i.mergeCallLocked(r)
+		i.foldCallLocked(r)
 	}
 	if c.emitLLMCalls {
 		props := i.callEventLocked(r)
@@ -725,9 +743,8 @@ func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
 			}
 			if tool == nil {
 				if len(i.tools) >= cfg().limits.MaxCallsPerInteraction {
-					// Counted, not kept: no breakdown entry or declared event.
-					i.extraToolCalls++
-					i.capLocked()
+					// Counted in its tool_breakdown identity only: no declared event.
+					i.foldToolLocked(&recordedTool{name: name, mcpServer: server, parentTool: call.ParentTool, agentName: call.AgentName, calls: 1})
 					continue
 				}
 				tool = &recordedTool{calls: 1}
@@ -762,8 +779,7 @@ func (i *Interaction) RecordToolCallCount(n int) {
 	if len(i.tools) < cfg().limits.MaxCallsPerInteraction {
 		i.tools = append(i.tools, &recordedTool{calls: n})
 	} else {
-		i.extraToolCalls += n
-		i.capLocked()
+		i.foldToolLocked(&recordedTool{calls: n})
 	}
 	i.mu.Unlock()
 }
@@ -1090,7 +1106,7 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	answer := first(o.ResponseText, i.answer)
 	snap := turnSnapshot{prompt: i.prompt, answer: answer, messages: i.messages}
-	for _, t := range i.tools {
+	for _, t := range append(slices.Clone(i.tools), i.toolOverflow...) {
 		if t.name != "" {
 			snap.toolNames = append(snap.toolNames, t.name)
 		}
@@ -1156,7 +1172,7 @@ func (i *Interaction) waitBackground(d time.Duration) {
 }
 
 func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK bool) map[string]any {
-	calls := i.calls
+	calls := append(slices.Clone(i.calls), i.overflow...)
 	last, lastOK := i.lastCall, i.lastOK
 	status, errorType, pauseReason := o.Status, o.ErrorType, o.PauseReason
 	if status == "" && i.hint != nil && i.hint.calls == i.callCount {
@@ -1215,8 +1231,9 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK 
 		return n
 	}
 	p["llm_call_count"] = sum(func(c *recordedCall) int { return c.callCount })
-	tools := i.extraToolCalls
-	for _, t := range i.tools {
+	allTools := append(slices.Clone(i.tools), i.toolOverflow...)
+	tools := 0
+	for _, t := range allTools {
 		tools += t.calls
 	}
 	p["tool_call_count"] = tools
@@ -1252,8 +1269,8 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK 
 	if b := usageBreakdown(calls); len(b) > 0 {
 		p["usage_breakdown"] = b
 	}
-	if i.toolBreakdown && len(i.tools) > 0 {
-		p["tool_breakdown"] = toolBreakdown(i.tools)
+	if i.toolBreakdown && len(allTools) > 0 {
+		p["tool_breakdown"] = toolBreakdown(allTools)
 	}
 	if responseOK {
 		p["response_text"] = responseText
