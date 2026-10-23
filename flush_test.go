@@ -117,8 +117,9 @@ func TestShutdownEndsOpenInteractionsAndStopsBackgroundWork(t *testing.T) {
 }
 
 func TestRunTaskFlushIsBounded(t *testing.T) {
+	seen := &seenErrors{}
 	stuck := &ctxClient{block: true}
-	setupAI(t)
+	setupAI(t, WithOnError(seen.hook))
 	start := time.Now()
 	err := RunTask(context.Background(), "job", TaskOptions{Analytics: stuck, FlushTimeout: 50 * time.Millisecond}, func(context.Context, *Interaction) error {
 		return errors.New("task failed")
@@ -128,6 +129,14 @@ func TestRunTaskFlushIsBounded(t *testing.T) {
 	}
 	if d := time.Since(start); d > time.Second || stuck.ctxFlushes.Load() != 1 {
 		t.Fatalf("task flush took %v (%d flushes)", d, stuck.ctxFlushes.Load())
+	}
+	// A flush that runs out of time is reported, as in Node; one that finishes is not.
+	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "RunTask"}) {
+		t.Fatalf("hook saw %+v", got)
+	}
+	_ = RunTask(context.Background(), "job", TaskOptions{Analytics: &ctxClient{}}, func(context.Context, *Interaction) error { return nil })
+	if got := seen.all(); len(got) != 1 {
+		t.Fatalf("hook saw %+v after a finished flush", got[1:])
 	}
 }
 

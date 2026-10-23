@@ -48,7 +48,8 @@ type TaskOptions struct {
 	// functions that exit right after (as [Flush] does for one client). Default: on, except for a
 	// task that chains to the interaction in its context.
 	Flush *bool
-	// FlushTimeout bounds that flush, classification included. Zero: 2 seconds.
+	// FlushTimeout bounds that flush, classification included. Zero: 2 seconds. Running out is
+	// reported as flush_timeout.
 	FlushTimeout time.Duration
 }
 
@@ -115,11 +116,13 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 		wait := cmp.Or(o.FlushTimeout, taskFlushTimeout)
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), wait)
 		defer cancel()
+		finished := true
 		safely(func() {
-			if task.waitBackground(ctx) {
-				flushClients(ctx, []analytics.Client{task.analytics()})
-			}
+			finished = task.waitBackground(ctx) && flushClients(ctx, []analytics.Client{task.analytics()})
 		})
+		if !finished {
+			report(KindFlushTimeout, "RunTask", ctx.Err())
+		}
 	}
 	return err
 }

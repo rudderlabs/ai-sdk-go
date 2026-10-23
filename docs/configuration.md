@@ -302,7 +302,7 @@ client.Close()              // analytics-go: stop the client; the SDK never clos
 
 - `Flush(ctx) bool` waits for pending classifications and scores and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), then flushes every RudderStack client the SDK has used, in parallel, all within one deadline: `ctx`'s, or 10 seconds when it has none. A client implementing `ContextFlusher` (`Flush(ctx) error`, analytics-go from the release that adds it) sends its whole queue; one implementing `Flusher` (`Flush() error`) is flushed as before; an older analytics-go client has no flush, is reported once as `client_outdated` and sends its queue on `Close()`. It returns false, and reports `flush_timeout`, when the deadline passed first. It never ends open interactions. `FlushTimeout(d)` is the deprecated duration form.
 - `Shutdown(ctx) bool` stops queueing new classifications and scores, ends every open interaction as `response_status: incomplete` with `end_reason: shutdown`, then flushes as above. Calling it again is safe. Call it from your SIGTERM handling.
-- A top-level `RunTask` waits for its own classification and score and flushes its client, at most `TaskOptions.FlushTimeout` (default 2 seconds) for both.
+- A top-level `RunTask` waits for its own classification and score and flushes its client, at most `TaskOptions.FlushTimeout` (default 2 seconds) for both; running out is reported as `flush_timeout`.
 - Serverless: on Lambda, `Flush` before returning with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM.
 - Events are queued in analytics-go, so delivery errors are its own: handle them with its `Config.Callback`.
 
@@ -331,7 +331,7 @@ Each contained error has an `ErrorInfo{Kind, Where}`. Kinds, identical in Node.j
 | `user_callback`     | A hook you configured (redact, identify, event rules, classifier, evaluator, trace ID, `MarshalJSON`) failed or panicked; its documented fallback was used. |
 | `limit_reached`     | A memory cap was hit.                                                                                |
 | `redaction_timeout` | A masking pattern ran out of time; the field was sent as `[redaction timed out]`.                    |
-| `flush_timeout`     | `Flush` or `Shutdown` hit its deadline.                                                              |
+| `flush_timeout`     | `Flush`, `Shutdown` or a `RunTask` flush hit its deadline.                                           |
 | `client_outdated`   | The RudderStack client cannot do what the SDK asked of it.                                           |
 
 `WithOnError(fn)` gets the error and its `ErrorInfo`, at most once per kind a minute; a panic in `fn` is swallowed. Without it, each kind is logged once as a warning with the error's type, never its text (it may carry credentials).
