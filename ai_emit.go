@@ -23,12 +23,12 @@ func emitAI(client analytics.Client, event, userID, anonymousID string, properti
 			"specVersion": SpecVersion,
 			"integration": first(integration, IntegrationManual),
 		}
-		extra := make(map[string]any, len(msgContext)+1)
-		for k, v := range msgContext {
-			extra[k] = v
+		extra := jsonSafeMap(msgContext)
+		if extra == nil {
+			extra = map[string]any{}
 		}
 		// A wrapperLibrary set by an outer layer is nested inside ours, never replaced.
-		if outer, ok := msgContext["wrapperLibrary"]; ok {
+		if outer, ok := extra["wrapperLibrary"]; ok {
 			wrapper["wrapperLibrary"] = outer
 		}
 		extra["wrapperLibrary"] = wrapper
@@ -36,7 +36,7 @@ func emitAI(client analytics.Client, event, userID, anonymousID string, properti
 			Event:             event,
 			UserId:            userID,
 			AnonymousId:       anonymousID,
-			Properties:        analytics.Properties(fitProperties(event, properties)),
+			Properties:        analytics.Properties(fitProperties(event, jsonSafeMap(properties))),
 			OriginalTimestamp: at.UTC(),
 			Context:           &analytics.Context{Extra: extra},
 		}
@@ -155,14 +155,7 @@ func redactText(text string) (out string, ok bool) {
 	if c.redactHook == nil {
 		return masked, true
 	}
-	ok = false
-	safely(func() {
-		var err error
-		out, err = c.redactHook(masked)
-		ok = err == nil
-	})
-	if !ok {
-		debugf("redact hook failed; dropping the text field")
+	if !callback("WithRedactHook", func() (err error) { out, err = c.redactHook(masked); return err }) {
 		return "", false
 	}
 	return out, true

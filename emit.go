@@ -43,7 +43,7 @@ func debugf(msg string, args ...any) {
 func safely(f func()) {
 	defer func() {
 		if r := recover(); r != nil {
-			debugf("recovered from a panic in the integration", "panic", r)
+			report(KindInternal, callerOf("safely"), recovered(r))
 		}
 	}()
 	f()
@@ -64,7 +64,7 @@ func emit(client analytics.Client, event string, w who, properties map[string]an
 			Event:             event,
 			UserId:            w.userID,
 			AnonymousId:       w.anonymousID,
-			Properties:        analytics.Properties(fitProperties(event, properties)),
+			Properties:        analytics.Properties(fitProperties(event, jsonSafeMap(properties))),
 			OriginalTimestamp: time.Now().UTC(),
 			Context: &analytics.Context{Extra: map[string]any{
 				"wrapperLibrary": map[string]any{

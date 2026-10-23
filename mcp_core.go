@@ -654,20 +654,21 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 	value := toolResultValue(result)
 	if rule.When != nil {
 		send := false
-		safely(func() { send = rule.When(args, value) })
+		callback("ToolEventRule.When", func() error { send = rule.When(args, value); return nil })
 		if !send {
 			return
 		}
 	}
 	p := map[string]any{}
 	if rule.Properties != nil {
-		safely(func() {
-			for k, v := range rule.Properties(args, value) {
+		var out map[string]any
+		if callback("ToolEventRule.Properties", func() error { out = rule.Properties(args, value); return nil }) {
+			for k, v := range out {
 				if !owned[k] {
 					p[k] = v
 				}
 			}
-		})
+		}
 	}
 	custom := slices.Collect(maps.Keys(p))
 	for k, v := range rc.base {

@@ -38,6 +38,7 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 	"github.com/rudderlabs/ai-sdk-go/internal/kit"
 )
 
@@ -204,7 +205,11 @@ func plainMessages(messages []types.Message) []any {
 }
 
 func safe(fn func()) {
-	defer func() { _ = recover() }()
+	defer func() {
+		if r := recover(); r != nil {
+			hook.Recovered(r, "safe")
+		}
+	}()
 	fn()
 }
 
@@ -215,7 +220,33 @@ type tracker struct{ cfg *config }
 
 func (*tracker) ID() string { return trackerID }
 
-func (t *tracker) HandleInitialize(ctx context.Context, in middleware.InitializeInput, next middleware.InitializeHandler) (middleware.InitializeOutput, middleware.Metadata, error) {
+func (t *tracker) HandleInitialize(ctx context.Context, in middleware.InitializeInput, next middleware.InitializeHandler) (out middleware.InitializeOutput, md middleware.Metadata, err error) {
+	// A panic in tracking is contained: before the call it runs untracked, after it the caller
+	// gets the call's own result. A panic in the next handler keeps unwinding.
+	callCtx := ctx
+	var sent, inNext bool
+	defer func() {
+		if inNext {
+			return
+		}
+		r := recover()
+		if r == nil {
+			return
+		}
+		hook.Recovered(r, "rudderbedrock.HandleInitialize")
+		if !sent {
+			out, md, err = next.HandleInitialize(callCtx, in)
+		}
+	}()
+	return t.handle(ctx, in, func(ctx context.Context) (middleware.InitializeOutput, middleware.Metadata, error) {
+		sent, inNext = true, true
+		out, md, err = next.HandleInitialize(ctx, in)
+		inNext = false
+		return out, md, err
+	})
+}
+
+func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, call func(context.Context) (middleware.InitializeOutput, middleware.Metadata, error)) (middleware.InitializeOutput, middleware.Metadata, error) {
 	var model *string
 	var messages []types.Message
 	stream := false
@@ -225,15 +256,15 @@ func (t *tracker) HandleInitialize(ctx context.Context, in middleware.Initialize
 	case *bedrockruntime.ConverseStreamInput:
 		model, messages, stream = p.ModelId, p.Messages, true
 	default:
-		return next.HandleInitialize(ctx, in)
+		return call(ctx)
 	}
 	if kit.Untracked(ctx) {
-		return next.HandleInitialize(ctx, in)
+		return call(ctx)
 	}
 	started := time.Now()
 	i, ephemeral := kit.ForCall(ctx, integration, t.cfg.analytics)
 	if i == nil {
-		return next.HandleInitialize(ctx, in)
+		return call(ctx)
 	}
 	c := &kit.Call{Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
 	safe(func() {
@@ -245,7 +276,7 @@ func (t *tracker) HandleInitialize(ctx context.Context, in middleware.Initialize
 		sc = &streamCall{call: c, ctx: ctx}
 		ctx = context.WithValue(ctx, streamKey{}, sc)
 	}
-	out, md, err := next.HandleInitialize(ctx, in)
+	out, md, err := call(ctx)
 	if err != nil {
 		safe(func() { failed(c, sc, kit.ErrorTypeOfTransport(err)) })
 		return out, md, err
@@ -425,15 +456,17 @@ type trackedBody struct {
 
 func (b *trackedBody) Close() error {
 	// Ended first, so the decode error the close causes is not taken for a failure.
-	b.s.mu.Lock()
-	if !b.s.ended {
-		how := kit.Cancelled
-		if b.s.obs.Done {
-			how = kit.Completed
+	safe(func() {
+		b.s.mu.Lock()
+		defer b.s.mu.Unlock()
+		if !b.s.ended {
+			how := kit.Cancelled
+			if b.s.obs.Done {
+				how = kit.Completed
+			}
+			b.s.endLocked(how, "")
 		}
-		b.s.endLocked(how, "")
-	}
-	b.s.mu.Unlock()
+	})
 	return b.ReadCloser.Close()
 }
 
@@ -444,8 +477,9 @@ type eventProtocol struct {
 
 func (p *eventProtocol) DeserializeEventMessage(schema *smithy.Schema, registry *smithy.TypeRegistry, r io.Reader) (smithy.Deserializable, error) {
 	event, err := p.ClientProtocol.DeserializeEventMessage(schema, registry, r)
+	// This runs on the AWS SDK's decoding goroutine, where a panic would end the process.
 	if b, ok := r.(*trackedBody); ok {
-		b.s.observe(event, err)
+		safe(func() { b.s.observe(event, err) })
 	}
 	return event, err
 }

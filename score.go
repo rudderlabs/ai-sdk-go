@@ -90,7 +90,7 @@ func scheduleEvaluation(i *Interaction, snap turnSnapshot, evaluate EvaluateFunc
 	return enqueue(func() {
 		scores, err := withTimeout(evaluateTimeout, func(ctx context.Context) ([]Score, error) { return evaluate(ctx, turn) })
 		if err != nil {
-			warnOnce("evaluate-failed", "evaluation failed ("+err.Error()+"); no score is sent", 0)
+			report(KindUserCallback, "evaluator", err)
 			return
 		}
 		for _, s := range scores {
