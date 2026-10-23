@@ -21,6 +21,8 @@ const (
 type streamTool struct {
 	id, name, mcpServer string
 	args                any
+	// chunks collects streamed JSON arguments; appending strings would copy them each time.
+	chunks strings.Builder
 }
 
 // Observer is the common bookkeeping of one streamed call: usage, tools and text seen so far,
@@ -113,6 +115,7 @@ func (o *Observer) NoteTool(key, id, name string, args any, mcpServer string) {
 	}
 	if args != nil {
 		t.args = args
+		t.chunks.Reset()
 	}
 }
 
@@ -124,8 +127,11 @@ func (o *Observer) NoteToolArgs(key, chunk string) {
 	if t == nil || chunk == "" {
 		return
 	}
-	s, _ := t.args.(string)
-	t.args = s + chunk
+	if s, ok := t.args.(string); ok && t.chunks.Len() == 0 {
+		t.chunks.WriteString(s)
+	}
+	t.chunks.WriteString(chunk)
+	t.args = nil
 }
 
 // NoteText appends streamed answer text, kept only for the classifier and evaluator.
@@ -148,7 +154,7 @@ func (o *Observer) recordTools() {
 	o.mu.Lock()
 	calls := make([]rudderstackai.ToolCall, 0, len(o.tools))
 	for _, t := range o.tools {
-		calls = append(calls, rudderstackai.ToolCall{ID: t.id, Name: t.name, MCPServer: t.mcpServer, Args: ParseToolValue(t.args)})
+		calls = append(calls, rudderstackai.ToolCall{ID: t.id, Name: t.name, MCPServer: t.mcpServer, Args: ParseToolValue(t.argsValue())})
 	}
 	o.mu.Unlock()
 	if len(calls) > 0 {
@@ -221,4 +227,12 @@ func (o *Observer) Finish(end End, errorType string) {
 	if o.Ephemeral {
 		EndEphemeral(o.Interaction, "")
 	}
+}
+
+// argsValue is the tool call's arguments: the streamed chunks, else what NoteTool gave.
+func (t *streamTool) argsValue() any {
+	if t.chunks.Len() > 0 {
+		return t.chunks.String()
+	}
+	return t.args
 }

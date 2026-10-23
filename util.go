@@ -426,6 +426,8 @@ type boundedMap[V any] struct {
 	max   int
 	order *list.List
 	items map[string]*list.Element
+	// evicted, when set, sees each value dropped for the cap.
+	evicted func(V)
 }
 
 type boundedEntry[V any] struct {
@@ -453,7 +455,12 @@ func (m *boundedMap[V]) set(k string, v V) {
 	for m.order.Len() > m.max {
 		oldest := m.order.Front()
 		m.order.Remove(oldest)
-		delete(m.items, oldest.Value.(*boundedEntry[V]).key)
+		e := oldest.Value.(*boundedEntry[V])
+		delete(m.items, e.key)
+		if m.evicted != nil {
+			m.evicted(e.value)
+		}
+		limitReached("MCP map cap")
 	}
 }
 

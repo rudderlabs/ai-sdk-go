@@ -133,6 +133,12 @@ spec:
       description: With response_status paused, what the run waits for.
       config:
         enum: [approval, human_input, deferred_tool, auth_required, other]
+    - id: end_reason
+      name: end_reason
+      type: string
+      description: Set only when the SDK ended the interaction itself (response_status incomplete), shutdown or ttl_expired.
+      config:
+        enum: [shutdown, ttl_expired]
     - id: client_disconnected
       name: client_disconnected
       type: boolean

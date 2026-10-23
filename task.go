@@ -139,12 +139,10 @@ func Flush(timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	finished := waitBackgroundWork(timeout)
 	finished = hook.WaitTracked(time.Until(deadline)) && finished
-	global.mu.RLock()
-	clients := append([]analytics.Client(nil), global.clients...)
-	if global.cfg.analytics != nil {
-		clients = append(clients, global.cfg.analytics)
+	clients := rememberedClients()
+	if c := cfg().analytics; c != nil {
+		clients = append(clients, c)
 	}
-	global.mu.RUnlock()
 	for _, c := range clients {
 		safely(func() { flushClient(c) })
 	}

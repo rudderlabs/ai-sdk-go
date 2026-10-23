@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/dlclark/regexp2"
@@ -13,6 +14,14 @@ import (
 
 // maxMaskedCodePoints: longer text is withheld rather than masked.
 const maxMaskedCodePoints = 32_000
+
+// redactMatchTimeout bounds each pattern's run over one text; regexp2 backtracks, so a crafted
+// text could otherwise hold the caller for seconds.
+const redactMatchTimeout = 100 * time.Millisecond
+
+// redactionTimedOut replaces a field whose masking ran out of time: never sent unmasked.
+// Identical in Node.js and Python.
+const redactionTimedOut = "[redaction timed out]"
 
 type redactRule struct {
 	name    string
@@ -48,6 +57,7 @@ var compiledRules = func() []*regexp2.Regexp {
 	out := make([]*regexp2.Regexp, len(redactRules))
 	for i, r := range redactRules {
 		out[i] = regexp2.MustCompile(r.pattern, regexp2.None)
+		out[i].MatchTimeout = redactMatchTimeout * raceSlowdown
 	}
 	return out
 }()
@@ -136,12 +146,15 @@ func checkIBAN(m string) bool {
 	return rest == 1
 }
 
-// maskBuiltIn replaces emails, phone numbers, cards, IPs, IDs and keys/tokens with tokens.
-func maskBuiltIn(text string) string {
+// maskBuiltIn replaces emails, phone numbers, cards, IPs, IDs and keys/tokens with tokens. When a
+// pattern runs out of time the whole text becomes redactionTimedOut (reported).
+func maskBuiltIn(text string) string { return maskWith(redactRules, compiledRules, text) }
+
+func maskWith(rules []redactRule, compiled []*regexp2.Regexp, text string) string {
 	out := text
-	for i, r := range redactRules {
+	for i, r := range rules {
 		token := "[" + r.token + "]"
-		replaced, err := compiledRules[i].ReplaceFunc(out, func(m regexp2.Match) string {
+		replaced, err := compiled[i].ReplaceFunc(out, func(m regexp2.Match) string {
 			s := m.String()
 			if r.check != nil && !r.check(s) {
 				return s
@@ -151,9 +164,11 @@ func maskBuiltIn(text string) string {
 			}
 			return token
 		}, -1, -1)
-		if err == nil {
-			out = replaced
+		if err != nil {
+			report(KindRedactionTimeout, "redaction pattern "+r.name, err)
+			return redactionTimedOut
 		}
+		out = replaced
 	}
 	return out
 }

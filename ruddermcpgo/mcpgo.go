@@ -8,6 +8,7 @@
 package ruddermcpgo
 
 import (
+	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
@@ -102,8 +103,7 @@ type tracked struct {
 	pending  sync.Mutex
 	byMsg    map[any]*call
 	byCtx    map[context.Context]*call
-	sessions sync.Map // session ID -> sessionInfo, at most maxPending
-	nSession int
+	sessions sessions
 }
 
 type sessionInfo struct {
@@ -311,8 +311,7 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if key == "" {
 		key = r.Connection
 	}
-	if v, ok := t.sessions.Load(key); ok && key != "" {
-		info := v.(sessionInfo)
+	if info, ok := t.sessions.load(key); ok && key != "" {
 		if r.Client == nil {
 			r.Client = info.client
 		}
@@ -345,18 +344,50 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 }
 
 func (t *tracked) remember(key string, info sessionInfo) {
-	if key == "" {
-		return
+	if key != "" {
+		t.sessions.store(key, info)
 	}
-	t.pending.Lock()
-	defer t.pending.Unlock()
-	if _, ok := t.sessions.Load(key); !ok {
-		if t.nSession >= maxPending {
-			return
-		}
-		t.nSession++
+}
+
+// sessions maps session IDs to what initialize said, at most Limits.MaxMapEntries, least
+// recently stored first out: a long-running server sees sessions come and go.
+type sessions struct {
+	mu    sync.Mutex
+	order *list.List
+	items map[string]*list.Element
+}
+
+var errSessionsFull = errors.New("ruddermcpgo: session map full; the oldest session was forgotten")
+
+type sessionEntry struct {
+	key  string
+	info sessionInfo
+}
+
+func (s *sessions) load(key string) (sessionInfo, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e, ok := s.items[key]; ok {
+		return e.Value.(*sessionEntry).info, true
 	}
-	t.sessions.Store(key, info)
+	return sessionInfo{}, false
+}
+
+func (s *sessions) store(key string, info sessionInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.items == nil {
+		s.order, s.items = list.New(), map[string]*list.Element{}
+	}
+	if e, ok := s.items[key]; ok {
+		s.order.Remove(e)
+	}
+	s.items[key] = s.order.PushBack(&sessionEntry{key, info})
+	for s.order.Len() > hook.MaxMapEntries() {
+		oldest := s.order.Remove(s.order.Front()).(*sessionEntry)
+		delete(s.items, oldest.key)
+		hook.Report("limit_reached", "MaxMapEntries (mcp-go sessions)", errSessionsFull)
+	}
 }
 
 func (t *tracked) toolCall(c *call, env *envelope, message any) {
@@ -455,8 +486,7 @@ func (t *tracked) succeeded(ctx context.Context, c *call, result any) {
 	case "initialize":
 		version, _ := res["protocolVersion"].(string)
 		var client *mcpbridge.Client
-		if v, ok := t.sessions.Load(c.name); ok && c.name != "" {
-			info := v.(sessionInfo)
+		if info, ok := t.sessions.load(c.name); ok && c.name != "" {
 			client = info.client
 			info.version = version
 			t.remember(c.name, info)

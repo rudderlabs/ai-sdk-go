@@ -36,5 +36,6 @@ func init() {
 		report(KindInternal, where, recovered(r))
 	}
 	hook.Report = report
+	hook.MaxMapEntries = func() int { return cfg().limits.MaxMapEntries }
 	hook.Reset = resetForTest
 }

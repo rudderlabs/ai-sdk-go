@@ -119,6 +119,7 @@ One per interaction, sent by `Interaction.End` (or when `RunInteraction` / `RunT
 | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | `response_status`        | See [Status](#status)                                                                                        |
 | `pause_reason`           | Only with status `paused`: `EndOptions.PauseReason`, default `other`                                         |
+| `end_reason`             | Only when the SDK ended the interaction itself, with status `incomplete`: `ttl_expired` (open longer than `Limits.InteractionTTL`) or `shutdown` (still open at `Shutdown`). Calls recorded before keep their usage. |
 | `trigger`                | `user` or `system`                                                                                           |
 | `client_disconnected`    | `true` only when `EndOptions.ClientDisconnected` was set                                                     |
 | `primary_model`, `primary_provider` | The last successful call's, else the last call's                                                  |

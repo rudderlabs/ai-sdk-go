@@ -155,12 +155,12 @@ func TestStateIsBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tools := make([]mcpbridge.Tool, 0, maxEntries+10)
-	for i := range maxEntries + 10 {
+	tools := make([]mcpbridge.Tool, 0, defaultLimits.MaxMapEntries+10)
+	for i := range defaultLimits.MaxMapEntries + 10 {
 		tools = append(tools, mcpbridge.Tool{Name: "tool_" + strconv.Itoa(i), Schema: map[string]any{"type": "object"}})
 	}
 	w.Begin(mcpbridge.Request{Ctx: context.Background(), Connection: "c1"}).ListTools(tools, true)
-	for i := range maxEntries + 10 {
+	for i := range defaultLimits.MaxMapEntries + 10 {
 		args := map[string]json.RawMessage{"n": json.RawMessage(strconv.Itoa(i))}
 		w.Begin(mcpbridge.Request{Ctx: context.Background(), Connection: "c" + strconv.Itoa(i%2)}).ToolCall("tool", args, false, nil, "")
 	}
@@ -168,11 +168,11 @@ func TestStateIsBounded(t *testing.T) {
 	st.Lock()
 	defer st.Unlock()
 	for name, size := range map[string]int{"retries": st.retries.size(), "toolSchemas": st.toolSchemas.size(), "scopes": st.scopes.size()} {
-		if size > maxEntries {
-			t.Errorf("%s = %d entries, more than %d", name, size, maxEntries)
+		if size > defaultLimits.MaxMapEntries {
+			t.Errorf("%s = %d entries, more than %d", name, size, defaultLimits.MaxMapEntries)
 		}
 	}
-	if st.retries.size() != maxEntries {
-		t.Errorf("retries = %d, want the cap %d", st.retries.size(), maxEntries)
+	if st.retries.size() != defaultLimits.MaxMapEntries {
+		t.Errorf("retries = %d, want the cap %d", st.retries.size(), defaultLimits.MaxMapEntries)
 	}
 }

@@ -37,6 +37,8 @@ var (
 	Recovered func(r any, where string)
 	// Report reports a contained error of the given kind (an onError kind).
 	Report func(kind, where string, err error)
+	// MaxMapEntries is the configured cap of each SDK lookup map.
+	MaxMapEntries func() int
 	// Reset restores the defaults (tests only).
 	Reset func()
 )

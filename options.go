@@ -146,7 +146,7 @@ func (o *options) mask(text string) (out string, ok bool) {
 	if out, ok = maskText(text); !ok {
 		return "", false
 	}
-	if o.Redact == nil {
+	if o.Redact == nil || out == redactionTimedOut {
 		return out, true
 	}
 	var redacted string

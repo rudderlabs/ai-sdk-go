@@ -88,11 +88,12 @@
     "ai_response_received": {
       "allOf": [{ "$ref": "#/$defs/ids" }],
       "required": ["response_status"],
-      "dependentSchemas": { "pause_reason": { "properties": { "response_status": { "const": "paused" } } } },
+      "dependentSchemas": { "pause_reason": { "properties": { "response_status": { "const": "paused" } } }, "end_reason": { "properties": { "response_status": { "const": "incomplete" } } } },
       "properties": {
         "source": { "$ref": "#/$defs/source" },
         "response_status": { "enum": ["success", "error", "timeout", "cancelled", "paused", "incomplete"], "description": "paused: the run stopped to wait for something outside it (pause_reason); the resumed run reports the same interaction_id without a new prompt event. incomplete: the run stopped at a cap (max turns, max output tokens, a cost budget, a time limit); error_type names the cap." },
         "pause_reason": { "enum": ["approval", "human_input", "deferred_tool", "auth_required", "other"], "description": "With response_status paused: what the run waits for." },
+        "end_reason": { "enum": ["shutdown", "ttl_expired"], "description": "Set only when the SDK ended the interaction itself, always with response_status incomplete: shutdown (shutdown() ended it while still open) or ttl_expired (it stayed open longer than the SDK's interaction TTL). Calls recorded before keep their usage." },
         "trigger": { "enum": ["user", "system"] },
         "client_disconnected": { "type": "boolean", "description": "Server only. true when the SDK observed the request close or the stream abort before the answer finished. Not a response_status value." },
         "primary_model": { "type": "string" },

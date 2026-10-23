@@ -162,10 +162,10 @@ func TestObserverTools(t *testing.T) {
 	if first.id != "call_4" || first.name != "weather" || first.mcpServer != "geo" {
 		t.Errorf("first tool = %+v", first)
 	}
-	if got := ParseToolValue(first.args); !reflect.DeepEqual(got, map[string]any{"city": "Paris"}) {
+	if got := ParseToolValue(first.argsValue()); !reflect.DeepEqual(got, map[string]any{"city": "Paris"}) {
 		t.Errorf("streamed args = %v", got)
 	}
-	if got := o.tools[1].args; !reflect.DeepEqual(got, map[string]any{"q": "y"}) {
+	if got := o.tools[1].argsValue(); !reflect.DeepEqual(got, map[string]any{"q": "y"}) {
 		t.Errorf("later args = %v", got)
 	}
 }
