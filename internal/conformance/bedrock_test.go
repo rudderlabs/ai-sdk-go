@@ -33,7 +33,8 @@ func bedrockClient(url string, step obj) *bedrockruntime.Client {
 		Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
 			return aws.Credentials{AccessKeyID: "test", SecretAccessKey: "test"}, nil
 		}),
-		Retryer: aws.NopRetryer{},
+		Retryer:    aws.NopRetryer{},
+		HTTPClient: testkit.HTTPClient(),
 	}, opts...)
 }
 
