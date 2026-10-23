@@ -3,7 +3,6 @@ package rudderstackai
 import (
 	"cmp"
 	"context"
-	"sort"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -159,8 +158,7 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 		for k := range change.Arguments {
 			keys = append(keys, k)
 		}
-		sort.Strings(keys)
-		p["argument_keys"] = keys
+		p["argument_keys"] = sortedNames(keys)
 	}
 	put(p, "delivery_mode", capLabel(change.DeliveryMode))
 	if change.TTL > 0 {
