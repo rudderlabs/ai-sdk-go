@@ -137,10 +137,10 @@ func TestRunErrors(t *testing.T) {
 		{[]string{capture, "--spec", notJSON}, 2, "cannot read schema"},
 		{[]string{capture, "--spec", array}, 2, "cannot read schema"},
 		{[]string{capture, "--client-schema", noID}, 2, "cannot read schema"},
-		{[]string{capture, "--spec", invalid}, 2, "cannot compile"},
+		{[]string{capture, "--spec", invalid}, 2, "cannot read schema"},
 		{[]string{empty, "--no-ai-events", "--spec", noDefs}, 2, noDefs + ": cannot read schema"},
 		{[]string{empty, "--no-ai-events", "--client-schema", noDefs}, 2, noDefs + ": cannot read schema"},
-		{[]string{capture, "--spec", noDef}, 2, "cannot compile"},
+		{[]string{capture, "--spec", noDef}, 2, "cannot read schema"},
 		{[]string{capture, "--expect-joins=1"}, 2, "ignored explicit argument"},
 		{[]string{capture, "--client-opt-out=x"}, 2, "invalid choice"},
 		{[]string{capture, capture}, 2, "unrecognized arguments"},
@@ -202,5 +202,48 @@ func TestTruthy(t *testing.T) {
 	}
 	if text(Int("7")) != "7" || text("x") != "x" || typeName(true) != "bool" || typeName(Float(1)) != "float" {
 		t.Error("text or typeName")
+	}
+}
+
+// Mirrors Python's test_invalid_schema_override_exits_2.
+func TestInvalidSchemaOverrideExits2(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "bad-pattern.json")
+	if err := os.WriteFile(bad, []byte(`{"$id": "https://example.com/c", "$defs": {"ai_user_action": {"pattern": "["}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	empty := filepath.Join(repoRoot(t), "spec", "fixtures", "migration-check", "empty.jsonl")
+	var stdout, stderr bytes.Buffer
+	code := run([]string{empty, "--no-ai-events", "--client-schema", bad}, &stdout, &stderr)
+	if code != 2 || stdout.String() != "" || stderr.String() != "error: "+bad+": cannot read schema\n" {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, stdout.String(), stderr.String())
+	}
+}
+
+// Mirrors Python's test_additional_properties_skip_pattern_properties.
+func TestAdditionalPropertiesSkipPatternProperties(t *testing.T) {
+	dir := t.TempDir()
+	schema := filepath.Join(dir, "pattern.json")
+	capture := filepath.Join(dir, "c.jsonl")
+	if err := os.WriteFile(schema, []byte(`{"$id": "https://example.com/p", "$defs": {"ai_user_action": {`+
+		`"properties": {"source": {}, "a": {}}, "patternProperties": {"^x": {"type": "integer"}}, "additionalProperties": false}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(capture, []byte(`{"event": "ai_user_action", "properties": {"source": "client", "xa": "s", "yb": 1}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	run([]string{capture, "--client-schema", schema}, &stdout, &stderr)
+	var fails []string
+	for _, line := range strings.Split(stdout.String(), "\n") {
+		if strings.Contains(line, "(client schema)") {
+			fails = append(fails, line)
+		}
+	}
+	want := []string{
+		"FAIL: #0 ai_user_action (client schema): properties.xa: not of type integer",
+		"FAIL: #0 ai_user_action (client schema): properties: unexpected 'yb'",
+	}
+	if strings.Join(fails, "\n") != strings.Join(want, "\n") {
+		t.Errorf("client schema lines:\n%s", strings.Join(fails, "\n"))
 	}
 }

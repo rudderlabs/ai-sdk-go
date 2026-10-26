@@ -18,7 +18,6 @@ FAIL: #0 ai_user_action (spec): properties.num: not of type integer
 FAIL: #0 ai_user_action (spec): properties.num: not one of [1, 2.5, 'x', None]
 FAIL: #0 ai_user_action (spec): properties.one: does not match exactly one of oneOf
 FAIL: #0 ai_user_action (spec): properties.pats.xa: not of type integer
-FAIL: #0 ai_user_action (spec): properties.pats: unexpected 'xa'
 FAIL: #0 ai_user_action (spec): properties.pats: unexpected 'yb'
 FAIL: #0 ai_user_action (spec): properties.short: does not match '^a'
 FAIL: #0 ai_user_action (spec): properties.short: longer than 2

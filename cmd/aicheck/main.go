@@ -32,13 +32,17 @@ check flags (repeat the list flags once per value):
   --no-ai-events                captured with the AI events switch off: no AI event may appear
   --feature <value>             allowed feature values
   --surface <value>             allowed surface values
-  --user-id <id>                userId expected on user-triggered server prompts and answers
+  --user-id <id>                userId expected on user-triggered server prompts and answers, and on server
+                                feedback that carries one
+  --mcp-user-id <id>            userId every MCP event carries (the identified subject)
   --expect-session              user-triggered server prompts and answers carry context.sessionId
   --expect-joins                the browser was driven with the server's IDs: every client/server gap fails
   --client-surface <surface>    a surface with a browser client: only its turns need client copies
   --client-opt-out <copy>       client_prompt, client_response, client_feedback or server_feedback:
                                 a copy the plan opts out of (fails if sent)
-  --feedback-endpoint <type>    action_type with a planned endpoint: its browser copy needs a server one
+  --feedback-endpoint <[surface:]type>
+                                action_type with a planned endpoint (on that surface's turns, else on every
+                                turn): its browser copy needs a server one
   --failed-interaction <id>     interaction the app failed and caught: its answer must report the failure
   --mcp-server <name>           allowed MCP server_name values
   --mcp-intent <intent>         allowed request_context intents (other is implied)
@@ -116,6 +120,7 @@ func dispatch(args []string, stdout io.Writer) (int, error) {
 		feature:           p.lists["feature"],
 		surface:           p.lists["surface"],
 		userID:            p.last("user-id"),
+		mcpUserID:         p.last("mcp-user-id"),
 		expectSession:     p.bools["expect-session"],
 		expectJoins:       p.bools["expect-joins"],
 		clientSurface:     p.lists["client-surface"],

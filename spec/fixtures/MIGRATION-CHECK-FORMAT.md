@@ -28,7 +28,7 @@ The captures come from the `rudder-ai-events-verify` skill's tested fixtures and
 
 ### Arguments
 
-`check <events.jsonl> [flags]` and `what-changes <before.jsonl> <after.jsonl>`. Flags take their value as the next argument or after `=`; options and the positional may come in any order; `--` ends the options. `--help` or `-h` anywhere prints the usage and exits 0. Exit 2 (usage on stderr) for an unknown flag, a missing value, a value on a boolean flag, a wrong positional count, or a `--client-opt-out` other than `client_prompt`, `client_response`, `client_feedback` and `server_feedback`. `--spec` and `--client-schema` replace the bundled schemas; one that is unreadable, not JSON, or not an object with a string `$id` and an object `$defs` exits 2 with `error: <path>: cannot read schema`. A schema without `$schema` is read as draft 2020-12. List flags (`--expect-legacy`, `--absent`, `--feature`, `--surface`, `--client-surface`, `--client-opt-out`, `--feedback-endpoint`, `--failed-interaction`, `--mcp-server`, `--mcp-intent`) repeat once per value.
+`check <events.jsonl> [flags]` and `what-changes <before.jsonl> <after.jsonl>`. Flags take their value as the next argument or after `=`; options and the positional may come in any order; `--` ends the options. `--help` or `-h` anywhere prints the usage and exits 0. Exit 2 (usage on stderr) for an unknown flag, a missing value, a value on a boolean flag, a wrong positional count, or a `--client-opt-out` other than `client_prompt`, `client_response`, `client_feedback` and `server_feedback`. `--spec` and `--client-schema` replace the bundled schemas; one that is unreadable, not JSON, not a valid draft 2020-12 schema (an invalid `pattern`, say), or not an object with a string `$id` and an object `$defs` exits 2 with `error: <path>: cannot read schema`. A schema without `$schema` is read as draft 2020-12. List flags (`--expect-legacy`, `--absent`, `--feature`, `--surface`, `--client-surface`, `--client-opt-out`, `--feedback-endpoint`, `--failed-interaction`, `--mcp-server`, `--mcp-intent`) repeat once per value.
 
 ### Printed values
 
@@ -43,7 +43,7 @@ Each failed keyword prints one line, `#<n> <event> (spec): <location>: <message>
 | Keyword | Message |
 | --- | --- |
 | `required` | one line per missing property, in schema order: `missing required 'name'` |
-| `additionalProperties` (false) | one line per extra property: `unexpected 'name'` |
+| `additionalProperties` (false) | one line per property in neither `properties` nor `patternProperties`: `unexpected 'name'` |
 | `type` | `not of type integer` (several: `string or null`, in schema order) |
 | `enum`, `const` | `not one of [...]`, `not 'value'` (schema value as `repr`) |
 | `minLength`, `maxLength`, `minimum`, `maximum` | `shorter than 1`, `longer than 1`, `less than 0`, `greater than 0` (lengths in code points) |

@@ -28,6 +28,7 @@ var checkFlags = map[string]flagSpec{
 	"spec":               {kind: valueFlag},
 	"client-schema":      {kind: valueFlag},
 	"user-id":            {kind: valueFlag},
+	"mcp-user-id":        {kind: valueFlag},
 	"capture-content":    {kind: boolFlag},
 	"no-ai-events":       {kind: boolFlag},
 	"expect-session":     {kind: boolFlag},

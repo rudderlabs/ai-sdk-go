@@ -24,7 +24,8 @@ var (
 	personal = set("traits") // identify() traits (email, name, ...) ride along in context
 	email    = regexp.MustCompile(`[^ \t\n\r\f\v@"]+@[^ \t\n\r\f\v@"]+\.[A-Za-z0-9_]+`)
 	vary     = regexp.MustCompile(`^(interaction_id|conversation_id|parent_interaction_id|trace_id|anonymousId|anonymous_id|sessionId)\z` +
-		`|_ms\z|[Ll]atency|[Dd]uration|At\z|[Tt]imestamp`)
+		// start_time, end_time (ai_otel_span) and OTLP's startTimeUnixNano vary on every run too
+		`|_ms\z|[Ll]atency|[Dd]uration|At\z|[Tt]imestamp|(^|_)time\z|Time(UnixNano)?\z`)
 )
 
 // typeName is Python's type(value).__name__.
@@ -46,11 +47,16 @@ func typeName(v any) string {
 	return "dict"
 }
 
-func rowKey(m *Object) string { // browser copies are their own rows
-	if obj(m.Get("properties")).Get("source") == "client" {
-		return m.Get("event").(string) + " (browser)"
+// rowKey: browser AI copies are their own rows, and so is a legacy event that uses an AI name.
+func rowKey(m *Object) string {
+	name := m.Get("event").(string)
+	if obj(m.Get("properties")).Get("source") == "client" && (clientCopies[name] || clientOnly[name]) {
+		return name + " (browser)"
 	}
-	return m.Get("event").(string)
+	if !in(obj(obj(m.Get("context")).Get("wrapperLibrary")).Get("name"), sdkNames) && reserved(name) {
+		return name + " (legacy)"
+	}
+	return name
 }
 
 func redact(v any, k string) any {

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/url"
 	"os"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,6 +29,7 @@ var clientSchema []byte
 
 // schemaDoc is one schema file.
 type schemaDoc struct {
+	name string // the path, for errors
 	id   string
 	defs *Object // the $defs entries, as read
 	raw  any     // the document as compiled (see split), to read keyword values from
@@ -64,7 +67,17 @@ func readSchema(path string, bundled []byte) (*schemaDoc, error) {
 	if !ok || !hasDefs {
 		return nil, captureErr("%s: cannot read schema", name)
 	}
-	return &schemaDoc{id: id, defs: defs, raw: split(o)}, nil
+	doc := &schemaDoc{name: name, id: id, defs: defs, raw: split(o)}
+	// an invalid schema (a bad pattern, say) fails here, not halfway through a capture
+	c := jsonschema.NewCompiler()
+	c.DefaultDraft(jsonschema.Draft2020)
+	if err := c.AddResource(id, toValidator(doc.raw)); err != nil {
+		return nil, captureErr("%s: cannot read schema", name)
+	}
+	if _, err := c.Compile(id); err != nil {
+		return nil, captureErr("%s: cannot read schema", name)
+	}
+	return doc, nil
 }
 
 // parseSchemaJSON reads a whole schema file as Python's json.load does.
@@ -82,7 +95,7 @@ func newSchemas(spec, client *schemaDoc) (*schemas, error) {
 	byID := map[string]*schemaDoc{}
 	for _, d := range []*schemaDoc{spec, client} {
 		if err := c.AddResource(d.id, toValidator(d.raw)); err != nil {
-			return nil, captureErr("%s: cannot read schema", d.id)
+			return nil, captureErr("%s: cannot read schema", d.name)
 		}
 		byID[d.id] = d
 	}
@@ -96,7 +109,7 @@ func (s *schemas) errors(doc *schemaDoc, name string, instance *Object) ([]strin
 	if !ok {
 		var err error
 		if sch, err = s.compiler.Compile(ref); err != nil {
-			return nil, captureErr("%s: cannot compile $defs/%s", doc.id, name)
+			return nil, captureErr("%s: cannot read schema", doc.name)
 		}
 		s.compiled[ref] = sch
 	}
@@ -148,9 +161,12 @@ func (s *schemas) collect(e *jsonschema.ValidationError, instance any, at []stri
 		}
 		return
 	case *kind.AdditionalProperties:
-		allowed := obj(schemaObj.Get("properties"))
+		allowed, patterns := obj(schemaObj.Get("properties")), obj(schemaObj.Get("patternProperties")).Keys()
 		for _, name := range obj(walk(instance, loc)).Keys() {
-			if !allowed.Has(name) {
+			if !allowed.Has(name) && !slices.ContainsFunc(patterns, func(p string) bool {
+				re, err := regexp.Compile(p)
+				return err == nil && re.MatchString(validatorString(name))
+			}) {
 				found[location(instance, loc)+": unexpected "+reprStr(name)] = true
 			}
 		}

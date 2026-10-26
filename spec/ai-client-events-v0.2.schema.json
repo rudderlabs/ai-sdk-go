@@ -55,7 +55,7 @@
             "card_kind": { "type": "string" },
             "target_type": { "type": "string", "not": { "pattern": "[/?=]" } }
           },
-          "not": { "anyOf": [{ "required": ["feedback_text"] }, { "required": ["url"] }, { "required": ["target_url"] }] }
+          "not": { "anyOf": [{ "required": ["url"] }, { "required": ["target_url"] }] }
         }
       }
     },
@@ -67,8 +67,7 @@
         "prompt_source": { "enum": ["composer", "starter_suggestion", "follow_up_action", "retry"] },
         "suggestion_id": { "type": "string", "minLength": 1 },
         "prompt_length": { "type": "integer", "minimum": 0 }
-      },
-      "not": { "required": ["prompt_text"] }
+      }
     },
     "ai_response_received": {
       "allOf": [{ "$ref": "#/$defs/with_interaction" }],

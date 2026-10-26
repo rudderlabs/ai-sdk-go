@@ -1134,6 +1134,297 @@
       "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 3}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nFAIL: interaction 22222222-2222-4222-8222-222222222222: client ai_user_action feedback_given with no server copy (endpoint not wired, or a different ID)\nRESULT: FAIL\n"
     },
     {
+      "name": "tracing span without feature (skill capture)",
+      "command": "check",
+      "captures": [
+        "span_no_feature"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--feature",
+        "support_bot"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'ai_otel_span': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "tracing span with a wrong feature",
+      "command": "check",
+      "captures": [
+        "span_wrong_feature"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--feature",
+        "support_bot"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'ai_otel_span': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nFAIL: #11 ai_otel_span: feature 'other_bot' not in ['support_bot']\nRESULT: FAIL\n"
+    },
+    {
+      "name": "tool's own request_context (skill capture)",
+      "command": "check",
+      "captures": [
+        "rc_own"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted"
+      ],
+      "exit_code": 0,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} \nmcp client_name: on 0 of 1 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nnote: #11 mcp_tool_called: request_context in argument_keys (fine if the tool declares its own)\nRESULT: PASS\n"
+    },
+    {
+      "name": "request_context with intent",
+      "command": "check",
+      "captures": [
+        "rc_intent"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--capture-content"
+      ],
+      "exit_code": 1,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': 'other', 'user_sentiment': None} \nmcp client_name: on 0 of 1 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nFAIL: #11 mcp_tool_called: request_context reached the tool (argument_keys)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "two server feedback events, one client copy",
+      "command": "check",
+      "captures": [
+        "fb_two_server"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 3}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nFAIL: interaction 11111111-1111-4111-8111-111111111111: 2 server and 1 client ai_user_action feedback_given (one copy per side per click: one lost or sent twice)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "one server feedback event, two client copies",
+      "command": "check",
+      "captures": [
+        "fb_two_client"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 3}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nFAIL: interaction 11111111-1111-4111-8111-111111111111: 1 server and 2 client ai_user_action feedback_given (one copy per side per click: one lost or sent twice)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "two feedback events on each side",
+      "command": "check",
+      "captures": [
+        "fb_two_both"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 4}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "feedback counts with client_feedback opted out",
+      "command": "check",
+      "captures": [
+        "fb_two_server_optout"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--client-opt-out",
+        "client_feedback"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "server action on another surface",
+      "command": "check",
+      "captures": [
+        "fb_surface_scope"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--client-surface",
+        "web",
+        "--surface",
+        "api",
+        "--surface",
+        "web"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 5, 'ai_response_received': 5, 'ai_user_action': 4}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 8}\ninteractions: 3\nRESULT: PASS\n"
+    },
+    {
+      "name": "--feedback-endpoint web:<action>",
+      "command": "check",
+      "captures": [
+        "fb_surface_scope"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--client-surface",
+        "web",
+        "--feedback-endpoint",
+        "web:copied_response"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 5, 'ai_response_received': 5, 'ai_user_action': 4}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 8}\ninteractions: 3\nFAIL: interaction 11111111-1111-4111-8111-111111111111: client ai_user_action copied_response with no server copy (endpoint not wired, or a different ID)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "--feedback-endpoint api:<action>",
+      "command": "check",
+      "captures": [
+        "fb_surface_scope"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--client-surface",
+        "web",
+        "--feedback-endpoint",
+        "api:copied_response"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 5, 'ai_response_received': 5, 'ai_user_action': 4}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 8}\ninteractions: 3\nRESULT: PASS\n"
+    },
+    {
+      "name": "--feedback-endpoint without a surface",
+      "command": "check",
+      "captures": [
+        "fb_surface_scope"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--client-surface",
+        "web",
+        "--feedback-endpoint",
+        "copied_response"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 5, 'ai_response_received': 5, 'ai_user_action': 4}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 8}\ninteractions: 3\nFAIL: interaction 11111111-1111-4111-8111-111111111111: client ai_user_action copied_response with no server copy (endpoint not wired, or a different ID)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "server feedback with another userId",
+      "command": "check",
+      "captures": [
+        "fb_wrong_user"
+      ],
+      "args": [
+        "--user-id",
+        "u1"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nFAIL: #2 ai_user_action: userId 'anonymous', expected 'u1'\nRESULT: FAIL\n"
+    },
+    {
+      "name": "server feedback without a userId",
+      "command": "check",
+      "captures": [
+        "fb_no_user"
+      ],
+      "args": [
+        "--user-id",
+        "u1"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "MCP events with the identified subject",
+      "command": "check",
+      "captures": [
+        "mcp_ok"
+      ],
+      "args": [
+        "--user-id",
+        "u1",
+        "--mcp-user-id",
+        "sub-1"
+      ],
+      "exit_code": 0,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': 'claude-code', 'protocol_version': None, 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} \nmcp client_name: on 1 of 1 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_client_seen': 1, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "MCP events with another userId",
+      "command": "check",
+      "captures": [
+        "mcp_wrong"
+      ],
+      "args": [
+        "--mcp-user-id",
+        "sub-1"
+      ],
+      "exit_code": 1,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': 'claude-code', 'protocol_version': None, 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} \nmcp client_name: on 1 of 1 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_client_seen': 1, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 2\nFAIL: #12 mcp_tool_called: userId 'u1', expected 'sub-1'\nRESULT: FAIL\n"
+    },
+    {
+      "name": "MCP events without a userId",
+      "command": "check",
+      "captures": [
+        "mcp_anon"
+      ],
+      "args": [
+        "--mcp-user-id",
+        "sub-1"
+      ],
+      "exit_code": 1,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': 'claude-code', 'protocol_version': None, 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} \nmcp client_name: on 1 of 1 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_client_seen': 1, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 2\nFAIL: #11 mcp_client_seen: no userId, expected 'sub-1' (identify not wired?)\nFAIL: #12 mcp_tool_called: no userId, expected 'sub-1' (identify not wired?)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "MCP events without a userId, --user-id only",
+      "command": "check",
+      "captures": [
+        "mcp_anon"
+      ],
+      "args": [
+        "--user-id",
+        "u1"
+      ],
+      "exit_code": 0,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': 'claude-code', 'protocol_version': None, 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} \nmcp client_name: on 1 of 1 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_client_seen': 1, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "browser content with capture on",
+      "command": "check",
+      "captures": [
+        "review_content"
+      ],
+      "args": [
+        "--capture-content"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 2, 'ai_response_received': 2, 'ai_interaction_classified': 1, 'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 3}\ninteractions: 1\nRESULT: PASS\n"
+    },
+    {
+      "name": "browser content with capture off",
+      "command": "check",
+      "captures": [
+        "review_content"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 2, 'ai_response_received': 2, 'ai_interaction_classified': 1, 'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 3}\ninteractions: 1\nFAIL: #3 ai_user_prompt_created: content sent with capture off: ['prompt_text']\nFAIL: #5 ai_user_action: content sent with capture off: ['feedback_text']\nRESULT: FAIL\n"
+    },
+    {
       "name": "stale browser ID with --client-surface",
       "command": "check",
       "captures": [
@@ -1203,7 +1494,7 @@
         "--expect-joins"
       ],
       "exit_code": 1,
-      "stdout": "run: {'task_name': 'digest', 'trigger_source': 'schedule', 'trigger_event_id': None, 'conversation_id': 'digest-1', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': '99999999-9999-4999-8999-999999999999', 'llm_call_count': 1e+16, 'total_tokens': 12345678901234567890}\nrun: {'task_name': None, 'trigger_source': None, 'trigger_event_id': None, 'conversation_id': 'digest-2', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': None, 'total_tokens': None}\nevents: {'ai_user_prompt_created': 3, 'ai_response_received': 3, 'ai_user_action': 2, 'ai_interaction_scored': 1, 'ai_custom_thing': 1, 'search_docs': 1, 'ai_ünïcode': 1, 'ai_assistant_opened': 1}\nlegacy or other events (no wrapperLibrary): {'ai_llm_response_received': 1}\nsdks: {'@rudderstack/ai': 10, 'custom': 1}\ninteractions: 3\nnote: #4 ai_response_received: system answer without task_name (a call outside any interaction or task?)\nnote: task digest: parent_interaction_id 99999999-9999-4999-8999-999999999999 not in this capture\nFAIL: #0 ai_user_prompt_created (spec): properties.feature: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #0 ai_user_prompt_created: feature {'b': 1, 'a': [1.5, True, None, 'it\\'s \"q\"']} not in ['support_bot']\nFAIL: #0 ai_user_prompt_created: surface 'wéb\\u2028\\t' not in ['web']\nFAIL: #0 ai_user_prompt_created: userId 42, expected 'u1'\nFAIL: #1 ai_response_received (spec): properties.llm_call_count: less than 0\nFAIL: #1 ai_response_received (spec): properties.pause_reason: not one of ['approval', 'human_input', 'deferred_tool', 'auth_required', 'other']\nFAIL: #1 ai_response_received (spec): properties.response_status: not 'paused'\nFAIL: #1 ai_response_received (spec): properties.tool_breakdown[0].error_types: unexpected 'boom'\nFAIL: #1 ai_response_received (spec): properties.tool_breakdown[0]: unexpected 'extra'\nFAIL: #1 ai_response_received (spec): properties.total_tokens: not of type integer\nFAIL: #1 ai_response_received: context.wrapperLibrary.specVersion is '0.2.0'\nFAIL: #1 ai_response_received: context.wrapperLibrary.name is 'custom', not one of ['@rudderstack/ai', 'ai-sdk-go', 'rudderstack-ai']\nFAIL: #1 ai_response_received: feature '' not in ['support_bot']\nFAIL: #1 ai_response_received: content sent with capture off: ['prompt_text']\nFAIL: #2 ai_user_action: content sent with capture off: ['feedback_text']\nFAIL: #3 ai_response_received: system-triggered event carries userId 'u1'\nFAIL: #5 ai_interaction_scored (spec): properties.evaluator: not one of ['model', 'code', 'human']\nFAIL: #5 ai_interaction_scored (spec): properties: matches none of anyOf\nFAIL: #6 ai_user_prompt_created (spec): properties.attachment_types: items not unique\nFAIL: #7 ai_custom_thing: not an AI events spec name (misspelled?)\nFAIL: #7 ai_custom_thing: feature None not in ['support_bot']\nFAIL: #8 search_docs (spec): properties.tool_status: not one of ['success', 'error', 'unknown']\nFAIL: #8 search_docs (spec): properties: missing required 'conversation_id'\nFAIL: #8 search_docs (spec): properties: missing required 'tool_name'\nFAIL: #8 search_docs: feature None not in ['support_bot']\nFAIL: #9 ai_ünïcode: not an AI events spec name (misspelled?)\nFAIL: #9 ai_ünïcode: feature None not in ['support_bot']\nFAIL: #10 ai_user_prompt_created (client schema): properties.prompt_length: less than 0\nFAIL: #10 ai_user_prompt_created (client schema): properties: matches a schema it must not\nFAIL: #10 ai_user_prompt_created (spec): properties.prompt_length: less than 0\nFAIL: #10 ai_user_prompt_created: content sent with capture off: ['prompt_text']\nFAIL: #11 ai_llm_response_received: no context.wrapperLibrary (not sent by the AI SDK; pass --expect-legacy ai_llm_response_received if it is a legacy event)\nFAIL: #12 ai_user_action (client schema): properties.action_details.target_type: matches a schema it must not\nFAIL: #12 ai_user_action (client schema): properties.action_details: matches a schema it must not\nFAIL: #12 ai_user_action (client schema): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #12 ai_user_action (spec): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #12 ai_user_action: surface 'teletype' not in ['web']\nFAIL: #12 ai_user_action: content sent with capture off: ['feedback_text']\nFAIL: #13 ai_assistant_opened: client-only event without source: client\nFAIL: interaction 55555555-5555-4555-8555-555555555555: 2 server ai_user_prompt_created (expected at most 1)\nFAIL: interaction 55555555-5555-4555-8555-555555555555: server answer with no client copy (not shown, client left, or client event lost)\nFAIL: interaction 66666666-6666-4666-8666-666666666666: 2 server ai_response_received (expected 1)\nFAIL: interaction 66666666-6666-4666-8666-666666666666: several conversation_id values ['digest-1', 'digest-2']\nFAIL: interaction 88888888-8888-4888-8888-888888888888: ai_interaction_scored for an answer not in this capture\nRESULT: FAIL\n"
+      "stdout": "run: {'task_name': 'digest', 'trigger_source': 'schedule', 'trigger_event_id': None, 'conversation_id': 'digest-1', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': '99999999-9999-4999-8999-999999999999', 'llm_call_count': 1e+16, 'total_tokens': 12345678901234567890}\nrun: {'task_name': None, 'trigger_source': None, 'trigger_event_id': None, 'conversation_id': 'digest-2', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': None, 'total_tokens': None}\nevents: {'ai_user_prompt_created': 3, 'ai_response_received': 3, 'ai_user_action': 2, 'ai_interaction_scored': 1, 'ai_custom_thing': 1, 'search_docs': 1, 'ai_ünïcode': 1, 'ai_assistant_opened': 1}\nlegacy or other events (no wrapperLibrary): {'ai_llm_response_received': 1}\nsdks: {'@rudderstack/ai': 10, 'custom': 1}\ninteractions: 3\nnote: #4 ai_response_received: system answer without task_name (a call outside any interaction or task?)\nnote: task digest: parent_interaction_id 99999999-9999-4999-8999-999999999999 not in this capture\nFAIL: #0 ai_user_prompt_created (spec): properties.feature: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #0 ai_user_prompt_created: feature {'b': 1, 'a': [1.5, True, None, 'it\\'s \"q\"']} not in ['support_bot']\nFAIL: #0 ai_user_prompt_created: surface 'wéb\\u2028\\t' not in ['web']\nFAIL: #0 ai_user_prompt_created: userId 42, expected 'u1'\nFAIL: #1 ai_response_received (spec): properties.llm_call_count: less than 0\nFAIL: #1 ai_response_received (spec): properties.pause_reason: not one of ['approval', 'human_input', 'deferred_tool', 'auth_required', 'other']\nFAIL: #1 ai_response_received (spec): properties.response_status: not 'paused'\nFAIL: #1 ai_response_received (spec): properties.tool_breakdown[0].error_types: unexpected 'boom'\nFAIL: #1 ai_response_received (spec): properties.tool_breakdown[0]: unexpected 'extra'\nFAIL: #1 ai_response_received (spec): properties.total_tokens: not of type integer\nFAIL: #1 ai_response_received: context.wrapperLibrary.specVersion is '0.2.0'\nFAIL: #1 ai_response_received: context.wrapperLibrary.name is 'custom', not one of ['@rudderstack/ai', 'ai-sdk-go', 'rudderstack-ai']\nFAIL: #1 ai_response_received: feature '' not in ['support_bot']\nFAIL: #1 ai_response_received: content sent with capture off: ['prompt_text']\nFAIL: #2 ai_user_action: content sent with capture off: ['feedback_text']\nFAIL: #3 ai_response_received: system-triggered event carries userId 'u1'\nFAIL: #5 ai_interaction_scored (spec): properties.evaluator: not one of ['model', 'code', 'human']\nFAIL: #5 ai_interaction_scored (spec): properties: matches none of anyOf\nFAIL: #6 ai_user_prompt_created (spec): properties.attachment_types: items not unique\nFAIL: #7 ai_custom_thing: not an AI events spec name (misspelled?)\nFAIL: #7 ai_custom_thing: feature None not in ['support_bot']\nFAIL: #8 search_docs (spec): properties.tool_status: not one of ['success', 'error', 'unknown']\nFAIL: #8 search_docs (spec): properties: missing required 'conversation_id'\nFAIL: #8 search_docs (spec): properties: missing required 'tool_name'\nFAIL: #8 search_docs: feature None not in ['support_bot']\nFAIL: #9 ai_ünïcode: not an AI events spec name (misspelled?)\nFAIL: #9 ai_ünïcode: feature None not in ['support_bot']\nFAIL: #10 ai_user_prompt_created (client schema): properties.prompt_length: less than 0\nFAIL: #10 ai_user_prompt_created (spec): properties.prompt_length: less than 0\nFAIL: #10 ai_user_prompt_created: content sent with capture off: ['prompt_text']\nFAIL: #11 ai_llm_response_received: no context.wrapperLibrary (not sent by the AI SDK; pass --expect-legacy ai_llm_response_received if it is a legacy event)\nFAIL: #12 ai_user_action (client schema): properties.action_details.target_type: matches a schema it must not\nFAIL: #12 ai_user_action (client schema): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #12 ai_user_action (spec): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #12 ai_user_action: surface 'teletype' not in ['web']\nFAIL: #12 ai_user_action: content sent with capture off: ['feedback_text']\nFAIL: #13 ai_assistant_opened: client-only event without source: client\nFAIL: interaction 55555555-5555-4555-8555-555555555555: 2 server ai_user_prompt_created (expected at most 1)\nFAIL: interaction 55555555-5555-4555-8555-555555555555: server answer with no client copy (not shown, client left, or client event lost)\nFAIL: interaction 66666666-6666-4666-8666-666666666666: 2 server ai_response_received (expected 1)\nFAIL: interaction 66666666-6666-4666-8666-666666666666: several conversation_id values ['digest-1', 'digest-2']\nFAIL: interaction 88888888-8888-4888-8888-888888888888: ai_interaction_scored for an answer not in this capture\nRESULT: FAIL\n"
     },
     {
       "name": "printed values, content capture on",
@@ -1217,7 +1508,7 @@
         "support_bot"
       ],
       "exit_code": 1,
-      "stdout": "run: {'task_name': 'digest', 'trigger_source': 'schedule', 'trigger_event_id': None, 'conversation_id': 'digest-1', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': '99999999-9999-4999-8999-999999999999', 'llm_call_count': 1e+16, 'total_tokens': 12345678901234567890}\nrun: {'task_name': None, 'trigger_source': None, 'trigger_event_id': None, 'conversation_id': 'digest-2', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': None, 'total_tokens': None}\nevents: {'ai_user_prompt_created': 3, 'ai_response_received': 3, 'ai_user_action': 2, 'ai_interaction_scored': 1, 'ai_custom_thing': 1, 'search_docs': 1, 'ai_ünïcode': 1, 'ai_assistant_opened': 1}\nlegacy or other events (no wrapperLibrary): {'ai_llm_response_received': 1}\nsdks: {'@rudderstack/ai': 10, 'custom': 1}\ninteractions: 3\nnote: #4 ai_response_received: system answer without task_name (a call outside any interaction or task?)\nnote: interaction 55555555-5555-4555-8555-555555555555: server answer with no client copy (not shown, client left, or client event lost)\nnote: interaction 88888888-8888-4888-8888-888888888888: ai_interaction_scored for an answer not in this capture\nnote: task digest: parent_interaction_id 99999999-9999-4999-8999-999999999999 not in this capture\nFAIL: #0 ai_user_prompt_created (spec): properties.feature: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #0 ai_user_prompt_created: feature {'b': 1, 'a': [1.5, True, None, 'it\\'s \"q\"']} not in ['support_bot']\nFAIL: #1 ai_response_received (spec): properties.llm_call_count: less than 0\nFAIL: #1 ai_response_received (spec): properties.pause_reason: not one of ['approval', 'human_input', 'deferred_tool', 'auth_required', 'other']\nFAIL: #1 ai_response_received (spec): properties.response_status: not 'paused'\nFAIL: #1 ai_response_received (spec): properties.tool_breakdown[0].error_types: unexpected 'boom'\nFAIL: #1 ai_response_received (spec): properties.tool_breakdown[0]: unexpected 'extra'\nFAIL: #1 ai_response_received (spec): properties.total_tokens: not of type integer\nFAIL: #1 ai_response_received: context.wrapperLibrary.specVersion is '0.2.0'\nFAIL: #1 ai_response_received: context.wrapperLibrary.name is 'custom', not one of ['@rudderstack/ai', 'ai-sdk-go', 'rudderstack-ai']\nFAIL: #1 ai_response_received: feature '' not in ['support_bot']\nFAIL: #3 ai_response_received: system-triggered event carries userId 'u1'\nFAIL: #5 ai_interaction_scored (spec): properties.evaluator: not one of ['model', 'code', 'human']\nFAIL: #5 ai_interaction_scored (spec): properties: matches none of anyOf\nFAIL: #6 ai_user_prompt_created (spec): properties.attachment_types: items not unique\nFAIL: #7 ai_custom_thing: not an AI events spec name (misspelled?)\nFAIL: #7 ai_custom_thing: feature None not in ['support_bot']\nFAIL: #8 search_docs (spec): properties.tool_status: not one of ['success', 'error', 'unknown']\nFAIL: #8 search_docs (spec): properties: missing required 'conversation_id'\nFAIL: #8 search_docs (spec): properties: missing required 'tool_name'\nFAIL: #8 search_docs: feature None not in ['support_bot']\nFAIL: #9 ai_ünïcode: not an AI events spec name (misspelled?)\nFAIL: #9 ai_ünïcode: feature None not in ['support_bot']\nFAIL: #10 ai_user_prompt_created (client schema): properties.prompt_length: less than 0\nFAIL: #10 ai_user_prompt_created (client schema): properties: matches a schema it must not\nFAIL: #10 ai_user_prompt_created (spec): properties.prompt_length: less than 0\nFAIL: #11 ai_llm_response_received: no context.wrapperLibrary (not sent by the AI SDK; pass --expect-legacy ai_llm_response_received if it is a legacy event)\nFAIL: #12 ai_user_action (client schema): properties.action_details.target_type: matches a schema it must not\nFAIL: #12 ai_user_action (client schema): properties.action_details: matches a schema it must not\nFAIL: #12 ai_user_action (client schema): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #12 ai_user_action (spec): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #13 ai_assistant_opened: client-only event without source: client\nFAIL: interaction 55555555-5555-4555-8555-555555555555: 2 server ai_user_prompt_created (expected at most 1)\nFAIL: interaction 66666666-6666-4666-8666-666666666666: 2 server ai_response_received (expected 1)\nFAIL: interaction 66666666-6666-4666-8666-666666666666: several conversation_id values ['digest-1', 'digest-2']\nRESULT: FAIL\n"
+      "stdout": "run: {'task_name': 'digest', 'trigger_source': 'schedule', 'trigger_event_id': None, 'conversation_id': 'digest-1', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': '99999999-9999-4999-8999-999999999999', 'llm_call_count': 1e+16, 'total_tokens': 12345678901234567890}\nrun: {'task_name': None, 'trigger_source': None, 'trigger_event_id': None, 'conversation_id': 'digest-2', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': None, 'total_tokens': None}\nevents: {'ai_user_prompt_created': 3, 'ai_response_received': 3, 'ai_user_action': 2, 'ai_interaction_scored': 1, 'ai_custom_thing': 1, 'search_docs': 1, 'ai_ünïcode': 1, 'ai_assistant_opened': 1}\nlegacy or other events (no wrapperLibrary): {'ai_llm_response_received': 1}\nsdks: {'@rudderstack/ai': 10, 'custom': 1}\ninteractions: 3\nnote: #4 ai_response_received: system answer without task_name (a call outside any interaction or task?)\nnote: interaction 55555555-5555-4555-8555-555555555555: server answer with no client copy (not shown, client left, or client event lost)\nnote: interaction 88888888-8888-4888-8888-888888888888: ai_interaction_scored for an answer not in this capture\nnote: task digest: parent_interaction_id 99999999-9999-4999-8999-999999999999 not in this capture\nFAIL: #0 ai_user_prompt_created (spec): properties.feature: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #0 ai_user_prompt_created: feature {'b': 1, 'a': [1.5, True, None, 'it\\'s \"q\"']} not in ['support_bot']\nFAIL: #1 ai_response_received (spec): properties.llm_call_count: less than 0\nFAIL: #1 ai_response_received (spec): properties.pause_reason: not one of ['approval', 'human_input', 'deferred_tool', 'auth_required', 'other']\nFAIL: #1 ai_response_received (spec): properties.response_status: not 'paused'\nFAIL: #1 ai_response_received (spec): properties.tool_breakdown[0].error_types: unexpected 'boom'\nFAIL: #1 ai_response_received (spec): properties.tool_breakdown[0]: unexpected 'extra'\nFAIL: #1 ai_response_received (spec): properties.total_tokens: not of type integer\nFAIL: #1 ai_response_received: context.wrapperLibrary.specVersion is '0.2.0'\nFAIL: #1 ai_response_received: context.wrapperLibrary.name is 'custom', not one of ['@rudderstack/ai', 'ai-sdk-go', 'rudderstack-ai']\nFAIL: #1 ai_response_received: feature '' not in ['support_bot']\nFAIL: #3 ai_response_received: system-triggered event carries userId 'u1'\nFAIL: #5 ai_interaction_scored (spec): properties.evaluator: not one of ['model', 'code', 'human']\nFAIL: #5 ai_interaction_scored (spec): properties: matches none of anyOf\nFAIL: #6 ai_user_prompt_created (spec): properties.attachment_types: items not unique\nFAIL: #7 ai_custom_thing: not an AI events spec name (misspelled?)\nFAIL: #7 ai_custom_thing: feature None not in ['support_bot']\nFAIL: #8 search_docs (spec): properties.tool_status: not one of ['success', 'error', 'unknown']\nFAIL: #8 search_docs (spec): properties: missing required 'conversation_id'\nFAIL: #8 search_docs (spec): properties: missing required 'tool_name'\nFAIL: #8 search_docs: feature None not in ['support_bot']\nFAIL: #9 ai_ünïcode: not an AI events spec name (misspelled?)\nFAIL: #9 ai_ünïcode: feature None not in ['support_bot']\nFAIL: #10 ai_user_prompt_created (client schema): properties.prompt_length: less than 0\nFAIL: #10 ai_user_prompt_created (spec): properties.prompt_length: less than 0\nFAIL: #11 ai_llm_response_received: no context.wrapperLibrary (not sent by the AI SDK; pass --expect-legacy ai_llm_response_received if it is a legacy event)\nFAIL: #12 ai_user_action (client schema): properties.action_details.target_type: matches a schema it must not\nFAIL: #12 ai_user_action (client schema): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #12 ai_user_action (spec): properties.surface: not one of ['web', 'mobile', 'slack', 'teams', 'email', 'chatgpt_app', 'claude_app', 'ide', 'api', 'other']\nFAIL: #13 ai_assistant_opened: client-only event without source: client\nFAIL: interaction 55555555-5555-4555-8555-555555555555: 2 server ai_user_prompt_created (expected at most 1)\nFAIL: interaction 66666666-6666-4666-8666-666666666666: 2 server ai_response_received (expected 1)\nFAIL: interaction 66666666-6666-4666-8666-666666666666: several conversation_id values ['digest-1', 'digest-2']\nRESULT: FAIL\n"
     },
     {
       "name": "fields of the wrong JSON type",
@@ -1652,6 +1943,17 @@
       "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `ai_response_received` | unchanged | 2 | 2 |\n| `ai_response_received (browser)` | unchanged | 2 | 2 |\n| `ai_user_action` | unchanged | 1 | 1 |\n| `ai_user_action (browser)` | unchanged | 1 | 1 |\n| `ai_user_prompt_created` | unchanged | 2 | 2 |\n| `ai_user_prompt_created (browser)` | unchanged | 2 | 2 |\n| `chatTurnCompleted` | unchanged | 1 | 1 |\n"
     },
     {
+      "name": "legacy ai_* event next to the SDK one",
+      "command": "what-changes",
+      "captures": [
+        "wc_legacy_ai_before",
+        "wc_legacy_ai_after"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `ai_response_received` | new | 0 | 1 |\n| `ai_response_received (legacy)` | unchanged | 1 | 1 |\n"
+    },
+    {
       "name": "dotted key versus nested object",
       "command": "what-changes",
       "captures": [
@@ -1661,6 +1963,17 @@
       "args": [],
       "exit_code": 0,
       "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `billed` | changed | 1 | 1 |\n\n#### `billed`\n\nDiffering fields: + properties.billing.cost, - properties.billing\\.cost\n\nBefore:\n```json\n{\n  \"event\": \"billed\",\n  \"properties\": {\n    \"billing.cost\": 1\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"billed\",\n  \"properties\": {\n    \"billing\": {\n      \"cost\": 1\n    }\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
+      "name": "span timestamps and a legacy source property",
+      "command": "what-changes",
+      "captures": [
+        "wc_time_before",
+        "wc_time_after"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `ai_otel_span` | unchanged | 1 | 1 |\n| `chatTurnCompleted` | changed | 1 | 1 |\n\n#### `chatTurnCompleted`\n\nDiffering fields: ~ properties.cost (0.01 -> 0.02), ~ properties.source (\"client\" -> \"server\")\n\nBefore:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"cost\": 0.01,\n    \"source\": \"client\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"cost\": 0.02,\n    \"source\": \"server\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
     },
     {
       "name": "empty before",

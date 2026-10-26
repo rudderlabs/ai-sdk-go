@@ -40,9 +40,10 @@ var (
 		return m
 	}()
 	turnEvents = set("ai_user_prompt_created", "ai_response_received") // the surface of a turn comes from these
-	content    = set("prompt_text", "response_text", "intent_summary", "explanation", "call_reason", "capability_detail")
-	rawMCP     = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
-	runFields  = []string{"task_name", "trigger_source", "trigger_event_id", "conversation_id", "account_id",
+	// intent_summary is not here: the classifier's own intent_summary option sends it, whatever the capture switch
+	content   = set("prompt_text", "response_text", "explanation", "call_reason", "capability_detail")
+	rawMCP    = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
+	runFields = []string{"task_name", "trigger_source", "trigger_event_id", "conversation_id", "account_id",
 		"on_behalf_of", "parent_interaction_id", "llm_call_count", "total_tokens"}
 	mcpCallFields = []string{"server_name", "client_name", "protocol_version", "tool_name", "tool_status",
 		"error_type", "intent", "user_sentiment"}
@@ -65,6 +66,7 @@ type options struct {
 	feature           []string
 	surface           []string
 	userID            string
+	mcpUserID         string
 	expectSession     bool
 	expectJoins       bool
 	clientSurface     []string
@@ -133,6 +135,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 	names, legacy, clientsSeen := newCounter(), newCounter(), newCounter()
 	answers := map[string]*Object{}
 	surfaces := map[string]any{}
+	clientSurfaces := map[string]any{}
 	declared := map[string]int{}                // non-MCP declared tool events per interaction
 	actions := map[string]map[string]*counter{} // interaction -> side -> action_type counts
 	var runs, toolCalls []*Object
@@ -247,6 +250,10 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 				fail("%s: no context.sessionId (cookies not read?)", where)
 			}
 		}
+		// feedback endpoints pass the real user or none (never a placeholder): only a present one is compared
+		if opts.userID != "" && !isClient && name == "ai_user_action" && truthy(user) && user != opts.userID {
+			fail("%s: userId %s, expected %s", where, repr(user), reprStr(opts.userID))
+		}
 		if system && name == "ai_response_received" && !isClient {
 			if !truthy(props.Get("task_name")) {
 				notes = append(notes, where+": system answer without task_name (a call outside any interaction or task?)")
@@ -257,6 +264,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			// declared tool events carry the properties their rule chose; only SDK-owned events are guarded
 			if leaked := present(props, rawMCP); mcpEvents[name] && len(leaked) > 0 {
 				fail("%s: raw MCP payload keys %s", where, reprList(sortedSet(leaked)))
+			}
+			if opts.mcpUserID != "" && !truthy(user) {
+				fail("%s: no userId, expected %s (identify not wired?)", where, reprStr(opts.mcpUserID))
+			} else if opts.mcpUserID != "" && user != opts.mcpUserID {
+				fail("%s: userId %s, expected %s", where, repr(user), reprStr(opts.mcpUserID))
 			}
 			if len(opts.mcpServer) > 0 && !in(props.Get("server_name"), opts.mcpServer) {
 				fail("%s: server_name %s not in %s", where, repr(props.Get("server_name")), reprList(opts.mcpServer))
@@ -318,6 +330,9 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if !isClient && truthy(props.Get("surface")) && turnEvents[name] { // not later feedback
 				surfaces[iid] = props.Get("surface")
 			}
+			if _, seen := clientSurfaces[iid]; isClient && truthy(props.Get("surface")) && !seen {
+				clientSurfaces[iid] = props.Get("surface")
+			}
 			if name == "ai_response_received" && !isClient && (!paused || answers[iid] == nil) {
 				answers[iid] = props
 			}
@@ -331,12 +346,34 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			hasClientCopies = true
 		}
 	}
-	// feedback types with a server endpoint: planned, or sent by the server here; others are browser-only
-	serverActions := slices.Clone(opts.feedbackEndpoint)
-	for _, sides := range actions {
-		serverActions = append(serverActions, sides["server"].keys...)
+	// feedback types with a server endpoint, per surface: planned ([surface:]action_type), or sent by
+	// the server on that surface's turns; others are browser-only. "" stands for every turn.
+	turnSurface := func(iid string) string {
+		surface := surfaces[iid]
+		if !truthy(surface) {
+			surface = clientSurfaces[iid]
+		}
+		s, _ := surface.(string)
+		return s
 	}
-	serverActions = sortedSet(serverActions)
+	endpoints := map[string][]string{}
+	for _, planned := range opts.feedbackEndpoint {
+		surface, actionType := "", planned
+		if i := strings.LastIndex(planned, ":"); i >= 0 {
+			surface, actionType = planned[:i], planned[i+1:]
+		}
+		endpoints[surface] = append(endpoints[surface], actionType)
+	}
+	for iid, sides := range actions {
+		endpoints[turnSurface(iid)] = append(endpoints[turnSurface(iid)], sides["server"].keys...)
+	}
+	serverActions := func(iid string) []string {
+		out := slices.Clone(endpoints[""])
+		if turn := turnSurface(iid); turn != "" {
+			out = append(out, endpoints[turn]...)
+		}
+		return sortedSet(out)
+	}
 	actionCount := func(iid, s, action string) int {
 		if actions[iid] == nil {
 			return 0
@@ -388,13 +425,15 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if clientAnswer > 0 && serverAnswer == 0 {
 				gap("interaction " + iid + ": client answer with no server answer (request never reached the SDK, or a different ID)")
 			}
-			for _, action := range serverActions {
+			for _, action := range serverActions(iid) {
 				server, browser := actionCount(iid, "server", action), actionCount(iid, "client", action)
-				if server > 0 && browser == 0 && !optedOut("client_feedback") {
+				switch {
+				case server > 0 && browser == 0 && !optedOut("client_feedback"):
 					gap("interaction " + iid + ": server ai_user_action " + action + " with no client copy (browser handler not wired?)")
-				}
-				if browser > 0 && server == 0 && !optedOut("server_feedback") {
+				case browser > 0 && server == 0 && !optedOut("server_feedback"):
 					gap("interaction " + iid + ": client ai_user_action " + action + " with no server copy (endpoint not wired, or a different ID)")
+				case server != browser && !optedOut("client_feedback") && !optedOut("server_feedback"):
+					gap(fmt.Sprintf("interaction %s: %d server and %d client ai_user_action %s (one copy per side per click: one lost or sent twice)", iid, server, browser, action))
 				}
 			}
 		}
@@ -405,7 +444,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		if optedOut("client_response") && clientAnswer > 0 {
 			fail("interaction %s: client answer copy sent, but the plan opts it out", iid)
 		}
-		if optedOut("client_feedback") && slices.ContainsFunc(serverActions, func(a string) bool { return actionCount(iid, "client", a) > 0 }) {
+		if optedOut("client_feedback") && slices.ContainsFunc(serverActions(iid), func(a string) bool { return actionCount(iid, "client", a) > 0 }) {
 			fail("interaction %s: client feedback copy sent, but the plan opts it out", iid)
 		}
 		if optedOut("server_feedback") && actions[iid] != nil && len(actions[iid]["server"].keys) > 0 {
