@@ -122,9 +122,11 @@ func (w *wrapped) receiving(next mcp.MethodHandler) mcp.MethodHandler {
 	}
 }
 
+// metaOf reads a request's _meta. Methods whose params may be omitted (ping, the list
+// methods) arrive with a typed-nil Params, which reads as no _meta.
 func metaOf(p mcp.Params) (meta map[string]any) {
 	safely(func() {
-		if p != nil {
+		if p != nil && !reflect.ValueOf(p).IsNil() {
 			meta = p.GetMeta()
 		}
 	})
