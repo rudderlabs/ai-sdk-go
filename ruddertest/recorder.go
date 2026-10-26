@@ -16,6 +16,7 @@ package ruddertest
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -33,17 +34,38 @@ type Recorder struct {
 
 var _ analytics.Client = (*Recorder)(nil)
 
-// NewRecorder opens path for appending, creating it if needed.
+// NewRecorder opens path for appending, creating it if needed. An existing capture is never
+// truncated; one without a final line break gets one, so the next record starts its own line.
 func NewRecorder(path string) (*Recorder, error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
+	}
+	if err := endLine(f); err != nil {
+		return nil, errors.Join(err, f.Close())
 	}
 	return &Recorder{f: f}, nil
 }
 
-// Enqueue writes m as one line; a pointer to a message is recorded like the message. analytics-go sets a message's type only when it sends it, so the
-// recorder sets it.
+// endLine appends a line break when f is not empty and does not end with one.
+func endLine(f *os.File) error {
+	info, err := f.Stat()
+	if err != nil || info.Size() == 0 {
+		return err
+	}
+	last := make([]byte, 1)
+	if _, err := f.ReadAt(last, info.Size()-1); err != nil {
+		return err
+	}
+	if last[0] == '\n' || last[0] == '\r' {
+		return nil
+	}
+	_, err = f.Write([]byte{'\n'})
+	return err
+}
+
+// Enqueue writes m as one line; a pointer to a message is recorded like the message. analytics-go
+// sets a message's type only when it sends it, so the recorder sets it.
 func (r *Recorder) Enqueue(m analytics.Message) error {
 	var line any
 	switch msg := deref(m).(type) {

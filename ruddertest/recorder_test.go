@@ -151,3 +151,35 @@ func TestRecorderOtherMessagesAndErrors(t *testing.T) {
 		t.Fatalf("lines %v", lines)
 	}
 }
+
+// An existing capture is never truncated, and one without a final line break gets one, so the next
+// record starts its own line.
+func TestRecorderStartsANewLineAfterAnExistingCapture(t *testing.T) {
+	for _, existing := range []string{`{"event":"first"}`, "{\"event\":\"first\"}\n", ""} {
+		path := filepath.Join(t.TempDir(), "events.jsonl")
+		if err := os.WriteFile(path, []byte(existing), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		rec, err := ruddertest.NewRecorder(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := rec.Enqueue(analytics.Track{UserId: "u1", Event: "second"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := rec.Close(); err != nil {
+			t.Fatal(err)
+		}
+		var events []any
+		for _, l := range readLines(t, path) {
+			events = append(events, l["event"])
+		}
+		want := []any{"second"}
+		if existing != "" {
+			want = []any{"first", "second"}
+		}
+		if fmt.Sprint(events) != fmt.Sprint(want) {
+			t.Errorf("existing %q: events %v, want %v", existing, events, want)
+		}
+	}
+}

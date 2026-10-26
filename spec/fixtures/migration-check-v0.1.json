@@ -1486,8 +1486,81 @@
         "--client-surface",
         "web"
       ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 5, 'ai_user_action': 2, 'ai_llm_response_received': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nFAIL: interaction 55555555-5555-4555-8555-555555555555: server answer with no client copy (not shown, client left, or client event lost)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "paused answer without its browser copy",
+      "command": "check",
+      "captures": [
+        "paused_no_copy"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 3, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nFAIL: interaction 22222222-2222-4222-8222-222222222222: server answer with no client copy (not shown, client left, or client event lost)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "paused answer without its browser copy, client_response opted out",
+      "command": "check",
+      "captures": [
+        "paused_no_copy"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--client-opt-out",
+        "client_response"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 3, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nFAIL: interaction 11111111-1111-4111-8111-111111111111: client answer copy sent, but the plan opts it out\nRESULT: FAIL\n"
+    },
+    {
+      "name": "paused answer with its browser copy",
+      "command": "check",
+      "captures": [
+        "paused_copy"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins"
+      ],
       "exit_code": 0,
-      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 5, 'ai_user_action': 2, 'ai_llm_response_received': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nRESULT: PASS\n"
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "pause and resume with one browser copy",
+      "command": "check",
+      "captures": [
+        "pause_resume_one_copy"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 5, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "dict feature",
+      "command": "check",
+      "captures": [
+        "dict_feature"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--feature",
+        "support_bot"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nFAIL: #0 ai_user_prompt_created (spec): properties.feature: not of type string\nFAIL: #0 ai_user_prompt_created: feature {'name': 'support_bot'} not in ['support_bot']\nRESULT: FAIL\n"
     },
     {
       "name": "vercel tracing span",

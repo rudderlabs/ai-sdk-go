@@ -470,7 +470,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if serverPrompt > 0 && clientPrompt == 0 && !optedOut("client_prompt") {
 				gap("interaction " + iid + ": server prompt with no client copy (browser copy not sent, or a different ID)")
 			}
-			if serverAnswer > 0 && clientAnswer == 0 && !optedOut("client_response") {
+			if serverAnswer+serverPaused > 0 && clientAnswer == 0 && !optedOut("client_response") {
 				gap("interaction " + iid + ": server answer with no client copy (not shown, client left, or client event lost)")
 			}
 			if clientAnswer > 0 && serverAnswer+serverPaused == 0 { // the browser sends a success copy for an approval pause
