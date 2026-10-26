@@ -1,0 +1,4 @@
+{"type": "track", "userId": "u1", "event": "orderPlaced", "properties": {"created_at": "2026-02-02", "updated_at": 2}}
+{"type": "track", "userId": "u1", "event": "formatted", "properties": {"format": "b"}}
+{"type": "track", "userId": "u1", "event": "chatTurnCompleted", "properties": {"cost": 0.01}}
+{"type": "track", "userId": "u1", "event": "chatTurnCompleted", "properties": {"cost": 0.01, "error_code": "E1"}}

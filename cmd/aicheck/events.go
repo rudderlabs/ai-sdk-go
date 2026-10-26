@@ -40,6 +40,7 @@ var (
 		return m
 	}()
 	answerBound = []string{"ai_user_action", "ai_interaction_scored", "ai_interaction_classified", "ai_llm_response_received"}
+	tracing     = []string{"tracing", "tracing/vercel-ai-sdk"}          // integrations of span events, which carry no specVersion
 	turnEvents  = set("ai_user_prompt_created", "ai_response_received") // the surface of a turn comes from these
 	// intent_summary is not here: the classifier's own intent_summary option sends it, whatever the capture switch
 	content   = set("prompt_text", "response_text", "explanation", "call_reason", "capability_detail")
@@ -138,8 +139,9 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 	answers := map[string]*Object{}
 	surfaces := map[string]any{}
 	clientSurfaces := map[string]any{}
-	declared := map[string]int{}                // non-MCP declared tool events per interaction
-	actions := map[string]map[string]*counter{} // interaction -> side -> action_type counts
+	features, clientFeatures := map[string]any{}, map[string]any{} // a turn's feature, like its surface
+	declared := map[string]int{}                                   // non-MCP declared tool events per interaction
+	actions := map[string]map[string]*counter{}                    // interaction -> side -> action_type counts
 	var runs, toolCalls []*Object
 
 	// browser AI event names: only these count as AI traffic when they carry source: client
@@ -172,12 +174,14 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 		names.add(name)
 		isMCP := mcpEvents[name] || w.Get("integration") == "mcp"
-		// past the legacy branch, an event with a customer name was sent by an AI SDK: a declared tool event
-		isDeclared := !reserved(name)
+		// a raw tracing span may carry a custom eventName; past the legacy branch, any other event with a
+		// customer name was sent by an AI SDK as a declared tool event
+		isSpan := name == "ai_otel_span" || (in(w.Get("integration"), tracing) && !knownEvents[name])
+		isDeclared := !reserved(name) && !isSpan
 		if !truthy(user) && !truthy(anon) && !isClient {
 			fail("%s: no userId or anonymousId", where)
 		}
-		if !isDeclared && !isClient && !knownEvents[name] {
+		if !isDeclared && !isSpan && !isClient && !knownEvents[name] {
 			fail("%s: not an AI events spec name (misspelled?)", where)
 		}
 		if clientOnly[name] && !isClient {
@@ -212,7 +216,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 		}
 		// wrapper metadata on every SDK event; tracing spans (ai_otel_span) carry no specVersion
-		if !isClient && w.Get("integration") != "tracing" && w.Get("specVersion") != specVersion {
+		if !isClient && !in(w.Get("integration"), tracing) && w.Get("specVersion") != specVersion {
 			fail("%s: context.wrapperLibrary.specVersion is %s", where, repr(w.Get("specVersion")))
 		}
 		if !isClient && !in(w.Get("name"), sdkNames) {
@@ -220,7 +224,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 		// trackAction takes no feature, so server ai_user_action has none; MCP events have none either;
 		// optionalFeature events are checked only when they carry one
-		featureOptional := optionalFeature[name] && !props.Has("feature")
+		featureOptional := (optionalFeature[name] || isSpan) && !props.Has("feature")
 		if len(opts.feature) > 0 && !isMCP && !featureOptional && (isClient || name != "ai_user_action") &&
 			!in(props.Get("feature"), opts.feature) {
 			fail("%s: feature %s not in %s", where, repr(props.Get("feature")), reprList(opts.feature))
@@ -341,6 +345,12 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if _, seen := clientSurfaces[iid]; isClient && truthy(props.Get("surface")) && !seen {
 				clientSurfaces[iid] = props.Get("surface")
 			}
+			if !isClient && truthy(props.Get("feature")) && turnEvents[name] {
+				features[iid] = props.Get("feature")
+			}
+			if _, seen := clientFeatures[iid]; isClient && truthy(props.Get("feature")) && !seen {
+				clientFeatures[iid] = props.Get("feature")
+			}
 			if name == "ai_response_received" && !isClient && (!paused || answers[iid] == nil) {
 				answers[iid] = props
 			}
@@ -354,31 +364,45 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			hasClientCopies = true
 		}
 	}
-	// feedback types with a server endpoint, per surface: planned ([surface:]action_type), or sent by
-	// the server on that surface's turns; others are browser-only. "" stands for every turn.
-	turnSurface := func(iid string) string {
-		surface := surfaces[iid]
-		if !truthy(surface) {
-			surface = clientSurfaces[iid]
+	// feedback types with a server endpoint, per (feature, surface): planned
+	// ([[feature:]surface:]action_type), or sent by the server on that feature's turns on that surface;
+	// others are browser-only. "" stands for an unknown part, and in a planned scope for every turn.
+	turnPart := func(server, client map[string]any, iid string) string {
+		v := server[iid]
+		if !truthy(v) {
+			v = client[iid]
 		}
-		s, _ := surface.(string)
+		s, _ := v.(string)
 		return s
 	}
-	endpoints := map[string][]string{}
-	for _, planned := range opts.feedbackEndpoint {
-		surface, actionType := "", planned
-		if i := strings.LastIndex(planned, ":"); i >= 0 {
-			surface, actionType = planned[:i], planned[i+1:]
+	type scope struct{ feature, surface string }
+	turnScope := func(iid string) scope {
+		return scope{turnPart(features, clientFeatures, iid), turnPart(surfaces, clientSurfaces, iid)}
+	}
+	planned, inferred := map[scope][]string{}, map[scope][]string{}
+	for _, endpoint := range opts.feedbackEndpoint {
+		parts := strings.Split(endpoint, ":")
+		actionType, parts := parts[len(parts)-1], parts[:len(parts)-1]
+		var s scope // a part left out matches every turn
+		switch n := len(parts); {
+		case n >= 2:
+			s = scope{parts[n-2], parts[n-1]}
+		case n == 1:
+			s = scope{"", parts[0]}
 		}
-		endpoints[surface] = append(endpoints[surface], actionType)
+		planned[s] = append(planned[s], actionType)
 	}
 	for iid, sides := range actions {
-		endpoints[turnSurface(iid)] = append(endpoints[turnSurface(iid)], sides["server"].keys...)
+		s := turnScope(iid) // exact scope, unknown parts included
+		inferred[s] = append(inferred[s], sides["server"].keys...)
 	}
 	serverActions := func(iid string) []string {
-		out := slices.Clone(endpoints[""])
-		if turn := turnSurface(iid); turn != "" {
-			out = append(out, endpoints[turn]...)
+		turn := turnScope(iid)
+		out := slices.Clone(inferred[turn])
+		for s, acts := range planned {
+			if (s.feature == "" || s.feature == turn.feature) && (s.surface == "" || s.surface == turn.surface) {
+				out = append(out, acts...)
+			}
 		}
 		return sortedSet(out)
 	}
@@ -430,7 +454,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if serverAnswer > 0 && clientAnswer == 0 && !optedOut("client_response") {
 				gap("interaction " + iid + ": server answer with no client copy (not shown, client left, or client event lost)")
 			}
-			if clientAnswer > 0 && serverAnswer == 0 {
+			if clientAnswer > 0 && serverAnswer+serverPaused == 0 { // the browser sends a success copy for an approval pause
 				gap("interaction " + iid + ": client answer with no server answer (request never reached the SDK, or a different ID)")
 			}
 			for _, action := range serverActions(iid) {

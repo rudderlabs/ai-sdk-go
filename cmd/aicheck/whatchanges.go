@@ -13,8 +13,8 @@ import (
 //
 // before: AI events switched off (the app as it was); after: AI events on. Prints the event table
 // (counts per capture) and, per changed event, a redacted before/after JSON pair with the differing
-// fields and values. Every occurrence is compared in capture order; the pair shown is the first that
-// differs. Fields that differ on every run (IDs, timestamps, durations) count by presence and type
+// fields and values. Every occurrence is compared in capture order, an unmatched one with the other
+// capture's first; the pair shown is the first that differs. Fields that differ on every run (IDs, timestamps, durations) count by presence and type
 // only, inside lists too. IDs, user and account IDs, on_behalf_of, emails, traits and timestamps are
 // redacted; check the rest before sharing.
 
@@ -25,7 +25,7 @@ var (
 	email    = regexp.MustCompile(`[^ \t\n\r\f\v@"]+@[^ \t\n\r\f\v@"]+\.[A-Za-z0-9_]+`)
 	vary     = regexp.MustCompile(`^(interaction_id|conversation_id|parent_interaction_id|trace_id|anonymousId|anonymous_id|sessionId)\z` +
 		// start_time, end_time (ai_otel_span) and OTLP's startTimeUnixNano vary on every run too
-		`|_ms\z|[Ll]atency|[Dd]uration|At\z|[Tt]imestamp|(^|_)time\z|Time(UnixNano)?\z`)
+		`|_ms\z|[Ll]atency|[Dd]uration|At\z|_at\z|[Tt]imestamp|(^|_)time\z|Time(UnixNano)?\z`)
 )
 
 // typeName is Python's type(value).__name__.
@@ -201,10 +201,21 @@ func whatChanges(before, after []*Object, out io.Writer) int {
 			// Compare every occurrence in capture order; a change in a later turn counts too.
 			var d []string
 			mb, ma := byB[name][0], byA[name][0]
+			// unmatched occurrences (added or removed turns) are compared with the other side's first one
+			var pairs [][2]*Object
 			for i := 0; i < nb && i < na; i++ {
-				lines := diff(fields(byB[name][i], "", map[string]string{}), fields(byA[name][i], "", map[string]string{}))
+				pairs = append(pairs, [2]*Object{byB[name][i], byA[name][i]})
+			}
+			for _, m := range byA[name][min(nb, na):] {
+				pairs = append(pairs, [2]*Object{byB[name][0], m})
+			}
+			for _, m := range byB[name][min(nb, na):] {
+				pairs = append(pairs, [2]*Object{m, byA[name][0]})
+			}
+			for _, p := range pairs {
+				lines := diff(fields(p[0], "", map[string]string{}), fields(p[1], "", map[string]string{}))
 				if len(lines) > 0 && len(d) == 0 {
-					mb, ma = byB[name][i], byA[name][i] // show the first pair that actually differs
+					mb, ma = p[0], p[1] // show the first pair that actually differs
 				}
 				for _, l := range lines {
 					if !slices.Contains(d, l) {

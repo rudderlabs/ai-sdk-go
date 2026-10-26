@@ -656,7 +656,7 @@
         "22222222-2222-4222-8222-222222222222"
       ],
       "exit_code": 1,
-      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nnote: interaction 22222222-2222-4222-8222-222222222222: client answer with no server answer (request never reached the SDK, or a different ID)\nFAIL: failed interaction 22222222-2222-4222-8222-222222222222: response_status 'paused', expected one of ['cancelled', 'error', 'incomplete', 'timeout']\nRESULT: FAIL\n"
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nFAIL: failed interaction 22222222-2222-4222-8222-222222222222: response_status 'paused', expected one of ['cancelled', 'error', 'incomplete', 'timeout']\nRESULT: FAIL\n"
     },
     {
       "name": "failure without error_type",
@@ -1490,6 +1490,97 @@
       "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 5, 'ai_user_action': 2, 'ai_llm_response_received': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nRESULT: PASS\n"
     },
     {
+      "name": "browser answer copy on a paused server answer",
+      "command": "check",
+      "captures": [
+        "paused_client_copy"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "feedback scope by feature",
+      "command": "check",
+      "captures": [
+        "feature_scope"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--feature",
+        "support_bot",
+        "--feature",
+        "builder"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 6, 'ai_response_received': 6, 'ai_user_action': 5}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 8}\ninteractions: 3\nRESULT: PASS\n"
+    },
+    {
+      "name": "--feedback-endpoint feature:surface:action",
+      "command": "check",
+      "captures": [
+        "feature_scope"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--feature",
+        "support_bot",
+        "--feature",
+        "builder",
+        "--feedback-endpoint",
+        "builder:web:copied_response"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 6, 'ai_response_received': 6, 'ai_user_action': 5}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 8}\ninteractions: 3\nFAIL: interaction 33333333-3333-4333-8333-333333333333: client ai_user_action copied_response with no server copy (endpoint not wired, or a different ID)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "--feedback-endpoint surface:action applies to every feature",
+      "command": "check",
+      "captures": [
+        "feature_scope"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--feature",
+        "support_bot",
+        "--feature",
+        "builder",
+        "--feedback-endpoint",
+        "web:copied_response"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 6, 'ai_response_received': 6, 'ai_user_action': 5}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 8}\ninteractions: 3\nFAIL: interaction 33333333-3333-4333-8333-333333333333: client ai_user_action copied_response with no server copy (endpoint not wired, or a different ID)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "spans with a custom eventName and the Vercel AI SDK preset",
+      "command": "check",
+      "captures": [
+        "custom_spans"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--feature",
+        "support_bot",
+        "--surface",
+        "web",
+        "--user-id",
+        "u1"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'llm_span': 1, 'ai_otel_span': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5, '@rudderstack/ai': 2}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
       "name": "only a misspelled event",
       "command": "check",
       "captures": [
@@ -2230,6 +2321,39 @@
       "args": [],
       "exit_code": 0,
       "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `ticket_created` | unchanged | 1 | 1 |\n| `ticket_created (AI SDK)` | new | 0 | 1 |\n"
+    },
+    {
+      "name": "snake_case timestamps, a key ending in at, an added occurrence",
+      "command": "what-changes",
+      "captures": [
+        "wc_r16_before",
+        "wc_r16_after"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `chatTurnCompleted` | changed | 1 | 2 |\n| `formatted` | changed | 1 | 1 |\n| `orderPlaced` | unchanged | 1 | 1 |\n\n#### `chatTurnCompleted`\n\nDiffering fields: + properties.error_code\n\nBefore:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"cost\": 0.01\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"cost\": 0.01,\n    \"error_code\": \"E1\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n\n#### `formatted`\n\nDiffering fields: ~ properties.format (\"a\" -> \"b\")\n\nBefore:\n```json\n{\n  \"event\": \"formatted\",\n  \"properties\": {\n    \"format\": \"a\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"formatted\",\n  \"properties\": {\n    \"format\": \"b\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
+      "name": "a removed occurrence",
+      "command": "what-changes",
+      "captures": [
+        "wc_r16_after",
+        "wc_r16_before"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `chatTurnCompleted` | changed | 2 | 1 |\n| `formatted` | changed | 1 | 1 |\n| `orderPlaced` | unchanged | 1 | 1 |\n\n#### `chatTurnCompleted`\n\nDiffering fields: - properties.error_code\n\nBefore:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"cost\": 0.01,\n    \"error_code\": \"E1\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"cost\": 0.01\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n\n#### `formatted`\n\nDiffering fields: ~ properties.format (\"b\" -> \"a\")\n\nBefore:\n```json\n{\n  \"event\": \"formatted\",\n  \"properties\": {\n    \"format\": \"b\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"formatted\",\n  \"properties\": {\n    \"format\": \"a\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
+      "name": "an identical extra occurrence",
+      "command": "what-changes",
+      "captures": [
+        "pass",
+        "wc_r16_dupe"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `ai_response_received` | removed | 2 | 0 |\n| `ai_response_received (browser)` | removed | 2 | 0 |\n| `ai_user_action` | removed | 1 | 0 |\n| `ai_user_action (browser)` | removed | 1 | 0 |\n| `ai_user_prompt_created` | removed | 2 | 0 |\n| `ai_user_prompt_created (browser)` | removed | 2 | 0 |\n| `chatTurnCompleted` | changed | 1 | 2 |\n\n#### `chatTurnCompleted`\n\nDiffering fields: count only\n\nBefore:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"cost\": 0.01\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"cost\": 0.01\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
     },
     {
       "name": "round 11 what-changes",

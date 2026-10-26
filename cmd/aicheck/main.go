@@ -42,9 +42,9 @@ check flags (repeat the list flags once per value):
   --client-surface <surface>    a surface with a browser client: only its turns need client copies
   --client-opt-out <copy>       client_prompt, client_response, client_feedback or server_feedback:
                                 a copy the plan opts out of (fails if sent)
-  --feedback-endpoint <[surface:]type>
-                                action_type with a planned endpoint (on that surface's turns, else on every
-                                turn): its browser copy needs a server one
+  --feedback-endpoint <[[feature:]surface:]type>
+                                action_type with a planned endpoint: its browser copy needs a server one on
+                                the turns of that feature and surface (all, when left out)
   --failed-interaction <id>     interaction the app failed and caught: its answer must report the failure
   --mcp-server <name>           allowed MCP server_name values
   --mcp-intent <intent>         allowed request_context intents (other is implied)
