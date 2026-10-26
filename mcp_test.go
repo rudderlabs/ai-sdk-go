@@ -387,6 +387,44 @@ func TestRequestIDFallsBackOutsideTheSDK(t *testing.T) {
 	}
 }
 
+// ping and the list methods may omit params; the go-sdk then hands the middleware a typed-nil
+// Params, which must read as no _meta rather than a contained panic.
+func TestParamlessRequestsHaveNoMeta(t *testing.T) {
+	if meta := metaOf((*mcp.ListToolsParams)(nil)); meta != nil {
+		t.Errorf("typed-nil params: meta = %v", meta)
+	}
+	if meta := metaOf(nil); meta != nil {
+		t.Errorf("nil params: meta = %v", meta)
+	}
+	if meta := metaOf(&mcp.CallToolParams{Meta: mcp.Meta{"k": "v"}}); meta["k"] != "v" {
+		t.Errorf("params with _meta: meta = %v", meta)
+	}
+	seen := &seenErrors{}
+	setupAI(t, WithOnError(seen.hook))
+	server := workspaceServer("paramless-mcp", nil)
+	r := wrap(t, server, Options{})
+	cs := connect(t, server, "2025-06-18", nil)
+	if err := cs.Ping(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	tools, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range tools.Tools {
+		if _, ok := tool.InputSchema.(map[string]any)["properties"].(map[string]any)[requestContext]; !ok {
+			t.Errorf("%s: request_context not added", tool.Name)
+		}
+	}
+	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
+	if p := r.props(t, "mcp_tool_called"); p["tool_name"] != "list_destinations" || p["tool_status"] != "success" {
+		t.Errorf("mcp_tool_called = %v", p)
+	}
+	if got := seen.all(); len(got) != 0 {
+		t.Fatalf("contained errors: %+v (%v)", got, seen.errs)
+	}
+}
+
 func TestServerNameFallbackAndOverride(t *testing.T) {
 	o := &options{}
 	o.resolveName(serverImpl(mcp.NewServer(&mcp.Implementation{Name: "", Version: ""}, nil)))
