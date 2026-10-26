@@ -247,3 +247,30 @@ func TestAdditionalPropertiesSkipPatternProperties(t *testing.T) {
 		t.Errorf("client schema lines:\n%s", strings.Join(fails, "\n"))
 	}
 }
+
+// Mirrors Python's test_unresolvable_schema_override_exits_2: a missing definition or a dangling $ref.
+func TestUnresolvableSchemaOverrideExits2(t *testing.T) {
+	capture := filepath.Join(repoRoot(t), "spec", "fixtures", "migration-check", "pass.jsonl")
+	for _, c := range []struct{ flag, defs string }{
+		{"--spec", `{}`},
+		{"--client-schema", `{"ai_user_action": {"$ref": "#/$defs/missing"}}`},
+	} {
+		schema := filepath.Join(t.TempDir(), "schema.json")
+		if err := os.WriteFile(schema, []byte(`{"$id": "https://example.com/s", "$defs": `+c.defs+`}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		code := run([]string{capture, c.flag, schema}, &stdout, &stderr)
+		if code != 2 || stdout.String() != "" || stderr.String() != "error: "+schema+": cannot read schema\n" {
+			t.Errorf("%s: exit %d, stdout %q, stderr %q", c.flag, code, stdout.String(), stderr.String())
+		}
+	}
+}
+
+func TestMCPIdentityFlagsAreExclusive(t *testing.T) {
+	capture := filepath.Join(repoRoot(t), "spec", "fixtures", "migration-check", "pass.jsonl")
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{capture, "--mcp-anonymous", "--mcp-user-id", "u1"}, &stdout, &stderr); code != 2 || stdout.Len() != 0 {
+		t.Errorf("exit %d, stdout %q", code, stdout.String())
+	}
+}

@@ -67,6 +67,7 @@ type options struct {
 	surface           []string
 	userID            string
 	mcpUserID         string
+	mcpAnonymous      bool
 	expectSession     bool
 	expectJoins       bool
 	clientSurface     []string
@@ -208,12 +209,13 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			for _, e := range errs {
 				fail("%s (spec): %s", where, e)
 			}
-			if !isClient && w.Get("specVersion") != specVersion {
-				fail("%s: context.wrapperLibrary.specVersion is %s", where, repr(w.Get("specVersion")))
-			}
-			if !isClient && !in(w.Get("name"), sdkNames) {
-				fail("%s: context.wrapperLibrary.name is %s, not one of %s", where, repr(w.Get("name")), reprList(sdkNames))
-			}
+		}
+		// wrapper metadata on every SDK event; tracing spans (ai_otel_span) carry no specVersion
+		if !isClient && w.Get("integration") != "tracing" && w.Get("specVersion") != specVersion {
+			fail("%s: context.wrapperLibrary.specVersion is %s", where, repr(w.Get("specVersion")))
+		}
+		if !isClient && !in(w.Get("name"), sdkNames) {
+			fail("%s: context.wrapperLibrary.name is %s, not one of %s", where, repr(w.Get("name")), reprList(sdkNames))
 		}
 		// trackAction takes no feature, so server ai_user_action has none; MCP events have none either;
 		// optionalFeature events are checked only when they carry one
@@ -269,6 +271,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 				fail("%s: no userId, expected %s (identify not wired?)", where, reprStr(opts.mcpUserID))
 			} else if opts.mcpUserID != "" && user != opts.mcpUserID {
 				fail("%s: userId %s, expected %s", where, repr(user), reprStr(opts.mcpUserID))
+			}
+			if opts.mcpAnonymous && truthy(user) {
+				fail("%s: userId %s on an unauthenticated MCP server (expected none)", where, repr(user))
+			} else if opts.mcpAnonymous && anon != "ai_system" {
+				fail("%s: anonymousId %s, expected 'ai_system'", where, repr(anon))
 			}
 			if len(opts.mcpServer) > 0 && !in(props.Get("server_name"), opts.mcpServer) {
 				fail("%s: server_name %s not in %s", where, repr(props.Get("server_name")), reprList(opts.mcpServer))
