@@ -1,0 +1,6 @@
+{"type": "track", "event": "chatTurnCompleted", "userId": "u1", "messageId": "m1", "timestamp": "t1", "context": {"traits": {"email": "a@b.co"}, "page": {"title": "Café 😀"}}, "properties": {"model": "gpt-4o", "latency_ms": 120.5, "steps": [{"tool": "search", "startedAt": "y", "ok": true}], "meta": {"k": "v"}, "tags": ["x"], "note": "mail me at jo.doe@example.com now", "score": 0.75, "big": 12345678901234567890, "tiny": 1e-07, "whole": 2.0, "account_id": "acct-1", "nested": {"owner_email": "x@y.z", "deep": {"user_id": 5}}}}
+{"type": "track", "event": "chatTurnCompleted", "userId": "u1", "properties": {"model": "gpt-4o", "latency_ms": 100, "interaction_id": "i9"}}
+{"type": "track", "event": "ai_response_received", "anonymousId": "a1", "properties": {"source": "client", "interaction_id": "i1", "response_status": "success"}}
+{"type": "page", "name": "Home"}
+{"type": "track", "event": "ai_response_received", "userId": "u1", "properties": {"x": 1}, "context": {"wrapperLibrary": {"name": "@rudderstack/ai", "version": "0.6.0", "specVersion": "0.3.0", "integration": "manual"}}}
+{"type": "track", "event": "ai_response_received", "anonymousId": "a1", "properties": {"source": "client", "interaction_id": "i2", "response_status": "success"}}

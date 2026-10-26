@@ -1,0 +1,223 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"regexp"
+	"slices"
+	"sort"
+	"strings"
+)
+
+// The what-changes command: a redacted before/after diff of two captures of the same driven traffic.
+//
+// before: AI events switched off (the app as it was); after: AI events on. Prints the event table
+// (counts per capture) and, per changed event, a redacted before/after JSON pair with the differing
+// fields and values. Every occurrence is compared in capture order; the pair shown is the first that
+// differs. Fields that differ on every run (IDs, timestamps, durations) count by presence and type
+// only, inside lists too. IDs, user and account IDs, on_behalf_of, emails, traits and timestamps are
+// redacted; check the rest before sharing.
+
+var (
+	drop     = set("messageId", "timestamp", "originalTimestamp", "sentAt", "receivedAt", "_metadata") // envelope only
+	idKey    = regexp.MustCompile(`(^|_)id\z|Id\z|^on_behalf_of\z|[eE]mail`)
+	personal = set("traits") // identify() traits (email, name, ...) ride along in context
+	email    = regexp.MustCompile(`[^ \t\n\r\f\v@"]+@[^ \t\n\r\f\v@"]+\.[A-Za-z0-9_]+`)
+	vary     = regexp.MustCompile(`^(interaction_id|conversation_id|parent_interaction_id|trace_id|anonymousId|anonymous_id|sessionId)\z` +
+		`|_ms\z|[Ll]atency|[Dd]uration|At\z|[Tt]imestamp`)
+)
+
+// typeName is Python's type(value).__name__.
+func typeName(v any) string {
+	switch v.(type) {
+	case nil:
+		return "NoneType"
+	case bool:
+		return "bool"
+	case Int:
+		return "int"
+	case Float:
+		return "float"
+	case string:
+		return "str"
+	case []any:
+		return "list"
+	}
+	return "dict"
+}
+
+func rowKey(m *Object) string { // browser copies are their own rows
+	if obj(m.Get("properties")).Get("source") == "client" {
+		return m.Get("event").(string) + " (browser)"
+	}
+	return m.Get("event").(string)
+}
+
+func redact(v any, k string) any {
+	if _, isObj := v.(*Object); personal[k] || (v != nil && !isObj && !isList(v) && idKey.MatchString(k)) {
+		return "<" + k + ">"
+	}
+	switch v := v.(type) {
+	case *Object:
+		out := newObject()
+		for _, kk := range v.keys {
+			out.Set(kk, redact(v.vals[kk], kk))
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = redact(item, k)
+		}
+		return out
+	case string:
+		return email.ReplaceAllLiteralString(v, "<email>")
+	}
+	return v
+}
+
+func shown(m *Object) any { // envelope fields are per send; nested ones are payload and stay
+	o := newObject()
+	for _, k := range m.keys {
+		if !drop[k] {
+			o.Set(k, m.vals[k])
+		}
+	}
+	return redact(o, "")
+}
+
+// norm is the comparable form: run-varying and redacted fields keep only their type, at any depth
+// (lists too).
+func norm(v any, k string) any {
+	if vary.MatchString(k) || idKey.MatchString(k) || personal[k] {
+		return typeName(v)
+	}
+	switch v := v.(type) {
+	case *Object:
+		out := newObject()
+		for _, kk := range v.keys {
+			out.Set(kk, norm(v.vals[kk], kk))
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = norm(item, k)
+		}
+		return out
+	}
+	return redact(v, k)
+}
+
+func fields(m *Object, prefix string, out map[string]string) map[string]string {
+	for _, k := range m.keys {
+		v := m.vals[k]
+		if prefix == "" && drop[k] { // envelope only: a payload's own messageId or timestamp is compared by type
+			continue
+		}
+		path := prefix + k
+		if o, ok := v.(*Object); ok && o.Len() > 0 && !personal[k] {
+			fields(o, path+".", out)
+		} else {
+			out[path] = dumps(norm(v, k), false)
+		}
+	}
+	return out
+}
+
+func sortedKeys(m map[string]string, keep func(string) bool) []string {
+	var out []string
+	for k := range m {
+		if keep(k) {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func diff(fb, fa map[string]string) []string {
+	var out []string
+	for _, k := range sortedKeys(fa, func(k string) bool { _, ok := fb[k]; return !ok }) {
+		out = append(out, "+ "+k)
+	}
+	for _, k := range sortedKeys(fb, func(k string) bool { _, ok := fa[k]; return !ok }) {
+		out = append(out, "- "+k)
+	}
+	for _, k := range sortedKeys(fb, func(k string) bool { a, ok := fa[k]; return ok && a != fb[k] }) {
+		out = append(out, fmt.Sprintf("~ %s (%s -> %s)", k, fb[k], fa[k]))
+	}
+	return out
+}
+
+type change struct {
+	name   string
+	diff   []string
+	mb, ma *Object
+}
+
+// whatChanges prints the event table and the changed events' redacted pairs; it always returns 0.
+func whatChanges(before, after []*Object, out io.Writer) int {
+	byB, byA := map[string][]*Object{}, map[string][]*Object{}
+	for _, m := range tracks(before) {
+		byB[rowKey(m)] = append(byB[rowKey(m)], m)
+	}
+	for _, m := range tracks(after) {
+		byA[rowKey(m)] = append(byA[rowKey(m)], m)
+	}
+	var rows []string
+	for k := range byB {
+		rows = append(rows, k)
+	}
+	for k := range byA {
+		if byB[k] == nil {
+			rows = append(rows, k)
+		}
+	}
+	sort.Strings(rows)
+
+	fmt.Fprintln(out, "| Event | Status | Before | After |\n|---|---|---|---|")
+	var changed []change
+	for _, name := range rows {
+		nb, na := len(byB[name]), len(byA[name])
+		var status string
+		switch {
+		case nb == 0:
+			status = "new"
+		case na == 0:
+			status = "removed"
+		default:
+			// Compare every occurrence in capture order; a change in a later turn counts too.
+			var d []string
+			mb, ma := byB[name][0], byA[name][0]
+			for i := 0; i < nb && i < na; i++ {
+				lines := diff(fields(byB[name][i], "", map[string]string{}), fields(byA[name][i], "", map[string]string{}))
+				if len(lines) > 0 && len(d) == 0 {
+					mb, ma = byB[name][i], byA[name][i] // show the first pair that actually differs
+				}
+				for _, l := range lines {
+					if !slices.Contains(d, l) {
+						d = append(d, l)
+					}
+				}
+			}
+			status = "unchanged"
+			if len(d) > 0 || nb != na {
+				status = "changed"
+				changed = append(changed, change{name, d, mb, ma})
+			}
+		}
+		fmt.Fprintf(out, "| `%s` | %s | %d | %d |\n", name, status, nb, na)
+	}
+
+	for _, c := range changed {
+		differing := strings.Join(c.diff, ", ")
+		if differing == "" {
+			differing = "count only"
+		}
+		fmt.Fprintf(out, "\n#### `%s`\n\nDiffering fields: %s\n\n", c.name, differing)
+		fmt.Fprintln(out, "Before:\n```json\n"+dumps(shown(c.mb), true)+"\n```")
+		fmt.Fprintln(out, "After:\n```json\n"+dumps(shown(c.ma), true)+"\n```")
+	}
+	return 0
+}

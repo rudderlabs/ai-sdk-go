@@ -30,6 +30,7 @@ updates:
       - '/ruddergenai'
       - '/rudderbedrock'
       - '/rudderotel'
+      - '/cmd/aicheck'
     ignore:
       - dependency-name: 'github.com/mark3labs/mcp-go'
       - dependency-name: 'github.com/modelcontextprotocol/go-sdk'

@@ -1,0 +1,5 @@
+{"type": "track", "event": "chatTurnCompleted", "userId": "u1", "messageId": "m1", "timestamp": "t1", "context": {"traits": {"email": "a@b.co"}, "page": {"title": "Café 😀"}}, "properties": {"model": "gpt-4o", "latency_ms": 120, "steps": [{"tool": "search", "startedAt": "x", "ok": true}], "meta": {}, "tags": [], "note": "mail me at jo.doe@example.com today", "score": 0.5, "nothing": null, "big": 12345678901234567890, "tiny": 1e-07, "whole": 2.0, "account_id": "acct-1", "nested": {"owner_email": "x@y.z", "deep": {"user_id": 5}}}}
+{"type": "track", "event": "chatTurnCompleted", "userId": "u1", "properties": {"model": "gpt-4o", "latency_ms": 100}}
+{"type": "track", "event": "legacyOnly", "userId": "u1", "properties": {"a": 1}}
+{"type": "track", "event": "ai_response_received", "anonymousId": "a1", "properties": {"source": "client", "interaction_id": "i1", "response_status": "success"}}
+{"type": "page", "name": "Home"}

@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/keywords",
+  "$defs": {
+    "ai_user_action": {
+      "type": "object",
+      "minProperties": 30,
+      "propertyNames": {
+        "maxLength": 12
+      },
+      "unevaluatedProperties": false,
+      "properties": {
+        "short": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2,
+          "pattern": "^a"
+        },
+        "big": {
+          "type": "number",
+          "maximum": 10,
+          "exclusiveMaximum": 5,
+          "multipleOf": 2
+        },
+        "one": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "minLength": 1
+            }
+          ]
+        },
+        "never": false,
+        "list": {
+          "type": "array",
+          "contains": {
+            "const": 1
+          },
+          "minContains": 2,
+          "minItems": 5
+        },
+        "few": {
+          "type": "array",
+          "contains": {
+            "const": 1
+          },
+          "minContains": 2
+        },
+        "many": {
+          "type": "array",
+          "contains": {
+            "const": 1
+          },
+          "maxContains": 1
+        },
+        "dep": {
+          "type": "object",
+          "dependentRequired": {
+            "a": [
+              "b"
+            ]
+          }
+        },
+        "items": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "x"
+            }
+          ],
+          "items": {
+            "type": "integer"
+          }
+        },
+        "fixed": {
+          "const": 1.0
+        },
+        "pats": {
+          "type": "object",
+          "patternProperties": {
+            "^x": {
+              "type": "integer"
+            }
+          },
+          "additionalProperties": false
+        },
+        "num": {
+          "type": "integer",
+          "minimum": 0,
+          "enum": [
+            1,
+            2.5,
+            "x",
+            null
+          ]
+        }
+      }
+    },
+    "ai_response_received": {
+      "properties": {
+        "arr": {
+          "type": "array",
+          "items": false
+        },
+        "pre": {
+          "prefixItems": [
+            false
+          ]
+        },
+        "items": false,
+        "viaref": {
+          "$ref": "#/$defs/nothing"
+        },
+        "inall": {
+          "allOf": [
+            false
+          ]
+        },
+        "typ": {
+          "type": [
+            "integer",
+            "boolean"
+          ],
+          "const": "k"
+        },
+        "anyv": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ]
+        },
+        "notv": {
+          "not": {
+            "type": "integer"
+          }
+        },
+        "obj": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "required": [
+            "z",
+            "y"
+          ]
+        }
+      }
+    },
+    "nothing": false
+  }
+}

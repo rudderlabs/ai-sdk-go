@@ -1,0 +1,6 @@
+{"type": "track", "event": "chatTurnCompleted", "userId": "u1", "properties": {"cost": 0.01}, "context": {"wrapperLibrary": "not an object"}}
+{"type": "track", "event": "ai_user_action", "userId": "u1", "properties": "not an object", "context": {"wrapperLibrary": {"name": "@rudderstack/ai", "version": "0.6.0", "specVersion": "0.3.0", "integration": "manual"}}}
+{"type": "track", "event": "ai_user_prompt_created", "userId": "u1", "context": [], "properties": {"conversation_id": "c1", "interaction_id": {"id": 1}, "action_details": 5, "argument_keys": "request_context"}}
+{"type": "track", "event": 5, "userId": "u1"}
+{"type": "track", "event": "ai_user_prompt_created", "userId": "u1", "properties": {"conversation_id": "c1", "interaction_id": 7, "feature": "support_bot", "surface": "web"}, "context": {"wrapperLibrary": {"name": "@rudderstack/ai", "version": "0.6.0", "specVersion": "0.3.0", "integration": "manual"}}}
+{"type": "track", "event": "", "userId": "u1"}

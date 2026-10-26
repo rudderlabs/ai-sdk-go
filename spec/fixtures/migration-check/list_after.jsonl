@@ -1,0 +1,1 @@
+{"type": "track", "event": "chatTurnCompleted", "userId": "u1", "properties": {"status": "ok", "model": "m1", "tool_breakdown": [{"tool": "search", "duration_ms": 11}]}}
