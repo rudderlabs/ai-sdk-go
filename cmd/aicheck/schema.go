@@ -78,6 +78,7 @@ func parseSchemaJSON(b []byte) (any, error) {
 
 func newSchemas(spec, client *schemaDoc) (*schemas, error) {
 	c := jsonschema.NewCompiler()
+	c.DefaultDraft(jsonschema.Draft2020) // a schema without $schema, as the other SDKs' checkers read it
 	byID := map[string]*schemaDoc{}
 	for _, d := range []*schemaDoc{spec, client} {
 		if err := c.AddResource(d.id, toValidator(d.raw)); err != nil {

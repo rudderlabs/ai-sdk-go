@@ -291,12 +291,12 @@ func (p *parser) hex4() (rune, bool) {
 	if p.i+4 > len(p.s) {
 		return 0, false
 	}
-	n, err := strconv.ParseUint(p.s[p.i:p.i+4], 16, 32)
+	n, err := strconv.ParseUint(p.s[p.i:p.i+4], 16, 16) // four hex digits always fit 16 bits
 	if err != nil {
 		return 0, false
 	}
 	p.i += 4
-	return rune(n), true
+	return rune(uint16(n)), true
 }
 
 func (p *parser) str() (any, error) {

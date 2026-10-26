@@ -115,7 +115,7 @@ func fields(m *Object, prefix string, out map[string]string) map[string]string {
 		if prefix == "" && drop[k] { // envelope only: a payload's own messageId or timestamp is compared by type
 			continue
 		}
-		path := prefix + k
+		path := prefix + strings.ReplaceAll(strings.ReplaceAll(k, `\`, `\\`), ".", `\.`) // a literal dot is not nesting
 		if o, ok := v.(*Object); ok && o.Len() > 0 && !personal[k] {
 			fields(o, path+".", out)
 		} else {

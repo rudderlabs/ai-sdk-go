@@ -42,11 +42,11 @@ func NewRecorder(path string) (*Recorder, error) {
 	return &Recorder{f: f}, nil
 }
 
-// Enqueue writes m as one line. analytics-go sets a message's type only when it sends it, so the
+// Enqueue writes m as one line; a pointer to a message is recorded like the message. analytics-go sets a message's type only when it sends it, so the
 // recorder sets it.
 func (r *Recorder) Enqueue(m analytics.Message) error {
 	var line any
-	switch msg := m.(type) {
+	switch msg := deref(m).(type) {
 	case analytics.Track:
 		msg.Type = "track"
 		line = msg
@@ -76,6 +76,38 @@ func (r *Recorder) Enqueue(m analytics.Message) error {
 	defer r.mu.Unlock()
 	_, err = r.f.Write(append(b, '\n'))
 	return err
+}
+
+// deref returns the message a non-nil pointer message points to, so it is recorded like a value;
+// anything else, a nil pointer included, is returned as is.
+func deref(m analytics.Message) analytics.Message {
+	switch msg := m.(type) {
+	case *analytics.Track:
+		if msg != nil {
+			return *msg
+		}
+	case *analytics.Identify:
+		if msg != nil {
+			return *msg
+		}
+	case *analytics.Page:
+		if msg != nil {
+			return *msg
+		}
+	case *analytics.Screen:
+		if msg != nil {
+			return *msg
+		}
+	case *analytics.Group:
+		if msg != nil {
+			return *msg
+		}
+	case *analytics.Alias:
+		if msg != nil {
+			return *msg
+		}
+	}
+	return m
 }
 
 // Flush makes rudderstackai.Flush treat the recorder as a current client; writes are unbuffered,

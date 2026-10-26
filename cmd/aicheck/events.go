@@ -30,9 +30,19 @@ var (
 	// a standalone score carries a feature only when given; ai_otel_span (tracing) carries none by default
 	optionalFeature      = set("ai_interaction_scored", "ai_otel_span")
 	requestContextFields = set("intent", "user_sentiment", "call_reason") // what the SDK reads from request_context
-	content              = set("prompt_text", "response_text", "intent_summary", "explanation", "call_reason", "capability_detail")
-	rawMCP               = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
-	runFields            = []string{"task_name", "trigger_source", "trigger_event_id", "conversation_id", "account_id",
+	knownEvents          = func() map[string]bool {                       // ai_otel_span: rudderstack.ai.tracing
+		m := set("ai_otel_span")
+		for _, s := range []map[string]bool{specEvents, mcpEvents, clientOnly} {
+			for k := range s {
+				m[k] = true
+			}
+		}
+		return m
+	}()
+	turnEvents = set("ai_user_prompt_created", "ai_response_received") // the surface of a turn comes from these
+	content    = set("prompt_text", "response_text", "intent_summary", "explanation", "call_reason", "capability_detail")
+	rawMCP     = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
+	runFields  = []string{"task_name", "trigger_source", "trigger_event_id", "conversation_id", "account_id",
 		"on_behalf_of", "parent_interaction_id", "llm_call_count", "total_tokens"}
 	mcpCallFields = []string{"server_name", "client_name", "protocol_version", "tool_name", "tool_status",
 		"error_type", "intent", "user_sentiment"}
@@ -59,6 +69,7 @@ type options struct {
 	expectJoins       bool
 	clientSurface     []string
 	clientOptOut      []string
+	feedbackEndpoint  []string
 	failedInteraction []string
 	mcpServer         []string
 	mcpIntent         []string
@@ -122,6 +133,8 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 	names, legacy, clientsSeen := newCounter(), newCounter(), newCounter()
 	answers := map[string]*Object{}
 	surfaces := map[string]any{}
+	declared := map[string]int{}                // non-MCP declared tool events per interaction
+	actions := map[string]map[string]*counter{} // interaction -> side -> action_type counts
 	var runs, toolCalls []*Object
 
 	// browser AI event names: only these count as AI traffic when they carry source: client
@@ -154,27 +167,24 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 		names.add(name)
 		isMCP := mcpEvents[name] || w.Get("integration") == "mcp"
-		isDeclared := !reserved(name) && props.Has("tool_status")
-		if !reserved(name) && !isDeclared {
-			continue
-		}
+		// past the legacy branch, an event with a customer name was sent by an AI SDK: a declared tool event
+		isDeclared := !reserved(name)
 		if !truthy(user) && !truthy(anon) && !isClient {
 			fail("%s: no userId or anonymousId", where)
+		}
+		if !isDeclared && !isClient && !knownEvents[name] {
+			fail("%s: not an AI events spec name (misspelled?)", where)
 		}
 		if clientOnly[name] && !isClient {
 			fail("%s: client-only event without source: client", where)
 		}
-		if isClient {
-			if sch.client.defs.Has(name) {
-				errs, err := sch.errors(sch.client, name, props)
-				if err != nil {
-					return 0, err
-				}
-				for _, e := range errs {
-					fail("%s (client schema): %s", where, e)
-				}
-			} else {
-				fail("%s: not a client event name", where)
+		if isClient { // client names come from the client schema's $defs
+			errs, err := sch.errors(sch.client, name, props)
+			if err != nil {
+				return 0, err
+			}
+			for _, e := range errs {
+				fail("%s (client schema): %s", where, e)
 			}
 		}
 		definition := name
@@ -185,7 +195,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 		}
 		if specEvents[name] || mcpEvents[name] || isDeclared { // client copies: spec and client schema
-			if isClient && !clientCopies[name] {
+			if props.Get("source") == "client" && !clientCopies[name] {
 				fail("%s: source: client on an event the browser never sends", where)
 			}
 			errs, err := sch.errors(sch.spec, definition, props)
@@ -237,14 +247,15 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 				fail("%s: no context.sessionId (cookies not read?)", where)
 			}
 		}
-		if system && name == "ai_response_received" {
+		if system && name == "ai_response_received" && !isClient {
 			if !truthy(props.Get("task_name")) {
 				notes = append(notes, where+": system answer without task_name (a call outside any interaction or task?)")
 			}
 			runs = append(runs, props)
 		}
 		if isMCP {
-			if leaked := present(props, rawMCP); len(leaked) > 0 {
+			// declared tool events carry the properties their rule chose; only SDK-owned events are guarded
+			if leaked := present(props, rawMCP); mcpEvents[name] && len(leaked) > 0 {
 				fail("%s: raw MCP payload keys %s", where, reprList(sortedSet(leaked)))
 			}
 			if len(opts.mcpServer) > 0 && !in(props.Get("server_name"), opts.mcpServer) {
@@ -295,7 +306,16 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 				}
 				conversations[iid][conversation] = true
 			}
-			if !isClient && truthy(props.Get("surface")) && clientCopies[name] {
+			if isDeclared {
+				declared[iid]++
+			}
+			if action, ok := props.Get("action_type").(string); ok && name == "ai_user_action" {
+				if actions[iid] == nil {
+					actions[iid] = map[string]*counter{"server": newCounter(), "client": newCounter()}
+				}
+				actions[iid][s].add(action)
+			}
+			if !isClient && truthy(props.Get("surface")) && turnEvents[name] { // not later feedback
 				surfaces[iid] = props.Get("surface")
 			}
 			if name == "ai_response_received" && !isClient && (!paused || answers[iid] == nil) {
@@ -310,6 +330,18 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		if c[side{"ai_response_received", "client"}] > 0 || c[side{"ai_user_prompt_created", "client"}] > 0 {
 			hasClientCopies = true
 		}
+	}
+	// feedback types with a server endpoint: planned, or sent by the server here; others are browser-only
+	serverActions := slices.Clone(opts.feedbackEndpoint)
+	for _, sides := range actions {
+		serverActions = append(serverActions, sides["server"].keys...)
+	}
+	serverActions = sortedSet(serverActions)
+	actionCount := func(iid, s, action string) int {
+		if actions[iid] == nil {
+			return 0
+		}
+		return actions[iid][s].n[action]
 	}
 	runIDs := map[string]bool{}
 	for _, r := range runs {
@@ -356,6 +388,15 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if clientAnswer > 0 && serverAnswer == 0 {
 				gap("interaction " + iid + ": client answer with no server answer (request never reached the SDK, or a different ID)")
 			}
+			for _, action := range serverActions {
+				server, browser := actionCount(iid, "server", action), actionCount(iid, "client", action)
+				if server > 0 && browser == 0 && !optedOut("client_feedback") {
+					gap("interaction " + iid + ": server ai_user_action " + action + " with no client copy (browser handler not wired?)")
+				}
+				if browser > 0 && server == 0 && !optedOut("server_feedback") {
+					gap("interaction " + iid + ": client ai_user_action " + action + " with no server copy (endpoint not wired, or a different ID)")
+				}
+			}
 		}
 		// An opted-out copy was dropped from the plan, so sending it is a regression, not a gap.
 		if optedOut("client_prompt") && clientPrompt > 0 {
@@ -364,10 +405,26 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		if optedOut("client_response") && clientAnswer > 0 {
 			fail("interaction %s: client answer copy sent, but the plan opts it out", iid)
 		}
+		if optedOut("client_feedback") && slices.ContainsFunc(serverActions, func(a string) bool { return actionCount(iid, "client", a) > 0 }) {
+			fail("interaction %s: client feedback copy sent, but the plan opts it out", iid)
+		}
+		if optedOut("server_feedback") && actions[iid] != nil && len(actions[iid]["server"].keys) > 0 {
+			fail("interaction %s: server ai_user_action sent, but the plan opts it out (server_feedback)", iid)
+		}
 		for _, event := range []string{"ai_user_action", "ai_interaction_scored"} {
 			if (c[side{event, "server"}] > 0 || c[side{event, "client"}] > 0) && serverAnswer+clientAnswer+serverPaused+clientPaused == 0 {
 				gap("interaction " + iid + ": " + event + " for an answer not in this capture")
 			}
+		}
+		if declared[iid] > 0 && serverAnswer+clientAnswer+serverPaused+clientPaused == 0 {
+			var names []string
+			for k := range c {
+				if !specEvents[k.event] {
+					names = append(names, k.event)
+				}
+			}
+			sort.Strings(names)
+			gap("interaction " + iid + ": declared tool event " + reprList(names) + " for an answer not in this capture")
 		}
 		if len(conversations[iid]) > 1 {
 			var ids []string

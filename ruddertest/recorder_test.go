@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -119,6 +120,14 @@ func TestRecorderOtherMessagesAndErrors(t *testing.T) {
 	if err := rec.Enqueue(custom{}); err != nil {
 		t.Fatal(err)
 	}
+	for _, m := range []analytics.Message{
+		&analytics.Track{Event: "e"}, &analytics.Identify{}, &analytics.Page{}, &analytics.Screen{}, &analytics.Group{}, &analytics.Alias{},
+		(*analytics.Track)(nil), (*analytics.Identify)(nil), (*analytics.Page)(nil), (*analytics.Screen)(nil), (*analytics.Group)(nil), (*analytics.Alias)(nil),
+	} {
+		if err := rec.Enqueue(m); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := rec.Enqueue(analytics.Track{Event: "x", Properties: analytics.Properties{"bad": make(chan int)}}); err == nil {
 		t.Fatal("unencodable message: no error")
 	}
@@ -132,7 +141,13 @@ func TestRecorderOtherMessagesAndErrors(t *testing.T) {
 		t.Fatal("Enqueue after Close: no error")
 	}
 	lines := readLines(t, path)
-	if len(lines) != 1 || lines[0]["type"] != "ruddertest_test.custom" {
+	var types []any
+	for _, l := range lines {
+		types = append(types, l["type"])
+	}
+	want := []any{"ruddertest_test.custom", "track", "identify", "page", "screen", "group", "alias",
+		"*analytics.Track", "*analytics.Identify", "*analytics.Page", "*analytics.Screen", "*analytics.Group", "*analytics.Alias"}
+	if fmt.Sprint(types) != fmt.Sprint(want) || lines[1]["event"] != "e" {
 		t.Fatalf("lines %v", lines)
 	}
 }

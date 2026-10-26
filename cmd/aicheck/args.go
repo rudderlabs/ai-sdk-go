@@ -40,7 +40,8 @@ var checkFlags = map[string]flagSpec{
 	"mcp-server":         {kind: listFlag},
 	"mcp-intent":         {kind: listFlag},
 	"client-surface":     {kind: listFlag},
-	"client-opt-out":     {kind: listFlag, choices: []string{"client_prompt", "client_response"}},
+	"client-opt-out":     {kind: listFlag, choices: []string{"client_prompt", "client_response", "client_feedback", "server_feedback"}},
+	"feedback-endpoint":  {kind: listFlag},
 }
 
 // errUsage is a command line the checker rejects: exit code 2 with the usage on stderr.

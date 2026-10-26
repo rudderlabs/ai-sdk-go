@@ -36,7 +36,9 @@ check flags (repeat the list flags once per value):
   --expect-session              user-triggered server prompts and answers carry context.sessionId
   --expect-joins                the browser was driven with the server's IDs: every client/server gap fails
   --client-surface <surface>    a surface with a browser client: only its turns need client copies
-  --client-opt-out <copy>       client_prompt or client_response: a browser copy the plan opts out of
+  --client-opt-out <copy>       client_prompt, client_response, client_feedback or server_feedback:
+                                a copy the plan opts out of (fails if sent)
+  --feedback-endpoint <type>    action_type with a planned endpoint: its browser copy needs a server one
   --failed-interaction <id>     interaction the app failed and caught: its answer must report the failure
   --mcp-server <name>           allowed MCP server_name values
   --mcp-intent <intent>         allowed request_context intents (other is implied)
@@ -118,6 +120,7 @@ func dispatch(args []string, stdout io.Writer) (int, error) {
 		expectJoins:       p.bools["expect-joins"],
 		clientSurface:     p.lists["client-surface"],
 		clientOptOut:      p.lists["client-opt-out"],
+		feedbackEndpoint:  p.lists["feedback-endpoint"],
 		failedInteraction: p.lists["failed-interaction"],
 		mcpServer:         p.lists["mcp-server"],
 		mcpIntent:         p.lists["mcp-intent"],

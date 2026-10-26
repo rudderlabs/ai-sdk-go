@@ -87,10 +87,21 @@ func TestSchemaKeywordsAsPython(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var stdout, stderr bytes.Buffer
-	code := run([]string{"testdata/keywords.jsonl", "--spec", "testdata/keywords.schema.json"}, &stdout, &stderr)
-	if code != 1 || stdout.String() != string(want) {
-		t.Errorf("exit %d, stderr %s, stdout:\n%s\nwant:\n%s", code, stderr.String(), stdout.String(), want)
+	schema, err := os.ReadFile("testdata/keywords.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Without $schema, a schema is read as draft 2020-12.
+	noDraft := filepath.Join(t.TempDir(), "nodraft.json")
+	if err := os.WriteFile(noDraft, bytes.Replace(schema, []byte(`"$schema": "https://json-schema.org/draft/2020-12/schema",`), nil, 1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"testdata/keywords.schema.json", noDraft} {
+		var stdout, stderr bytes.Buffer
+		code := run([]string{"testdata/keywords.jsonl", "--spec", path}, &stdout, &stderr)
+		if code != 1 || stdout.String() != string(want) {
+			t.Errorf("%s: exit %d, stderr %s, stdout:\n%s\nwant:\n%s", path, code, stderr.String(), stdout.String(), want)
+		}
 	}
 }
 
