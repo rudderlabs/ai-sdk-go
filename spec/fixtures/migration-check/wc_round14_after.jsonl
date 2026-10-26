@@ -1,0 +1,2 @@
+{"type": "track", "userId": "u1", "event": "ticket_created", "properties": {"priority": "high"}}
+{"type": "track", "user_id": "u1", "event": "ticket_created", "context": {"wrapperLibrary": {"name": "rudderstack-ai", "version": "0.6.0", "integration": "manual", "specVersion": "0.3.0"}}, "properties": {"interaction_id": "11111111-1111-4111-8111-111111111111", "conversation_id": "c1", "tool_name": "create_ticket", "tool_status": "success", "priority": "high"}}

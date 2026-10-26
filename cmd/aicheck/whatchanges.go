@@ -47,13 +47,18 @@ func typeName(v any) string {
 	return "dict"
 }
 
-// rowKey: browser AI copies are their own rows, and so is a legacy event that uses an AI name.
+// rowKey gives own rows to browser AI copies, legacy events with AI names, and SDK events with
+// customer names.
 func rowKey(m *Object) string {
 	name := m.Get("event").(string)
 	if obj(m.Get("properties")).Get("source") == "client" && (clientCopies[name] || clientOnly[name]) {
 		return name + " (browser)"
 	}
-	if !in(obj(obj(m.Get("context")).Get("wrapperLibrary")).Get("name"), sdkNames) && reserved(name) {
+	sdk := in(obj(obj(m.Get("context")).Get("wrapperLibrary")).Get("name"), sdkNames)
+	switch {
+	case sdk && !reserved(name): // a declared tool event may share a legacy event's name
+		return name + " (AI SDK)"
+	case !sdk && reserved(name):
 		return name + " (legacy)"
 	}
 	return name

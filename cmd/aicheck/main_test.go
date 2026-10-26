@@ -274,3 +274,29 @@ func TestMCPIdentityFlagsAreExclusive(t *testing.T) {
 		t.Errorf("exit %d, stdout %q", code, stdout.String())
 	}
 }
+
+// Mirrors Python's test_schema_override_in_another_dialect_exits_2.
+func TestSchemaOverrideInAnotherDialectExits2(t *testing.T) {
+	empty := filepath.Join(repoRoot(t), "spec", "fixtures", "migration-check", "empty.jsonl")
+	for _, d := range []string{`"http://json-schema.org/draft-07/schema#"`, `"foo"`, `null`} {
+		schema := filepath.Join(t.TempDir(), "schema.json")
+		if err := os.WriteFile(schema, []byte(`{"$schema": `+d+`, "$id": "https://example.com/s", "$defs": {}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		code := run([]string{empty, "--no-ai-events", "--client-schema", schema}, &stdout, &stderr)
+		if code != 2 || stdout.String() != "" || stderr.String() != "error: "+schema+": cannot read schema\n" {
+			t.Errorf("%s: exit %d, stdout %q, stderr %q", d, code, stdout.String(), stderr.String())
+		}
+	}
+	for _, d := range []string{`"https://json-schema.org/draft/2020-12/schema#"`} {
+		schema := filepath.Join(t.TempDir(), "schema.json")
+		if err := os.WriteFile(schema, []byte(`{"$schema": `+d+`, "$id": "https://example.com/s", "$defs": {}}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var stdout, stderr bytes.Buffer
+		if code := run([]string{empty, "--no-ai-events", "--client-schema", schema}, &stdout, &stderr); code != 0 {
+			t.Errorf("%s: exit %d, stderr %q", d, code, stderr.String())
+		}
+	}
+}

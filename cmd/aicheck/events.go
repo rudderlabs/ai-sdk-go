@@ -39,7 +39,8 @@ var (
 		}
 		return m
 	}()
-	turnEvents = set("ai_user_prompt_created", "ai_response_received") // the surface of a turn comes from these
+	answerBound = []string{"ai_user_action", "ai_interaction_scored", "ai_interaction_classified", "ai_llm_response_received"}
+	turnEvents  = set("ai_user_prompt_created", "ai_response_received") // the surface of a turn comes from these
 	// intent_summary is not here: the classifier's own intent_summary option sends it, whatever the capture switch
 	content   = set("prompt_text", "response_text", "explanation", "call_reason", "capability_detail")
 	rawMCP    = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
@@ -457,7 +458,8 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		if optedOut("server_feedback") && actions[iid] != nil && len(actions[iid]["server"].keys) > 0 {
 			fail("interaction %s: server ai_user_action sent, but the plan opts it out (server_feedback)", iid)
 		}
-		for _, event := range []string{"ai_user_action", "ai_interaction_scored"} {
+		// events bound to an answer: without one, the final answer was lost or sent under another ID
+		for _, event := range answerBound {
 			if (c[side{event, "server"}] > 0 || c[side{event, "client"}] > 0) && serverAnswer+clientAnswer+serverPaused+clientPaused == 0 {
 				gap("interaction " + iid + ": " + event + " for an answer not in this capture")
 			}

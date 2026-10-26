@@ -27,6 +27,9 @@ var specSchema []byte
 //go:embed schemas/ai-client-events-v0.2.schema.json
 var clientSchema []byte
 
+// dialect is the only JSON Schema draft the three SDKs' checkers implement.
+const dialect = "https://json-schema.org/draft/2020-12/schema"
+
 // schemaDoc is one schema file.
 type schemaDoc struct {
 	name string // the path, for errors
@@ -65,6 +68,9 @@ func readSchema(path string, bundled []byte) (*schemaDoc, error) {
 	id, ok := o.Get("$id").(string)
 	defs, hasDefs := o.Get("$defs").(*Object)
 	if !ok || !hasDefs {
+		return nil, captureErr("%s: cannot read schema", name)
+	}
+	if d, declared := o.Lookup("$schema"); declared && d != dialect && d != dialect+"#" { // other drafts read differently
 		return nil, captureErr("%s: cannot read schema", name)
 	}
 	doc := &schemaDoc{name: name, id: id, defs: defs, raw: split(o)}
