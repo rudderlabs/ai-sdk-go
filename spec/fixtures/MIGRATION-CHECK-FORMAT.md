@@ -28,7 +28,7 @@ The captures come from the `rudder-ai-events-verify` skill's tested fixtures and
 
 ### Arguments
 
-`check <events.jsonl> [flags]` and `what-changes <before.jsonl> <after.jsonl>`. Flags take their value as the next argument or after `=`; options and the positional may come in any order; `--` ends the options. `--help` or `-h` anywhere prints the usage and exits 0. Exit 2 (usage on stderr) for an unknown flag, a missing value, a value on a boolean flag, a wrong positional count, or a `--client-opt-out` other than `client_prompt` and `client_response`. `--spec` and `--client-schema` replace the bundled schemas. List flags (`--expect-legacy`, `--absent`, `--feature`, `--surface`, `--client-surface`, `--client-opt-out`, `--failed-interaction`, `--mcp-server`, `--mcp-intent`) repeat once per value.
+`check <events.jsonl> [flags]` and `what-changes <before.jsonl> <after.jsonl>`. Flags take their value as the next argument or after `=`; options and the positional may come in any order; `--` ends the options. `--help` or `-h` anywhere prints the usage and exits 0. Exit 2 (usage on stderr) for an unknown flag, a missing value, a value on a boolean flag, a wrong positional count, or a `--client-opt-out` other than `client_prompt` and `client_response`. `--spec` and `--client-schema` replace the bundled schemas; one that is unreadable, not JSON, or not an object with a string `$id` and an object `$defs` exits 2 with `error: <path>: cannot read schema`. List flags (`--expect-legacy`, `--absent`, `--feature`, `--surface`, `--client-surface`, `--client-opt-out`, `--failed-interaction`, `--mcp-server`, `--mcp-intent`) repeat once per value.
 
 ### Printed values
 

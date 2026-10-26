@@ -27,9 +27,12 @@ var (
 		"ai_conversation_switched", "ai_conversation_renamed", "ai_conversation_deleted")
 	mcpEvents = set("mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
 		"mcp_resource_read", "mcp_prompt_used", "mcp_event_subscription_changed", "mcp_event_delivered")
-	content   = set("prompt_text", "response_text", "intent_summary", "explanation", "call_reason", "capability_detail")
-	rawMCP    = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
-	runFields = []string{"task_name", "trigger_source", "trigger_event_id", "conversation_id", "account_id",
+	// a standalone score carries a feature only when given; ai_otel_span (tracing) carries none by default
+	optionalFeature      = set("ai_interaction_scored", "ai_otel_span")
+	requestContextFields = set("intent", "user_sentiment", "call_reason") // what the SDK reads from request_context
+	content              = set("prompt_text", "response_text", "intent_summary", "explanation", "call_reason", "capability_detail")
+	rawMCP               = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
+	runFields            = []string{"task_name", "trigger_source", "trigger_event_id", "conversation_id", "account_id",
 		"on_behalf_of", "parent_interaction_id", "llm_call_count", "total_tokens"}
 	mcpCallFields = []string{"server_name", "client_name", "protocol_version", "tool_name", "tool_status",
 		"error_type", "intent", "user_sentiment"}
@@ -200,9 +203,9 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 		}
 		// trackAction takes no feature, so server ai_user_action has none; MCP events have none either;
-		// a standalone score carries one only when given, so check it only when present
-		optionalFeature := name == "ai_interaction_scored" && !props.Has("feature")
-		if len(opts.feature) > 0 && !isMCP && !optionalFeature && (isClient || name != "ai_user_action") &&
+		// optionalFeature events are checked only when they carry one
+		featureOptional := optionalFeature[name] && !props.Has("feature")
+		if len(opts.feature) > 0 && !isMCP && !featureOptional && (isClient || name != "ai_user_action") &&
 			!in(props.Get("feature"), opts.feature) {
 			fail("%s: feature %s not in %s", where, repr(props.Get("feature")), reprList(opts.feature))
 		}
@@ -248,7 +251,12 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 				fail("%s: server_name %s not in %s", where, repr(props.Get("server_name")), reprList(opts.mcpServer))
 			}
 			if keys, ok := props.Get("argument_keys").([]any); ok && slices.ContainsFunc(keys, func(k any) bool { return k == "request_context" }) {
-				fail("%s: request_context reached the tool (argument_keys)", where)
+				// A tool declaring its own request_context gets it untouched; the SDK reads nothing from it.
+				if len(present(props, requestContextFields)) > 0 {
+					fail("%s: request_context reached the tool (argument_keys)", where)
+				} else {
+					notes = append(notes, where+": request_context in argument_keys (fine if the tool declares its own)")
+				}
 			}
 			if intent, ok := props.Lookup("intent"); ok && len(opts.mcpIntent) > 0 && !in(intent, append(slices.Clone(opts.mcpIntent), "other")) {
 				fail("%s: intent %s not in the server's list", where, repr(intent))

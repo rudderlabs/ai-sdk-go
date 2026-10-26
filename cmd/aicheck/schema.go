@@ -60,10 +60,11 @@ func readSchema(path string, bundled []byte) (*schemaDoc, error) {
 		return nil, captureErr("%s: cannot read schema", name)
 	}
 	id, ok := o.Get("$id").(string)
-	if !ok {
+	defs, hasDefs := o.Get("$defs").(*Object)
+	if !ok || !hasDefs {
 		return nil, captureErr("%s: cannot read schema", name)
 	}
-	return &schemaDoc{id: id, defs: obj(o.Get("$defs")), raw: split(o)}, nil
+	return &schemaDoc{id: id, defs: defs, raw: split(o)}, nil
 }
 
 // parseSchemaJSON reads a whole schema file as Python's json.load does.

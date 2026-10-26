@@ -108,8 +108,10 @@ func TestRunErrors(t *testing.T) {
 	notJSON := write("schema.txt", "{")
 	array := write("array.json", "[]")
 	noID := write("noid.json", `{"$defs": {}}`)
-	invalid := write("invalid.json", `{"$id": "https://example.com/x", "type": 5}`)
+	invalid := write("invalid.json", `{"$id": "https://example.com/x", "$defs": {}, "type": 5}`)
 	noDef := write("nodef.json", `{"$id": "https://example.com/y", "$defs": {}}`)
+	noDefs := write("nodefs.json", `{"$id": "https://example.com/z"}`)
+	empty := filepath.Join(repoRoot(t), "spec", "fixtures", "migration-check", "empty.jsonl")
 	for _, c := range []struct {
 		args   []string
 		code   int
@@ -125,6 +127,8 @@ func TestRunErrors(t *testing.T) {
 		{[]string{capture, "--spec", array}, 2, "cannot read schema"},
 		{[]string{capture, "--client-schema", noID}, 2, "cannot read schema"},
 		{[]string{capture, "--spec", invalid}, 2, "cannot compile"},
+		{[]string{empty, "--no-ai-events", "--spec", noDefs}, 2, noDefs + ": cannot read schema"},
+		{[]string{empty, "--no-ai-events", "--client-schema", noDefs}, 2, noDefs + ": cannot read schema"},
 		{[]string{capture, "--spec", noDef}, 2, "cannot compile"},
 		{[]string{capture, "--expect-joins=1"}, 2, "ignored explicit argument"},
 		{[]string{capture, "--client-opt-out=x"}, 2, "invalid choice"},

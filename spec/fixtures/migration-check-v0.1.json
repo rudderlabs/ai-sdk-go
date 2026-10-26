@@ -1074,6 +1074,38 @@
       "stdout": "mcp call: {'server_name': 'docs', 'client_name': 'claude-code', 'protocol_version': '2025-11-25', 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': 'search_docs', 'user_sentiment': None} joined\nmcp call: {'server_name': 'billing', 'client_name': None, 'protocol_version': '2025-11-25', 'tool_name': 'refund', 'tool_status': 'error', 'error_type': 'denied', 'intent': 'steal', 'user_sentiment': None} \nmcp client_name: on 1 of 2 tool calls\nevents: {'ai_user_prompt_created': 1, 'ai_response_received': 1, 'mcp_client_seen': 2, 'mcp_tool_called': 2, 'lookup_order': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 7}\ninteractions: 1\nnote: mcp_client_seen ('docs', 'claude-code', None, 'u1'): 2 times in one window (several processes, or a restart?)\nFAIL: #4 mcp_tool_called (spec): properties: missing required 'request_id'\nFAIL: #5 mcp_tool_called (spec): properties: missing required 'request_id'\nFAIL: #5 mcp_tool_called: raw MCP payload keys ['arguments']\nFAIL: #5 mcp_tool_called: request_context reached the tool (argument_keys)\nRESULT: FAIL\n"
     },
     {
+      "name": "tracing span without feature",
+      "command": "check",
+      "captures": [
+        "otel_span"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--feature",
+        "support_bot",
+        "--surface",
+        "web",
+        "--user-id",
+        "u1"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 1, 'ai_otel_span': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "tool with its own request_context",
+      "command": "check",
+      "captures": [
+        "mcp_own_request_context"
+      ],
+      "args": [
+        "--mcp-server",
+        "docs"
+      ],
+      "exit_code": 0,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 'own_context', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} joined\nmcp client_name: on 0 of 1 tool calls\nevents: {'ai_user_prompt_created': 1, 'ai_response_received': 1, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 3}\ninteractions: 1\nnote: #2 mcp_tool_called: request_context in argument_keys (fine if the tool declares its own)\nRESULT: PASS\n"
+    },
+    {
       "name": "duplicate prompts and answers",
       "command": "check",
       "captures": [
