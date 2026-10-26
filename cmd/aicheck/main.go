@@ -39,7 +39,9 @@ check flags (repeat the list flags once per value):
                                 anonymousId ai_system (not with --mcp-user-id)
   --expect-session              user-triggered server prompts and answers carry context.sessionId
   --expect-joins                the browser was driven with the server's IDs: every client/server gap fails
-  --client-surface <surface>    a surface with a browser client: only its turns need client copies
+  --client-surface <[feature:]surface>
+                                a surface (of one feature, or all) with a browser client: only its turns
+                                need client copies
   --client-opt-out <copy>       client_prompt, client_response, client_feedback or server_feedback:
                                 a copy the plan opts out of (fails if sent)
   --feedback-endpoint <[[feature:]surface:]type>

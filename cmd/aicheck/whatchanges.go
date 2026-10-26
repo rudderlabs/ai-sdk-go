@@ -20,7 +20,7 @@ import (
 
 var (
 	drop     = set("messageId", "timestamp", "originalTimestamp", "sentAt", "receivedAt", "_metadata") // envelope only
-	idKey    = regexp.MustCompile(`(^|_)id\z|Id\z|^on_behalf_of\z|[eE]mail`)
+	idKey    = regexp.MustCompile(`(^|_)(id|ID)\z|Id\z|[a-z0-9]ID\z|^on_behalf_of\z|[eE]mail`)
 	personal = set("traits") // identify() traits (email, name, ...) ride along in context
 	email    = regexp.MustCompile(`[^ \t\n\r\f\v@"]+@[^ \t\n\r\f\v@"]+\.[A-Za-z0-9_]+`)
 	vary     = regexp.MustCompile(`^(interaction_id|conversation_id|parent_interaction_id|trace_id|anonymousId|anonymous_id|sessionId)\z` +

@@ -1490,6 +1490,106 @@
       "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 5, 'ai_user_action': 2, 'ai_llm_response_received': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nFAIL: interaction 55555555-5555-4555-8555-555555555555: server answer with no client copy (not shown, client left, or client event lost)\nRESULT: FAIL\n"
     },
     {
+      "name": "two web features, --client-surface web",
+      "command": "check",
+      "captures": [
+        "two_web_features"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--feature",
+        "support_bot",
+        "--feature",
+        "reports",
+        "--client-surface",
+        "web"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 5, 'ai_response_received': 5, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nFAIL: interaction 33333333-3333-4333-8333-333333333333: server prompt with no client copy (browser copy not sent, or a different ID)\nFAIL: interaction 33333333-3333-4333-8333-333333333333: server answer with no client copy (not shown, client left, or client event lost)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "two web features, --client-surface support_bot:web",
+      "command": "check",
+      "captures": [
+        "two_web_features"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--feature",
+        "support_bot",
+        "--feature",
+        "reports",
+        "--client-surface",
+        "support_bot:web"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 5, 'ai_response_received': 5, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nRESULT: PASS\n"
+    },
+    {
+      "name": "two web features, --client-surface reports:web",
+      "command": "check",
+      "captures": [
+        "two_web_features"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--feature",
+        "support_bot",
+        "--feature",
+        "reports",
+        "--client-surface",
+        "reports:web"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 5, 'ai_response_received': 5, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nFAIL: interaction 33333333-3333-4333-8333-333333333333: server prompt with no client copy (browser copy not sent, or a different ID)\nFAIL: interaction 33333333-3333-4333-8333-333333333333: server answer with no client copy (not shown, client left, or client event lost)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "browser copy missing on the client feature",
+      "command": "check",
+      "captures": [
+        "missing_copy"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--feature",
+        "support_bot",
+        "--feature",
+        "reports",
+        "--client-surface",
+        "support_bot:web"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 5, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nFAIL: interaction 11111111-1111-4111-8111-111111111111: server answer with no client copy (not shown, client left, or client event lost)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "stale browser ID with a feature-scoped client surface",
+      "command": "check",
+      "captures": [
+        "stale"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--feature",
+        "support_bot",
+        "--feature",
+        "reports",
+        "--client-surface",
+        "support_bot:web"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 5, 'ai_response_received': 6, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 4\nFAIL: interaction 66666666-6666-4666-8666-666666666666: client answer with no server answer (request never reached the SDK, or a different ID)\nRESULT: FAIL\n"
+    },
+    {
       "name": "paused answer without its browser copy",
       "command": "check",
       "captures": [
@@ -2532,6 +2632,17 @@
       "args": [],
       "exit_code": 0,
       "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `ai_otel_span` | changed | 1 | 1 |\n\n#### `ai_otel_span`\n\nDiffering fields: ~ properties.model (\"m1\" -> \"m2\")\n\nBefore:\n```json\n{\n  \"anonymousId\": \"<anonymousId>\",\n  \"context\": {\n    \"wrapperLibrary\": {\n      \"integration\": \"tracing\",\n      \"name\": \"@rudderstack/ai\",\n      \"version\": \"0.6.0\"\n    }\n  },\n  \"event\": \"ai_otel_span\",\n  \"properties\": {\n    \"model\": \"m1\",\n    \"span_id\": \"<span_id>\",\n    \"span_name\": \"chat\",\n    \"trace_id\": \"<trace_id>\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"anonymousId\": \"<anonymousId>\",\n  \"context\": {\n    \"wrapperLibrary\": {\n      \"integration\": \"tracing\",\n      \"name\": \"@rudderstack/ai\",\n      \"version\": \"0.6.0\"\n    }\n  },\n  \"event\": \"ai_otel_span\",\n  \"properties\": {\n    \"model\": \"m2\",\n    \"span_id\": \"<span_id>\",\n    \"span_name\": \"chat\",\n    \"trace_id\": \"<trace_id>\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
+      "name": "uppercase ID keys",
+      "command": "what-changes",
+      "captures": [
+        "wc_upper_id_before",
+        "wc_upper_id_after"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `chatTurnCompleted` | changed | 1 | 1 |\n\n#### `chatTurnCompleted`\n\nDiffering fields: ~ properties.VALID (\"keep-me\" -> \"keep-me-2\"), ~ properties.status (\"ok\" -> \"error\")\n\nBefore:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"ID\": \"<ID>\",\n    \"VALID\": \"keep-me\",\n    \"accountID\": \"<accountID>\",\n    \"isValid\": true,\n    \"status\": \"ok\",\n    \"userID\": \"<userID>\",\n    \"user_ID\": \"<user_ID>\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"ID\": \"<ID>\",\n    \"VALID\": \"keep-me-2\",\n    \"accountID\": \"<accountID>\",\n    \"isValid\": true,\n    \"status\": \"error\",\n    \"userID\": \"<userID>\",\n    \"user_ID\": \"<user_ID>\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
     },
     {
       "name": "round 11 what-changes",

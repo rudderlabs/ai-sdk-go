@@ -421,6 +421,15 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 		return actions[iid][s].n[action]
 	}
+	// --client-surface [feature:]surface: the turns that have a browser client; "" feature: any
+	var clientScopes [][2]string
+	for _, c := range opts.clientSurface {
+		feature, surface := "", c
+		if i := strings.LastIndex(c, ":"); i >= 0 {
+			feature, surface = c[:i], c[i+1:]
+		}
+		clientScopes = append(clientScopes, [2]string{feature, surface})
+	}
 	runIDs := map[string]bool{}
 	for _, r := range runs {
 		if iid, ok := key(r.Get("interaction_id")); ok {
@@ -461,8 +470,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		if serverPrompt > 0 && serverAnswer+serverPaused == 0 {
 			fail("interaction %s: server prompt without a server ai_response_received", iid)
 		}
-		surface, known := surfaces[iid] // an ID with no server surface stays join-checked
-		serverOnly := len(opts.clientSurface) > 0 && known && !in(surface, opts.clientSurface)
+		// exempt only a known server-only surface; an ID with no server event (stale browser ID) stays checked
+		surface, known := surfaces[iid]
+		serverOnly := len(opts.clientSurface) > 0 && known && !slices.ContainsFunc(clientScopes, func(sc [2]string) bool {
+			return surface == sc[1] && (sc[0] == "" || features[iid] == sc[0])
+		})
 		if (hasClientCopies || opts.expectJoins) && !runIDs[iid] && !serverOnly {
 			if clientPrompt > 0 && serverPrompt == 0 {
 				gap("interaction " + iid + ": client prompt with no server prompt (request never reached the SDK, or a different ID)")
