@@ -47,6 +47,27 @@ func typeName(v any) string {
 	return "dict"
 }
 
+// withoutOTLP drops properties.otlp: OTLP attributes hold identities as key/value pairs (user.id) the
+// name-based redaction misses.
+func withoutOTLP(m *Object) *Object {
+	props, ok := m.Get("properties").(*Object)
+	if !ok || !props.Has("otlp") {
+		return m
+	}
+	p := newObject()
+	for _, k := range props.keys {
+		if k != "otlp" {
+			p.Set(k, props.vals[k])
+		}
+	}
+	out := newObject()
+	for _, k := range m.keys {
+		out.Set(k, m.vals[k])
+	}
+	out.Set("properties", p)
+	return out
+}
+
 // rowKey gives own rows to browser AI copies, legacy events with AI names, and SDK events with
 // customer names.
 func rowKey(m *Object) string {
@@ -171,9 +192,11 @@ type change struct {
 func whatChanges(before, after []*Object, out io.Writer) int {
 	byB, byA := map[string][]*Object{}, map[string][]*Object{}
 	for _, m := range tracks(before) {
+		m = withoutOTLP(m)
 		byB[rowKey(m)] = append(byB[rowKey(m)], m)
 	}
 	for _, m := range tracks(after) {
+		m = withoutOTLP(m)
 		byA[rowKey(m)] = append(byA[rowKey(m)], m)
 	}
 	var rows []string

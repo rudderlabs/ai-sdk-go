@@ -140,6 +140,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 	surfaces := map[string]any{}
 	clientSurfaces := map[string]any{}
 	features, clientFeatures := map[string]any{}, map[string]any{} // a turn's feature, like its surface
+	scopes := map[string]map[string]map[string]bool{}              // interaction -> feature|surface -> values
 	declared := map[string]int{}                                   // non-MCP declared tool events per interaction
 	actions := map[string]map[string]*counter{}                    // interaction -> side -> action_type counts
 	var runs, toolCalls []*Object
@@ -330,6 +331,14 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 				}
 				conversations[iid][conversation] = true
 			}
+			for _, k := range []string{"feature", "surface"} { // every copy of a turn lands in the same dashboard segment
+				if v, ok := props.Get(k).(string); ok && v != "" {
+					if scopes[iid] == nil {
+						scopes[iid] = map[string]map[string]bool{"feature": {}, "surface": {}}
+					}
+					scopes[iid][k][v] = true
+				}
+			}
 			if isDeclared {
 				declared[iid]++
 			}
@@ -428,9 +437,19 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 	optedOut := func(name string) bool { return slices.Contains(opts.clientOptOut, name) }
 	for _, iid := range interactionOrder {
 		c := byInteraction[iid]
+		// one browser copy per answer the browser rendered: a paused one and the resumed final one
+		shown := max(1, c[side{"ai_response_received", "server"}]+c[side{"ai_response_received (paused)", "server"}])
 		for _, s := range []string{"server", "client"} {
-			if n := c[side{"ai_response_received", s}]; n > 1 {
-				fail("interaction %s: %d %s ai_response_received (expected 1)", iid, n, s)
+			limit := 1
+			if s == "client" {
+				limit = shown
+			}
+			if n := c[side{"ai_response_received", s}]; n > limit {
+				atMost := ""
+				if limit > 1 {
+					atMost = "at most "
+				}
+				fail("interaction %s: %d %s ai_response_received (expected %s%d)", iid, n, s, atMost, limit)
 			}
 			if n := c[side{"ai_user_prompt_created", s}]; n > 1 {
 				fail("interaction %s: %d %s ai_user_prompt_created (expected at most 1)", iid, n, s)
@@ -497,6 +516,15 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 			sort.Strings(names)
 			gap("interaction " + iid + ": declared tool event " + reprList(names) + " for an answer not in this capture")
+		}
+		for _, k := range []string{"feature", "surface"} {
+			if len(scopes[iid][k]) > 1 {
+				var values []string
+				for v := range scopes[iid][k] {
+					values = append(values, v)
+				}
+				fail("interaction %s: several %s values %s", iid, k, reprList(sortedSet(values)))
+			}
 		}
 		if len(conversations[iid]) > 1 {
 			var ids []string
