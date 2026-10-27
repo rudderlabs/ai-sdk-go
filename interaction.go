@@ -5,6 +5,7 @@ import (
 	"container/list"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -347,6 +348,44 @@ type Interaction struct {
 	prompt, answer     string
 	messages           any
 	background         chan struct{}
+	// callErrors are errors wrapped calls failed with, newest last, so the app returning one
+	// keeps its call's error_type.
+	callErrors []callError
+}
+
+type callError struct {
+	err       error
+	errorType string
+}
+
+// maxCallErrors bounds callErrors; the newest are kept.
+const maxCallErrors = 8
+
+// noteCallError remembers the error a wrapped call failed with, as recorded under errorType.
+func (i *Interaction) noteCallError(err error, errorType string) {
+	if err == nil || errorType == "" {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if len(i.callErrors) == maxCallErrors {
+		i.callErrors = i.callErrors[1:]
+	}
+	i.callErrors = append(i.callErrors, callError{err, errorType})
+}
+
+// answerErrorType is the error_type of an answer the app's code ended with err: a wrapped call's
+// own error keeps that call's type, anything else is classified ([appErrorType]).
+func (i *Interaction) answerErrorType(err error) string {
+	i.mu.Lock()
+	noted := slices.Clone(i.callErrors)
+	i.mu.Unlock()
+	for n := len(noted) - 1; n >= 0; n-- {
+		if errors.Is(err, noted[n].err) {
+			return noted[n].errorType
+		}
+	}
+	return appErrorType(err)
 }
 
 // ID is the interaction ID (interaction_id): return it to your client for feedback events.
@@ -518,7 +557,9 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 
 // RunInteraction runs fn with a new interaction in its context (and the interaction's identity
 // as context values), then ends it. An error returned by fn ends it with an error status and is
-// returned unchanged; a panic ends it as an error and continues to panic.
+// returned unchanged; a panic ends it the same way (app_error for a value that is not an error)
+// and continues to panic. An error no wrapped call failed with and that carries no provider
+// signal (integration error type, error code, HTTP status) is app_error.
 //
 //	err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID: id},
 //		func(ctx context.Context, in *rudderstackai.Interaction) error {
@@ -546,7 +587,11 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 			return
 		}
 		r := recover()
-		i.End(EndOptions{Status: StatusError, ErrorType: "api_error"})
+		t := "app_error"
+		if e, ok := r.(error); ok {
+			t = i.answerErrorType(e)
+		}
+		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t})
 		// nil: runtime.Goexit (t.FailNow), which must keep unwinding rather than become a panic.
 		if r != nil {
 			panic(r)
@@ -555,7 +600,7 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 	err = fn(ctx, i)
 	completed = true
 	if err != nil {
-		t := ErrorTypeOf(err)
+		t := i.answerErrorType(err)
 		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t})
 		return err
 	}

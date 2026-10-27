@@ -36,47 +36,70 @@ func registerErrorClassifier(fn func(error) (string, bool)) {
 // invalid_request (400, 422), connection_error or api_error. The error chain is unwrapped, so a
 // retry library's error wrapping a provider error maps as the provider error.
 func ErrorTypeOf(err error) string {
+	t, _ := classifyError(err)
+	return t
+}
+
+// classifyError is ErrorTypeOf, and whether the error chain carries a provider signal: an
+// integration's error type (openai, anthropic, genai, AWS), an error code or an HTTP status.
+func classifyError(err error) (t string, provider bool) {
 	if err == nil {
-		return ""
+		return "", false
 	}
 	errorClassifiers.mu.RLock()
 	fns := errorClassifiers.fns
 	errorClassifiers.mu.RUnlock()
 	for _, fn := range fns {
 		if t, ok := safeClassify(fn, err); ok {
-			return t
+			return t, true
 		}
 	}
 	var coded interface{ ErrorCode() string }
 	if errors.As(err, &coded) {
+		provider = true
 		if t := errorTypeForName(coded.ErrorCode()); t != "" {
-			return t
+			return t, true
 		}
 	}
 	var status interface{ HTTPStatusCode() int }
 	if errors.As(err, &status) {
+		provider = true
 		if t := ErrorTypeForStatus(status.HTTPStatusCode()); t != "" {
-			return t
+			return t, true
 		}
+	}
+	var statusCode interface{ StatusCode() int }
+	if errors.As(err, &statusCode) {
+		provider = true
 	}
 	switch {
 	case errors.Is(err, context.Canceled):
-		return "cancelled"
+		return "cancelled", provider
 	case errors.Is(err, context.DeadlineExceeded):
-		return "timeout"
+		return "timeout", provider
 	}
 	var nerr net.Error
 	if errors.As(err, &nerr) {
 		if nerr.Timeout() {
-			return "timeout"
+			return "timeout", provider
 		}
-		return "connection_error"
+		return "connection_error", provider
 	}
 	var op *net.OpError
 	if errors.As(err, &op) {
-		return "connection_error"
+		return "connection_error", provider
 	}
-	return "api_error"
+	return "api_error", provider
+}
+
+// appErrorType is the answer's error_type for an error the app's code ended it with: the
+// classification, except that api_error without a provider signal is app_error.
+func appErrorType(err error) string {
+	t, provider := classifyError(err)
+	if t == "api_error" && !provider {
+		return "app_error"
+	}
+	return t
 }
 
 func safeClassify(fn func(error) (string, bool), err error) (t string, ok bool) {

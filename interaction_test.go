@@ -114,9 +114,14 @@ func TestRunInteractionStatuses(t *testing.T) {
 		status, errType string
 	}{
 		{nil, "success", ""},
-		{errors.New("boom"), "error", "api_error"},
+		{errors.New("boom"), "error", "app_error"},
 		{fmt.Errorf("wrapped: %w", context.DeadlineExceeded), "timeout", "timeout"},
 		{context.Canceled, "cancelled", "cancelled"},
+		// A provider signal (an HTTP status or error code) keeps api_error.
+		{statusErr(500), "error", "api_error"},
+		{fmt.Errorf("retry: %w", codedErr{"Mystery"}), "error", "api_error"},
+		{fmt.Errorf("retry: %w", statusErr(429)), "error", "rate_limit"},
+		{statusCodeErr(503), "error", "api_error"},
 	} {
 		r := setupAI(t)
 		var inner *Interaction
@@ -155,8 +160,66 @@ func TestRunInteractionPanicIsReraised(t *testing.T) {
 	if !inner.Ended() {
 		t.Fatal("interaction not ended")
 	}
-	if resp := r.response(t); resp["response_status"] != "error" || resp["error_type"] != "api_error" {
+	if resp := r.response(t); resp["response_status"] != "error" || resp["error_type"] != "app_error" {
 		t.Fatal(resp)
+	}
+}
+
+func TestRunInteractionPanicWithError(t *testing.T) {
+	for _, c := range []struct {
+		value any
+		want  string
+	}{{statusErr(429), "rate_limit"}, {errors.New("bad state"), "app_error"}, {context.DeadlineExceeded, "timeout"}} {
+		r := setupAI(t)
+		func() {
+			defer func() { _ = recover() }()
+			_ = RunInteraction(context.Background(), InteractionOptions{UserID: "u"}, func(context.Context, *Interaction) error { panic(c.value) })
+		}()
+		if resp := r.response(t); resp["error_type"] != c.want {
+			t.Errorf("%v: %v", c.value, resp)
+		}
+	}
+}
+
+// An error the app's own code returns after a successful call is app_error, not a provider failure.
+func TestRunInteractionAppErrorAfterCall(t *testing.T) {
+	r := setupAI(t)
+	_ = RunInteraction(context.Background(), InteractionOptions{UserID: "u"}, func(_ context.Context, i *Interaction) error {
+		i.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4o-mini", InputTokens: 10, OutputTokens: 2})
+		return errors.New("context review failed")
+	})
+	resp := r.response(t)
+	if resp["response_status"] != "error" || resp["error_type"] != "app_error" || resp["llm_call_count"] != 1 {
+		t.Fatal(resp)
+	}
+}
+
+// A wrapped call's own error keeps the type the call recorded, even without a provider signal.
+func TestRunInteractionKeepsCallErrorType(t *testing.T) {
+	r := setupAI(t)
+	cause := errors.New("stream reset")
+	_ = RunInteraction(context.Background(), InteractionOptions{UserID: "u"}, func(_ context.Context, i *Interaction) error {
+		i.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4o-mini", ErrorType: "connection_error"})
+		i.noteCallError(cause, "connection_error")
+		return fmt.Errorf("sdk: %w", cause)
+	})
+	if resp := r.response(t); resp["error_type"] != "connection_error" {
+		t.Fatal(resp)
+	}
+}
+
+func TestNoteCallErrorKeepsNewest(t *testing.T) {
+	setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	defer i.End(EndOptions{})
+	first := errors.New("first")
+	i.noteCallError(first, "timeout")
+	i.noteCallError(nil, "timeout")
+	for range maxCallErrors {
+		i.noteCallError(errors.New("later"), "rate_limit")
+	}
+	if got := i.answerErrorType(first); got != "app_error" {
+		t.Fatalf("evicted error kept: %s", got)
 	}
 }
 
@@ -683,6 +746,11 @@ type statusErr int
 
 func (e statusErr) Error() string       { return "status" }
 func (e statusErr) HTTPStatusCode() int { return int(e) }
+
+type statusCodeErr int
+
+func (e statusCodeErr) Error() string   { return "status code" }
+func (e statusCodeErr) StatusCode() int { return int(e) }
 
 type netErr struct{ timeout bool }
 

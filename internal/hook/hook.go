@@ -28,6 +28,8 @@ var (
 	OnBeforeEnd func(interaction any, fn func())
 	// StatusForErrorType maps an error type to a response status.
 	StatusForErrorType func(errorType string) string
+	// NoteCallError remembers the error a wrapped call failed with, recorded under errorType.
+	NoteCallError func(interaction any, err error, errorType string)
 	// RegisterErrorClassifier adds an integration's error mapping.
 	RegisterErrorClassifier func(fn func(error) (string, bool))
 	// Untracked reports whether calls with this context are the SDK's own.

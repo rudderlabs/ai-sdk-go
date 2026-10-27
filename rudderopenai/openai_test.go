@@ -382,11 +382,41 @@ func TestHTTPErrorsAndClassifier(t *testing.T) {
 	if !errors.As(err, &apiErr) || rudderstackai.ErrorTypeOf(err) != "rate_limit" {
 		t.Fatalf("err %v", err)
 	}
-	if got := one(t, rec.events(t), "ai_llm_response_received"); got["error_type"] != "rate_limit" {
+	events := rec.events(t)
+	if got := one(t, events, "ai_llm_response_received"); got["error_type"] != "rate_limit" {
 		t.Errorf("call: %v", got)
+	}
+	if got := one(t, events, "ai_response_received"); got["error_type"] != "rate_limit" {
+		t.Errorf("answer: %v", got)
 	}
 	if got := rudderstackai.ErrorTypeOf(fmt.Errorf("wrapped: %w", &openai.Error{StatusCode: 503})); got != "api_error" {
 		t.Errorf("503 -> %s", got)
+	}
+}
+
+// An error from the app's own code after a successful call is app_error; a provider error the app
+// returns unwrapped keeps api_error.
+func TestAppErrorAfterCall(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{errors.New("context review failed"), "app_error"},
+		{&openai.Error{StatusCode: 500}, "api_error"},
+	} {
+		rec, llm := setup(t)
+		client := newClient(llm)
+		llm.Script("openai.chat", reply(t, `{"json":{"id":"c9","model":"gpt-4.1-mini","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":1}}}`))
+		_ = inInteraction(t, func(ctx context.Context) error {
+			if _, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{}, body(chatBody)); err != nil {
+				t.Fatal(err)
+			}
+			return tc.err
+		})
+		answer := one(t, rec.events(t), "ai_response_received")
+		if answer["error_type"] != tc.want || answer["response_status"] != "error" || num(answer["llm_call_count"]) != 1 {
+			t.Errorf("%v: %v", tc.err, answer)
+		}
 	}
 }
 

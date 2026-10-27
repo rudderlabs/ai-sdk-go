@@ -2174,7 +2174,7 @@
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
             "finish_reason": "stop",
-            "error_type": "api_error",
+            "error_type": "app_error",
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -9031,7 +9031,7 @@
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
             "finish_reason": "stop",
-            "error_type": "api_error",
+            "error_type": "app_error",
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -13295,7 +13295,7 @@
             "total_tokens": 0,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "error_type": "api_error"
+            "error_type": "app_error"
           },
           "context": {
             "wrapperLibrary": {

@@ -585,6 +585,49 @@ func TestInterceptStreamReadErrorKeepsUsage(t *testing.T) {
 	})
 }
 
+// The app returning a wrapped call's own error keeps the call's error_type, not app_error.
+func TestRunInteractionKeepsCallError(t *testing.T) {
+	cases := []struct {
+		name string
+		fail func(base http.RoundTripper) func(*http.Request) (*http.Response, error)
+	}{
+		{"stream read error", func(base http.RoundTripper) func(*http.Request) (*http.Response, error) {
+			return func(r *http.Request) (*http.Response, error) {
+				resp, err := base.RoundTrip(r)
+				if err != nil {
+					return nil, err
+				}
+				resp.Body = &failingBody{Reader: io.MultiReader(resp.Body, errReader{})}
+				return resp, nil
+			}
+		}},
+		{"transport error", func(http.RoundTripper) func(*http.Request) (*http.Response, error) {
+			return func(*http.Request) (*http.Response, error) { return nil, errors.New("proxy refused") }
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := newHarness(t, sseHandler(chunk(`{"id":"c8","choices":[],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)))
+			fail := c.fail(h.srv.Client().Transport)
+			h.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) { return h.spec.Intercept(r, fail) })
+			err := rudderstackai.RunInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u1", Analytics: h.rec}, func(ctx context.Context, _ *rudderstackai.Interaction) error {
+				resp, err := h.post(ctx, streamRequest)
+				if err != nil {
+					return fmt.Errorf("sdk: %w", err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+				_, err = io.ReadAll(resp.Body)
+				return fmt.Errorf("sdk: %w", err)
+			})
+			if err == nil {
+				t.Fatal("want the call's error")
+			}
+			call := h.rec.props(t, "ai_llm_response_received")
+			want(t, h.rec.props(t, "ai_response_received"), map[string]any{"response_status": "error", "error_type": call["error_type"]})
+		})
+	}
+}
+
 type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("connection reset") }
