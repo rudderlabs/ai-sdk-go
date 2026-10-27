@@ -3,8 +3,8 @@ module github.com/rudderlabs/ai-sdk-go/ruddergenai
 go 1.26.10
 
 require (
-	github.com/rudderlabs/ai-sdk-go v0.2.0
-	github.com/rudderlabs/analytics-go/v4 v4.3.1
+	github.com/rudderlabs/ai-sdk-go v0.3.0
+	github.com/rudderlabs/analytics-go/v4 v4.4.0
 	google.golang.org/genai v1.72.0
 )
 

@@ -2894,6 +2894,72 @@
       "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `ai_response_received` | new | 0 | 1 |\n| `ai_response_received (browser)` | new | 0 | 2 |\n| `chatTurnCompleted` | new | 0 | 2 |\n"
     },
     {
+      "name": "argument_keys in another order",
+      "command": "what-changes",
+      "captures": [
+        "wc_ak_before",
+        "wc_ak_swapped"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `toolUsed` | unchanged | 1 | 1 |\n"
+    },
+    {
+      "name": "a new argument key",
+      "command": "what-changes",
+      "captures": [
+        "wc_ak_before",
+        "wc_ak_added"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `toolUsed` | changed | 1 | 1 |\n\n#### `toolUsed`\n\nDiffering fields: ~ properties.argument_keys ([\"Z\", \"\\u00e9\", \"limit\", \"query\", 1.5, 2, [1, \"q\"], null, true, {\"a\": \"x\", \"b\": 1}] -> [\"Z\", \"\\u00e9\", \"limit\", \"page\", \"query\", 1.5, 2, [1, \"q\"], null, true, {\"a\": \"x\", \"b\": 1}])\n\nBefore:\n```json\n{\n  \"event\": \"toolUsed\",\n  \"properties\": {\n    \"argument_keys\": [\n      \"query\",\n      \"limit\",\n      \"\\u00e9\",\n      \"Z\",\n      2,\n      null,\n      {\n        \"a\": \"x\",\n        \"b\": 1\n      },\n      [\n        1,\n        \"q\"\n      ],\n      1.5,\n      true\n    ],\n    \"steps\": [\n      \"a\",\n      \"b\"\n    ]\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"toolUsed\",\n  \"properties\": {\n    \"argument_keys\": [\n      \"limit\",\n      \"query\",\n      \"page\",\n      \"\\u00e9\",\n      \"Z\",\n      2,\n      null,\n      {\n        \"a\": \"x\",\n        \"b\": 1\n      },\n      [\n        1,\n        \"q\"\n      ],\n      1.5,\n      true\n    ],\n    \"steps\": [\n      \"a\",\n      \"b\"\n    ]\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
+      "name": "another list in another order",
+      "command": "what-changes",
+      "captures": [
+        "wc_ak_before",
+        "wc_ak_steps"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `toolUsed` | changed | 1 | 1 |\n\n#### `toolUsed`\n\nDiffering fields: ~ properties.steps ([\"a\", \"b\"] -> [\"b\", \"a\"])\n\nBefore:\n```json\n{\n  \"event\": \"toolUsed\",\n  \"properties\": {\n    \"argument_keys\": [\n      \"query\",\n      \"limit\",\n      \"\\u00e9\",\n      \"Z\",\n      2,\n      null,\n      {\n        \"a\": \"x\",\n        \"b\": 1\n      },\n      [\n        1,\n        \"q\"\n      ],\n      1.5,\n      true\n    ],\n    \"steps\": [\n      \"a\",\n      \"b\"\n    ]\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"toolUsed\",\n  \"properties\": {\n    \"argument_keys\": [\n      \"query\",\n      \"limit\",\n      \"\\u00e9\",\n      \"Z\",\n      2,\n      null,\n      {\n        \"a\": \"x\",\n        \"b\": 1\n      },\n      [\n        1,\n        \"q\"\n      ],\n      1.5,\n      true\n    ],\n    \"steps\": [\n      \"b\",\n      \"a\"\n    ]\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
+      "name": "nested argument_keys in another order",
+      "command": "what-changes",
+      "captures": [
+        "wc_ak_nested_before",
+        "wc_ak_nested_after"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `toolUsed` | unchanged | 1 | 1 |\n"
+    },
+    {
+      "name": "argument_keys order in the after capture's examples",
+      "command": "what-changes",
+      "captures": [
+        "wc_ak_swapped",
+        "wc_ak_added"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `toolUsed` | changed | 1 | 1 |\n\n#### `toolUsed`\n\nDiffering fields: ~ properties.argument_keys ([\"Z\", \"\\u00e9\", \"limit\", \"query\", 1.5, 2, [1, \"q\"], null, true, {\"a\": \"x\", \"b\": 1}] -> [\"Z\", \"\\u00e9\", \"limit\", \"page\", \"query\", 1.5, 2, [1, \"q\"], null, true, {\"a\": \"x\", \"b\": 1}])\n\nBefore:\n```json\n{\n  \"event\": \"toolUsed\",\n  \"properties\": {\n    \"argument_keys\": [\n      true,\n      1.5,\n      [\n        1,\n        \"q\"\n      ],\n      {\n        \"a\": \"x\",\n        \"b\": 1\n      },\n      null,\n      2,\n      \"Z\",\n      \"\\u00e9\",\n      \"limit\",\n      \"query\"\n    ],\n    \"steps\": [\n      \"a\",\n      \"b\"\n    ]\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"toolUsed\",\n  \"properties\": {\n    \"argument_keys\": [\n      \"limit\",\n      \"query\",\n      \"page\",\n      \"\\u00e9\",\n      \"Z\",\n      2,\n      null,\n      {\n        \"a\": \"x\",\n        \"b\": 1\n      },\n      [\n        1,\n        \"q\"\n      ],\n      1.5,\n      true\n    ],\n    \"steps\": [\n      \"a\",\n      \"b\"\n    ]\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
+      "name": "a list inside argument_keys in another order",
+      "command": "what-changes",
+      "captures": [
+        "wc_ak_inner_before",
+        "wc_ak_inner_after"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `toolUsed` | changed | 1 | 1 |\n\n#### `toolUsed`\n\nDiffering fields: ~ properties.argument_keys ([\"a\", [1, \"q\"]] -> [\"a\", [\"q\", 1]])\n\nBefore:\n```json\n{\n  \"event\": \"toolUsed\",\n  \"properties\": {\n    \"argument_keys\": [\n      [\n        1,\n        \"q\"\n      ],\n      \"a\"\n    ]\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"toolUsed\",\n  \"properties\": {\n    \"argument_keys\": [\n      \"a\",\n      [\n        \"q\",\n        1\n      ]\n    ]\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
       "name": "what-changes with one capture",
       "command": "what-changes",
       "captures": [

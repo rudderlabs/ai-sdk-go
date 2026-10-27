@@ -142,7 +142,7 @@ const (
 )
 
 // ContextFlusher is implemented by RudderStack clients that send their queue on demand within a
-// deadline: analytics-go from the release that adds Flush(ctx).
+// deadline: analytics-go v4.4.0 and later.
 type ContextFlusher interface {
 	Flush(ctx context.Context) error
 }
@@ -153,8 +153,8 @@ type ContextFlusher interface {
 // (at where), even after a timeout, since the app's own later Flush finds an empty queue, and is
 // false when there was one. A flush that fails after finish is reported as flush_failed from its
 // own goroutine. An error that is the expired ctx's own (the flush gave up at the deadline) is the
-// timeout, never flush_failed. A client that cannot flush (analytics-go before Flush(ctx)) is
-// reported as client_outdated: its events go out on its own schedule or at Close.
+// timeout, never flush_failed. A client that cannot flush (a custom client, or analytics-go before
+// v4.4.0) is reported as client_outdated: its events go out on its own schedule or at Close.
 func flushClients(ctx context.Context, where string, clients []analytics.Client) (finished bool, finish func() bool) {
 	var (
 		wg     sync.WaitGroup
@@ -223,13 +223,13 @@ func timedOut(ctx context.Context, err error) bool {
 	return ctxErr != nil && (errors.Is(err, ctxErr) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled))
 }
 
-var errNoClientFlush = errors.New("rudderstackai: the RudderStack client has no Flush(ctx); upgrade analytics-go, or Close the client before the process exits")
+var errNoClientFlush = errors.New("rudderstackai: the RudderStack client has no Flush(ctx); use analytics-go v4.4.0 or later, or Close the client before the process exits")
 
 // Flush sends what the SDK holds, within ctx (10 seconds when ctx has no deadline): it waits for
 // pending classifications, scores and failed provider attempts held for a retry, then flushes
 // every RudderStack client the SDK has used, in parallel. A client implementing
-// [ContextFlusher] (analytics-go from the release with Flush(ctx)) sends its whole queue; one
-// implementing [Flusher] is flushed as before; an older analytics-go client cannot be flushed
+// [ContextFlusher] (analytics-go v4.4.0 and later) sends its whole queue; one implementing
+// [Flusher] is flushed as before; a client with neither, such as a custom one, cannot be flushed
 // (reported as client_outdated), so Close it before the process exits. Flush never panics,
 // never ends open interactions and never closes a client. It reports false, and flush_timeout,
 // when ctx ended first. Because it drains your client's queue, your own client.Flush afterwards

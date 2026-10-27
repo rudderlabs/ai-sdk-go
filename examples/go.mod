@@ -9,12 +9,12 @@ require (
 	github.com/mark3labs/mcp-go v1.3.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/openai/openai-go/v3 v3.78.0
-	github.com/rudderlabs/ai-sdk-go v0.2.0
+	github.com/rudderlabs/ai-sdk-go v0.3.0
 	github.com/rudderlabs/ai-sdk-go/rudderanthropic v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderbedrock v0.1.0
 	github.com/rudderlabs/ai-sdk-go/ruddergenai v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderopenai v0.1.0
-	github.com/rudderlabs/analytics-go/v4 v4.3.1
+	github.com/rudderlabs/analytics-go/v4 v4.4.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	google.golang.org/genai v1.75.0
 )

@@ -330,6 +330,32 @@ func TestChatStreamErrorEvent(t *testing.T) {
 	}
 }
 
+// An error chunk after the usage chunk keeps that usage on the failed call.
+func TestChatStreamErrorAfterUsage(t *testing.T) {
+	rec, llm := setup(t)
+	client := newClient(llm)
+	llm.Script("openai.chat", reply(t, `{"sse":[
+		{"data":{"id":"c2","model":"gpt-4.1-mini","choices":[{"index":0,"delta":{"content":"a"}}]}},
+		{"data":{"id":"c2","model":"gpt-4.1-mini","choices":[],"usage":{"prompt_tokens":11,"completion_tokens":3,"prompt_tokens_details":{"cached_tokens":2}}}},
+		{"data":{"error":{"message":"slow down","code":"rate_limit_exceeded"}}}]}`))
+	err := inInteraction(t, func(ctx context.Context) error {
+		s := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, body(streamBody))
+		return consume(s, func() {})
+	})
+	if err == nil {
+		t.Fatal("want the stream error")
+	}
+	events := rec.events(t)
+	call := one(t, events, "ai_llm_response_received")
+	if call["error_type"] != "rate_limit" || num(call["input_tokens"]) != 11 || num(call["output_tokens"]) != 3 || num(call["cached_input_tokens"]) != 2 {
+		t.Errorf("call: %v", call)
+	}
+	answer := one(t, events, "ai_response_received")
+	if num(answer["llm_call_count"]) != 1 || num(answer["total_input_tokens"]) != 11 || num(answer["total_output_tokens"]) != 3 || answer["error_type"] != "rate_limit" {
+		t.Errorf("answer: %v", answer)
+	}
+}
+
 func TestChatStreamBreak(t *testing.T) {
 	rec, llm := setup(t)
 	client := newClient(llm)
@@ -356,11 +382,41 @@ func TestHTTPErrorsAndClassifier(t *testing.T) {
 	if !errors.As(err, &apiErr) || rudderstackai.ErrorTypeOf(err) != "rate_limit" {
 		t.Fatalf("err %v", err)
 	}
-	if got := one(t, rec.events(t), "ai_llm_response_received"); got["error_type"] != "rate_limit" {
+	events := rec.events(t)
+	if got := one(t, events, "ai_llm_response_received"); got["error_type"] != "rate_limit" {
 		t.Errorf("call: %v", got)
+	}
+	if got := one(t, events, "ai_response_received"); got["error_type"] != "rate_limit" {
+		t.Errorf("answer: %v", got)
 	}
 	if got := rudderstackai.ErrorTypeOf(fmt.Errorf("wrapped: %w", &openai.Error{StatusCode: 503})); got != "api_error" {
 		t.Errorf("503 -> %s", got)
+	}
+}
+
+// An error from the app's own code after a successful call is app_error; a provider error the app
+// returns unwrapped keeps api_error.
+func TestAppErrorAfterCall(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{errors.New("context review failed"), "app_error"},
+		{&openai.Error{StatusCode: 500}, "api_error"},
+	} {
+		rec, llm := setup(t)
+		client := newClient(llm)
+		llm.Script("openai.chat", reply(t, `{"json":{"id":"c9","model":"gpt-4.1-mini","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":1}}}`))
+		_ = inInteraction(t, func(ctx context.Context) error {
+			if _, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{}, body(chatBody)); err != nil {
+				t.Fatal(err)
+			}
+			return tc.err
+		})
+		answer := one(t, rec.events(t), "ai_response_received")
+		if answer["error_type"] != tc.want || answer["response_status"] != "error" || num(answer["llm_call_count"]) != 1 {
+			t.Errorf("%v: %v", tc.err, answer)
+		}
 	}
 }
 

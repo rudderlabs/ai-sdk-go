@@ -7,12 +7,12 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.4
 	github.com/openai/openai-go/v3 v3.78.0
-	github.com/rudderlabs/ai-sdk-go v0.2.0
+	github.com/rudderlabs/ai-sdk-go v0.3.0
 	github.com/rudderlabs/ai-sdk-go/rudderanthropic v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderbedrock v0.1.0
 	github.com/rudderlabs/ai-sdk-go/ruddergenai v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderopenai v0.1.0
-	github.com/rudderlabs/analytics-go/v4 v4.3.1
+	github.com/rudderlabs/analytics-go/v4 v4.4.0
 	google.golang.org/genai v1.75.0
 )
 

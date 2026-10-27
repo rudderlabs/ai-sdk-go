@@ -43,6 +43,12 @@ func OnBeforeEnd(i *rudderstackai.Interaction, fn func()) { hook.OnBeforeEnd(i, 
 // Untracked reports whether calls with this context are the SDK's own.
 func Untracked(ctx context.Context) bool { return hook.Untracked(ctx) }
 
+// NoteCallError remembers the error a call failed with, so the app returning it keeps the call's
+// errorType rather than becoming app_error.
+func NoteCallError(i *rudderstackai.Interaction, err error, errorType string) {
+	hook.NoteCallError(i, err, errorType)
+}
+
 // RegisterErrorClassifier adds an integration's mapping of its SDK's errors to error types.
 func RegisterErrorClassifier(fn func(error) (string, bool)) { hook.RegisterErrorClassifier(fn) }
 

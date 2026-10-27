@@ -271,7 +271,7 @@ rudderstackai.Shutdown(ctx) // on SIGTERM: also ends open interactions as incomp
 client.Close()              // the SDK never closes your client
 ```
 
-An analytics-go client with `Flush(ctx)` sends its queue on `Flush`; an older one cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
+An analytics-go client (v4.4.0, the minimum) sends its queue on `Flush`; a custom client without `Flush(ctx)` or `Flush()` cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
 
 ## Events
 
@@ -362,7 +362,7 @@ Each module requires the oldest version it supports, so adding it never upgrades
 | Module                                        | Requires and tested at (minimum)                               | Also tested with |
 | --------------------------------------------- | -------------------------------------------------------------- | ---------------- |
 | All modules                                   | Go 1.26.10                                                      | Go 1.26, 1.27    |
-| `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.3.1, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.2.1 |
+| `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.4.0, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.2.1 |
 | `.../rudderopenai`                            | `github.com/openai/openai-go/v3` v3.70.0                        | v3.77.0          |
 | `.../rudderanthropic`                         | `github.com/anthropics/anthropic-sdk-go` v1.78.0                | v1.80.0          |
 | `.../ruddergenai`                             | `google.golang.org/genai` v1.72.0                               | v1.73.0          |
@@ -370,6 +370,14 @@ Each module requires the oldest version it supports, so adding it never upgrades
 | `.../rudderotel`                              | `go.opentelemetry.io/otel/trace` v1.47.0                        |                  |
 
 Every module runs the shared cross-SDK fixtures in [`spec/fixtures/`](spec/fixtures) with the Node.js and Python SDKs.
+
+## Upgrading to 0.3.0
+
+No API was removed.
+
+- **RudderStack client**: every module requires `github.com/rudderlabs/analytics-go/v4` v4.4.0, so `Flush` and `Shutdown` send its queue. A custom client without `Flush(ctx)` or `Flush()` is still reported once as `client_outdated`.
+- **`app_error`**: an answer that fails in your own code after a successful model call has `error_type: app_error`, not `api_error`. An error from a model call, or one that carries a provider signal (HTTP status, provider error code or provider error type), keeps its type. Update queries that count `api_error` as all failures.
+- **Usage on failed streams**: a streamed call that fails partway keeps the tokens it already reported and still counts in `llm_call_count` (unpriced). A Gemini stream that fails mid-way is now a failed call, no longer a success.
 
 ## Known limitations
 

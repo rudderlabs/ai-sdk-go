@@ -555,6 +555,79 @@ func TestInterceptStreamReadError(t *testing.T) {
 	}
 }
 
+// A stream that fails after its usage arrived is a counted, failed call that keeps that usage.
+func TestInterceptStreamReadErrorKeepsUsage(t *testing.T) {
+	h := newHarness(t, sseHandler(chunk(`{"id":"c7","choices":[{"index":0,"delta":{"content":"Hi"}}]}`), chunk(`{"id":"c7","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":4}}`)))
+	base := h.srv.Client().Transport
+	h.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
+		return h.spec.Intercept(r, func(r *http.Request) (*http.Response, error) {
+			resp, err := base.RoundTrip(r)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = &failingBody{Reader: io.MultiReader(resp.Body, errReader{})}
+			return resp, nil
+		})
+	})
+	ctx, i := interaction(h.rec)
+	resp, err := h.post(ctx, streamRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadAll(resp.Body); err == nil {
+		t.Fatal("want the read error")
+	}
+	_ = resp.Body.Close()
+	want(t, h.rec.props(t, "ai_llm_response_received"), map[string]any{"error_type": "api_error", "input_tokens": 12, "output_tokens": 4, "total_tokens": 16})
+	i.End(rudderstackai.EndOptions{})
+	want(t, h.rec.props(t, "ai_response_received"), map[string]any{
+		"response_status": "error", "error_type": "api_error", "llm_call_count": 1, "total_input_tokens": 12, "total_output_tokens": 4,
+	})
+}
+
+// The app returning a wrapped call's own error keeps the call's error_type, not app_error.
+func TestRunInteractionKeepsCallError(t *testing.T) {
+	cases := []struct {
+		name string
+		fail func(base http.RoundTripper) func(*http.Request) (*http.Response, error)
+	}{
+		{"stream read error", func(base http.RoundTripper) func(*http.Request) (*http.Response, error) {
+			return func(r *http.Request) (*http.Response, error) {
+				resp, err := base.RoundTrip(r)
+				if err != nil {
+					return nil, err
+				}
+				resp.Body = &failingBody{Reader: io.MultiReader(resp.Body, errReader{})}
+				return resp, nil
+			}
+		}},
+		{"transport error", func(http.RoundTripper) func(*http.Request) (*http.Response, error) {
+			return func(*http.Request) (*http.Response, error) { return nil, errors.New("proxy refused") }
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			h := newHarness(t, sseHandler(chunk(`{"id":"c8","choices":[],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)))
+			fail := c.fail(h.srv.Client().Transport)
+			h.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) { return h.spec.Intercept(r, fail) })
+			err := rudderstackai.RunInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u1", Analytics: h.rec}, func(ctx context.Context, _ *rudderstackai.Interaction) error {
+				resp, err := h.post(ctx, streamRequest)
+				if err != nil {
+					return fmt.Errorf("sdk: %w", err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+				_, err = io.ReadAll(resp.Body)
+				return fmt.Errorf("sdk: %w", err)
+			})
+			if err == nil {
+				t.Fatal("want the call's error")
+			}
+			call := h.rec.props(t, "ai_llm_response_received")
+			want(t, h.rec.props(t, "ai_response_received"), map[string]any{"response_status": "error", "error_type": call["error_type"]})
+		})
+	}
+}
+
 type errReader struct{}
 
 func (errReader) Read([]byte) (int, error) { return 0, errors.New("connection reset") }
@@ -754,6 +827,24 @@ func TestSSEParse(t *testing.T) {
 		t.Fatalf("events = %q", got)
 	}
 }
+
+func TestSSEParseOtherLines(t *testing.T) {
+	h := &lineHandler{funcHandler: funcHandler{onEvent: func(string, []byte) {}}}
+	b := &sseBody{h: h}
+	for _, line := range []string{": comment\n", "id: 1\n", "retry: 5\n", `{"error":{"code":429}}` + "\n"} {
+		b.parse([]byte(line))
+	}
+	if strings.Join(h.lines, ";") != `{"error":{"code":429}}` {
+		t.Fatalf("lines = %q", h.lines)
+	}
+}
+
+type lineHandler struct {
+	funcHandler
+	lines []string
+}
+
+func (l *lineHandler) OnLine(line []byte) { l.lines = append(l.lines, string(line)) }
 
 type funcHandler struct {
 	onEvent func(string, []byte)

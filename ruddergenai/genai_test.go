@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -331,6 +333,46 @@ func TestStreamBreakCancels(t *testing.T) {
 		return nil
 	})
 	want(t, rec.response(t), "response_status", "cancelled")
+}
+
+// An error line after a chunk with usage fails the call with that usage, as the SDK's APIError.
+func TestStreamErrorKeepsUsage(t *testing.T) {
+	rec := setup(t, rudderstackai.WithLLMCallEvents(true))
+	first, _ := json.Marshal(reply([]any{m{"text": "Hel"}}, m{"promptTokenCount": 10, "candidatesTokenCount": 2, "cachedContentTokenCount": 4}, ""))
+	stream := "data: " + string(first) + "\n\n" + `{"error":{"code":429,"message":"quota","status":"RESOURCE_EXHAUSTED"}}` + "\n"
+	hc := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(stream)), Request: r}, nil
+	})}
+	client := newClient(t, genai.BackendGeminiAPI, ruddergenai.HTTPClient(hc))
+	err := interaction(t, func(ctx context.Context) error {
+		for _, err := range client.Models.GenerateContentStream(ctx, model, genai.Text("Hi"), nil) {
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	var apiErr genai.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected the SDK's APIError, got %v", err)
+	}
+	var call map[string]any
+	for _, e := range rec.events(t) {
+		if e.Event == "ai_llm_response_received" {
+			b, _ := json.Marshal(e.Properties)
+			_ = json.Unmarshal(b, &call)
+		}
+	}
+	want(t, call, "error_type", "rate_limit")
+	want(t, call, "input_tokens", 10)
+	want(t, call, "output_tokens", 2)
+	want(t, call, "cached_input_tokens", 4)
+	p := rec.response(t)
+	want(t, p, "response_status", "error")
+	want(t, p, "error_type", "rate_limit")
+	want(t, p, "llm_call_count", 1)
+	want(t, p, "total_input_tokens", 10)
+	want(t, p, "total_output_tokens", 2)
 }
 
 func TestToolLoopSettlesFunctionResponses(t *testing.T) {

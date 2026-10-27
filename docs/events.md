@@ -161,7 +161,7 @@ A background task's answer adds its system-actor fields:
 
 `response_status` is `success`, `error`, `timeout`, `cancelled`, `paused` or `incomplete`, decided in this order:
 
-1. `EndOptions.Status`, when it is one of the `Status*` constants (any other value logs a warning and is ignored). `RunInteraction` and `RunTask` pass the status of the error `fn` returned (`ErrorTypeOf(err)`: `timeout` for `timeout`, `cancelled` for `cancelled`, else `error`), and `error` with `api_error` when `fn` panics.
+1. `EndOptions.Status`, when it is one of the `Status*` constants (any other value logs a warning and is ignored). `RunInteraction` and `RunTask` pass the status of the error `fn` returned or panicked with (`timeout` for `timeout`, `cancelled` for `cancelled`, else `error`); its `error_type` is the failed call's own when a wrapped call failed with that error, else `ErrorTypeOf(err)`, with `app_error` in place of `api_error` when nothing in the error chain names a provider (see [Error types](#error-types)).
 2. Otherwise the last recorded call decides: a failed call gives the status of its `ErrorType` (`timeout`, `cancelled`, `max_turns` / `max_budget_usd` / `length` → `incomplete`, anything else `error`), even after earlier successful calls and even when your code handled the error. A failed call followed by a successful retry is a success.
 3. A successful last call whose `FinishReason` is `length` or `max_tokens` makes the answer `incomplete` with `error_type: length`; `content_filter` makes it `error` with `error_type: content_filter`. A refusal (`finish_reason: refusal`) stays `success`.
 4. Otherwise `success`, also for an interaction without calls.
@@ -394,10 +394,11 @@ What the user did with an answer, sent by `TrackAction`, typically from a feedba
 | `invalid_request`                     | HTTP 400 and 422, AWS `ValidationException`, Google `INVALID_ARGUMENT`                                        |
 | `connection_error`                    | A network error without a response                                                                            |
 | `api_error`                           | Anything else, including provider 5xx and error events inside a stream                                       |
+| `app_error`                           | The turn failed in the app's own code, with no model call failing: an error the SDK cannot tie to a provider |
 | `length`, `content_filter`            | Derived from the last call's `finish_reason` (see [Status](#status))                                         |
 | `max_turns`, `max_budget_usd`, others | Only when you pass them in `EndOptions.ErrorType` or `LLMCall.ErrorType`                                      |
 
-`rudderstackai.ErrorTypeOf(err)` applies the same mapping to any error: the integrations register their SDK's error types (`*openai.Error`, `*anthropic.Error`, `genai.APIError`, AWS `smithy.APIError`), then errors with `ErrorCode()` or `HTTPStatusCode()`, then context and network errors. Wrapped errors are unwrapped, so a retry library's error maps as the provider error behind it. `ErrorTypeForStatus(status)` maps an HTTP status alone.
+`rudderstackai.ErrorTypeOf(err)` applies the same mapping to any error: the integrations register their SDK's error types (`*openai.Error`, `*anthropic.Error`, `genai.APIError`, AWS `smithy.APIError`), then errors with `ErrorCode()`, `HTTPStatusCode()` or `StatusCode()`, then context and network errors. Wrapped errors are unwrapped, so a retry library's error maps as the provider error behind it. `ErrorTypeForStatus(status)` maps an HTTP status alone.
 
 ## context.wrapperLibrary
 

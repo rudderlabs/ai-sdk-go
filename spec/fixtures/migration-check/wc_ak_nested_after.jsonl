@@ -1,0 +1,1 @@
+{"type": "track", "userId": "u1", "event": "toolUsed", "properties": {"tool": {"argument_keys": ["a", "b"]}, "calls": [{"argument_keys": ["x", "y"]}]}}

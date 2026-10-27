@@ -54,6 +54,12 @@ type EventFilter interface {
 	Hide(event string, data []byte) bool
 }
 
+// LineHandler is an optional StreamHandler extension: OnLine gets each line that is not an SSE
+// field or comment (Gemini sends a mid-stream error as a bare JSON line).
+type LineHandler interface {
+	OnLine(line []byte)
+}
+
 // Prepared is a streamed request changed before it is sent (stream_options.include_usage).
 type Prepared struct {
 	Body map[string]any
@@ -187,6 +193,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	}
 	if err != nil {
 		t := ErrorTypeOfTransport(err)
+		safe(func() { NoteCallError(i, err, t) })
 		// A connection error carries no body to tell a retry by: inside an interaction it waits
 		// for the retry, the next call or the end; a call outside one is recorded now.
 		if numbered && !ephemeral && req.Context().Err() == nil {
@@ -221,7 +228,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		var h StreamHandler
 		safe(func() { h = s.NewStream(c, resp) })
 		if h != nil {
-			body := &sseBody{src: resp.Body, h: h, ctx: req.Context(), reader: bufio.NewReader(resp.Body)}
+			body := &sseBody{src: resp.Body, h: h, i: i, ctx: req.Context(), reader: bufio.NewReader(resp.Body)}
 			body.filter, _ = h.(EventFilter)
 			resp.Body = body
 			return resp, nil
@@ -350,6 +357,7 @@ type sseBody struct {
 	src    io.ReadCloser
 	reader *bufio.Reader
 	h      StreamHandler
+	i      *rudderstackai.Interaction
 	ctx    context.Context
 	buf    bytes.Buffer
 	event  string
@@ -444,6 +452,11 @@ func (b *sseBody) parse(line []byte) {
 	case strings.HasPrefix(s, "data:"):
 		d := strings.TrimPrefix(s, "data:")
 		b.data = append(b.data, strings.TrimPrefix(d, " "))
+	case strings.HasPrefix(s, "id:"), strings.HasPrefix(s, "retry:"):
+	default:
+		if lh, ok := b.h.(LineHandler); ok {
+			safe(func() { lh.OnLine([]byte(s)) })
+		}
 	}
 }
 
@@ -460,6 +473,9 @@ func (b *sseBody) end(err error) {
 		t := ErrorTypeOfTransport(err)
 		if b.ctx.Err() != nil {
 			t = ErrorTypeOfTransport(b.ctx.Err())
+		}
+		if b.i != nil {
+			safe(func() { NoteCallError(b.i, err, t) })
 		}
 		if t == "cancelled" {
 			safe(func() { b.h.Finish(Cancelled, "") })

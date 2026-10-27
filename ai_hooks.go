@@ -27,6 +27,7 @@ func init() {
 	}
 	hook.OnBeforeEnd = func(i any, fn func()) { i.(*Interaction).onBeforeEnd(fn) }
 	hook.StatusForErrorType = func(t string) string { return string(statusForErrorType(t)) }
+	hook.NoteCallError = func(i any, err error, errorType string) { i.(*Interaction).noteCallError(err, errorType) }
 	hook.RegisterErrorClassifier = registerErrorClassifier
 	hook.Untracked = func(ctx context.Context) bool { return ctx != nil && isUntracked(ctx) }
 	hook.Recovered = func(r any, where string) {

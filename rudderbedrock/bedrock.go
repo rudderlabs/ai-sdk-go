@@ -278,7 +278,11 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	}
 	out, md, err := call(ctx)
 	if err != nil {
-		safe(func() { failed(c, sc, kit.ErrorTypeOfTransport(err)) })
+		safe(func() {
+			t := kit.ErrorTypeOfTransport(err)
+			kit.NoteCallError(i, err, t)
+			failed(c, sc, t)
+		})
 		return out, md, err
 	}
 	if o, ok := out.Result.(*bedrockruntime.ConverseOutput); ok {
@@ -403,6 +407,7 @@ func (s *streamCall) observe(event smithy.Deserializable, err error) {
 		if s.ctx.Err() != nil {
 			t = kit.ErrorTypeOfTransport(s.ctx.Err())
 		}
+		kit.NoteCallError(s.call.Interaction, err, t)
 		s.endLocked(kit.Errored, t)
 		return
 	}
