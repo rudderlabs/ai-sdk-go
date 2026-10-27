@@ -371,6 +371,14 @@ Each module requires the oldest version it supports, so adding it never upgrades
 
 Every module runs the shared cross-SDK fixtures in [`spec/fixtures/`](spec/fixtures) with the Node.js and Python SDKs.
 
+## Upgrading to 0.3.0
+
+No API was removed.
+
+- **RudderStack client**: every module requires `github.com/rudderlabs/analytics-go/v4` v4.4.0, so `Flush` and `Shutdown` send its queue. A custom client without `Flush(ctx)` or `Flush()` is still reported once as `client_outdated`.
+- **`app_error`**: an answer that fails in your own code after a successful model call has `error_type: app_error`, not `api_error`. An error from a model call, or one that carries a provider signal (HTTP status, provider error code or provider error type), keeps its type. Update queries that count `api_error` as all failures.
+- **Usage on failed streams**: a streamed call that fails partway keeps the tokens it already reported and still counts in `llm_call_count` (unpriced). A Gemini stream that fails mid-way is now a failed call, no longer a success.
+
 ## Known limitations
 
 - Integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients only. There are no OpenAI Agents SDK, Claude Agent SDK, LangChain, LangGraph or Vercel AI SDK integrations (they have no Go version), and no OpenTelemetry span processor or exporter.
