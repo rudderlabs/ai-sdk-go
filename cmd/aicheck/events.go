@@ -619,6 +619,9 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 	if opts.noAIEvents && browserEvents > 0 {
 		fail("%d browser AI events sent with the AI events switch off (trackAi not gated on it)", browserEvents)
 	}
+	if opts.expectJoins && !opts.noAIEvents && len(answers) == 0 { // browser events alone hide the server side
+		fail("no server ai_response_received captured (--expect-joins needs the server side)")
+	}
 	if !opts.noAIEvents && sdkEvents == 0 && browserEvents == 0 { // a silent recorder must not pass
 		fail("no AI events captured (recorder not wired, or the AI events switch is off)")
 	}

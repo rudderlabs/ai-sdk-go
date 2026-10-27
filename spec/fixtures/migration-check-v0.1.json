@@ -1490,6 +1490,43 @@
       "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 5, 'ai_user_action': 2, 'ai_llm_response_received': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nFAIL: interaction 55555555-5555-4555-8555-555555555555: server answer with no client copy (not shown, client left, or client event lost)\nRESULT: FAIL\n"
     },
     {
+      "name": "browser-only capture with --expect-joins",
+      "command": "check",
+      "captures": [
+        "browser_only_capture"
+      ],
+      "args": [
+        "--expect-joins"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_assistant_opened': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 0\nFAIL: no server ai_response_received captured (--expect-joins needs the server side)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "browser-only capture without --expect-joins",
+      "command": "check",
+      "captures": [
+        "browser_only_capture"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_assistant_opened': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 0\nRESULT: PASS\n"
+    },
+    {
+      "name": "AI off with --expect-joins",
+      "command": "check",
+      "captures": [
+        "ai_off"
+      ],
+      "args": [
+        "--no-ai-events",
+        "--expect-joins",
+        "--expect-legacy",
+        "chatTurnCompleted"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {}\ninteractions: 0\nRESULT: PASS\n"
+    },
+    {
       "name": "two web features, --client-surface web",
       "command": "check",
       "captures": [
@@ -1857,7 +1894,7 @@
         "--expect-joins"
       ],
       "exit_code": 1,
-      "stdout": "events: {'ai_reponse_received': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nFAIL: #0 ai_reponse_received: not an AI events spec name (misspelled?)\nFAIL: #0 ai_reponse_received: context.wrapperLibrary.specVersion is '0.0.0'\nRESULT: FAIL\n"
+      "stdout": "events: {'ai_reponse_received': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nFAIL: #0 ai_reponse_received: not an AI events spec name (misspelled?)\nFAIL: #0 ai_reponse_received: context.wrapperLibrary.specVersion is '0.0.0'\nFAIL: no server ai_response_received captured (--expect-joins needs the server side)\nRESULT: FAIL\n"
     },
     {
       "name": "client-only event sent by the SDK",
