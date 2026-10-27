@@ -148,8 +148,9 @@ type ContextFlusher interface {
 }
 
 // flushClients flushes each client in parallel within ctx; false when ctx ended first. failed is
-// the first error a client's own Flush returned, unchanged: the caller reports it as flush_failed,
-// since the app's own later Flush finds an empty queue. A client that cannot flush (analytics-go
+// the first error a client's own Flush returned by then (one still running has none yet),
+// unchanged: the caller reports it as flush_failed, even after a timeout, since the app's own later
+// Flush finds an empty queue. A client that cannot flush (analytics-go
 // before Flush(ctx)) is reported as client_outdated: its events go out on its own schedule or at
 // Close.
 func flushClients(ctx context.Context, clients []analytics.Client) (finished bool, failed error) {
@@ -173,7 +174,8 @@ func flushClients(ctx context.Context, clients []analytics.Client) (finished boo
 		}
 		wg.Go(func() {
 			safely(func() {
-				if err := flush(); err != nil {
+				// an error returned once ctx ended came after the deadline (a hung flush giving up): not counted
+				if err := flush(); err != nil && ctx.Err() == nil {
 					mu.Lock()
 					if first == nil {
 						first = err
@@ -211,6 +213,7 @@ var errNoClientFlush = errors.New("rudderstackai: the RudderStack client has no 
 // when ctx ended first. Because it drains your client's queue, your own client.Flush afterwards
 // has nothing left to fail on: when your client's flush fails, Flush returns false and passes your
 // client's error, unchanged, to the [WithOnError] hook as flush_failed, so handle flush errors there.
+// A deadline does not hide an error a client returned before it: both kinds are reported.
 //
 //	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 //	defer cancel()
@@ -235,15 +238,14 @@ func Flush(ctx context.Context) (finished bool) {
 		finished = drained && finished
 		failed = err
 	})
+	// both reported, whichever happened: a timeout does not hide an error a client returned before it
 	if !finished {
 		report(KindFlushTimeout, "Flush", ctx.Err())
-		return false
 	}
 	if failed != nil {
 		report(KindFlushFailed, "Flush", failed)
-		return false
 	}
-	return true
+	return finished && failed == nil
 }
 
 // FlushTimeout is Flush with a timeout (zero: 10 seconds).

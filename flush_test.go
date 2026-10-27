@@ -3,6 +3,7 @@ package rudderstackai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -272,5 +273,30 @@ func BenchmarkBurst1300AnalyticsGo(b *testing.B) {
 		}
 		burst(1300, client)
 		_ = client.Close()
+	}
+}
+
+// A timeout does not hide a flush error returned before it: both are reported. A flush still
+// running when ctx ends has no error yet.
+func TestFlushTimeoutDoesNotHideAFlushError(t *testing.T) {
+	failing := &failingClient{err: errors.New("dataplane said no")}
+	for _, run := range []struct {
+		name string
+		fn   func(context.Context) bool
+	}{{"Flush", Flush}, {"Shutdown", Shutdown}} {
+		t.Run(run.name, func(t *testing.T) {
+			seen := &seenErrors{}
+			setupAI(t, WithOnError(seen.hook), WithAnalytics(&ctxClient{block: true}))
+			emitAI(failing, "ai_user_action", "u", "", map[string]any{}, nil, "", time.Now()) // remembered
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+			if run.fn(ctx) {
+				t.Fatal("reported success")
+			}
+			want := []ErrorInfo{{Kind: KindFlushTimeout, Where: "Flush"}, {Kind: KindFlushFailed, Where: "Flush"}}
+			if got := seen.all(); fmt.Sprint(got) != fmt.Sprint(want) || seen.errs[1] != failing.err {
+				t.Fatalf("hook saw %+v %v", got, seen.errs)
+			}
+		})
 	}
 }
