@@ -1490,6 +1490,38 @@
       "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 5, 'ai_user_action': 2, 'ai_llm_response_received': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nFAIL: interaction 55555555-5555-4555-8555-555555555555: server answer with no client copy (not shown, client left, or client event lost)\nRESULT: FAIL\n"
     },
     {
+      "name": "browser rows without an identity",
+      "command": "check",
+      "captures": [
+        "browser_no_identity"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--user-id",
+        "u1"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nFAIL: #5 ai_user_prompt_created: no userId or anonymousId\nFAIL: #6 ai_response_received: no userId or anonymousId\nFAIL: #7 ai_user_prompt_created: no userId or anonymousId\nFAIL: #8 ai_response_received: no userId or anonymousId\nFAIL: #9 ai_user_action: no userId or anonymousId\nRESULT: FAIL\n"
+    },
+    {
+      "name": "browser rows with only a userId",
+      "command": "check",
+      "captures": [
+        "browser_user_only"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--expect-joins",
+        "--user-id",
+        "u1"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 5}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
       "name": "browser-only capture with --expect-joins",
       "command": "check",
       "captures": [

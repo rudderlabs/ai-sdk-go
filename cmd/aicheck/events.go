@@ -179,7 +179,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		// customer name was sent by an AI SDK as a declared tool event
 		isSpan := name == "ai_otel_span" || (in(w.Get("integration"), tracing) && !knownEvents[name])
 		isDeclared := !reserved(name) && !isSpan
-		if !truthy(user) && !truthy(anon) && !isClient {
+		if !truthy(user) && !truthy(anon) { // the browser SDK sends anonymousId on every event
 			fail("%s: no userId or anonymousId", where)
 		}
 		if !isDeclared && !isSpan && !isClient && !knownEvents[name] {
