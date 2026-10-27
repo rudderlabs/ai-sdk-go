@@ -29451,6 +29451,429 @@
       ]
     },
     {
+      "name": "openai_agents_failed_response_is_api_error",
+      "description": "OpenAI Agents SDK, streamed: the model response fails (response.failed) while it streams; that model call is the failure, so the call and the answer are api_error, and the call keeps the usage it reported, unpriced.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.responses": [
+          {
+            "sse": [
+              {
+                "event": "response.created",
+                "data": {
+                  "type": "response.created",
+                  "sequence_number": 0,
+                  "response": {
+                    "id": "resp_oa_failed_1",
+                    "object": "response",
+                    "created_at": 1760000000,
+                    "status": "in_progress",
+                    "model": "gpt-4.1-mini-2025-04-14",
+                    "output": [],
+                    "usage": null,
+                    "error": null,
+                    "incomplete_details": null,
+                    "instructions": null,
+                    "metadata": {},
+                    "parallel_tool_calls": true,
+                    "temperature": 1,
+                    "tool_choice": "auto",
+                    "tools": [],
+                    "top_p": 1
+                  }
+                }
+              },
+              {
+                "event": "response.output_text.delta",
+                "data": {
+                  "type": "response.output_text.delta",
+                  "sequence_number": 1,
+                  "item_id": "msg_oa_failed_1",
+                  "output_index": 0,
+                  "content_index": 0,
+                  "delta": "Checking",
+                  "logprobs": []
+                }
+              },
+              {
+                "event": "response.failed",
+                "data": {
+                  "type": "response.failed",
+                  "sequence_number": 2,
+                  "response": {
+                    "id": "resp_oa_failed_1",
+                    "object": "response",
+                    "created_at": 1760000000,
+                    "status": "failed",
+                    "model": "gpt-4.1-mini-2025-04-14",
+                    "output": [],
+                    "usage": {
+                      "input_tokens": 40,
+                      "input_tokens_details": {
+                        "cached_tokens": 0
+                      },
+                      "output_tokens": 3,
+                      "output_tokens_details": {
+                        "reasoning_tokens": 0
+                      },
+                      "total_tokens": 43
+                    },
+                    "error": {
+                      "code": "server_error",
+                      "message": "The server had an error."
+                    },
+                    "incomplete_details": null,
+                    "instructions": null,
+                    "metadata": {},
+                    "parallel_tool_calls": true,
+                    "temperature": 1,
+                    "tool_choice": "auto",
+                    "tools": [],
+                    "top_p": 1
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "openai_agents_run",
+          "agents": [
+            {
+              "name": "orders",
+              "model": "gpt-4.1-mini"
+            }
+          ],
+          "input": "Where is order 1234?",
+          "stream": true,
+          "tracking": {
+            "user_id": "user_1",
+            "feature": "support",
+            "conversation_id": "conv_oa_failed_response"
+          },
+          "expect_error": true
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_oa_failed_response",
+            "interaction_id": "$int1",
+            "feature": "support"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai-agents"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_oa_failed_response",
+            "interaction_id": "$int1",
+            "feature": "support",
+            "agent_name": "orders",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 40,
+            "output_tokens": 3,
+            "reasoning_tokens": 0,
+            "total_tokens": 43,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "resp_oa_failed_1",
+            "error_type": "api_error"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai-agents"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_oa_failed_response",
+            "interaction_id": "$int1",
+            "feature": "support",
+            "response_status": "error",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 40,
+            "total_output_tokens": 3,
+            "total_reasoning_tokens": 0,
+            "total_tokens": 43,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "error_type": "api_error",
+            "usage_breakdown": [
+              {
+                "agent_name": "orders",
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 40,
+                "output_tokens": 3,
+                "reasoning_tokens": 0,
+                "total_tokens": 43,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 1
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai-agents"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "openai_agents_tool_error_is_app_error",
+      "description": "OpenAI Agents SDK, streamed: the model call succeeds and asks for a function tool, which raises out of the run; no model call is in flight, so the answer is app_error and the call stays successful.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.responses": [
+          {
+            "sse": [
+              {
+                "event": "response.created",
+                "data": {
+                  "type": "response.created",
+                  "sequence_number": 0,
+                  "response": {
+                    "id": "resp_oa_tool_error_1",
+                    "object": "response",
+                    "created_at": 1760000000,
+                    "status": "in_progress",
+                    "model": "gpt-4.1-mini-2025-04-14",
+                    "output": [],
+                    "usage": null,
+                    "error": null,
+                    "incomplete_details": null,
+                    "instructions": null,
+                    "metadata": {},
+                    "parallel_tool_calls": true,
+                    "temperature": 1,
+                    "tool_choice": "auto",
+                    "tools": [],
+                    "top_p": 1
+                  }
+                }
+              },
+              {
+                "event": "response.output_item.added",
+                "data": {
+                  "type": "response.output_item.added",
+                  "sequence_number": 1,
+                  "output_index": 0,
+                  "item": {
+                    "type": "function_call",
+                    "id": "fc_oa_tool_error_1",
+                    "call_id": "call_oa_tool_error_1",
+                    "name": "raise_lookup_order",
+                    "arguments": "",
+                    "status": "in_progress"
+                  }
+                }
+              },
+              {
+                "event": "response.output_item.done",
+                "data": {
+                  "type": "response.output_item.done",
+                  "sequence_number": 2,
+                  "output_index": 0,
+                  "item": {
+                    "type": "function_call",
+                    "id": "fc_oa_tool_error_1",
+                    "call_id": "call_oa_tool_error_1",
+                    "name": "raise_lookup_order",
+                    "arguments": "{}",
+                    "status": "completed"
+                  }
+                }
+              },
+              {
+                "event": "response.completed",
+                "data": {
+                  "type": "response.completed",
+                  "sequence_number": 3,
+                  "response": {
+                    "id": "resp_oa_tool_error_1",
+                    "object": "response",
+                    "created_at": 1760000000,
+                    "status": "completed",
+                    "model": "gpt-4.1-mini-2025-04-14",
+                    "output": [
+                      {
+                        "type": "function_call",
+                        "id": "fc_oa_tool_error_1",
+                        "call_id": "call_oa_tool_error_1",
+                        "name": "raise_lookup_order",
+                        "arguments": "{}",
+                        "status": "completed"
+                      }
+                    ],
+                    "usage": {
+                      "input_tokens": 50,
+                      "input_tokens_details": {
+                        "cached_tokens": 0
+                      },
+                      "output_tokens": 10,
+                      "output_tokens_details": {
+                        "reasoning_tokens": 0
+                      },
+                      "total_tokens": 60
+                    },
+                    "error": null,
+                    "incomplete_details": null,
+                    "instructions": null,
+                    "metadata": {},
+                    "parallel_tool_calls": true,
+                    "temperature": 1,
+                    "tool_choice": "auto",
+                    "tools": [],
+                    "top_p": 1
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "openai_agents_run",
+          "agents": [
+            {
+              "name": "orders",
+              "model": "gpt-4.1-mini",
+              "tools": [
+                "raise_lookup_order"
+              ]
+            }
+          ],
+          "input": "Where is order 1234?",
+          "stream": true,
+          "tracking": {
+            "user_id": "user_1",
+            "feature": "support",
+            "conversation_id": "conv_oa_tool_error"
+          },
+          "expect_error": true
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_oa_tool_error",
+            "interaction_id": "$int1",
+            "feature": "support"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai-agents"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_oa_tool_error",
+            "interaction_id": "$int1",
+            "feature": "support",
+            "agent_name": "orders",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 50,
+            "output_tokens": 10,
+            "reasoning_tokens": 0,
+            "total_tokens": 60,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "resp_oa_tool_error_1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai-agents"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_oa_tool_error",
+            "interaction_id": "$int1",
+            "feature": "support",
+            "response_status": "error",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 50,
+            "total_output_tokens": 10,
+            "total_reasoning_tokens": 0,
+            "total_tokens": 60,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "error_type": "app_error",
+            "usage_breakdown": [
+              {
+                "agent_name": "orders",
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 50,
+                "output_tokens": 10,
+                "reasoning_tokens": 0,
+                "total_tokens": 60,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai-agents"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "openai_agents_max_output_tokens",
       "description": "OpenAI Agents SDK, Responses API: a response cut off at max_output_tokens (status incomplete) is a billed call with finish_reason length, never passed through as incomplete; the run (which the Agents SDK raises on) is response_status incomplete with error_type length, not success or api_error.",
       "config": {},
