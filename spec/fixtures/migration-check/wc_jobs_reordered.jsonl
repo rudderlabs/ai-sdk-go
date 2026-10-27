@@ -1,0 +1,2 @@
+{"type": "track", "userId": "u1", "event": "jobDone", "properties": {"job": "b", "status": "error"}}
+{"type": "track", "userId": "u1", "event": "jobDone", "properties": {"job": "a", "status": "ok"}}

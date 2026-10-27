@@ -1,0 +1,40 @@
+events: {'ai_user_action': 1, 'ai_response_received': 1}
+legacy or other events (no wrapperLibrary): {}
+sdks: {'ai-sdk-go': 2}
+interactions: 0
+FAIL: #0 ai_user_action (spec): properties.big: fails exclusiveMaximum
+FAIL: #0 ai_user_action (spec): properties.big: fails multipleOf
+FAIL: #0 ai_user_action (spec): properties.big: greater than 10
+FAIL: #0 ai_user_action (spec): properties.dep: fails dependentRequired
+FAIL: #0 ai_user_action (spec): properties.few: fails minContains
+FAIL: #0 ai_user_action (spec): properties.fixed: not 1.0
+FAIL: #0 ai_user_action (spec): properties.items[0]: not 'x'
+FAIL: #0 ai_user_action (spec): properties.items[1]: not of type integer
+FAIL: #0 ai_user_action (spec): properties.list: fails minContains
+FAIL: #0 ai_user_action (spec): properties.list: fails minItems
+FAIL: #0 ai_user_action (spec): properties.many: fails maxContains
+FAIL: #0 ai_user_action (spec): properties.num: less than 0
+FAIL: #0 ai_user_action (spec): properties.num: not of type integer
+FAIL: #0 ai_user_action (spec): properties.num: not one of [1, 2.5, 'x', None]
+FAIL: #0 ai_user_action (spec): properties.one: does not match exactly one of oneOf
+FAIL: #0 ai_user_action (spec): properties.pats.xa: not of type integer
+FAIL: #0 ai_user_action (spec): properties.pats: unexpected 'yb'
+FAIL: #0 ai_user_action (spec): properties.short: does not match '^a'
+FAIL: #0 ai_user_action (spec): properties.short: longer than 2
+FAIL: #0 ai_user_action (spec): properties: fails minProperties
+FAIL: #0 ai_user_action (spec): properties: fails unevaluatedProperties
+FAIL: #0 ai_user_action (spec): properties: longer than 12
+FAIL: #0 ai_user_action (spec): properties: not allowed
+FAIL: #1 ai_response_received (spec): properties.anyv: matches none of anyOf
+FAIL: #1 ai_response_received (spec): properties.arr: fails items
+FAIL: #1 ai_response_received (spec): properties.inall: not allowed
+FAIL: #1 ai_response_received (spec): properties.notv: matches a schema it must not
+FAIL: #1 ai_response_received (spec): properties.obj.q: not of type string
+FAIL: #1 ai_response_received (spec): properties.obj: missing required 'y'
+FAIL: #1 ai_response_received (spec): properties.obj: missing required 'z'
+FAIL: #1 ai_response_received (spec): properties.pre: not allowed
+FAIL: #1 ai_response_received (spec): properties.typ: not 'k'
+FAIL: #1 ai_response_received (spec): properties.typ: not of type integer or boolean
+FAIL: #1 ai_response_received (spec): properties.viaref: not allowed
+FAIL: #1 ai_response_received (spec): properties: not allowed
+RESULT: FAIL

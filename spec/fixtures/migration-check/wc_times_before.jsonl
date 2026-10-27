@@ -1,0 +1,1 @@
+{"type": "track", "userId": "u1", "event": "chatTurnCompleted", "properties": {"status": "ok", "createdAt": "2026-10-27T10:00:00Z", "updated_at": "2026-10-27T10:00:01Z", "steps": [{"timestamp": 1761559200000, "name": "plan"}], "meta": {"start_time": 17}}}

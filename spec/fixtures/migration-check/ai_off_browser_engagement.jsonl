@@ -1,0 +1,2 @@
+{"type": "track", "userId": "u1", "event": "chatTurnCompleted", "properties": {"cost": 0.01}}
+{"type": "track", "anonymousId": "a1", "event": "ai_assistant_opened", "properties": {"source": "client", "feature": "support_bot", "surface": "web", "conversation_id": "c1", "interaction_id": "11111111-1111-4111-8111-111111111111", "entry_point": "launcher"}}

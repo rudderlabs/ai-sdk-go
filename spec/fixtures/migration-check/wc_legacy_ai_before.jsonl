@@ -1,0 +1,1 @@
+{"type": "track", "userId": "u1", "event": "ai_response_received", "properties": {"model": "x", "promptTokens": 3}}

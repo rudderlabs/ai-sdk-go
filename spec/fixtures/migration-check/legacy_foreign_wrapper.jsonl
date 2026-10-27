@@ -1,0 +1,1 @@
+{"type": "track", "userId": "u1", "event": "chatTurnCompleted", "properties": {"cost": 0.01}, "context": {"wrapperLibrary": {"name": "acme-analytics", "version": "2.0.0"}}}

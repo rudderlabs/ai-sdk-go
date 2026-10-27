@@ -18,6 +18,8 @@ Tools (golangci-lint, govulncheck) run through `go run` at the versions pinned i
 *.go                    package rudderstackai: the public API (interactions, tasks, Middleware, MCP), at the module root
 version.go              SDK version, bumped by release-please
 ruddermcpgo/            mcp-go support, in the root module
+ruddertest/             Recorder: an analytics-go client that records to JSONL for the migration check, in the root module
+cmd/aicheck/            module of the aicheck migration check command (go install ...@latest), with its own copy of the schemas
 rudderopenai/ rudderanthropic/ ruddergenai/ rudderbedrock/ rudderotel/
                         one Go module per provider integration, plus the OpenTelemetry trace_id helper
 internal/kit/           shared HTTP interception, stream and retry handling of the integrations

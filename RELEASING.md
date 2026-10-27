@@ -16,7 +16,9 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 
 ## Modules
 
-The repository holds several Go modules (see `go.work`): the core `github.com/rudderlabs/ai-sdk-go` (tags `vX.Y.Z`; it includes `ruddermcpgo`) and one per integration, `rudderopenai`, `rudderanthropic`, `ruddergenai`, `rudderbedrock` and `rudderotel` (tags `<dir>/vX.Y.Z`, as Go requires for a module in a subdirectory). release-please versions each from the commits under its directory. `internal/conformance` and `examples` are never tagged.
+The repository holds several Go modules (see `go.work`): the core `github.com/rudderlabs/ai-sdk-go` (tags `vX.Y.Z`; it includes `ruddermcpgo`), one per integration, `rudderopenai`, `rudderanthropic`, `ruddergenai`, `rudderbedrock` and `rudderotel`, and the `cmd/aicheck` command (tags `<dir>/vX.Y.Z`, as Go requires for a module in a subdirectory; the command's release-please component is therefore `cmd/aicheck`, and its first release is 0.1.0 through `initial-version`). release-please versions each from the commits under its directory. `internal/conformance` and `examples` are never tagged.
+
+`cmd/aicheck` depends on no core package (`go install` cannot follow a replace), so it releases on its own; its bundled schemas are copies of `spec/`, checked by its tests.
 
 Each integration's `go.mod` requires a core release and replaces it with `../` for development; consumers ignore the replace. An integration that needs a new core API must require the core release that has it: release the core first, then bump the requirement (`go get github.com/rudderlabs/ai-sdk-go@vX.Y.Z` in that module) in the integration's release PR.
 

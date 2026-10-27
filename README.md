@@ -323,6 +323,25 @@ err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID)
 
 A value you set always wins. No span is created or exported ([trace_id](docs/configuration.md#trace_id)).
 
+## Checking a migration
+
+Moving AI events your app already sends through RudderStack to this SDK? `aicheck` checks a recording of what the app sends; it is its own module, so the app gains no dependency. Record the events while you drive the app, once per switch setting. In the test or harness, make `ruddertest.Recorder` the app's own analytics-go client where the app builds it, before the app calls `rudderstackai.Configure` and reads its switches, so legacy calls and switch-off runs are recorded too (configuring a recorder after start misses them):
+
+```go
+client, err := ruddertest.NewRecorder("events.jsonl") // github.com/rudderlabs/ai-sdk-go/ruddertest, instead of analytics.NewWithConfig(...)
+```
+
+```bash
+go install github.com/rudderlabs/ai-sdk-go/cmd/aicheck@latest
+aicheck events.jsonl --expect-legacy chatTurnCompleted \
+  --feature support_bot --surface web --user-id demo_user_1 --expect-joins
+aicheck legacy-off.jsonl --absent chatTurnCompleted
+aicheck ai-off.jsonl --no-ai-events --expect-legacy chatTurnCompleted
+aicheck what-changes ai-off.jsonl events.jsonl  # redacted before/after diff for the PR
+```
+
+The check validates every event against the spec this version emits (and browser copies against the browser-event schema), and checks that legacy events keep sending (`--expect-legacy`) or stop when their switch is off (`--absent`, counted by provenance: events without an AI SDK's `context.wrapperLibrary`, so an AI event with the same name does not count), that no AI event is sent with the AI switch off (`--no-ai-events`), client/server joins in both directions (`--expect-joins`, feedback copies per action type included, honouring `--client-opt-out client_prompt|client_response|client_feedback|server_feedback`, `--feedback-endpoint` and `--client-surface` for surfaces with a browser client), that app-caught failures are not reported as success (`--failed-interaction <id>`), plus identity (`--user-id`, `--expect-session`, and `--mcp-user-id` or `--mcp-anonymous` for MCP servers), content capture and MCP flags (`aicheck --help`). Exit code 0 passes, 1 fails, 2 is bad usage or an unreadable file. The Node.js (`npx @rudderstack/ai check`) and Python (`python -m rudderstack.ai.check`) SDKs ship the same check, with the same output.
+
 ## Troubleshooting
 
 | Symptom                                    | Cause and fix                                                                                                                         |

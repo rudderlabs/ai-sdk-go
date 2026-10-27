@@ -1,0 +1,3 @@
+{"type": "track", "userId": "u1", "event": "orderPlaced", "properties": {"created_at": "2026-01-01", "updated_at": 1}}
+{"type": "track", "userId": "u1", "event": "formatted", "properties": {"format": "a"}}
+{"type": "track", "userId": "u1", "event": "chatTurnCompleted", "properties": {"cost": 0.01}}
