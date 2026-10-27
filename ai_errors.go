@@ -71,6 +71,9 @@ func classifyError(err error) (t string, provider bool) {
 	var statusCode interface{ StatusCode() int }
 	if errors.As(err, &statusCode) {
 		provider = true
+		if t := ErrorTypeForStatus(statusCode.StatusCode()); t != "" {
+			return t, true
+		}
 	}
 	switch {
 	case errors.Is(err, context.Canceled):

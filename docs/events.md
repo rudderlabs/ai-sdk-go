@@ -398,7 +398,7 @@ What the user did with an answer, sent by `TrackAction`, typically from a feedba
 | `length`, `content_filter`            | Derived from the last call's `finish_reason` (see [Status](#status))                                         |
 | `max_turns`, `max_budget_usd`, others | Only when you pass them in `EndOptions.ErrorType` or `LLMCall.ErrorType`                                      |
 
-`rudderstackai.ErrorTypeOf(err)` applies the same mapping to any error: the integrations register their SDK's error types (`*openai.Error`, `*anthropic.Error`, `genai.APIError`, AWS `smithy.APIError`), then errors with `ErrorCode()` or `HTTPStatusCode()`, then context and network errors. Wrapped errors are unwrapped, so a retry library's error maps as the provider error behind it. `ErrorTypeForStatus(status)` maps an HTTP status alone.
+`rudderstackai.ErrorTypeOf(err)` applies the same mapping to any error: the integrations register their SDK's error types (`*openai.Error`, `*anthropic.Error`, `genai.APIError`, AWS `smithy.APIError`), then errors with `ErrorCode()`, `HTTPStatusCode()` or `StatusCode()`, then context and network errors. Wrapped errors are unwrapped, so a retry library's error maps as the provider error behind it. `ErrorTypeForStatus(status)` maps an HTTP status alone.
 
 ## context.wrapperLibrary
 
