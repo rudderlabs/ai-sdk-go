@@ -170,8 +170,9 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		isClient := props.Get("source") == "client" && isClientName(name) // a legacy event may use source too
 		where := fmt.Sprintf("#%d %s", i, name)
 		// Provenance: only the AI SDKs' wrapperLibrary marks an AI send; another adapter's tag is still legacy,
-		// unless the event uses an AI name (then it falls through and fails the SDK-name check).
-		foreign := w.Len() > 0 && !in(w.Get("name"), sdkNames) && !specEvents[name] && !mcpEvents[name] && !clientOnly[name]
+		// unless the event uses an AI name not listed in --expect-legacy (then it fails the SDK-name check).
+		aiName := specEvents[name] || mcpEvents[name] || clientOnly[name]
+		foreign := w.Len() > 0 && !in(w.Get("name"), sdkNames) && (!aiName || slices.Contains(opts.expectLegacy, name))
 		if (w.Len() == 0 || foreign) && !isClient { // not sent through the AI SDK: legacy or other analytics
 			legacy.add(name)
 			if clientOnly[name] && !slices.Contains(opts.expectLegacy, name) { // browser-only: a missing source is the bug
