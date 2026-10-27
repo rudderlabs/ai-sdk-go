@@ -491,6 +491,29 @@ func TestStreamException(t *testing.T) {
 	check(t, rec.named(t, "ai_response_received")[0], map[string]any{"tool_call_count": 1, "response_status": "error"})
 }
 
+// An exception after the metadata event keeps its usage on the failed call.
+func TestStreamExceptionKeepsUsage(t *testing.T) {
+	rec := setup(t)
+	llm.ScriptBedrock("bedrock.converse_stream", testkit.BedrockReply{RequestID: "req-u", Stream: fullStream,
+		StreamError: &testkit.BedrockError{Code: "ThrottlingException", Message: "slow"}})
+	err := interaction(t, func(ctx context.Context) error {
+		es, err := converseStream(ctx, client())
+		if err != nil {
+			return err
+		}
+		return drain(es)
+	})
+	if err == nil {
+		t.Fatal("want the stream exception")
+	}
+	check(t, rec.named(t, "ai_llm_response_received")[0], map[string]any{
+		"error_type": "rate_limit", "input_tokens": 45, "output_tokens": 8, "cached_input_tokens": 10, "cache_write_tokens": 5,
+	})
+	check(t, rec.named(t, "ai_response_received")[0], map[string]any{
+		"response_status": "error", "error_type": "rate_limit", "llm_call_count": 1, "total_input_tokens": 45, "total_output_tokens": 8,
+	})
+}
+
 func TestStreamHTTPError(t *testing.T) {
 	rec := setup(t)
 	llm.ScriptBedrock("bedrock.converse_stream", testkit.BedrockReply{Error: &testkit.BedrockError{Code: "ValidationException", Status: 400, Message: "bad"}})

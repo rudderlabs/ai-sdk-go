@@ -419,6 +419,19 @@ func (s *stream) OnEvent(_ string, data []byte) {
 	}
 }
 
+// OnLine fails the call on the bare JSON error line genai raises as an APIError mid-stream; the
+// usage seen so far stays.
+func (s *stream) OnLine(line []byte) {
+	var body struct {
+		Error *genai.APIError `json:"error"`
+	}
+	if json.Unmarshal(line, &body) != nil || body.Error == nil {
+		return
+	}
+	t, _ := classifyError(*body.Error)
+	s.Finish(kit.Errored, t)
+}
+
 func (s *stream) nextKey() string {
 	s.n++
 	return strconv.Itoa(s.n)

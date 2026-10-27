@@ -54,6 +54,12 @@ type EventFilter interface {
 	Hide(event string, data []byte) bool
 }
 
+// LineHandler is an optional StreamHandler extension: OnLine gets each line that is not an SSE
+// field or comment (Gemini sends a mid-stream error as a bare JSON line).
+type LineHandler interface {
+	OnLine(line []byte)
+}
+
 // Prepared is a streamed request changed before it is sent (stream_options.include_usage).
 type Prepared struct {
 	Body map[string]any
@@ -444,6 +450,11 @@ func (b *sseBody) parse(line []byte) {
 	case strings.HasPrefix(s, "data:"):
 		d := strings.TrimPrefix(s, "data:")
 		b.data = append(b.data, strings.TrimPrefix(d, " "))
+	case strings.HasPrefix(s, "id:"), strings.HasPrefix(s, "retry:"):
+	default:
+		if lh, ok := b.h.(LineHandler); ok {
+			safe(func() { lh.OnLine([]byte(s)) })
+		}
 	}
 }
 

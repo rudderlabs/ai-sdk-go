@@ -330,6 +330,32 @@ func TestChatStreamErrorEvent(t *testing.T) {
 	}
 }
 
+// An error chunk after the usage chunk keeps that usage on the failed call.
+func TestChatStreamErrorAfterUsage(t *testing.T) {
+	rec, llm := setup(t)
+	client := newClient(llm)
+	llm.Script("openai.chat", reply(t, `{"sse":[
+		{"data":{"id":"c2","model":"gpt-4.1-mini","choices":[{"index":0,"delta":{"content":"a"}}]}},
+		{"data":{"id":"c2","model":"gpt-4.1-mini","choices":[],"usage":{"prompt_tokens":11,"completion_tokens":3,"prompt_tokens_details":{"cached_tokens":2}}}},
+		{"data":{"error":{"message":"slow down","code":"rate_limit_exceeded"}}}]}`))
+	err := inInteraction(t, func(ctx context.Context) error {
+		s := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, body(streamBody))
+		return consume(s, func() {})
+	})
+	if err == nil {
+		t.Fatal("want the stream error")
+	}
+	events := rec.events(t)
+	call := one(t, events, "ai_llm_response_received")
+	if call["error_type"] != "rate_limit" || num(call["input_tokens"]) != 11 || num(call["output_tokens"]) != 3 || num(call["cached_input_tokens"]) != 2 {
+		t.Errorf("call: %v", call)
+	}
+	answer := one(t, events, "ai_response_received")
+	if num(answer["llm_call_count"]) != 1 || num(answer["total_input_tokens"]) != 11 || num(answer["total_output_tokens"]) != 3 || answer["error_type"] != "rate_limit" {
+		t.Errorf("answer: %v", answer)
+	}
+}
+
 func TestChatStreamBreak(t *testing.T) {
 	rec, llm := setup(t)
 	client := newClient(llm)

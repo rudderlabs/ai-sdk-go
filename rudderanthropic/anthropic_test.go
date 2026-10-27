@@ -320,6 +320,40 @@ func TestStreamErrorEvent(t *testing.T) {
 	eq(t, p, "total_input_tokens", 9)
 }
 
+// An error event after message_delta keeps every figure seen: the call counts, with its usage.
+func TestStreamErrorEventKeepsUsage(t *testing.T) {
+	llm, rec := setup(t, rudderstackai.WithLLMCallEvents(true))
+	llm.Script("anthropic.messages", sse(t,
+		map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_u", "model": "claude-haiku-4-5", "usage": map[string]any{"input_tokens": 9, "output_tokens": 1, "cache_read_input_tokens": 3}}},
+		map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]any{"type": "text_delta", "text": "Hi"}},
+		map[string]any{"type": "message_delta", "delta": map[string]any{}, "usage": map[string]any{"output_tokens": 15, "output_tokens_details": map[string]any{"thinking_tokens": 4}}},
+		map[string]any{"type": "error", "error": map[string]any{"type": "overloaded_error", "message": "Overloaded"}},
+	))
+	c := newClient(llm)
+	err := run(t, func(ctx context.Context) error {
+		st := c.Messages.NewStreaming(ctx, anthropic.MessageNewParams{}, body(t, request(map[string]any{"stream": true})))
+		defer func() { _ = st.Close() }()
+		for st.Next() {
+		}
+		return st.Err()
+	})
+	if err == nil {
+		t.Fatal("expected the stream error")
+	}
+	ev := rec.events(t)
+	call := ev["ai_llm_response_received"][0]
+	eq(t, call, "error_type", "api_error")
+	eq(t, call, "input_tokens", 12)
+	eq(t, call, "cached_input_tokens", 3)
+	eq(t, call, "output_tokens", 15)
+	eq(t, call, "reasoning_tokens", 4)
+	p := ev["ai_response_received"][0]
+	eq(t, p, "llm_call_count", 1)
+	eq(t, p, "total_input_tokens", 12)
+	eq(t, p, "total_output_tokens", 15)
+	eq(t, p, "error_type", "api_error")
+}
+
 func TestStreamWithoutMessageStop(t *testing.T) {
 	llm, rec := setup(t)
 	llm.Script("anthropic.messages", sse(t,
