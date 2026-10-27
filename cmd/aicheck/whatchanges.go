@@ -138,16 +138,25 @@ func norm(v any, k string) any {
 		}
 		return out
 	case []any:
-		out := make([]any, len(v))
-		for i, item := range v {
-			out[i] = norm(item, k)
-		}
-		if k == "argument_keys" { // unordered (known limit argument_keys_unordered): compare it as a set
-			sort.SliceStable(out, func(i, j int) bool { return dumps(out[i], false) < dumps(out[j], false) })
-		}
-		return out
+		return normList(v, k, true)
 	}
 	return redact(v, k)
+}
+
+// normList normalises a list under key k; field marks the field's own list, the only one sorted.
+func normList(v []any, k string, field bool) []any {
+	out := make([]any, len(v))
+	for i, item := range v {
+		if l, ok := item.([]any); ok {
+			out[i] = normList(l, k, false)
+		} else {
+			out[i] = norm(item, k)
+		}
+	}
+	if field && k == "argument_keys" { // unordered (known limit argument_keys_unordered): compare it as a set
+		sort.SliceStable(out, func(i, j int) bool { return dumps(out[i], false) < dumps(out[j], false) })
+	}
+	return out
 }
 
 func fields(m *Object, prefix string, out map[string]string) map[string]string {
