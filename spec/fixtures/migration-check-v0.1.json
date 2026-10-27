@@ -1490,6 +1490,55 @@
       "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 5, 'ai_user_action': 2, 'ai_llm_response_received': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 3\nFAIL: interaction 55555555-5555-4555-8555-555555555555: server answer with no client copy (not shown, client left, or client event lost)\nRESULT: FAIL\n"
     },
     {
+      "name": "server-scoped intent used on another server",
+      "command": "check",
+      "captures": [
+        "mcp_intents_mixed"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--mcp-intent",
+        "docs:search_docs",
+        "--mcp-intent",
+        "admin:create_user"
+      ],
+      "exit_code": 1,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 't', 'tool_status': 'success', 'error_type': None, 'intent': 'search_docs', 'user_sentiment': None} \nmcp call: {'server_name': 'admin', 'client_name': None, 'protocol_version': None, 'tool_name': 't', 'tool_status': 'success', 'error_type': None, 'intent': 'search_docs', 'user_sentiment': None} \nmcp client_name: on 0 of 2 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_tool_called': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 2\nFAIL: #12 mcp_tool_called: intent 'search_docs' not in 'admin''s list\nRESULT: FAIL\n"
+    },
+    {
+      "name": "each server's own intents and other",
+      "command": "check",
+      "captures": [
+        "mcp_intents_ok"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--mcp-intent",
+        "docs:search_docs",
+        "--mcp-intent",
+        "admin:create_user"
+      ],
+      "exit_code": 0,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 't', 'tool_status': 'success', 'error_type': None, 'intent': 'search_docs', 'user_sentiment': None} \nmcp call: {'server_name': 'admin', 'client_name': None, 'protocol_version': None, 'tool_name': 't', 'tool_status': 'success', 'error_type': None, 'intent': 'create_user', 'user_sentiment': None} \nmcp call: {'server_name': 'admin', 'client_name': None, 'protocol_version': None, 'tool_name': 't', 'tool_status': 'success', 'error_type': None, 'intent': 'other', 'user_sentiment': None} \nmcp client_name: on 0 of 3 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_tool_called': 3}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 8}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
+      "name": "a bare intent allowed on every server",
+      "command": "check",
+      "captures": [
+        "mcp_intents_mixed"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--mcp-intent",
+        "search_docs"
+      ],
+      "exit_code": 0,
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 't', 'tool_status': 'success', 'error_type': None, 'intent': 'search_docs', 'user_sentiment': None} \nmcp call: {'server_name': 'admin', 'client_name': None, 'protocol_version': None, 'tool_name': 't', 'tool_status': 'success', 'error_type': None, 'intent': 'search_docs', 'user_sentiment': None} \nmcp client_name: on 0 of 2 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_tool_called': 2}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 7}\ninteractions: 2\nRESULT: PASS\n"
+    },
+    {
       "name": "browser rows without an identity",
       "command": "check",
       "captures": [
@@ -2251,7 +2300,7 @@
         "u1"
       ],
       "exit_code": 1,
-      "stdout": "mcp call: {'server_name': 'docs', 'client_name': 'claude-code', 'protocol_version': '2025-11-25', 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': 'search_docs', 'user_sentiment': None} joined\nmcp call: {'server_name': 'billing', 'client_name': None, 'protocol_version': '2025-11-25', 'tool_name': 'refund', 'tool_status': 'error', 'error_type': 'denied', 'intent': 'steal', 'user_sentiment': None} \nmcp client_name: on 1 of 2 tool calls\nevents: {'ai_user_prompt_created': 1, 'ai_response_received': 1, 'mcp_client_seen': 2, 'mcp_tool_called': 2, 'lookup_order': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 7}\ninteractions: 1\nnote: mcp_client_seen ('docs', 'claude-code', None, 'u1'): 2 times in one window (several processes, or a restart?)\nFAIL: #4 mcp_tool_called (spec): properties: missing required 'request_id'\nFAIL: #5 mcp_tool_called (spec): properties: missing required 'request_id'\nFAIL: #5 mcp_tool_called: raw MCP payload keys ['arguments']\nFAIL: #5 mcp_tool_called: server_name 'billing' not in ['docs']\nFAIL: #5 mcp_tool_called: request_context reached the tool (argument_keys)\nFAIL: #5 mcp_tool_called: intent 'steal' not in the server's list\nRESULT: FAIL\n"
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': 'claude-code', 'protocol_version': '2025-11-25', 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': 'search_docs', 'user_sentiment': None} joined\nmcp call: {'server_name': 'billing', 'client_name': None, 'protocol_version': '2025-11-25', 'tool_name': 'refund', 'tool_status': 'error', 'error_type': 'denied', 'intent': 'steal', 'user_sentiment': None} \nmcp client_name: on 1 of 2 tool calls\nevents: {'ai_user_prompt_created': 1, 'ai_response_received': 1, 'mcp_client_seen': 2, 'mcp_tool_called': 2, 'lookup_order': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 7}\ninteractions: 1\nnote: mcp_client_seen ('docs', 'claude-code', None, 'u1'): 2 times in one window (several processes, or a restart?)\nFAIL: #4 mcp_tool_called (spec): properties: missing required 'request_id'\nFAIL: #5 mcp_tool_called (spec): properties: missing required 'request_id'\nFAIL: #5 mcp_tool_called: raw MCP payload keys ['arguments']\nFAIL: #5 mcp_tool_called: server_name 'billing' not in ['docs']\nFAIL: #5 mcp_tool_called: request_context reached the tool (argument_keys)\nFAIL: #5 mcp_tool_called: intent 'steal' not in 'billing''s list\nRESULT: FAIL\n"
     },
     {
       "name": "MCP events, no MCP flags",

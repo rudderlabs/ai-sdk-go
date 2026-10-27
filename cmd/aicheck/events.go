@@ -129,6 +129,14 @@ func present(o *Object, want map[string]bool) []string {
 type side struct{ event, side string }
 
 func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, error) {
+	mcpIntents := map[string][]string{} // server ("": every one) -> intents
+	for _, entry := range opts.mcpIntent {
+		server, intent := "", entry
+		if i := strings.LastIndex(entry, ":"); i >= 0 {
+			server, intent = entry[:i], entry[i+1:]
+		}
+		mcpIntents[server] = append(mcpIntents[server], intent)
+	}
 	var problems, notes []string
 	fail := func(format string, args ...any) { problems = append(problems, fmt.Sprintf(format, args...)) }
 	events := tracks(messages)
@@ -294,8 +302,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 					notes = append(notes, where+": request_context in argument_keys (fine if the tool declares its own)")
 				}
 			}
-			if intent, ok := props.Lookup("intent"); ok && len(opts.mcpIntent) > 0 && !in(intent, append(slices.Clone(opts.mcpIntent), "other")) {
-				fail("%s: intent %s not in the server's list", where, repr(intent))
+			server := props.Get("server_name")
+			serverName, _ := server.(string)
+			allowed := append(append(slices.Clone(mcpIntents[""]), "other"), mcpIntents[serverName]...)
+			if intent, ok := props.Lookup("intent"); ok && len(opts.mcpIntent) > 0 && !in(intent, allowed) {
+				fail("%s: intent %s not in %s's list", where, repr(intent), repr(server))
 			}
 			if name == "mcp_client_seen" {
 				seen := "(" + strings.Join([]string{repr(props.Get("server_name")), repr(props.Get("client_name")),

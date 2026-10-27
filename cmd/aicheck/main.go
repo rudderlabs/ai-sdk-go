@@ -49,7 +49,9 @@ check flags (repeat the list flags once per value):
                                 the turns of that feature and surface (all, when left out)
   --failed-interaction <id>     interaction the app failed and caught: its answer must report the failure
   --mcp-server <name>           allowed MCP server_name values
-  --mcp-intent <intent>         allowed request_context intents (other is implied)
+  --mcp-intent <[server:]intent>
+                                allowed request_context intents (other is implied); without a server name
+                                allowed on every server
 
 exit code: 0 pass, 1 a check failed, 2 bad usage or an unreadable file
 `
