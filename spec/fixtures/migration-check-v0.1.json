@@ -2634,7 +2634,7 @@
       ],
       "args": [],
       "exit_code": 0,
-      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `ai_response_received` | new | 0 | 1 |\n| `ai_response_received (browser)` | changed | 1 | 2 |\n| `chatTurnCompleted` | changed | 2 | 2 |\n| `legacyOnly` | removed | 1 | 0 |\n\n#### `ai_response_received (browser)`\n\nDiffering fields: count only\n\nBefore:\n```json\n{\n  \"anonymousId\": \"<anonymousId>\",\n  \"event\": \"ai_response_received\",\n  \"properties\": {\n    \"interaction_id\": \"<interaction_id>\",\n    \"response_status\": \"success\",\n    \"source\": \"client\"\n  },\n  \"type\": \"track\"\n}\n```\nAfter:\n```json\n{\n  \"anonymousId\": \"<anonymousId>\",\n  \"event\": \"ai_response_received\",\n  \"properties\": {\n    \"interaction_id\": \"<interaction_id>\",\n    \"response_status\": \"success\",\n    \"source\": \"client\"\n  },\n  \"type\": \"track\"\n}\n```\n\n#### `chatTurnCompleted`\n\nDiffering fields: + properties.meta.k, - properties.meta, - properties.nothing, ~ properties.latency_ms (\"int\" -> \"float\"), ~ properties.note (\"mail me at <email> today\" -> \"mail me at <email> now\"), ~ properties.score (0.5 -> 0.75), ~ properties.tags ([] -> [\"x\"]), + properties.interaction_id\n\nBefore:\n```json\n{\n  \"context\": {\n    \"page\": {\n      \"title\": \"Caf\\u00e9 \\ud83d\\ude00\"\n    },\n    \"traits\": \"<traits>\"\n  },\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"account_id\": \"<account_id>\",\n    \"big\": 12345678901234567890,\n    \"latency_ms\": 120,\n    \"meta\": {},\n    \"model\": \"gpt-4o\",\n    \"nested\": {\n      \"deep\": {\n        \"user_id\": \"<user_id>\"\n      },\n      \"owner_email\": \"<owner_email>\"\n    },\n    \"note\": \"mail me at <email> today\",\n    \"nothing\": null,\n    \"score\": 0.5,\n    \"steps\": [\n      {\n        \"ok\": true,\n        \"startedAt\": \"x\",\n        \"tool\": \"search\"\n      }\n    ],\n    \"tags\": [],\n    \"tiny\": 1e-07,\n    \"whole\": 2.0\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"context\": {\n    \"page\": {\n      \"title\": \"Caf\\u00e9 \\ud83d\\ude00\"\n    },\n    \"traits\": \"<traits>\"\n  },\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"account_id\": \"<account_id>\",\n    \"big\": 12345678901234567890,\n    \"latency_ms\": 120.5,\n    \"meta\": {\n      \"k\": \"v\"\n    },\n    \"model\": \"gpt-4o\",\n    \"nested\": {\n      \"deep\": {\n        \"user_id\": \"<user_id>\"\n      },\n      \"owner_email\": \"<owner_email>\"\n    },\n    \"note\": \"mail me at <email> now\",\n    \"score\": 0.75,\n    \"steps\": [\n      {\n        \"ok\": true,\n        \"startedAt\": \"y\",\n        \"tool\": \"search\"\n      }\n    ],\n    \"tags\": [\n      \"x\"\n    ],\n    \"tiny\": 1e-07,\n    \"whole\": 2.0\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `ai_response_received` | new | 0 | 1 |\n| `ai_response_received (browser)` | changed | 1 | 2 |\n| `chatTurnCompleted` | changed | 2 | 2 |\n| `legacyOnly` | removed | 1 | 0 |\n\n#### `ai_response_received (browser)`\n\nDiffering fields: count only\n\nBefore:\n```json\n{\n  \"anonymousId\": \"<anonymousId>\",\n  \"event\": \"ai_response_received\",\n  \"properties\": {\n    \"interaction_id\": \"<interaction_id>\",\n    \"response_status\": \"success\",\n    \"source\": \"client\"\n  },\n  \"type\": \"track\"\n}\n```\nAfter:\n```json\n{\n  \"anonymousId\": \"<anonymousId>\",\n  \"event\": \"ai_response_received\",\n  \"properties\": {\n    \"interaction_id\": \"<interaction_id>\",\n    \"response_status\": \"success\",\n    \"source\": \"client\"\n  },\n  \"type\": \"track\"\n}\n```\n\n#### `chatTurnCompleted`\n\nDiffering fields: + properties.meta.k, - properties.meta, - properties.nothing, ~ properties.latency_ms (\"int\" -> \"float\"), ~ properties.note (\"mail me at <email> today\" -> \"mail me at <email> now\"), ~ properties.score (0.5 -> 0.75), ~ properties.tags ([] -> [\"x\"]), + properties.interaction_id\n\nBefore:\n```json\n{\n  \"context\": {\n    \"page\": {\n      \"title\": \"Caf\\u00e9 \\ud83d\\ude00\"\n    },\n    \"traits\": \"<traits>\"\n  },\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"account_id\": \"<account_id>\",\n    \"big\": 12345678901234567890,\n    \"latency_ms\": 120,\n    \"meta\": {},\n    \"model\": \"gpt-4o\",\n    \"nested\": {\n      \"deep\": {\n        \"user_id\": \"<user_id>\"\n      },\n      \"owner_email\": \"<owner_email>\"\n    },\n    \"note\": \"mail me at <email> today\",\n    \"nothing\": null,\n    \"score\": 0.5,\n    \"steps\": [\n      {\n        \"ok\": true,\n        \"startedAt\": \"<startedAt>\",\n        \"tool\": \"search\"\n      }\n    ],\n    \"tags\": [],\n    \"tiny\": 1e-07,\n    \"whole\": 2.0\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"context\": {\n    \"page\": {\n      \"title\": \"Caf\\u00e9 \\ud83d\\ude00\"\n    },\n    \"traits\": \"<traits>\"\n  },\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"account_id\": \"<account_id>\",\n    \"big\": 12345678901234567890,\n    \"latency_ms\": 120.5,\n    \"meta\": {\n      \"k\": \"v\"\n    },\n    \"model\": \"gpt-4o\",\n    \"nested\": {\n      \"deep\": {\n        \"user_id\": \"<user_id>\"\n      },\n      \"owner_email\": \"<owner_email>\"\n    },\n    \"note\": \"mail me at <email> now\",\n    \"score\": 0.75,\n    \"steps\": [\n      {\n        \"ok\": true,\n        \"startedAt\": \"<startedAt>\",\n        \"tool\": \"search\"\n      }\n    ],\n    \"tags\": [\n      \"x\"\n    ],\n    \"tiny\": 1e-07,\n    \"whole\": 2.0\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
     },
     {
       "name": "identical captures",
@@ -2712,6 +2712,39 @@
       "args": [],
       "exit_code": 0,
       "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `chatTurnCompleted` | changed | 1 | 1 |\n\n#### `chatTurnCompleted`\n\nDiffering fields: ~ properties.VALID (\"keep-me\" -> \"keep-me-2\"), ~ properties.status (\"ok\" -> \"error\")\n\nBefore:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"ID\": \"<ID>\",\n    \"VALID\": \"keep-me\",\n    \"accountID\": \"<accountID>\",\n    \"isValid\": true,\n    \"status\": \"ok\",\n    \"userID\": \"<userID>\",\n    \"user_ID\": \"<user_ID>\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"ID\": \"<ID>\",\n    \"VALID\": \"keep-me-2\",\n    \"accountID\": \"<accountID>\",\n    \"isValid\": true,\n    \"status\": \"error\",\n    \"userID\": \"<userID>\",\n    \"user_ID\": \"<user_ID>\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
+      "name": "reordered identical occurrences",
+      "command": "what-changes",
+      "captures": [
+        "wc_jobs_before",
+        "wc_jobs_reordered"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `jobDone` | unchanged | 2 | 2 |\n"
+    },
+    {
+      "name": "a real change among reordered occurrences",
+      "command": "what-changes",
+      "captures": [
+        "wc_jobs_before",
+        "wc_jobs_changed"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `jobDone` | changed | 2 | 2 |\n\n#### `jobDone`\n\nDiffering fields: ~ properties.status (\"ok\" -> \"failed\")\n\nBefore:\n```json\n{\n  \"event\": \"jobDone\",\n  \"properties\": {\n    \"job\": \"a\",\n    \"status\": \"ok\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"jobDone\",\n  \"properties\": {\n    \"job\": \"a\",\n    \"status\": \"failed\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
+    },
+    {
+      "name": "nested timestamps masked in examples",
+      "command": "what-changes",
+      "captures": [
+        "wc_times_before",
+        "wc_times_after"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "| Event | Status | Before | After |\n|---|---|---|---|\n| `chatTurnCompleted` | changed | 1 | 1 |\n\n#### `chatTurnCompleted`\n\nDiffering fields: ~ properties.status (\"ok\" -> \"error\")\n\nBefore:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"createdAt\": \"<createdAt>\",\n    \"meta\": {\n      \"start_time\": \"<start_time>\"\n    },\n    \"status\": \"ok\",\n    \"steps\": [\n      {\n        \"name\": \"plan\",\n        \"timestamp\": \"<timestamp>\"\n      }\n    ],\n    \"updated_at\": \"<updated_at>\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\nAfter:\n```json\n{\n  \"event\": \"chatTurnCompleted\",\n  \"properties\": {\n    \"createdAt\": \"<createdAt>\",\n    \"meta\": {\n      \"start_time\": \"<start_time>\"\n    },\n    \"status\": \"error\",\n    \"steps\": [\n      {\n        \"name\": \"plan\",\n        \"timestamp\": \"<timestamp>\"\n      }\n    ],\n    \"updated_at\": \"<updated_at>\"\n  },\n  \"type\": \"track\",\n  \"userId\": \"<userId>\"\n}\n```\n"
     },
     {
       "name": "round 11 what-changes",

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"maps"
 	"regexp"
 	"slices"
 	"sort"
@@ -13,8 +14,8 @@ import (
 //
 // before: AI events switched off (the app as it was); after: AI events on. Prints the event table
 // (counts per capture) and, per changed event, a redacted before/after JSON pair with the differing
-// fields and values. Every occurrence is compared in capture order, an unmatched one with the other
-// capture's first; the pair shown is the first that differs. Fields that differ on every run (IDs, timestamps, durations) count by presence and type
+// fields and values. Equal occurrences pair first, whatever their order; the rest pair in capture
+// order, an unmatched one with the other capture's first; the pair shown is the first that differs. Fields that differ on every run (IDs, timestamps, durations) count by presence and type
 // only, inside lists too. IDs, user and account IDs, on_behalf_of, emails, traits and timestamps are
 // redacted; check the rest before sharing.
 
@@ -85,8 +86,13 @@ func rowKey(m *Object) string {
 	return name
 }
 
+// timeKey is vary's timestamp part: masked at any depth in the printed examples, as IDs are.
+var timeKey = regexp.MustCompile(`At\z|_at\z|[Tt]imestamp|(^|_)time\z|Time(UnixNano)?\z`)
+
 func redact(v any, k string) any {
-	if _, isObj := v.(*Object); personal[k] || (v != nil && !isObj && !isList(v) && idKey.MatchString(k)) {
+	_, isObj := v.(*Object)
+	scalar := v != nil && !isObj && !isList(v)
+	if personal[k] || (scalar && (idKey.MatchString(k) || timeKey.MatchString(k))) {
 		return "<" + k + ">"
 	}
 	switch v := v.(type) {
@@ -224,15 +230,26 @@ func whatChanges(before, after []*Object, out io.Writer) int {
 			// Compare every occurrence in capture order; a change in a later turn counts too.
 			var d []string
 			mb, ma := byB[name][0], byA[name][0]
-			// unmatched occurrences (added or removed turns) are compared with the other side's first one
-			var pairs [][2]*Object
-			for i := 0; i < nb && i < na; i++ {
-				pairs = append(pairs, [2]*Object{byB[name][i], byA[name][i]})
+			// equal occurrences pair first, whatever their order (concurrent jobs finish in any order);
+			// the rest pair in capture order, and unmatched ones with the other side's first occurrence
+			restB, restA := slices.Clone(byB[name]), []*Object(nil)
+			for _, m := range byA[name] {
+				fm := fields(m, "", map[string]string{})
+				twin := slices.IndexFunc(restB, func(o *Object) bool { return maps.Equal(fields(o, "", map[string]string{}), fm) })
+				if twin < 0 {
+					restA = append(restA, m)
+				} else {
+					restB = slices.Delete(restB, twin, twin+1)
+				}
 			}
-			for _, m := range byA[name][min(nb, na):] {
+			var pairs [][2]*Object
+			for i := 0; i < len(restB) && i < len(restA); i++ {
+				pairs = append(pairs, [2]*Object{restB[i], restA[i]})
+			}
+			for _, m := range restA[min(len(restB), len(restA)):] {
 				pairs = append(pairs, [2]*Object{byB[name][0], m})
 			}
-			for _, m := range byB[name][min(nb, na):] {
+			for _, m := range restB[min(len(restB), len(restA)):] {
 				pairs = append(pairs, [2]*Object{m, byA[name][0]})
 			}
 			for _, p := range pairs {
