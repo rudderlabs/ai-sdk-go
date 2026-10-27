@@ -365,3 +365,57 @@ func TestTimedOut(t *testing.T) {
 		}
 	}
 }
+
+// signalClient's Flush(ctx) outlives the deadline until released, then fails and says so.
+type signalClient struct {
+	lateClient
+	returned chan struct{}
+}
+
+func (c *signalClient) Flush(ctx context.Context) error {
+	defer close(c.returned)
+	return c.lateClient.Flush(ctx)
+}
+
+// The error the caller collected is reported before any late one can take flush_failed's
+// rate-limit slot: here a second client fails while the timeout hook is still running.
+func TestFlushReportsTheCollectedErrorBeforeALateOne(t *testing.T) {
+	early := &failingClient{err: errors.New("failed in time")}
+	late := &signalClient{lateClient: lateClient{err: errors.New("failed late"), release: make(chan struct{})}, returned: make(chan struct{})}
+	seen := &seenErrors{}
+	hook := func(err error, info ErrorInfo) {
+		seen.hook(err, info)
+		if info.Kind == KindFlushTimeout {
+			close(late.release)
+			<-late.returned
+			time.Sleep(50 * time.Millisecond) // the late flush's goroutine handles its error meanwhile
+		}
+	}
+	setupAI(t, WithOnError(hook), WithAnalytics(late))
+	emitAI(early, "ai_user_action", "u", "", map[string]any{}, nil, "", time.Now()) // remembered
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if Flush(ctx) {
+		t.Fatal("reported success")
+	}
+	time.Sleep(50 * time.Millisecond) // nothing more arrives
+	want := []ErrorInfo{{Kind: KindFlushTimeout, Where: "Flush"}, {Kind: KindFlushFailed, Where: "Flush"}}
+	seen.mu.Lock()
+	defer seen.mu.Unlock()
+	if fmt.Sprint(seen.infos) != fmt.Sprint(want) || seen.errs[1] != early.err {
+		t.Fatalf("hook saw %+v %v", seen.infos, seen.errs)
+	}
+}
+
+// Flushes that end together with ctx did not finish in time, whichever select case wins.
+func TestFlushClientsAfterTheDeadlineIsATimeout(t *testing.T) {
+	setupAI(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for range 20 {
+		finished, finish := flushClients(ctx, "Flush", []analytics.Client{&ctxClient{}})
+		if finished || !finish() {
+			t.Fatalf("finished %v", finished)
+		}
+	}
+}

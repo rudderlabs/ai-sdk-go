@@ -117,18 +117,18 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), wait)
 		defer cancel()
 		finished := true
-		var failed error
+		var finish func() bool
 		safely(func() {
 			finished = task.waitBackground(ctx)
 			var drained bool
-			drained, failed = flushClients(ctx, "RunTask", []analytics.Client{task.analytics()})
+			drained, finish = flushClients(ctx, "RunTask", []analytics.Client{task.analytics()})
 			finished = drained && finished
 		})
 		if !finished {
 			report(KindFlushTimeout, "RunTask", ctx.Err())
 		}
-		if failed != nil {
-			report(KindFlushFailed, "RunTask", failed)
+		if finish != nil {
+			finish()
 		}
 	}
 	return err
@@ -147,19 +147,20 @@ type ContextFlusher interface {
 	Flush(ctx context.Context) error
 }
 
-// flushClients flushes each client in parallel within ctx; false when ctx ended first. failed is
-// the first error a client's own Flush returned by the time flushClients returns, unchanged: the
-// caller reports it as flush_failed, even after a timeout, since the app's own later Flush finds an
-// empty queue. A flush that fails after that is reported as flush_failed (at where) from its own
-// goroutine. An error that is the expired ctx's own (the flush gave up at the deadline) is the
-// timeout the caller reports, never flush_failed. A client that cannot flush (analytics-go before
-// Flush(ctx)) is reported as client_outdated: its events go out on its own schedule or at Close.
-func flushClients(ctx context.Context, where string, clients []analytics.Client) (finished bool, failed error) {
+// flushClients flushes each client in parallel within ctx; finished is false when ctx ended first
+// (also when the flushes ended with it). The caller reports any timeout, then calls finish: it
+// reports the first error a client's own Flush returned until then, unchanged, as flush_failed
+// (at where), even after a timeout, since the app's own later Flush finds an empty queue, and is
+// false when there was one. A flush that fails after finish is reported as flush_failed from its
+// own goroutine. An error that is the expired ctx's own (the flush gave up at the deadline) is the
+// timeout, never flush_failed. A client that cannot flush (analytics-go before Flush(ctx)) is
+// reported as client_outdated: its events go out on its own schedule or at Close.
+func flushClients(ctx context.Context, where string, clients []analytics.Client) (finished bool, finish func() bool) {
 	var (
 		wg     sync.WaitGroup
 		mu     sync.Mutex
 		first  error // written by flushes that may outlive ctx: read only under mu
-		closed bool  // the caller has its result: later errors are reported from their goroutine
+		closed bool  // finish ran: later errors are reported from their goroutine
 	)
 	for _, c := range clients {
 		var flush func() error
@@ -199,13 +200,20 @@ func flushClients(ctx context.Context, where string, clients []analytics.Client)
 	}()
 	select {
 	case <-done:
-		finished = true
+		// done and ctx.Done() can be ready together: flushes that ended with ctx did not finish in time
+		finished = ctx.Err() == nil
 	case <-ctx.Done():
 	}
-	mu.Lock()
-	failed, closed = first, true
-	mu.Unlock()
-	return finished, failed
+	return finished, func() bool {
+		// under the lock, so a late failure cannot take flush_failed's rate-limit slot ahead of this one
+		mu.Lock()
+		defer mu.Unlock()
+		closed = true
+		if first != nil {
+			report(KindFlushFailed, where, first)
+		}
+		return first == nil
+	}
 }
 
 // timedOut reports whether err is ctx's own error once ctx has ended: a flush that gave up at the
@@ -234,7 +242,7 @@ var errNoClientFlush = errors.New("rudderstackai: the RudderStack client has no 
 //	defer cancel()
 //	rudderstackai.Flush(ctx)
 func Flush(ctx context.Context) (finished bool) {
-	var failed error
+	var finish func() bool
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -249,18 +257,16 @@ func Flush(ctx context.Context) (finished bool) {
 		if c := cfg().analytics; c != nil {
 			clients = append(clients, c)
 		}
-		drained, err := flushClients(ctx, "Flush", clients)
+		var drained bool
+		drained, finish = flushClients(ctx, "Flush", clients)
 		finished = drained && finished
-		failed = err
 	})
 	// both reported, whichever happened: a timeout does not hide an error a client returned before it
 	if !finished {
 		report(KindFlushTimeout, "Flush", ctx.Err())
 	}
-	if failed != nil {
-		report(KindFlushFailed, "Flush", failed)
-	}
-	return finished && failed == nil
+	ok := finish == nil || finish()
+	return finished && ok
 }
 
 // FlushTimeout is Flush with a timeout (zero: 10 seconds).
