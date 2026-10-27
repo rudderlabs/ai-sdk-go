@@ -300,9 +300,9 @@ rudderstackai.Flush(ctx)    // or Shutdown(ctx) when the process is stopping
 client.Close()              // analytics-go: stop the client; the SDK never closes it
 ```
 
-- `Flush(ctx) bool` waits for pending classifications and scores and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), then flushes every RudderStack client the SDK has used, in parallel, all within one deadline: `ctx`'s, or 10 seconds when it has none. A client implementing `ContextFlusher` (`Flush(ctx) error`, analytics-go from the release that adds it) sends its whole queue; one implementing `Flusher` (`Flush() error`) is flushed as before; an older analytics-go client has no flush, is reported once as `client_outdated` and sends its queue on `Close()`. It returns false, and reports `flush_timeout`, when the deadline passed first. It never ends open interactions. `FlushTimeout(d)` is the deprecated duration form.
+- `Flush(ctx) bool` waits for pending classifications and scores and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), then flushes every RudderStack client the SDK has used, in parallel, all within one deadline: `ctx`'s, or 10 seconds when it has none. A client implementing `ContextFlusher` (`Flush(ctx) error`, analytics-go from the release that adds it) sends its whole queue; one implementing `Flusher` (`Flush() error`) is flushed as before; an older analytics-go client has no flush, is reported once as `client_outdated` and sends its queue on `Close()`. It returns false, and reports `flush_timeout`, when the deadline passed first. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` (and `Shutdown` and the `RunTask` flush) returns false and passes your client's error, unchanged, to `WithOnError` as `flush_failed`, so handle flush errors there. It never ends open interactions. `FlushTimeout(d)` is the deprecated duration form.
 - `Shutdown(ctx) bool` stops queueing new classifications and scores, ends every open interaction as `response_status: incomplete` with `end_reason: shutdown`, then flushes as above. Calling it again is safe. Call it from your SIGTERM handling.
-- A top-level `RunTask` waits for its own classification and score and flushes its client, at most `TaskOptions.FlushTimeout` (default 2 seconds) for both; running out is reported as `flush_timeout`.
+- A top-level `RunTask` waits for its own classification and score and flushes its client, at most `TaskOptions.FlushTimeout` (default 2 seconds) for both; running out is reported as `flush_timeout`, and the client's own flush error as `flush_failed`.
 - Serverless: on Lambda, `Flush` before returning with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM.
 - Events are queued in analytics-go, so delivery errors are its own: handle them with its `Config.Callback`.
 
@@ -332,6 +332,7 @@ Each contained error has an `ErrorInfo{Kind, Where}`. Kinds, identical in Node.j
 | `limit_reached`     | A memory cap was hit.                                                                                |
 | `redaction_timeout` | A masking pattern ran out of time; the field was sent as `[redaction timed out]`.                    |
 | `flush_timeout`     | `Flush`, `Shutdown` or a `RunTask` flush hit its deadline.                                           |
+| `flush_failed`      | Your RudderStack client's own Flush failed; the error passed is your client's, unchanged.            |
 | `client_outdated`   | The RudderStack client cannot do what the SDK asked of it.                                           |
 
 `WithOnError(fn)` gets the error and its `ErrorInfo`, at most once per kind a minute; a panic in `fn` is swallowed. Without it, each kind is logged once as a warning with the error's type, never its text (it may carry credentials).

@@ -126,8 +126,8 @@ func TestFlush(t *testing.T) {
 		t.Fatal(err)
 	}
 	answer(t, InteractionOptions{PromptText: "p", Analytics: used}, "a")
-	if !Flush(context.Background()) {
-		t.Fatal("classification not finished")
+	if Flush(context.Background()) { // the used client's flush failed: reported as flush_failed
+		t.Fatal("a failed client flush reported success")
 	}
 	if len(used.named("ai_interaction_classified")) != 1 || used.flushes.Load() != 1 || global.flushes.Load() != 1 {
 		t.Fatalf("used %v flushes %d global %d", used.names(), used.flushes.Load(), global.flushes.Load())
@@ -138,6 +138,7 @@ func TestFlush(t *testing.T) {
 	if err := Configure(WithClassifier(nil)); err != nil {
 		t.Fatal(err)
 	}
+	used.flushErr = nil
 	if !Flush(context.Background()) {
 		t.Fatal("nothing pending")
 	}

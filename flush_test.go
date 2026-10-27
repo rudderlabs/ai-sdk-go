@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -27,6 +28,67 @@ func (c *ctxClient) Flush(ctx context.Context) error {
 		return ctx.Err()
 	}
 	return nil
+}
+
+// failingClient is an analytics-go client whose Flush(ctx) fails.
+type failingClient struct {
+	sink
+	err error
+}
+
+func (c *failingClient) Flush(context.Context) error { return c.err }
+
+// The SDK's flush drains the client's queue, so the app's own later client.Flush has nothing left
+// to fail on: the client's error reaches OnError, unchanged, as flush_failed.
+func TestFlushPassesTheClientsFlushError(t *testing.T) {
+	ctxErr, oldErr := errors.New("dataplane said no"), errors.New("old client said no")
+	for _, c := range []struct {
+		name   string
+		client analytics.Client
+		want   error
+	}{
+		{"Flush(ctx)", &failingClient{err: ctxErr}, ctxErr},
+		{"Flush()", &sink{flushErr: oldErr}, oldErr},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			for _, run := range []struct {
+				where string
+				fn    func(context.Context) bool
+			}{{"Flush", Flush}, {"Flush", Shutdown}} {
+				seen := &seenErrors{}
+				setupAI(t, WithOnError(seen.hook), WithAnalytics(c.client))
+				if run.fn(context.Background()) {
+					t.Fatal("a failed client flush reported success")
+				}
+				if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushFailed, Where: run.where}) || seen.errs[0] != c.want {
+					t.Fatalf("hook saw %+v %v", got, seen.errs)
+				}
+			}
+		})
+	}
+}
+
+func TestRunTaskPassesTheClientsFlushError(t *testing.T) {
+	seen := &seenErrors{}
+	setupAI(t, WithOnError(seen.hook))
+	failing := &failingClient{err: errors.New("dataplane said no")}
+	if err := RunTask(context.Background(), "job", TaskOptions{Analytics: failing}, func(context.Context, *Interaction) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushFailed, Where: "RunTask"}) || seen.errs[0] != failing.err {
+		t.Fatalf("hook saw %+v %v", got, seen.errs)
+	}
+}
+
+// Without OnError, a flush error is one warning naming its type, never its text.
+func TestFlushErrorWarnsWithoutItsText(t *testing.T) {
+	setupAI(t, WithAnalytics(&failingClient{err: errors.New("secret token abc")}))
+	logs := captureLogs(t)
+	Flush(context.Background())
+	Flush(context.Background())
+	if out := logs.String(); strings.Count(out, "flush_failed") != 1 || strings.Contains(out, "secret token") {
+		t.Fatalf("logs: %s", out)
+	}
 }
 
 // oldClient is analytics-go before Flush(ctx): Enqueue and Close only.
