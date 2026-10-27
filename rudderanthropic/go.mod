@@ -5,7 +5,7 @@ go 1.26.10
 require (
 	github.com/anthropics/anthropic-sdk-go v1.78.0
 	github.com/rudderlabs/ai-sdk-go v0.2.0
-	github.com/rudderlabs/analytics-go/v4 v4.3.1
+	github.com/rudderlabs/analytics-go/v4 v4.4.0
 )
 
 require (

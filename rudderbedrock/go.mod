@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.1
 	github.com/aws/smithy-go v1.28.1
 	github.com/rudderlabs/ai-sdk-go v0.2.0
-	github.com/rudderlabs/analytics-go/v4 v4.3.1
+	github.com/rudderlabs/analytics-go/v4 v4.4.0
 )
 
 require (

@@ -14,7 +14,7 @@ require (
 	github.com/rudderlabs/ai-sdk-go/rudderbedrock v0.1.0
 	github.com/rudderlabs/ai-sdk-go/ruddergenai v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderopenai v0.1.0
-	github.com/rudderlabs/analytics-go/v4 v4.3.1
+	github.com/rudderlabs/analytics-go/v4 v4.4.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	google.golang.org/genai v1.75.0
 )
