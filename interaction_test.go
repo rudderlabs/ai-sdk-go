@@ -208,6 +208,26 @@ func TestRunInteractionKeepsCallErrorType(t *testing.T) {
 	}
 }
 
+// An app error that wraps a recorded call error anywhere in its chain keeps the call's type.
+func TestRunInteractionAppErrorWrapsCallError(t *testing.T) {
+	for _, wrap := range []func(error) error{
+		func(e error) error { return fmt.Errorf("context review: %w", e) },
+		func(e error) error { return fmt.Errorf("turn: %w", fmt.Errorf("review: %w", e)) },
+		func(e error) error { return errors.Join(errors.New("cleanup failed"), fmt.Errorf("call: %w", e)) },
+	} {
+		r := setupAI(t)
+		callErr := errors.New("upstream reset")
+		_ = RunInteraction(context.Background(), InteractionOptions{UserID: "u"}, func(_ context.Context, i *Interaction) error {
+			i.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4o-mini", ErrorType: "rate_limit"})
+			i.noteCallError(callErr, "rate_limit")
+			return wrap(callErr)
+		})
+		if resp := r.response(t); resp["error_type"] != "rate_limit" {
+			t.Errorf("%v: %v", wrap(callErr), resp)
+		}
+	}
+}
+
 func TestNoteCallErrorKeepsNewest(t *testing.T) {
 	setupAI(t)
 	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
