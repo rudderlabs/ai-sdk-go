@@ -49,7 +49,7 @@ type TaskOptions struct {
 	// task that chains to the interaction in its context.
 	Flush *bool
 	// FlushTimeout bounds that flush, classification included. Zero: 2 seconds. Running out is
-	// reported as flush_timeout.
+	// reported as flush_timeout; the client's own flush error is passed, unchanged, as flush_failed.
 	FlushTimeout time.Duration
 }
 
@@ -117,11 +117,18 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), wait)
 		defer cancel()
 		finished := true
+		var finish func() bool
 		safely(func() {
-			finished = task.waitBackground(ctx) && flushClients(ctx, []analytics.Client{task.analytics()})
+			finished = task.waitBackground(ctx)
+			var drained bool
+			drained, finish = flushClients(ctx, "RunTask", []analytics.Client{task.analytics()})
+			finished = drained && finished
 		})
 		if !finished {
 			report(KindFlushTimeout, "RunTask", ctx.Err())
+		}
+		if finish != nil {
+			finish()
 		}
 	}
 	return err
@@ -140,11 +147,21 @@ type ContextFlusher interface {
 	Flush(ctx context.Context) error
 }
 
-// flushClients flushes each client in parallel within ctx; false when ctx ended first. A client
-// that cannot flush (analytics-go before Flush(ctx)) is reported as client_outdated: its events
-// go out on its own schedule or at Close.
-func flushClients(ctx context.Context, clients []analytics.Client) bool {
-	var wg sync.WaitGroup
+// flushClients flushes each client in parallel within ctx; finished is false when ctx ended first
+// (also when the flushes ended with it). The caller reports any timeout, then calls finish: it
+// reports the first error a client's own Flush returned until then, unchanged, as flush_failed
+// (at where), even after a timeout, since the app's own later Flush finds an empty queue, and is
+// false when there was one. A flush that fails after finish is reported as flush_failed from its
+// own goroutine. An error that is the expired ctx's own (the flush gave up at the deadline) is the
+// timeout, never flush_failed. A client that cannot flush (analytics-go before Flush(ctx)) is
+// reported as client_outdated: its events go out on its own schedule or at Close.
+func flushClients(ctx context.Context, where string, clients []analytics.Client) (finished bool, finish func() bool) {
+	var (
+		wg     sync.WaitGroup
+		mu     sync.Mutex
+		first  error // written by flushes that may outlive ctx: read only under mu
+		closed bool  // finish ran: later errors are reported from their goroutine
+	)
 	for _, c := range clients {
 		var flush func() error
 		switch f := c.(type) {
@@ -160,8 +177,18 @@ func flushClients(ctx context.Context, clients []analytics.Client) bool {
 		}
 		wg.Go(func() {
 			safely(func() {
-				if err := flush(); err != nil {
-					debugf("analytics flush failed (ignored)", "error", err)
+				err := flush()
+				if err == nil || timedOut(ctx, err) {
+					return
+				}
+				mu.Lock()
+				late := closed
+				if !late && first == nil {
+					first = err
+				}
+				mu.Unlock()
+				if late {
+					report(KindFlushFailed, where, err)
 				}
 			})
 		})
@@ -173,10 +200,27 @@ func flushClients(ctx context.Context, clients []analytics.Client) bool {
 	}()
 	select {
 	case <-done:
-		return true
+		// done and ctx.Done() can be ready together: flushes that ended with ctx did not finish in time
+		finished = ctx.Err() == nil
 	case <-ctx.Done():
-		return false
 	}
+	return finished, func() bool {
+		// under the lock, so a late failure cannot take flush_failed's rate-limit slot ahead of this one
+		mu.Lock()
+		defer mu.Unlock()
+		closed = true
+		if first != nil {
+			report(KindFlushFailed, where, first)
+		}
+		return first == nil
+	}
+}
+
+// timedOut reports whether err is ctx's own error once ctx has ended: a flush that gave up at the
+// deadline, which is a timeout, not a client failure.
+func timedOut(ctx context.Context, err error) bool {
+	ctxErr := ctx.Err()
+	return ctxErr != nil && (errors.Is(err, ctxErr) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled))
 }
 
 var errNoClientFlush = errors.New("rudderstackai: the RudderStack client has no Flush(ctx); upgrade analytics-go, or Close the client before the process exits")
@@ -188,12 +232,17 @@ var errNoClientFlush = errors.New("rudderstackai: the RudderStack client has no 
 // implementing [Flusher] is flushed as before; an older analytics-go client cannot be flushed
 // (reported as client_outdated), so Close it before the process exits. Flush never panics,
 // never ends open interactions and never closes a client. It reports false, and flush_timeout,
-// when ctx ended first.
+// when ctx ended first. Because it drains your client's queue, your own client.Flush afterwards
+// has nothing left to fail on: when your client's flush fails, Flush returns false and passes your
+// client's error, unchanged, to the [WithOnError] hook as flush_failed, so handle flush errors there.
+// A deadline does not hide an error a client returned before it: both kinds are reported; one
+// returned after Flush returned is reported then, from the flush's own goroutine.
 //
 //	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 //	defer cancel()
 //	rudderstackai.Flush(ctx)
 func Flush(ctx context.Context) (finished bool) {
+	var finish func() bool
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -208,12 +257,16 @@ func Flush(ctx context.Context) (finished bool) {
 		if c := cfg().analytics; c != nil {
 			clients = append(clients, c)
 		}
-		finished = flushClients(ctx, clients) && finished
+		var drained bool
+		drained, finish = flushClients(ctx, "Flush", clients)
+		finished = drained && finished
 	})
+	// both reported, whichever happened: a timeout does not hide an error a client returned before it
 	if !finished {
 		report(KindFlushTimeout, "Flush", ctx.Err())
 	}
-	return finished
+	ok := finish == nil || finish()
+	return finished && ok
 }
 
 // FlushTimeout is Flush with a timeout (zero: 10 seconds).

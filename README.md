@@ -266,12 +266,12 @@ Before a script, worker or serverless handler exits, flush within a deadline; on
 ```go
 ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 defer cancel()
-rudderstackai.Flush(ctx)    // classifications, scores, held retries, then each client; false on timeout
+rudderstackai.Flush(ctx)    // classifications, scores, held retries, then each client; false on timeout or a client flush error
 rudderstackai.Shutdown(ctx) // on SIGTERM: also ends open interactions as incomplete (end_reason shutdown)
 client.Close()              // the SDK never closes your client
 ```
 
-An analytics-go client with `Flush(ctx)` sends its queue on `Flush`; an older one cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
+An analytics-go client with `Flush(ctx)` sends its queue on `Flush`; an older one cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
 
 ## Events
 
