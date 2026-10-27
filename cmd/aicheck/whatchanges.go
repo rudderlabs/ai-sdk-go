@@ -142,6 +142,9 @@ func norm(v any, k string) any {
 		for i, item := range v {
 			out[i] = norm(item, k)
 		}
+		if k == "argument_keys" { // unordered (known limit argument_keys_unordered): compare it as a set
+			sort.SliceStable(out, func(i, j int) bool { return dumps(out[i], false) < dumps(out[j], false) })
+		}
 		return out
 	}
 	return redact(v, k)
