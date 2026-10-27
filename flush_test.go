@@ -300,3 +300,68 @@ func TestFlushTimeoutDoesNotHideAFlushError(t *testing.T) {
 		})
 	}
 }
+
+// lateClient's Flush(ctx) outlives the deadline, then fails with an error of its own.
+type lateClient struct {
+	sink
+	err     error
+	release chan struct{}
+}
+
+func (c *lateClient) Flush(ctx context.Context) error {
+	<-ctx.Done()
+	<-c.release
+	return c.err
+}
+
+// A client error that arrives after Flush returned is still reported, once, from the flush's own
+// goroutine; an error that is the expired ctx's own is the timeout, never flush_failed.
+func TestFlushReportsAClientErrorAfterTheDeadline(t *testing.T) {
+	seen := &seenErrors{}
+	late := &lateClient{err: errors.New("dataplane said no, late"), release: make(chan struct{})}
+	setupAI(t, WithOnError(seen.hook), WithAnalytics(late))
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if Flush(ctx) {
+		t.Fatal("reported success past the deadline")
+	}
+	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "Flush"}) {
+		t.Fatalf("hook saw %+v before the late error", got)
+	}
+	close(late.release)
+	deadline := time.Now().Add(5 * time.Second)
+	for len(seen.all()) < 2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(20 * time.Millisecond) // nothing more arrives
+	got := seen.all()
+	if len(got) != 2 || got[1] != (ErrorInfo{Kind: KindFlushFailed, Where: "Flush"}) {
+		t.Fatalf("hook saw %+v", got)
+	}
+	seen.mu.Lock()
+	defer seen.mu.Unlock()
+	if seen.errs[1] != late.err {
+		t.Fatalf("error %v", seen.errs[1])
+	}
+}
+
+func TestTimedOut(t *testing.T) {
+	live := context.Background()
+	ended, cancel := context.WithCancel(context.Background())
+	cancel()
+	wrapped := fmt.Errorf("flush: %w", context.DeadlineExceeded)
+	for _, c := range []struct {
+		ctx  context.Context
+		err  error
+		want bool
+	}{
+		{live, context.Canceled, false},
+		{ended, context.Canceled, true},
+		{ended, wrapped, true},
+		{ended, errors.New("dataplane said no"), false},
+	} {
+		if got := timedOut(c.ctx, c.err); got != c.want {
+			t.Errorf("timedOut(%v, %v) = %v", c.ctx.Err(), c.err, got)
+		}
+	}
+}
