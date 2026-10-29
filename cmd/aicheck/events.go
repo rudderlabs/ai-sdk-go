@@ -24,8 +24,11 @@ var (
 	clientCopies    = set("ai_user_prompt_created", "ai_response_received", "ai_user_action")
 	failureStatuses = []string{"cancelled", "error", "incomplete", "timeout"} // what an app-caught failure may report
 	clientOnly      = set("ai_assistant_opened", "ai_assistant_closed", "ai_conversation_started",
-		"ai_conversation_switched", "ai_conversation_renamed", "ai_conversation_deleted")
-	mcpEvents = set("mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
+		"ai_conversation_switched", "ai_conversation_renamed", "ai_conversation_deleted", "ai_conversation_pinned",
+		"ai_conversation_shared", "ai_agent_selected", "ai_suggestion_shown", "ai_feedback_requested", "ai_limit_reached")
+	// feedback about a whole conversation or feature: its interaction_id is minted for it, no answer has it
+	scopedFeedback = []string{"conversation", "feature"}
+	mcpEvents      = set("mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
 		"mcp_resource_read", "mcp_prompt_used", "mcp_event_subscription_changed", "mcp_event_delivered")
 	// a standalone score carries a feature only when given; ai_otel_span (tracing) carries none by default
 	optionalFeature      = set("ai_interaction_scored", "ai_otel_span")
@@ -167,7 +170,9 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 		context := obj(m.Get("context"))
 		w := obj(context.Get("wrapperLibrary"))
-		isClient := props.Get("source") == "client" && isClientName(name) // a legacy event may use source too
+		// a legacy event may use source too; a client app's declared tool event carries tool_name or tool_status
+		isClient := props.Get("source") == "client" &&
+			(isClientName(name) || (!reserved(name) && w.Len() == 0 && (props.Has("tool_name") || props.Has("tool_status"))))
 		where := fmt.Sprintf("#%d %s", i, name)
 		// Provenance: only the AI SDKs' wrapperLibrary marks an AI send; another adapter's tag is still legacy,
 		// unless the event uses an AI name not listed in --expect-legacy (then it fails the SDK-name check).
@@ -198,7 +203,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			fail("%s: client-only event without source: client", where)
 		}
 		if isClient { // client names come from the client schema's $defs
-			errs, err := sch.errors(sch.client, name, props)
+			clientDefinition := name
+			if !reserved(name) {
+				clientDefinition = "declared_tool_event"
+			}
+			errs, err := sch.errors(sch.client, clientDefinition, props)
 			if err != nil {
 				return 0, err
 			}
@@ -214,7 +223,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 		}
 		if specEvents[name] || mcpEvents[name] || isDeclared { // client copies: spec and client schema
-			if props.Get("source") == "client" && !clientCopies[name] {
+			if props.Get("source") == "client" && !clientCopies[name] && !isClient {
 				fail("%s: source: client on an event the browser never sends", where)
 			}
 			errs, err := sch.errors(sch.spec, definition, props)
@@ -332,9 +341,13 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 			// a paused run resumes under the same interaction_id: count only final answers
 			paused := name == "ai_response_received" && props.Get("response_status") == "paused"
-			if paused {
+			scoped := name == "ai_user_action" && in(obj(props.Get("action_details")).Get("feedback_scope"), scopedFeedback)
+			switch {
+			case paused:
 				c[side{name + " (paused)", s}]++
-			} else {
+			case scoped:
+				c[side{name + " (scoped)", s}]++
+			default:
 				c[side{name, s}]++
 			}
 			if conversation, ok := key(props.Get("conversation_id")); ok {
@@ -534,7 +547,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		if declared[iid] > 0 && serverAnswer+clientAnswer+serverPaused+clientPaused == 0 {
 			var names []string
 			for k := range c {
-				if !specEvents[k.event] {
+				if !reserved(k.event) {
 					names = append(names, k.event)
 				}
 			}

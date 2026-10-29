@@ -235,3 +235,14 @@ func TestTrackScore(t *testing.T) {
 		t.Fatal(p)
 	}
 }
+
+func TestV04ActionsAreStandard(t *testing.T) {
+	r := setupAI(t)
+	logs := captureLogs(t)
+	for _, action := range []ActionType{ActionFeedbackDismissed, ActionExported, ActionReverted} {
+		TrackAction(context.Background(), TrackActionOptions{UserID: "u", ConversationID: "c", InteractionID: "i", ActionType: action})
+	}
+	if logs.count("non-standard") != 0 || len(r.named("ai_user_action")) != 3 {
+		t.Fatalf("actions: %v; logs: %s", r.names(), logs)
+	}
+}

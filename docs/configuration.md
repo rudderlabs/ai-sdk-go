@@ -48,7 +48,7 @@ err := rudderstackai.Configure(
 | `WithEventRules(rules)`                 | none    | [Declared tool events](events.md#declared-tool-events). Replaces earlier rules; event names starting with `ai_` or `mcp_` are rejected. |
 | `WithClassifier(*ClassifierOptions)`    | none    | [Intent classification](#classifier-and-evaluator). Nil turns it off.                                                         |
 | `WithEvaluator(fn)`                     | none    | [Scoring](#classifier-and-evaluator) after each successful answer. Nil turns it off.                                          |
-| `WithServerFeedback(on)`                | on      | `TrackAction` sends `ai_user_action`. Off when the browser sends its own copy (`source: "client"`).                           |
+| `WithServerFeedback(on)`                | on      | `TrackAction` sends `ai_user_action`. Off when the client app sends its own copy (`source: "client"`).                        |
 | `WithPrices(map[string]ModelPrice)`     | none    | Registers prices, as [`RegisterPrice`](#pricing) for each. Merged into the registered ones.                                   |
 | `WithTraceIDFrom(fn)`                   | none    | Reads [`trace_id`](#trace_id) from the context, for example `rudderotel.TraceID` for the active OpenTelemetry span.        |
 | `WithLimits(Limits)`                    | see [Limits](#limits) | Memory caps. A zero field keeps its default.                                                                  |

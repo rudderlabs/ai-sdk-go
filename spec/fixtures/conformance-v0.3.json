@@ -37425,6 +37425,114 @@
           }
         }
       ]
+    },
+    {
+      "name": "v04_action_types_and_details",
+      "description": "Since v0.4. Server feedback APIs accept feedback dismissal, exports and suggestion reversion with feedback and item details.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "feedback_dismissed",
+            "interaction_id": "int_given",
+            "conversation_id": "conv_track_action_with_conv",
+            "user_id": "user_1",
+            "action_details": {
+              "feedback_scope": "conversation",
+              "feedback_reasons": [
+                "accurate"
+              ]
+            }
+          }
+        },
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "exported",
+            "interaction_id": "int_given",
+            "conversation_id": "conv_track_action_with_conv",
+            "user_id": "user_1",
+            "action_details": {
+              "destination": "ide"
+            }
+          }
+        },
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "reverted",
+            "interaction_id": "int_given",
+            "conversation_id": "conv_track_action_with_conv",
+            "user_id": "user_1",
+            "action_details": {
+              "items_total": 4,
+              "items_accepted": 0
+            }
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_track_action_with_conv",
+            "interaction_id": "int_given",
+            "action_type": "feedback_dismissed",
+            "action_details": {
+              "feedback_scope": "conversation",
+              "feedback_reasons": [
+                "accurate"
+              ]
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_track_action_with_conv",
+            "interaction_id": "int_given",
+            "action_type": "exported",
+            "action_details": {
+              "destination": "ide"
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_track_action_with_conv",
+            "interaction_id": "int_given",
+            "action_type": "reverted",
+            "action_details": {
+              "items_total": 4,
+              "items_accepted": 0
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
     }
   ]
 }

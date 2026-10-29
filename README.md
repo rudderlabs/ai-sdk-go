@@ -205,7 +205,7 @@ Call `WrapMCPServer` once, before serving; it takes its own options (`Configure`
 
 ### Feedback
 
-`TrackAction(ctx, TrackActionOptions{...})` sends `ai_user_action`, typically from your feedback endpoint ([quick start](#quick-start)). Action types: `feedback_given`, `feedback_retracted`, `copied_response`, `shared`, `reported`, `regenerated`, `accepted`, `rejected`, `edited`, `clicked_through`. `InteractionID` and `ConversationID` are required (else the event is dropped with a warning); `feedback_text` in `ActionDetails` is sent only with content capture on. For a one-shot interaction, pass its ID as both. When the client app (web or mobile) sends its own copy, `WithServerFeedback(false)` turns the server copy off.
+`TrackAction(ctx, TrackActionOptions{...})` sends `ai_user_action`, typically from your feedback endpoint ([quick start](#quick-start)). Action types: `feedback_given`, `feedback_retracted`, `feedback_dismissed`, `copied_response`, `shared`, `exported`, `reported`, `regenerated`, `accepted`, `rejected`, `edited`, `reverted`, `clicked_through`. `InteractionID` and `ConversationID` are required (else the event is dropped with a warning); `feedback_text` in `ActionDetails` is sent only with content capture on. For a one-shot interaction, pass its ID as both. When the client app (web or mobile) sends its own copy, `WithServerFeedback(false)` turns the server copy off.
 
 ### Scores
 
