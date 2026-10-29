@@ -1,0 +1,15 @@
+{
+  "description": "Per-event sampling (configure sample rates). An event with an interaction_id is kept when hash / 2^32 < rate, where hash is the first 4 bytes, big-endian, of SHA-256 over the UTF-8 interaction_id. Every SDK must reach the same hash and the same decision.",
+  "cases": [
+    { "interaction_id": "11111111-1111-4111-8111-111111111111", "hash": 3178652325, "rate": 0.75, "keep": true },
+    { "interaction_id": "11111111-1111-4111-8111-111111111111", "hash": 3178652325, "rate": 0.74, "keep": false },
+    { "interaction_id": "3f2c9a4e-8b1d-4c6f-9e2a-7d5b1c0e4a93", "hash": 1692005180, "rate": 0.5, "keep": true },
+    { "interaction_id": "3f2c9a4e-8b1d-4c6f-9e2a-7d5b1c0e4a93", "hash": 1692005180, "rate": 0.39, "keep": false },
+    { "interaction_id": "i1", "hash": 1289336679, "rate": 0.31, "keep": true },
+    { "interaction_id": "i1", "hash": 1289336679, "rate": 0.3, "keep": false },
+    { "interaction_id": "interaction-ü-✓", "hash": 75118315, "rate": 0.1, "keep": true },
+    { "interaction_id": "interaction-ü-✓", "hash": 75118315, "rate": 0.01, "keep": false },
+    { "interaction_id": "22222222-2222-4222-8222-222222222222", "hash": 3025467436, "rate": 1, "keep": true },
+    { "interaction_id": "22222222-2222-4222-8222-222222222222", "hash": 3025467436, "rate": 0, "keep": false }
+  ]
+}

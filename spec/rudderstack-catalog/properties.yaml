@@ -19,6 +19,13 @@ spec:
       description: One user prompt and the one answer it gets; joins feedback to the answer.
       config:
         min_length: 1
+    - id: sample_rate
+      name: sample_rate
+      type: number
+      description: Since v0.4. The rate the event was sampled at when sent; absent when not sampled. Weight a row by 1 / sample_rate.
+      config:
+        minimum: 0
+        maximum: 1
     - id: feature
       name: feature
       type: string
