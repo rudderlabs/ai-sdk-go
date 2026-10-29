@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: ['main']
+  # No base-branch filter: stacked PRs target other feature branches and still need CI.
   pull_request:
-    branches: ['main']
   workflow_dispatch:
 
 concurrency:
