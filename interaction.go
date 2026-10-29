@@ -329,6 +329,8 @@ type PausedInteraction struct {
 	ParentInteractionID string  `json:"parent_interaction_id,omitempty"`
 	Intent              string  `json:"intent,omitempty"`
 	TraceID             string  `json:"trace_id,omitempty"`
+	Outcome             string  `json:"outcome,omitempty"`
+	Integration         string  `json:"integration,omitempty"`
 	// SeenResponseIDs retains provider/response ID pairs already counted. Since v0.4.
 	SeenResponseIDs [][2]string `json:"seen_response_ids,omitempty"`
 	// PendingCalls and PendingTools carry usage accepted after the paused segment closed. Since v0.4.
@@ -620,6 +622,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		i.userID, i.anonymousID = snapshot.UserID, snapshot.AnonymousID
 		i.feature, i.surface = snapshot.Feature, surfaceOf(snapshot.Surface)
 		i.accountID, i.onBehalfOf = snapshot.AccountID, snapshot.OnBehalfOf
+		i.outcome, i.integration = snapshot.Outcome, snapshot.Integration
 		i.restorePending(snapshot)
 		i.pauseCount = max(snapshot.PauseCount, 0)
 		for _, pair := range snapshot.SeenResponseIDs {
@@ -644,11 +647,20 @@ func first2(a, b Surface) Surface {
 
 // fillTraceID takes the trace ID [WithTraceIDFrom] finds in the context, unless one is set.
 func (i *Interaction) fillTraceID(ctx context.Context) {
-	if i.traceID != "" || ctx == nil {
+	i.mu.Lock()
+	needed := i.traceID == "" && !i.ended && ctx != nil
+	i.mu.Unlock()
+	if !needed {
 		return
 	}
 	if from := cfg().traceIDFrom; from != nil {
-		callback("WithTraceIDFrom", func() error { i.traceID = from(ctx); return nil })
+		var traceID string
+		callback("WithTraceIDFrom", func() error { traceID = from(ctx); return nil })
+		i.mu.Lock()
+		if i.traceID == "" && !i.ended {
+			i.traceID = traceID
+		}
+		i.mu.Unlock()
 	}
 }
 
@@ -1396,7 +1408,6 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		return i.snapshotLocked()
 	}
 	i.pausing = true
-	i.pausedAt = time.Now()
 	i.pauseCount++
 	hooks := i.beforeEnd
 	i.beforeEnd = nil
@@ -1413,16 +1424,17 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	for _, fn := range hooks {
 		safely(fn)
 	}
-	i.mu.Lock()
-	tools := slices.Clone(i.tools)
-	i.mu.Unlock()
-	// Calls whose outcome never arrived are sent now, as unknown: the next segment starts empty.
-	i.fireToolEvents(tools, true)
 	var responseText string
 	var responseOK bool
 	if o.ResponseText != "" && i.captureContent {
 		responseText, responseOK = redactText(o.ResponseText)
 	}
+	i.mu.Lock()
+	tools := slices.Clone(i.tools)
+	i.mu.Unlock()
+	// Include tools added by redaction before the next segment starts empty.
+	// Calls whose outcome never arrived are sent now, as unknown.
+	i.fireToolEvents(tools, true)
 	i.mu.Lock()
 	defer i.unlock()
 	if i.ended {
@@ -1434,6 +1446,8 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		props = customProperties(o.ExtraProperties)
 		maps.Copy(props, i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false))
 	})
+	// Finalization belongs to segment latency, not the subsequent paused interval.
+	i.pausedAt = time.Now()
 	if props != nil {
 		i.sendLocked("ai_response_received", func() map[string]any { return props })
 	}
@@ -1491,7 +1505,7 @@ func (i *Interaction) resumeLocked() {
 func (i *Interaction) Paused() bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return !i.pausedAt.IsZero()
+	return i.pausing || !i.pausedAt.IsZero()
 }
 
 // snapshotLocked is the paused run's snapshot; not ok unless it is paused.
@@ -1505,6 +1519,7 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		UserID: i.userID, AnonymousID: i.anonymousID, Feature: i.feature, Surface: i.surface,
 		AccountID: i.accountID, OnBehalfOf: i.onBehalfOf, TriggerSource: i.triggerSource, TaskName: i.taskName,
 		TriggerEventID: i.triggerEventID, ParentInteractionID: i.parent, Intent: i.intent, TraceID: i.traceID,
+		Outcome: i.outcome, Integration: i.integration,
 	}
 	for key := range i.seen {
 		provider, responseID, _ := strings.Cut(key, "\x00")
@@ -2237,15 +2252,21 @@ func (i *Interaction) adoptAnalytics(c analytics.Client) {
 // callStarted: a model call of this interaction starts; the held prompt event goes out now.
 func (i *Interaction) callStarted(ctx context.Context, integration string) {
 	i.mu.Lock()
-	defer i.unlock()
 	if i.ended {
+		i.mu.Unlock()
 		return
 	}
 	i.resumeLocked()
 	if i.integration == "" {
 		i.integration = integration
 	}
+	i.mu.Unlock()
 	i.fillTraceID(ctx)
+	i.mu.Lock()
+	defer i.unlock()
+	if i.ended {
+		return
+	}
 	i.settled = true
 	i.flushLocked()
 }

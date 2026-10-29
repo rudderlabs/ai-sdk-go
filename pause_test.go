@@ -14,6 +14,121 @@ import (
 
 var pauseCall = LLMCall{Provider: "openai", Model: "gpt-4o-mini", InputTokens: 10, OutputTokens: 2}
 
+func TestPauseTraceProviderReentry(t *testing.T) {
+	for _, method := range []string{"Ended", "Pause"} {
+		t.Run(method, func(t *testing.T) {
+			r := setupAI(t)
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+			available := false
+			if err := Configure(WithTraceIDFrom(func(context.Context) string {
+				if !i.mu.TryLock() {
+					return ""
+				}
+				i.mu.Unlock()
+				available = true
+				if method == "Pause" {
+					i.Pause(PauseOptions{})
+				} else {
+					i.Ended()
+				}
+				// A value set during the callback must win over its return value.
+				i.SetTraceID("explicit")
+				return "from-hook"
+			})); err != nil {
+				t.Fatal(err)
+			}
+			i.callStarted(context.Background(), IntegrationOpenAI)
+			i.End(EndOptions{})
+			if !available || lastResponse(t, r)["trace_id"] != "explicit" {
+				t.Fatal("trace provider held the interaction lock or overwrote an explicit trace ID")
+			}
+		})
+	}
+}
+
+func TestPauseRedactorAddedToolsEmitBeforeResponse(t *testing.T) {
+	var i *Interaction
+	r := setupAI(t, WithCaptureContent(true), WithToolBreakdown(true),
+		WithEventRules(EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "lookup_done"}}}),
+		WithRedactHook(func(text string) (string, error) {
+			i.RecordToolCalls(ToolCall{ID: "redactor-tool", Name: "lookup"})
+			return text, nil
+		}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	i.Pause(PauseOptions{ResponseText: "approval"})
+	if mustJSON(r.names()) != `["lookup_done","ai_response_received"]` ||
+		lastResponse(t, r)["tool_call_count"] != 1 {
+		t.Fatal("redactor tool was cleared without its event", r.names())
+	}
+	i.Resume()
+	i.End(EndOptions{})
+	if len(r.named("lookup_done")) != 1 || lastResponse(t, r)["tool_call_count"] != 0 {
+		t.Fatal("redactor tool was emitted or counted twice")
+	}
+}
+
+func TestPauseJSONPreservesOutcomeAndIntegration(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.SetOutcome("escalated")
+	call := pauseCall
+	call.Integration = IntegrationOpenAI
+	i.RecordCall(call)
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("pause failed")
+	}
+	var stored PausedInteraction
+	if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+		t.Fatal(err)
+	}
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	i.Resume()
+	i.End(EndOptions{})
+	restored.End(EndOptions{})
+	for _, event := range r.named("ai_response_received") {
+		if event.Properties["outcome"] != "escalated" || integrationOf(event) != IntegrationOpenAI {
+			t.Fatal("snapshot lost outcome or integration", event)
+		}
+	}
+}
+
+func TestPauseTimestampExcludesFinalization(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	var finalized time.Time
+	i.onBeforeEnd(func() {
+		time.Sleep(30 * time.Millisecond)
+		finalized = time.Now()
+	})
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok || snapshot.PausedAt < finalized.UnixMilli() {
+		t.Fatal("pause timestamp preceded finalization", snapshot.PausedAt, finalized)
+	}
+	i.Resume()
+	i.End(EndOptions{})
+	segments := r.named("ai_response_received")
+	if segments[0].Properties["latency_ms"].(int64) < 30 {
+		t.Fatal("segment latency omitted finalization")
+	}
+}
+
+func TestFinalizerSuppliedPauseRemainsResumable(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.onBeforeEnd(func() { i.hintOutcome(StatusPaused, "") })
+	i.End(EndOptions{})
+	if i.Ended() || !i.Paused() || lastResponse(t, r)["response_status"] != "paused" {
+		t.Fatal("finalizer permanently ended a paused interaction")
+	}
+	i.Resume()
+	i.RecordCall(pauseCall)
+	i.End(EndOptions{})
+	if !i.Ended() || i.Paused() || lastResponse(t, r)["llm_call_count"] != 1 {
+		t.Fatal("finalizer pause did not resume")
+	}
+}
+
 func TestRestoreSharedPendingUsageWithoutReplayingCallEvents(t *testing.T) {
 	for _, unpriced := range []bool{false, true} {
 		t.Run(fmt.Sprint(unpriced), func(t *testing.T) {
