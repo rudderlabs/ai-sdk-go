@@ -1382,18 +1382,13 @@ func (i *Interaction) Pause(o PauseOptions) (paused PausedInteraction, ok bool) 
 	return paused, ok
 }
 
-type pauseInFlight struct {
-	complete bool
-}
+type pauseInFlight struct{}
 
 func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool) {
 	i.mu.Lock()
-	if flight := i.pauseFlight; flight != nil {
-		defer i.mu.Unlock()
-		if !flight.complete {
-			return PausedInteraction{}, false
-		}
-		return i.snapshotLocked()
+	if i.pauseFlight != nil {
+		i.mu.Unlock()
+		return PausedInteraction{}, false
 	}
 	if i.ended || !i.pausedAt.IsZero() {
 		defer i.mu.Unlock()
@@ -1435,7 +1430,6 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	defer i.unlock()
 	if i.ended {
 		snapshot, ok = i.snapshotLocked()
-		flight.complete = true
 		return snapshot, ok
 	}
 	var props map[string]any
@@ -1454,8 +1448,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
 	unregister(i)
 	snapshot, ok = i.snapshotLocked()
-	// Publish before unlock emits events, so callbacks can safely ask for the completed pause.
-	flight.complete = true
+	// The flight stays in progress until unlock finishes delivery and deferred reporting.
 	return snapshot, ok
 }
 

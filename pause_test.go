@@ -152,7 +152,7 @@ func TestPauseDeliveryCarriesLateUsageIntoNextSegment(t *testing.T) {
 			close(release)
 			first := <-done
 			after, afterOK := i.Pause(PauseOptions{})
-			if !first.ok || !duringOK || !afterOK || mustJSON(first.snapshot) != mustJSON(during) || mustJSON(after) != mustJSON(during) {
+			if !first.ok || duringOK || !afterOK || mustJSON(first.snapshot) != mustJSON(after) {
 				t.Fatal("snapshots did not include writes accepted during delivery", first, during, after)
 			}
 			if mustJSON(after.SeenResponseIDs) != `[["openai","first"],["openai","late"]]` {
@@ -207,7 +207,7 @@ func TestPauseEmissionPreservesEndReentryGuard(t *testing.T) {
 		i.RecordCall(call)
 	})
 	snapshot, ok := i.Pause(PauseOptions{})
-	if !ok || !nestedOK || mustJSON(snapshot) != mustJSON(nested) || i.Ended() || len(r.named("ai_response_received")) != 1 {
+	if !ok || nestedOK || len(snapshot.SeenResponseIDs) != 1 || i.Ended() || len(r.named("ai_response_received")) != 1 {
 		t.Fatal("emission callback ended the in-flight pause", snapshot, nested)
 	}
 }
@@ -839,7 +839,7 @@ func TestAllCallbackTypesReleaseLockAndAllowLifecycleReentry(t *testing.T) {
 			case <-time.After(3 * time.Second):
 				t.Fatal("callback deadlocked")
 			}
-			if !entered || (source != "delivery" && nestedOK) || !accepted {
+			if !entered || nestedOK || !accepted {
 				t.Fatal("callback lifecycle results", entered, nestedOK, accepted)
 			}
 			i.Resume()
@@ -916,5 +916,49 @@ func TestBackgroundCallbackTypesAllowLifecycleReentry(t *testing.T) {
 				t.Fatal("double emission or lost usage", r.names())
 			}
 		})
+	}
+}
+
+func TestPauseDeliveryReentryRemainsInProgress(t *testing.T) {
+	r := setupAI(t)
+	client := &pauseReentrantClient{recorder: r}
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true, Analytics: client})
+	i.RecordCall(pauseCall)
+	results := make(chan bool, 2)
+	client.reenter = func() {
+		// A delivery callback can delegate to another goroutine and wait for it.
+		go func() { _, ok := i.Pause(PauseOptions{}); results <- ok }()
+		select {
+		case ok := <-results:
+			if ok {
+				t.Error("delivery exposed a completed pause")
+			}
+		case <-time.After(time.Second):
+			t.Error("delivery callback blocked waiting on Pause")
+		}
+		i.End(EndOptions{})
+		call := pauseCall
+		call.ResponseID = "delivery"
+		if !i.RecordCall(call) {
+			t.Error("late usage rejected")
+		}
+		_, ok := i.Pause(PauseOptions{})
+		if ok {
+			t.Error("nested pause after late usage returned ok")
+		}
+	}
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok || len(snapshot.PendingCalls) != 1 {
+		t.Fatal("outer pause lost late usage", snapshot, ok)
+	}
+	after, afterOK := i.Pause(PauseOptions{})
+	if !afterOK || mustJSON(snapshot) != mustJSON(after) {
+		t.Fatal("completed snapshot changed")
+	}
+	i.Resume()
+	i.End(EndOptions{})
+	segments := r.named("ai_response_received")
+	if len(segments) != 2 || segments[0].Properties["llm_call_count"] != 1 || segments[1].Properties["llm_call_count"] != 1 {
+		t.Fatal("lost or doubled usage", r.names())
 	}
 }
