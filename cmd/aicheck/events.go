@@ -19,7 +19,7 @@ const specVersion = "0.3.0"
 
 var (
 	sdkNames   = []string{"@rudderstack/ai", "ai-sdk-go", "rudderstack-ai"} // context.wrapperLibrary.name: Node.js, Go, Python
-	specEvents = set("ai_user_prompt_created", "ai_response_received", "ai_user_action",
+	specEvents = set("ai_user_prompt_created", "ai_response_received", "ai_task_started", "ai_user_action",
 		"ai_interaction_classified", "ai_interaction_scored", "ai_llm_response_received", "ai_limit_reached")
 	clientCopies    = set("ai_user_prompt_created", "ai_response_received", "ai_user_action")
 	failureStatuses = []string{"cancelled", "error", "incomplete", "timeout"} // what an app-caught failure may report

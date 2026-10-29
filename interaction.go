@@ -59,6 +59,11 @@ type InteractionOptions struct {
 	TriggerEventID string
 	// ParentInteractionID is the interaction that started this one: agent hand-offs, sub-tasks.
 	ParentInteractionID string
+	// Resume continues a paused run from the snapshot [Interaction.Pause] returned, in this or
+	// another process: its IDs, identity and background fields win over these options, no prompt
+	// event or ai_task_started is sent, and its pause count and paused time carry on to the final
+	// answer.
+	Resume *PausedInteraction
 	// Analytics is the RudderStack client for this interaction. Wins over the context and the
 	// global client.
 	Analytics analytics.Client
@@ -286,6 +291,65 @@ type EndOptions struct {
 	endReason string
 }
 
+// PauseOptions configures [Interaction.Pause].
+type PauseOptions struct {
+	// Reason is what the run waits for (pause_reason). Defaults to PauseOther.
+	Reason PauseReason
+	// ResponseText is what the run said before it paused, such as the question. Sent as
+	// response_text only with content capture on.
+	ResponseText string
+	// ExtraProperties are custom properties for this ai_response_received. SDK-owned names are
+	// ignored.
+	ExtraProperties map[string]any
+}
+
+// PausedInteraction is a paused run, as JSON: store it with the run's own state and pass it as
+// [InteractionOptions.Resume] or [TaskOptions.Resume] to continue the same interaction later, in
+// any process. Keys match the event properties.
+type PausedInteraction struct {
+	InteractionID  string  `json:"interaction_id"`
+	ConversationID string  `json:"conversation_id"`
+	Trigger        Trigger `json:"trigger"`
+	// PauseCount is the pauses so far, this one included.
+	PauseCount int `json:"pause_count"`
+	// TotalPausedMS is the time spent paused before this pause.
+	TotalPausedMS int64 `json:"total_paused_ms"`
+	// PausedAt is when this pause started (Unix milliseconds).
+	PausedAt            int64   `json:"paused_at"`
+	UserID              string  `json:"user_id,omitempty"`
+	AnonymousID         string  `json:"anonymous_id,omitempty"`
+	Feature             string  `json:"feature,omitempty"`
+	Surface             Surface `json:"surface,omitempty"`
+	AccountID           string  `json:"account_id,omitempty"`
+	OnBehalfOf          string  `json:"on_behalf_of,omitempty"`
+	TriggerSource       string  `json:"trigger_source,omitempty"`
+	TaskName            string  `json:"task_name,omitempty"`
+	TriggerEventID      string  `json:"trigger_event_id,omitempty"`
+	ParentInteractionID string  `json:"parent_interaction_id,omitempty"`
+	Intent              string  `json:"intent,omitempty"`
+	TraceID             string  `json:"trace_id,omitempty"`
+}
+
+// resumeFrom applies a Resume snapshot's fields to o; false (with a warning) when it is not one.
+func resumeFrom(o *InteractionOptions) bool {
+	r := o.Resume
+	if r == nil {
+		return false
+	}
+	if r.InteractionID == "" || r.ConversationID == "" ||
+		(r.Trigger != TriggerUser && r.Trigger != TriggerSystem) ||
+		r.PauseCount < 1 || int64(r.PauseCount) > 9007199254740991 ||
+		r.TotalPausedMS < 0 || r.TotalPausedMS > 9007199254740991 || r.PausedAt < 0 || r.PausedAt > 9007199254740991 {
+		warnOnce("invalid-resume", "Resume: not a paused interaction snapshot; starting a new interaction", 0)
+		return false
+	}
+	o.InteractionID, o.ConversationID, o.Trigger = r.InteractionID, r.ConversationID, r.Trigger
+	o.UserID, o.AnonymousID, o.Feature, o.Surface = r.UserID, r.AnonymousID, r.Feature, r.Surface
+	o.AccountID, o.OnBehalfOf, o.TriggerSource, o.TaskName = r.AccountID, r.OnBehalfOf, r.TriggerSource, r.TaskName
+	o.TriggerEventID, o.ParentInteractionID, o.Intent, o.TraceID = r.TriggerEventID, r.ParentInteractionID, r.Intent, r.TraceID
+	return true
+}
+
 type recordedCall struct {
 	credits                                          *float64
 	callPurpose                                      string
@@ -346,14 +410,21 @@ type Interaction struct {
 	captureContent, toolBreakdown, classify                                bool
 	explicitAnalytics                                                      analytics.Client
 	msgContext                                                             map[string]any
-	started                                                                time.Time
+	// resumed: continued from a Resume snapshot.
+	resumed bool
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
 	untracked bool
 	// opened and elem place it among the open interactions (guarded by open.mu).
 	opened time.Time
 	elem   *list.Element
 
-	mu                 sync.Mutex
+	mu sync.Mutex
+	// started is the start of the current segment: the run, or its latest resume.
+	started time.Time
+	// pausedAt is when the current pause started; zero while running.
+	pausedAt           time.Time
+	pauseCount         int
+	pausedTotal        time.Duration
 	adapterAnalytics   analytics.Client
 	intent, outcome    string
 	traceID            string
@@ -463,6 +534,8 @@ func boolOr(v *bool, fallback bool) bool {
 }
 
 func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
+	snapshot := o.Resume
+	resumed := resumeFrom(&o)
 	c := cfg()
 	cv := valuesFrom(ctx)
 	if cv == nil {
@@ -531,6 +604,15 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		toolsByID:         map[string]*recordedTool{},
 		firstToken:        -1,
 		disconnected:      cv.disconnected,
+		resumed:           resumed,
+	}
+	if resumed {
+		i.userID, i.anonymousID = snapshot.UserID, snapshot.AnonymousID
+		i.feature, i.surface = snapshot.Feature, surfaceOf(snapshot.Surface)
+		i.accountID, i.onBehalfOf = snapshot.AccountID, snapshot.OnBehalfOf
+		i.pauseCount = max(snapshot.PauseCount, 0)
+		i.pausedTotal = time.Duration(max(snapshot.TotalPausedMS, 0))*time.Millisecond +
+			max(now.Sub(time.UnixMilli(snapshot.PausedAt)), 0)
 	}
 	i.fillTraceID(ctx)
 	return i
@@ -591,7 +673,7 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 		i.prompt = o.PromptText
 	}
 	i.mu.Unlock()
-	if !o.NoPromptEvent && i.trigger == TriggerUser {
+	if !o.NoPromptEvent && i.trigger == TriggerUser && !i.resumed {
 		i.emitPrompt(o)
 	}
 	return context.WithValue(ctx, keyInteraction, i), i
@@ -646,7 +728,10 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t})
 		return err
 	}
-	i.End(EndOptions{})
+	// A paused run stays open for its resume.
+	if !i.Paused() {
+		i.End(EndOptions{})
+	}
 	return nil
 }
 
@@ -738,6 +823,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		debugf("call reported after interaction ended", "interaction_id", i.id)
 		return false
 	}
+	i.resumeLocked()
 	i.settled = true
 	if i.integration == "" {
 		i.integration = call.Integration
@@ -865,6 +951,7 @@ func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
 	safely(func() {
 		var fire []*recordedTool
 		i.mu.Lock()
+		i.resumeLocked()
 		for _, call := range calls {
 			name, server := normalizeTool(call.Name, call.MCPServer)
 			var tool *recordedTool
@@ -906,6 +993,7 @@ func (i *Interaction) RecordToolCallCount(n int) {
 		return
 	}
 	i.mu.Lock()
+	i.resumeLocked()
 	if len(i.tools) < cfg().limits.MaxCallsPerInteraction {
 		i.tools = append(i.tools, &recordedTool{calls: n})
 	} else {
@@ -986,7 +1074,19 @@ var reservedProperties = set(
 	"response_text", "prompt_text", "input_method", "trace_id", "account_id", "on_behalf_of",
 	"trigger_source", "task_name", "parent_interaction_id", "trigger_event_id", "source", "surface",
 	"pause_reason", "client_disconnected", "attachment_count", "attachment_types", "end_reason",
+	"pause_count", "total_paused_ms",
 )
+
+// customProperties are the extra properties without SDK-owned names.
+func customProperties(extra map[string]any) map[string]any {
+	props := map[string]any{}
+	for k, v := range extra {
+		if !reservedProperties[k] {
+			props[k] = v
+		}
+	}
+	return props
+}
 
 var toolEventReserved = func() map[string]bool {
 	m := set("sample_rate", "agent_name", "tool_name", "tool_call_id", "tool_status", "tool_duration_ms")
@@ -1228,7 +1328,108 @@ func (i *Interaction) callEventLocked(c *recordedCall) map[string]any {
 // A last call's finish_reason that ends the answer, as its error_type.
 var finishErrors = map[string]string{"length": "length", "max_tokens": "length", "content_filter": "content_filter"}
 
-// End sends ai_response_received once. Later calls do nothing.
+// Pause pauses the run while it waits for something outside it (an approval, a person's answer):
+// it sends ai_response_received with response_status paused and this segment's totals, then starts
+// the next segment's totals from zero, so summing the segments counts each call once. It returns
+// the snapshot to [Interaction.Resume] from, or to pass as [InteractionOptions.Resume] in another
+// process; ok is false once the interaction ended. A paused run is never ended by the TTL or
+// [Shutdown], and [RunInteraction] and [RunTask] leave it paused when fn returns nil. Pausing again
+// before a resume sends nothing.
+func (i *Interaction) Pause(o PauseOptions) (paused PausedInteraction, ok bool) {
+	safely(func() { paused, ok = i.pause(o) })
+	return paused, ok
+}
+
+func (i *Interaction) pause(o PauseOptions) (PausedInteraction, bool) {
+	i.mu.Lock()
+	if i.ended || !i.pausedAt.IsZero() {
+		defer i.mu.Unlock()
+		return i.snapshotLocked()
+	}
+	tools := slices.Clone(i.tools)
+	i.mu.Unlock()
+	// Calls whose outcome never arrived are sent now, as unknown: the next segment starts empty.
+	i.fireToolEvents(tools, true)
+	var responseText string
+	var responseOK bool
+	if o.ResponseText != "" && i.captureContent {
+		responseText, responseOK = redactText(o.ResponseText)
+	}
+	i.mu.Lock()
+	defer i.unlock()
+	if i.ended || !i.pausedAt.IsZero() {
+		return i.snapshotLocked()
+	}
+	var props map[string]any
+	safely(func() {
+		props = customProperties(o.ExtraProperties)
+		maps.Copy(props, i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false))
+	})
+	if props != nil {
+		i.sendLocked("ai_response_received", func() map[string]any { return props })
+	}
+	i.pausedAt = time.Now()
+	i.pauseCount++
+	i.calls, i.overflow, i.callCount, i.lastCall, i.lastOK = nil, nil, 0, nil, nil
+	i.seen = map[string]*recordedCall{}
+	i.tools, i.toolOverflow, i.toolsByID = nil, nil, map[string]*recordedTool{}
+	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
+	unregister(i)
+	return i.snapshotLocked()
+}
+
+// Resume resumes a paused run in this process: the next segment starts now. A model or tool call
+// recorded while paused resumes it too. It does nothing unless the run is paused.
+func (i *Interaction) Resume() {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.resumeLocked()
+}
+
+func (i *Interaction) resumeLocked() {
+	if i.pausedAt.IsZero() || i.ended {
+		return
+	}
+	i.pausedTotal += max(time.Since(i.pausedAt), 0)
+	i.pausedAt = time.Time{}
+	i.started = time.Now()
+	reopen(i)
+}
+
+// Paused reports whether the run is paused and not resumed or ended yet.
+func (i *Interaction) Paused() bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return !i.pausedAt.IsZero()
+}
+
+// snapshotLocked is the paused run's snapshot; not ok unless it is paused.
+func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
+	if i.ended || i.pausedAt.IsZero() {
+		return PausedInteraction{}, false
+	}
+	return PausedInteraction{
+		InteractionID: i.id, ConversationID: i.conversationID, Trigger: i.trigger,
+		PauseCount: i.pauseCount, TotalPausedMS: roundMS(i.pausedTotal), PausedAt: i.pausedAt.UnixMilli(),
+		UserID: i.userID, AnonymousID: i.anonymousID, Feature: i.feature, Surface: i.surface,
+		AccountID: i.accountID, OnBehalfOf: i.onBehalfOf, TriggerSource: i.triggerSource, TaskName: i.taskName,
+		TriggerEventID: i.triggerEventID, ParentInteractionID: i.parent, Intent: i.intent, TraceID: i.traceID,
+	}, true
+}
+
+// taskStarted sends ai_task_started when it is switched on and the run did not resume.
+func (i *Interaction) taskStarted() {
+	if !cfg().emitTaskStarted || i.resumed {
+		return
+	}
+	i.mu.Lock()
+	defer i.unlock()
+	if !i.ended {
+		i.sendLocked("ai_task_started", i.baseLocked)
+	}
+}
+
+// End sends the segment response. A paused end can resume; a final end is idempotent.
 func (i *Interaction) End(o EndOptions) {
 	safely(func() { i.end(o) })
 }
@@ -1272,19 +1473,24 @@ func (i *Interaction) end(o EndOptions) {
 	if !i.clientDisconnected && i.disconnected != nil {
 		safely(func() { i.clientDisconnected = i.disconnected() })
 	}
+	derived := i.buildLocked(o, responseText, responseOK, false)
+	if derived["response_status"] == string(StatusPaused) {
+		i.mu.Unlock()
+		i.pause(PauseOptions{Reason: PauseReason(derived["pause_reason"].(string)), ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
+		return
+	}
 	i.ended = true
 	i.settled = true
+	// Ended while paused: the wait counts as paused time and the final segment starts now.
+	if !i.pausedAt.IsZero() {
+		i.pausedTotal += max(time.Since(i.pausedAt), 0)
+		i.pausedAt = time.Time{}
+		i.started = time.Now()
+	}
 	var props map[string]any
 	safely(func() {
-		props = map[string]any{}
-		for k, v := range o.ExtraProperties {
-			if !reservedProperties[k] {
-				props[k] = v
-			}
-		}
-		for k, v := range i.buildLocked(o, responseText, responseOK) {
-			props[k] = v
-		}
+		props = customProperties(o.ExtraProperties)
+		maps.Copy(props, i.buildLocked(o, responseText, responseOK, true))
 	})
 	if props != nil {
 		i.sendLocked("ai_response_received", func() map[string]any { return props })
@@ -1359,7 +1565,7 @@ func (i *Interaction) waitBackground(ctx context.Context) bool {
 	}
 }
 
-func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK bool) map[string]any {
+func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK, final bool) map[string]any {
 	calls := append(slices.Clone(i.calls), i.overflow...)
 	last, lastOK := i.lastCall, i.lastOK
 	status, errorType, pauseReason := o.Status, o.ErrorType, o.PauseReason
@@ -1480,6 +1686,10 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK 
 	}
 	put(p, "trace_id", i.traceID)
 	put(p, "end_reason", o.endReason)
+	if final && i.pauseCount > 0 {
+		p["pause_count"] = i.pauseCount
+		p["total_paused_ms"] = roundMS(i.pausedTotal)
+	}
 	return p
 }
 
@@ -1719,6 +1929,7 @@ func (i *Interaction) callStarted(ctx context.Context, integration string) {
 	if i.ended {
 		return
 	}
+	i.resumeLocked()
 	if i.integration == "" {
 		i.integration = integration
 	}

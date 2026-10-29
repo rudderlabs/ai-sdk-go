@@ -19,6 +19,7 @@ type config struct {
 	analytics           analytics.Client
 	captureContent      bool
 	emitLLMCalls        bool
+	emitTaskStarted     bool
 	toolBreakdown       bool
 	identityFromCookies bool
 	redact              bool
@@ -124,6 +125,15 @@ func WithCaptureContent(on bool) ConfigOption {
 func WithLLMCallEvents(on bool) ConfigOption {
 	return func(c *config, _ *pending) error {
 		c.emitLLMCalls = on
+		return nil
+	}
+}
+
+// WithTaskStartedEvents also sends ai_task_started when a [RunTask] run starts (never when it
+// resumes), so runs still in flight or abandoned show up. Off by default.
+func WithTaskStartedEvents(on bool) ConfigOption {
+	return func(c *config, _ *pending) error {
+		c.emitTaskStarted = on
 		return nil
 	}
 }

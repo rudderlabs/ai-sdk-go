@@ -90,6 +90,8 @@ type run struct {
 	llm  *testkit.LLM
 	last *rudderstackai.Interaction
 	cur  *rudderstackai.Interaction
+	// saved holds pause snapshots by save_as name, as JSON, as a store would.
+	saved map[string][]byte
 }
 
 var llm *testkit.LLM
@@ -177,6 +179,7 @@ func configure(t *testing.T, c obj, rec *recorder) {
 		rudderstackai.WithAnalytics(rec),
 		rudderstackai.WithCaptureContent(boolOr(c["capture_content"], false)),
 		rudderstackai.WithLLMCallEvents(boolOr(c["emit_llm_calls"], false)),
+		rudderstackai.WithTaskStartedEvents(boolOr(c["emit_task_started"], false)),
 		rudderstackai.WithToolBreakdown(boolOr(c["tool_breakdown"], false)),
 		rudderstackai.WithIdentityFromCookies(boolOr(c["identity_from_cookies"], true)),
 		rudderstackai.WithRedaction(boolOr(c["redact"], true)),
@@ -345,13 +348,17 @@ func (r *run) step(ctx context.Context, s obj) error {
 		driver := apis[str(s["api"])]
 		return expectError(s, driver(ctx, r, s))
 	case "interaction":
-		err := rudderstackai.RunInteraction(ctx, interactionOptions(obj0(s["options"])), func(ctx context.Context, i *rudderstackai.Interaction) error {
+		o := interactionOptions(obj0(s["options"]))
+		o.Resume = r.snapshot(obj0(s["options"]))
+		err := rudderstackai.RunInteraction(ctx, o, func(ctx context.Context, i *rudderstackai.Interaction) error {
 			return r.inside(ctx, i, objs0(s["steps"]))
 		})
 		rudderstackai.Flush(context.Background())
 		return expectError(s, err)
 	case "task":
-		err := rudderstackai.RunTask(ctx, str(s["task_name"]), taskOptions(obj0(s["options"])), func(ctx context.Context, i *rudderstackai.Interaction) error {
+		o := taskOptions(obj0(s["options"]))
+		o.Resume = r.snapshot(obj0(s["options"]))
+		err := rudderstackai.RunTask(ctx, str(s["task_name"]), o, func(ctx context.Context, i *rudderstackai.Interaction) error {
 			return r.inside(ctx, i, objs0(s["steps"]))
 		})
 		rudderstackai.Flush(context.Background())
@@ -471,10 +478,40 @@ func (r *run) step(ctx context.Context, s obj) error {
 		rudderstackai.ClearPrices()
 	case "shutdown":
 		rudderstackai.Shutdown(context.Background())
+	case "pause":
+		paused, _ := r.cur.Pause(rudderstackai.PauseOptions{
+			Reason: rudderstackai.PauseReason(str(s["reason"])), ResponseText: str(s["response_text"]),
+			ExtraProperties: obj0(s["extra_properties"]),
+		})
+		if name := str(s["save_as"]); name != "" {
+			b, err := json.Marshal(paused)
+			if err != nil {
+				return err
+			}
+			if r.saved == nil {
+				r.saved = map[string][]byte{}
+			}
+			r.saved[name] = b
+		}
+	case "resume":
+		r.cur.Resume()
 	default:
 		return fmt.Errorf("unknown op %s", op)
 	}
 	return nil
+}
+
+// snapshot is the saved pause snapshot an interaction or task option `resume` names.
+func (r *run) snapshot(o obj) *rudderstackai.PausedInteraction {
+	name := str(o["resume"])
+	if name == "" {
+		return nil
+	}
+	var p rudderstackai.PausedInteraction
+	if err := json.Unmarshal(r.saved[name], &p); err != nil {
+		r.t.Fatalf("resume %s: %v", name, err)
+	}
+	return &p
 }
 
 func (r *run) inside(ctx context.Context, i *rudderstackai.Interaction, steps []obj) error {
@@ -677,7 +714,7 @@ func normalise(msgs []analytics.Track, exactCallTiming bool) []obj {
 		if value, has := props["conversation_id"]; has {
 			props["conversation_id"] = symbol(value, "conv")
 		}
-		for _, k := range []string{"latency_ms", "time_to_first_token_ms", "tool_duration_ms", "classifier_duration_ms"} {
+		for _, k := range []string{"latency_ms", "time_to_first_token_ms", "tool_duration_ms", "classifier_duration_ms", "total_paused_ms"} {
 			if exactCallTiming && m.Event == "ai_llm_response_received" && (k == "latency_ms" || k == "time_to_first_token_ms") {
 				continue
 			}

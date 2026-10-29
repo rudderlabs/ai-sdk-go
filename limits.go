@@ -100,6 +100,17 @@ func unregister(i *Interaction) {
 	}
 }
 
+// reopen puts a resumed interaction back on the open list, whatever MaxOpenInteractions says: it
+// was tracked before its pause.
+func reopen(i *Interaction) {
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	if i.elem == nil {
+		i.opened = time.Now()
+		i.elem = open.list.PushBack(i)
+	}
+}
+
 // openCount is the number of open interactions.
 func openCount() int {
 	open.mu.Lock()
