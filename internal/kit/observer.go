@@ -28,6 +28,8 @@ type streamTool struct {
 // Observer is the common bookkeeping of one streamed call: usage, tools and text seen so far,
 // recorded once when the stream ends. Integrations fill its fields as events arrive.
 type Observer struct {
+	Details        rudderstackai.CallDetails
+	FirstTokenAt   time.Time
 	Interaction    *rudderstackai.Interaction
 	Ephemeral      bool
 	Provider       string
@@ -71,6 +73,7 @@ type Observer struct {
 // stream is still open, the call is recorded then (cancelled unless it completed).
 func NewObserver(c *Call) *Observer {
 	o := &Observer{
+		Details: c.Details, StartedAt: c.StartedAt,
 		Interaction: c.Interaction, Ephemeral: c.Ephemeral, Provider: c.Provider, Integration: c.Integration,
 		Model: c.Model, RequestedModel: c.Model, toolKeys: map[string]*streamTool{},
 		keepText: KeepsText(c.Interaction),
@@ -89,7 +92,8 @@ func NewObserver(c *Call) *Observer {
 func (o *Observer) FirstToken() {
 	if !o.first {
 		o.first = true
-		FirstToken(o.Interaction, time.Now())
+		o.FirstTokenAt = time.Now()
+		FirstToken(o.Interaction, o.FirstTokenAt)
 	}
 }
 
@@ -196,7 +200,7 @@ func (o *Observer) Finish(end End, errorType string) {
 			CachedInputTokens: o.CachedInputTokens, CacheWriteTokens: o.CacheWriteTokens, CacheWrite1hTokens: o.CacheWrite1hTokens,
 			UsageUnknown: true,
 		}
-		o.Interaction.RecordCall(call)
+		o.RecordCall(call)
 		// Tools the model already invoked still count.
 		o.recordTools()
 		if o.Ephemeral {
@@ -221,7 +225,7 @@ func (o *Observer) Finish(end End, errorType string) {
 	o.mu.Lock()
 	call.OutputText = o.text.String()
 	o.mu.Unlock()
-	if o.Interaction.RecordCall(call) {
+	if o.RecordCall(call) {
 		o.recordTools()
 	}
 	if o.Ephemeral {
@@ -235,4 +239,12 @@ func (t *streamTool) argsValue() any {
 		return t.chunks.String()
 	}
 	return t.args
+}
+
+// RecordCall preserves this stream's boundaries and metadata.
+func (o *Observer) RecordCall(call rudderstackai.LLMCall) bool {
+	call.StartedAt, call.FirstTokenAt = o.StartedAt, o.FirstTokenAt
+	call.CallPurpose = o.Details.CallPurpose
+	call.FallbackUsed, call.BYOK = o.Details.FallbackUsed, o.Details.BYOK
+	return o.Interaction.RecordCall(call)
 }

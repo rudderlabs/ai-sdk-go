@@ -67,7 +67,7 @@ func loadSchemas(path string) (map[string]*jsonschema.Schema, error) {
 	}
 	out := map[string]*jsonschema.Schema{}
 	for name, def := range raw.Defs {
-		if _, ok := def["allOf"]; !ok {
+		if _, ok := def["allOf"]; !ok && !strings.HasPrefix(name, "ai_") {
 			continue
 		}
 		if out[name], err = c.Compile(schemaURL + "#/$defs/" + name); err != nil {

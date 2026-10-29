@@ -44,6 +44,7 @@ const integration = "anthropic"
 type Option func(*config)
 
 type config struct {
+	details   rudderstackai.CallDetails
 	provider  string
 	analytics analytics.Client
 }
@@ -67,7 +68,7 @@ func Middleware(opts ...Option) option.Middleware {
 	for _, o := range opts {
 		o(&c)
 	}
-	spec := &kit.Spec{
+	spec := &kit.Spec{Details: c.details,
 		Provider:    c.provider,
 		Integration: integration,
 		Analytics:   c.analytics,
@@ -170,7 +171,7 @@ func recordMessage(c *kit.Call, msg map[string]any, _ *http.Response) bool {
 			tools = append(tools, toolCall(b))
 		}
 	}
-	recorded := c.Interaction.RecordCall(rudderstackai.LLMCall{
+	recorded := c.RecordCall(rudderstackai.LLMCall{
 		Integration: integration, Provider: c.Provider, Model: model, RequestedModel: c.Model,
 		InputTokens: t.total, OutputTokens: kit.Int(usage["output_tokens"]), ReasoningTokens: thinkingTokens(usage),
 		CachedInputTokens: t.read, CacheWriteTokens: t.write, CacheWrite1hTokens: t.write1h,
@@ -304,3 +305,14 @@ func deref(p *int) int {
 	}
 	return *p
 }
+
+// WithCallPurpose labels the purpose of model calls through this integration.
+func WithCallPurpose(purpose string) Option {
+	return func(c *config) { c.details.CallPurpose = purpose }
+}
+
+// WithFallbackUsed records whether the app selected a fallback provider or model.
+func WithFallbackUsed(used bool) Option { return func(c *config) { c.details.FallbackUsed = &used } }
+
+// WithBYOK records whether the call used the end customer's own provider key.
+func WithBYOK(byok bool) Option { return func(c *config) { c.details.BYOK = &byok } }

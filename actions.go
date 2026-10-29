@@ -24,7 +24,10 @@ type TrackActionOptions struct {
 	AnonymousID   string
 	AccountID     string
 	OnBehalfOf    string
-	Surface       Surface
+	// AgentVersion names the app release or configuration; Variant names its experiment arm.
+	AgentVersion string
+	Variant      string
+	Surface      Surface
 	// Analytics is the client for this event. Falls back to the context, then the global client.
 	Analytics analytics.Client
 	// Context is extra message context for this event.
@@ -56,6 +59,8 @@ func TrackAction(ctx context.Context, o TrackActionOptions) {
 		p := map[string]any{"conversation_id": conversation, "interaction_id": o.InteractionID, "action_type": string(o.ActionType)}
 		put(p, "account_id", first(o.AccountID, cv.accountID))
 		put(p, "on_behalf_of", first(o.OnBehalfOf, cv.onBehalfOf))
+		put(p, "agent_version", first(o.AgentVersion, cv.agentVersion))
+		put(p, "variant", first(o.Variant, cv.variant))
 		put(p, "surface", string(first2(surfaceOf(o.Surface), surfaceOf(cv.surface))))
 		if o.ActionDetails != nil {
 			details := maps.Clone(o.ActionDetails)

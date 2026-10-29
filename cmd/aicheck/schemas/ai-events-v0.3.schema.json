@@ -447,8 +447,7 @@
         "block_reason": {
           "properties": {
             "response_status": {
-              "const": "blocked",
-              "description": "Since v0.4. "
+              "const": "blocked"
             }
           }
         }
@@ -563,7 +562,7 @@
         "total_credits": {
           "type": "number",
           "minimum": 0,
-          "description": "Since v0.4. Sum of the calls in the app's own credits, from the app's credit pricing. Present only when every successful call has credits; failed and cancelled calls add only credits the app set on them."
+          "description": "Since v0.4. Sum of the calls in the app's own credits, from the app's credit pricing. Present only when every successful call has credits; failed calls add only app-set credits; cancelled calls add none."
         },
         "compaction_count": {
           "type": "integer",
@@ -1623,36 +1622,28 @@
       ],
       "properties": {
         "conversation_id": {
-          "$ref": "#/$defs/id_fields/properties/conversation_id",
-          "description": "Since v0.4. "
+          "$ref": "#/$defs/id_fields/properties/conversation_id"
         },
         "interaction_id": {
-          "$ref": "#/$defs/id_fields/properties/interaction_id",
-          "description": "Since v0.4. "
+          "$ref": "#/$defs/id_fields/properties/interaction_id"
         },
         "feature": {
-          "$ref": "#/$defs/id_fields/properties/feature",
-          "description": "Since v0.4. "
+          "$ref": "#/$defs/id_fields/properties/feature"
         },
         "surface": {
-          "$ref": "#/$defs/surface",
-          "description": "Since v0.4. "
+          "$ref": "#/$defs/surface"
         },
         "account_id": {
-          "$ref": "#/$defs/id_fields/properties/account_id",
-          "description": "Since v0.4. "
+          "$ref": "#/$defs/id_fields/properties/account_id"
         },
         "on_behalf_of": {
-          "$ref": "#/$defs/id_fields/properties/on_behalf_of",
-          "description": "Since v0.4. "
+          "$ref": "#/$defs/id_fields/properties/on_behalf_of"
         },
         "agent_version": {
-          "$ref": "#/$defs/id_fields/properties/agent_version",
-          "description": "Since v0.4. "
+          "$ref": "#/$defs/id_fields/properties/agent_version"
         },
         "variant": {
-          "$ref": "#/$defs/id_fields/properties/variant",
-          "description": "Since v0.4. "
+          "$ref": "#/$defs/id_fields/properties/variant"
         },
         "limit_type": {
           "type": "string",

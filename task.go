@@ -31,6 +31,9 @@ type TaskOptions struct {
 	AccountID string
 	// OnBehalfOf is the human the work is for. The task's actor is always the system.
 	OnBehalfOf string
+	// AgentVersion names the app release or configuration; Variant names its experiment arm.
+	AgentVersion string
+	Variant      string
 	// TriggerSource is why the run started: "schedule", "webhook", "queue"... Defaults to
 	// "agent" when the task has a parent.
 	TriggerSource  string
@@ -104,7 +107,7 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 	var task *Interaction
 	err := RunInteraction(ctx, InteractionOptions{
 		UserID: o.UserID, AnonymousID: o.AnonymousID, ConversationID: conversation, InteractionID: o.InteractionID, OneShot: o.OneShot, Feature: o.Feature,
-		Surface: o.Surface, TraceID: o.TraceID, AccountID: o.AccountID, OnBehalfOf: o.OnBehalfOf,
+		Surface: o.Surface, TraceID: o.TraceID, AccountID: o.AccountID, OnBehalfOf: o.OnBehalfOf, AgentVersion: o.AgentVersion, Variant: o.Variant,
 		TriggerSource: triggerSource, TriggerEventID: o.TriggerEventID, TaskName: taskName,
 		ParentInteractionID: parent, Analytics: o.Analytics, CaptureContent: o.CaptureContent,
 		ToolBreakdown: o.ToolBreakdown, Classify: o.Classify, Context: o.Context,

@@ -138,7 +138,7 @@ func recordResponse(c *kit.Call, response map[string]any, g gateway) bool {
 	if len(counts) == 0 {
 		counts = nil
 	}
-	recorded := c.Interaction.RecordCall(rudderstackai.LLMCall{
+	recorded := c.RecordCall(rudderstackai.LLMCall{
 		Integration: c.Integration, Provider: c.Provider,
 		Model:          firstOf(g.model, kit.Str(response["model"]), c.Model),
 		RequestedModel: c.Model,
@@ -158,7 +158,7 @@ func recordResponse(c *kit.Call, response map[string]any, g gateway) bool {
 }
 
 func responsesSpec(cfg config) *kit.Spec {
-	return &kit.Spec{
+	return &kit.Spec{Details: cfg.details,
 		Provider: cfg.provider, Integration: integration, Analytics: cfg.analytics,
 		IsStream:  isStream,
 		OnRequest: recordResponsesToolResults,
@@ -242,6 +242,7 @@ func (s *responsesStream) record(end kit.End, _ string) bool {
 		return false
 	}
 	c := *s.call
+	c.FirstTokenAt = s.FirstTokenAt
 	recordResponse(&c, final, s.gateway)
 	if s.Ephemeral {
 		kit.EndEphemeral(s.Interaction, "")

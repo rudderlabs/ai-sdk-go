@@ -31,6 +31,7 @@ const (
 	StatusCancelled  ResponseStatus = "cancelled"
 	StatusPaused     ResponseStatus = "paused"
 	StatusIncomplete ResponseStatus = "incomplete"
+	StatusBlocked    ResponseStatus = "blocked"
 )
 
 // PauseReason is what a paused run waits for, sent as pause_reason.
@@ -84,7 +85,7 @@ const (
 )
 
 var (
-	responseStatuses = set(StatusSuccess, StatusError, StatusTimeout, StatusCancelled, StatusPaused, StatusIncomplete)
+	responseStatuses = set(StatusSuccess, StatusError, StatusTimeout, StatusCancelled, StatusPaused, StatusIncomplete, StatusBlocked)
 	pauseReasons     = set(PauseApproval, PauseHumanInput, PauseDeferredTool, PauseAuthRequired, PauseOther)
 	surfaces         = set(SurfaceWeb, SurfaceMobile, SurfaceSlack, SurfaceTeams, SurfaceEmail, SurfaceChatGPTApp, SurfaceClaudeApp, SurfaceIDE, SurfaceAPI, SurfaceOther)
 	actionTypes      = set(ActionFeedbackDismissed, ActionExported, ActionReverted, ActionFeedbackGiven, ActionFeedbackRetracted, ActionCopiedResponse, ActionShared, ActionReported, ActionRegenerated, ActionAccepted, ActionRejected, ActionEdited, ActionClickedThrough)
@@ -102,3 +103,28 @@ func set[T comparable](values ...T) map[T]bool {
 
 // Ptr returns a pointer to v, for the optional fields of [LLMCall], [ToolCall] and the options.
 func Ptr[T any](v T) *T { return &v }
+
+// BlockReason names why an app intentionally declined an answer.
+type BlockReason string
+
+// Block reasons.
+const (
+	BlockGuardrail   BlockReason = "guardrail"
+	BlockPolicy      BlockReason = "policy"
+	BlockUnsupported BlockReason = "unsupported"
+	BlockSkipped     BlockReason = "skipped"
+	BlockOther       BlockReason = "other"
+)
+
+// Confidence is the app's confidence in an answer.
+type Confidence string
+
+// Confidence levels.
+const (
+	ConfidenceLow    Confidence = "low"
+	ConfidenceMedium Confidence = "medium"
+	ConfidenceHigh   Confidence = "high"
+)
+
+var blockReasons = set(BlockGuardrail, BlockPolicy, BlockUnsupported, BlockSkipped, BlockOther)
+var confidences = set(ConfidenceLow, ConfidenceMedium, ConfidenceHigh)

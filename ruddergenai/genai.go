@@ -58,6 +58,7 @@ const codeExecution = "code_execution"
 type Option func(*options)
 
 type options struct {
+	details   rudderstackai.CallDetails
 	provider  string
 	analytics analytics.Client
 }
@@ -113,7 +114,7 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		provider = providerOf(req)
 	}
 	model := modelOf(req.URL.Path)
-	spec := &kit.Spec{
+	spec := &kit.Spec{Details: t.o.details,
 		Provider:    provider,
 		Integration: integration,
 		Analytics:   t.o.analytics,
@@ -265,7 +266,7 @@ func recordResponse(c *kit.Call, body map[string]any) {
 	if u != nil {
 		call.InputTokens, call.OutputTokens, call.ReasoningTokens, call.CachedInputTokens = u.input, u.output, u.reasoning, u.cached
 	}
-	if !c.Interaction.RecordCall(call) {
+	if !c.RecordCall(call) {
 		return
 	}
 	var tools []rudderstackai.ToolCall
@@ -511,3 +512,14 @@ func hasKey(m map[string]any, k string) bool {
 	_, ok := m[k]
 	return ok
 }
+
+// WithCallPurpose labels the purpose of model calls through this integration.
+func WithCallPurpose(purpose string) Option {
+	return func(c *options) { c.details.CallPurpose = purpose }
+}
+
+// WithFallbackUsed records whether the app selected a fallback model or provider.
+func WithFallbackUsed(used bool) Option { return func(c *options) { c.details.FallbackUsed = &used } }
+
+// WithBYOK records whether calls use the end customer's provider key.
+func WithBYOK(byok bool) Option { return func(c *options) { c.details.BYOK = &byok } }

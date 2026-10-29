@@ -196,6 +196,14 @@ func configure(t *testing.T, c obj, rec *recorder) {
 	if ev, ok := c["evaluator"]; ok {
 		opts = append(opts, rudderstackai.WithEvaluator(evaluator(ev)))
 	}
+	if spec, ok := c["credits"]; ok {
+		opts = append(opts, rudderstackai.WithCredits(func(call rudderstackai.CreditCall) (*float64, error) {
+			if spec == "throw" {
+				return nil, errRule
+			}
+			return fptr(obj0(obj0(spec)["by_model"])[call.Model]), nil
+		}))
+	}
 	if err := rudderstackai.Configure(opts...); err != nil {
 		t.Fatal(err)
 	}
@@ -329,6 +337,9 @@ func expectError(s obj, err error) error {
 func (r *run) step(ctx context.Context, s obj) error {
 	switch op := str(s["op"]); op {
 	case "call":
+		if details, ok := s["call_options"].(obj); ok {
+			ctx = rudderstackai.WithCallDetails(ctx, rudderstackai.CallDetails{CallPurpose: str(details["call_purpose"]), FallbackUsed: boolPtr(details["fallback_used"]), BYOK: boolPtr(details["byok"])})
+		}
 		driver := apis[str(s["api"])]
 		return expectError(s, driver(ctx, r, s))
 	case "interaction":
@@ -348,7 +359,7 @@ func (r *run) step(ctx context.Context, s obj) error {
 		cv := rudderstackai.ContextValues{
 			UserID: str(v["user_id"]), AnonymousID: str(v["anonymous_id"]), ConversationID: str(v["conversation_id"]),
 			Feature: str(v["feature"]), Surface: rudderstackai.Surface(str(v["surface"])), AccountID: str(v["account_id"]),
-			OnBehalfOf: str(v["on_behalf_of"]), Context: obj0(v["context"]),
+			OnBehalfOf: str(v["on_behalf_of"]), AgentVersion: str(v["agent_version"]), Variant: str(v["variant"]), Context: obj0(v["context"]),
 		}
 		cv.Cookies, cv.CookieValues = cookies(v["cookies"])
 		err := r.steps(rudderstackai.WithValues(ctx, cv), objs0(s["steps"]))
@@ -363,13 +374,21 @@ func (r *run) step(ctx context.Context, s obj) error {
 		return errors.New(str(s["message"]))
 	case "set_intent":
 		r.cur.SetIntent(str(s["value"]))
+	case "set_confidence":
+		r.cur.SetConfidence(rudderstackai.Confidence(str(s["value"])))
+	case "record_compaction":
+		if n, ok := s["count"].(float64); ok {
+			r.cur.RecordCompaction(int(n))
+		} else {
+			r.cur.RecordCompaction()
+		}
 	case "set_outcome":
 		r.cur.SetOutcome(str(s["value"]))
 	case "end":
 		r.cur.End(rudderstackai.EndOptions{
 			ResponseText: str(s["response_text"]), ExtraProperties: obj0(s["extra_properties"]),
 			Status: rudderstackai.ResponseStatus(str(s["status"])), ErrorType: str(s["error_type"]),
-			PauseReason: rudderstackai.PauseReason(str(s["pause_reason"])), ClientDisconnected: s["client_disconnected"] == true,
+			BlockReason: rudderstackai.BlockReason(str(s["block_reason"])), PauseReason: rudderstackai.PauseReason(str(s["pause_reason"])), ClientDisconnected: s["client_disconnected"] == true,
 		})
 	case "record_call":
 		r.cur.RecordCall(llmCall(s))
@@ -399,7 +418,19 @@ func (r *run) step(ctx context.Context, s obj) error {
 		rudderstackai.TrackAction(ctx, rudderstackai.TrackActionOptions{
 			ActionType: rudderstackai.ActionType(str(o["action_type"])), InteractionID: id,
 			ConversationID: str(o["conversation_id"]), UserID: str(o["user_id"]), AnonymousID: str(o["anonymous_id"]),
-			ActionDetails: obj0(o["action_details"]), AccountID: str(o["account_id"]), OnBehalfOf: str(o["on_behalf_of"]),
+			ActionDetails: obj0(o["action_details"]), AccountID: str(o["account_id"]), OnBehalfOf: str(o["on_behalf_of"]), AgentVersion: str(o["agent_version"]), Variant: str(o["variant"]),
+			Surface: rudderstackai.Surface(str(o["surface"])),
+		})
+	case "track_limit_reached":
+		o := obj0(s["options"])
+		id := str(o["interaction_id"])
+		if id == "$last" && r.last != nil {
+			id = r.last.ID()
+		}
+		rudderstackai.TrackLimitReached(ctx, rudderstackai.TrackLimitReachedOptions{
+			LimitType: str(o["limit_type"]), Feature: str(o["feature"]), InteractionID: id,
+			ConversationID: str(o["conversation_id"]), UserID: str(o["user_id"]), AnonymousID: str(o["anonymous_id"]),
+			AccountID: str(o["account_id"]), OnBehalfOf: str(o["on_behalf_of"]), AgentVersion: str(o["agent_version"]), Variant: str(o["variant"]),
 			Surface: rudderstackai.Surface(str(o["surface"])),
 		})
 	case "track_score":
@@ -421,7 +452,7 @@ func (r *run) step(ctx context.Context, s obj) error {
 		rudderstackai.TrackScore(ctx, rudderstackai.TrackScoreOptions{
 			Score: score, InteractionID: id, ConversationID: conv, UserID: str(o["user_id"]), AnonymousID: str(o["anonymous_id"]),
 			Feature: str(o["feature"]), Surface: rudderstackai.Surface(str(o["surface"])), Trigger: rudderstackai.Trigger(str(o["trigger"])),
-			AccountID: str(o["account_id"]), OnBehalfOf: str(o["on_behalf_of"]),
+			AccountID: str(o["account_id"]), OnBehalfOf: str(o["on_behalf_of"]), AgentVersion: str(o["agent_version"]), Variant: str(o["variant"]),
 		})
 	case "register_price":
 		if err := rudderstackai.RegisterPrice(str(s["model"]), modelPrice(s)); err != nil {
@@ -483,7 +514,7 @@ func interactionOptions(o obj) rudderstackai.InteractionOptions {
 		UserID: str(o["user_id"]), AnonymousID: str(o["anonymous_id"]), ConversationID: str(o["conversation_id"]),
 		Feature: str(o["feature"]), Intent: str(o["intent"]), TraceID: str(o["trace_id"]), InputMethod: str(o["input_method"]),
 		PromptText: str(o["prompt_text"]), Trigger: rudderstackai.Trigger(str(o["trigger"])), AccountID: str(o["account_id"]),
-		OnBehalfOf: str(o["on_behalf_of"]), TriggerSource: str(o["trigger_source"]), TaskName: str(o["task_name"]),
+		OnBehalfOf: str(o["on_behalf_of"]), AgentVersion: str(o["agent_version"]), Variant: str(o["variant"]), TriggerSource: str(o["trigger_source"]), TaskName: str(o["task_name"]),
 		ParentInteractionID: str(o["parent_interaction_id"]), ToolBreakdown: boolPtr(o["tool_breakdown"]),
 		IdentityFromCookies: boolPtr(o["identity_from_cookies"]), Classify: boolPtr(o["classify"]),
 		Surface: rudderstackai.Surface(str(o["surface"])), TriggerEventID: str(o["trigger_event_id"]),
@@ -500,7 +531,7 @@ func taskOptions(o obj) rudderstackai.TaskOptions {
 	out := rudderstackai.TaskOptions{
 		OneShot: o["one_shot"] == true, InteractionID: str(o["interaction_id"]),
 		UserID: str(o["user_id"]), AnonymousID: str(o["anonymous_id"]), ConversationID: str(o["conversation_id"]), Feature: str(o["feature"]), TraceID: str(o["trace_id"]),
-		AccountID: str(o["account_id"]), OnBehalfOf: str(o["on_behalf_of"]), TriggerSource: str(o["trigger_source"]),
+		AccountID: str(o["account_id"]), OnBehalfOf: str(o["on_behalf_of"]), AgentVersion: str(o["agent_version"]), Variant: str(o["variant"]), TriggerSource: str(o["trigger_source"]),
 		ParentInteractionID: str(o["parent_interaction_id"]), ToolBreakdown: boolPtr(o["tool_breakdown"]),
 		Classify: boolPtr(o["classify"]), Surface: rudderstackai.Surface(str(o["surface"])), TriggerEventID: str(o["trigger_event_id"]),
 	}
@@ -520,6 +551,7 @@ func intPtr(v any) *int {
 
 func llmCall(s obj) rudderstackai.LLMCall {
 	c := rudderstackai.LLMCall{
+		Credits: fptr(s["credits"]), CallPurpose: str(s["call_purpose"]), FallbackUsed: boolPtr(s["fallback_used"]), BYOK: boolPtr(s["byok"]),
 		Provider: str(s["provider"]), Model: str(s["model"]), RequestedModel: str(s["requested_model"]),
 		InputTokens: int(num(s["input_tokens"])), OutputTokens: int(num(s["output_tokens"])), ReasoningTokens: intPtr(s["reasoning_tokens"]),
 		CachedInputTokens: int(num(s["cached_input_tokens"])), CacheWriteTokens: int(num(s["cache_write_tokens"])),
@@ -527,6 +559,13 @@ func llmCall(s obj) rudderstackai.LLMCall {
 		CallCount: int(num(s["call_count"])), ErrorCount: intPtr(s["error_count"]), AgentName: str(s["agent_name"]),
 		ResponseID: str(s["response_id"]), FinishReason: str(s["finish_reason"]), ErrorType: str(s["error_type"]),
 		UsageUnknown: s["usage_known"] == false,
+	}
+	if timing, ok := s["timing"].(obj); ok {
+		c.EndedAt = time.Now()
+		c.StartedAt = c.EndedAt.Add(-time.Duration(num(timing["duration_ms"]) * float64(time.Millisecond)))
+		if ms, ok := timing["first_token_ms"].(float64); ok {
+			c.FirstTokenAt = c.StartedAt.Add(time.Duration(ms * float64(time.Millisecond)))
+		}
 	}
 	if v, ok := s["cost_usd"].(float64); ok {
 		c.CostUSD = &v
@@ -626,11 +665,15 @@ func normalise(msgs []analytics.Track) []obj {
 			e["anonymousId"] = m.AnonymousId
 		}
 		props := jsonRoundTrip(map[string]any(m.Properties)).(obj)
-		props["interaction_id"] = symbol(props["interaction_id"], "int")
+		if value, has := props["interaction_id"]; has {
+			props["interaction_id"] = symbol(value, "int")
+		}
 		if v, ok := props["parent_interaction_id"]; ok {
 			props["parent_interaction_id"] = symbol(v, "int")
 		}
-		props["conversation_id"] = symbol(props["conversation_id"], "conv")
+		if value, has := props["conversation_id"]; has {
+			props["conversation_id"] = symbol(value, "conv")
+		}
 		for _, k := range []string{"latency_ms", "time_to_first_token_ms", "tool_duration_ms", "classifier_duration_ms"} {
 			if v, ok := props[k]; ok {
 				props[k] = measured(v)

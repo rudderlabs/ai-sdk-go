@@ -20,7 +20,7 @@ const specVersion = "0.3.0"
 var (
 	sdkNames   = []string{"@rudderstack/ai", "ai-sdk-go", "rudderstack-ai"} // context.wrapperLibrary.name: Node.js, Go, Python
 	specEvents = set("ai_user_prompt_created", "ai_response_received", "ai_user_action",
-		"ai_interaction_classified", "ai_interaction_scored", "ai_llm_response_received")
+		"ai_interaction_classified", "ai_interaction_scored", "ai_llm_response_received", "ai_limit_reached")
 	clientCopies    = set("ai_user_prompt_created", "ai_response_received", "ai_user_action")
 	failureStatuses = []string{"cancelled", "error", "incomplete", "timeout"} // what an app-caught failure may report
 	clientOnly      = set("ai_assistant_opened", "ai_assistant_closed", "ai_conversation_started",
@@ -31,7 +31,7 @@ var (
 	mcpEvents      = set("mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
 		"mcp_resource_read", "mcp_prompt_used", "mcp_event_subscription_changed", "mcp_event_delivered")
 	// a standalone score carries a feature only when given; ai_otel_span (tracing) carries none by default
-	optionalFeature      = set("ai_interaction_scored", "ai_otel_span")
+	optionalFeature      = set("ai_interaction_scored", "ai_otel_span", "ai_limit_reached")
 	requestContextFields = set("intent", "user_sentiment", "call_reason") // what the SDK reads from request_context
 	knownEvents          = func() map[string]bool {                       // ai_otel_span: rudderstack.ai.tracing
 		m := set("ai_otel_span")

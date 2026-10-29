@@ -15,6 +15,7 @@ import (
 
 // config is the process-wide configuration of the AI interaction events.
 type config struct {
+	credits             CreditsFunc
 	analytics           analytics.Client
 	captureContent      bool
 	emitLLMCalls        bool
@@ -351,3 +352,8 @@ func warnOnce(key, msg string, every time.Duration) {
 }
 
 func warnf(format string, args ...any) { slog.Warn(logPrefix + fmt.Sprintf(format, args...)) }
+
+// WithCredits prices successful calls in app credits after USD pricing. Nil clears the hook.
+func WithCredits(price CreditsFunc) ConfigOption {
+	return func(c *config, _ *pending) error { c.credits = price; return nil }
+}

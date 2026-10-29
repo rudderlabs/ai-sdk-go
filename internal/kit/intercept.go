@@ -20,7 +20,9 @@ import (
 
 // Call is one intercepted model request.
 type Call struct {
-	Interaction *rudderstackai.Interaction
+	Details      rudderstackai.CallDetails
+	FirstTokenAt time.Time
+	Interaction  *rudderstackai.Interaction
 	// Ephemeral: the integration opened the interaction for this call and ends it.
 	Ephemeral   bool
 	Provider    string
@@ -72,6 +74,7 @@ type Prepared struct {
 
 // Spec describes one provider API for [Intercept].
 type Spec struct {
+	Details     rudderstackai.CallDetails
 	Provider    string
 	Integration string
 	Analytics   analytics.Client
@@ -157,7 +160,8 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	}
 	req = req.WithContext(context.WithValue(ctx, trackedKey{s.Integration}, true))
 	model, _ := body["model"].(string)
-	c := &Call{Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
+	details := rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, s.Details))
+	c := &Call{Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
 	safe(func() {
 		if s.OnRequest != nil {
 			s.OnRequest(c)
@@ -250,7 +254,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 
 func (s *Spec) failed(c *Call, errorType string) {
 	safe(func() {
-		c.Interaction.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
+		c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
 		if c.Ephemeral {
 			EndEphemeral(c.Interaction, errorType)
 		}
@@ -274,6 +278,14 @@ var rateLimitCodes = map[string]bool{"insufficient_quota": true, "rate_limit_exc
 // HTTPErrorType maps a failed HTTP response: the status, else a rate-limit error code, else
 // api_error.
 func HTTPErrorType(status int, body map[string]any) string {
+	e := Map(body["error"])
+	if e == nil {
+		e = body
+	}
+	code, message := Str(e["code"]), strings.ToLower(Str(e["message"]))
+	if (status == 400 || status == 422 || status == 0) && (code == "context_length_exceeded" || strings.Contains(message, "maximum context length") || strings.Contains(message, "prompt is too long") || strings.Contains(message, "input is too long") || strings.Contains(message, "context window")) {
+		return "context_limit"
+	}
 	if t := rudderstackai.ErrorTypeForStatus(status); t != "" {
 		return t
 	}
@@ -496,4 +508,13 @@ func (b *sseBody) Close() error {
 		safe(func() { b.h.Finish(Cancelled, "") })
 	})
 	return b.src.Close()
+}
+
+// RecordCall adds observed boundaries and app metadata before recording a call.
+func (c *Call) RecordCall(call rudderstackai.LLMCall) bool {
+	call.StartedAt = c.StartedAt
+	call.FirstTokenAt = c.FirstTokenAt
+	call.CallPurpose = c.Details.CallPurpose
+	call.FallbackUsed, call.BYOK = c.Details.FallbackUsed, c.Details.BYOK
+	return c.Interaction.RecordCall(call)
 }

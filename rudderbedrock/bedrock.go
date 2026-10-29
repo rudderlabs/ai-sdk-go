@@ -53,6 +53,7 @@ const (
 type Option func(*config)
 
 type config struct {
+	details   rudderstackai.CallDetails
 	analytics analytics.Client
 }
 
@@ -266,7 +267,7 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	if i == nil {
 		return call(ctx)
 	}
-	c := &kit.Call{Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
+	c := &kit.Call{Details: rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, t.cfg.details)), Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
 	safe(func() {
 		recordToolResults(i, messages)
 		kit.KeepMessages(i, plainMessages(messages))
@@ -297,7 +298,7 @@ func failed(c *kit.Call, sc *streamCall, errorType string) {
 	if sc != nil && sc.end(kit.Errored, errorType) {
 		return
 	}
-	c.Interaction.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
+	c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
 	if c.Ephemeral {
 		kit.EndEphemeral(c.Interaction, errorType)
 	}
@@ -324,7 +325,7 @@ func recordResponse(c *kit.Call, out *bedrockruntime.ConverseOutput, responseID 
 		}
 		call.OutputText = text.String()
 	}
-	if c.Interaction.RecordCall(call) && len(tools) > 0 {
+	if c.RecordCall(call) && len(tools) > 0 {
 		c.Interaction.RecordToolCalls(tools...)
 	}
 	if c.Ephemeral {
@@ -504,3 +505,14 @@ func (streamWrapper) HandleDeserialize(ctx context.Context, in middleware.Deseri
 	safe(func() { sc.start(resp) })
 	return out, md, err
 }
+
+// WithCallPurpose labels the purpose of model calls through this integration.
+func WithCallPurpose(purpose string) Option {
+	return func(c *config) { c.details.CallPurpose = purpose }
+}
+
+// WithFallbackUsed records whether the app selected a fallback provider or model.
+func WithFallbackUsed(used bool) Option { return func(c *config) { c.details.FallbackUsed = &used } }
+
+// WithBYOK records whether the call used the end customer's own provider key.
+func WithBYOK(byok bool) Option { return func(c *config) { c.details.BYOK = &byok } }

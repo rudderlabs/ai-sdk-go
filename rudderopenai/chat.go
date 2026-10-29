@@ -57,7 +57,7 @@ func recordChatToolResults(c *kit.Call) {
 }
 
 func chatSpec(cfg config, rejected *rejectedHosts) *kit.Spec {
-	return &kit.Spec{
+	return &kit.Spec{Details: cfg.details,
 		Provider: cfg.provider, Integration: integration, Analytics: cfg.analytics,
 		IsStream:  isStream,
 		OnRequest: recordChatToolResults,
@@ -130,7 +130,7 @@ func onChatResponse(c *kit.Call, body map[string]any, resp *http.Response) bool 
 	if cost == nil {
 		cost = g.cost
 	}
-	recorded := c.Interaction.RecordCall(rudderstackai.LLMCall{
+	recorded := c.RecordCall(rudderstackai.LLMCall{
 		Integration: c.Integration, Provider: c.Provider,
 		Model:          firstOf(g.model, kit.Str(body["model"]), c.Model),
 		RequestedModel: c.Model,

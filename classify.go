@@ -17,7 +17,7 @@ import (
 
 // DefaultOutcomes are the outcomes a classifier picks from unless [ClassifierOptions.Outcomes]
 // says otherwise.
-var DefaultOutcomes = []string{"resolved", "partial", "unresolved", "escalated", "unclear"}
+var DefaultOutcomes = []string{"resolved", "partial", "unresolved", "escalated", "unsupported", "unclear"}
 
 const (
 	defaultClassifyTimeout = 5 * time.Second
