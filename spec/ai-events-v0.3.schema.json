@@ -209,7 +209,7 @@
             "feedback_scope": {"enum": ["interaction", "conversation", "feature"], "description": "Since v0.4. What the feedback is about; absent means interaction. Conversation or feature feedback still carries both IDs: interaction_id is minted for the feedback, and conversation_id is the interaction_id when there is no conversation."},
             "items_total": {"type": "integer", "minimum": 0, "description": "Since v0.4. On accepted, edited, rejected, reverted: the parts the output had."},
             "items_accepted": {"type": "integer", "minimum": 0, "description": "Since v0.4. On accepted, edited, rejected, reverted: the parts the user kept."},
-            "destination": {"type": "string", "minLength": 1, "not": {"pattern": "[/?=]|^[A-Za-z][A-Za-z0-9+.-]*:"}, "examples": ["download", "dashboard", "agent", "ide"], "description": "Since v0.4. On exported: where the output went. Never a URL."},
+            "destination": {"type": "string", "pattern": "^[a-z][a-z0-9_]*", "maxLength": 64, "not": {"pattern": "[^a-z0-9_]"}, "examples": ["download", "dashboard", "agent", "ide"], "description": "Since v0.4. On exported: where the output went, as a snake_case label (1-64 ASCII characters; starts with a lowercase letter, followed by lowercase letters, digits or underscores)."},
             "card_kind": { "type": "string", "minLength": 1, "description": "On clicked_through: which card or component, e.g. a source card, a chart or an MCP Apps widget." },
             "target_type": { "type": "string", "minLength": 1, "examples": ["resource", "doc"], "description": "On clicked_through: the kind of object opened. Never a URL." }
           }

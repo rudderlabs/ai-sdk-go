@@ -377,6 +377,7 @@ What the user did with an answer, sent by `TrackAction`, typically from a feedba
 ```
 
 - `action_type`: `feedback_given`, `feedback_retracted`, `feedback_dismissed`, `copied_response`, `shared`, `exported`, `reported`, `regenerated`, `accepted`, `rejected`, `edited`, `reverted` or `clicked_through` (the `Action*` constants). Another value is sent with a warning.
+- `exported` uses `action_details.destination`, a snake_case label such as `download`, `dashboard`, `agent` or `ide` (1-64 ASCII characters: a lowercase letter first, then lowercase letters, digits or underscores).
 - `action_details`: your map, with `feedback_type`, `feedback_text`, `card_kind` and `target_type` dropped (with a warning) when not strings; `card_kind` and `target_type` also when empty. `feedback_text` is sent only with content capture on, masked.
 - Send `feedback_retracted` with the same `feedback_type` when a user takes feedback back: the latest event per `interaction_id` is the final state.
 - `InteractionID` and `ConversationID` (falling back to the context) are required; without them the event is dropped with a warning. For a one-shot interaction, pass its ID as both. `WithServerFeedback(false)` turns `TrackAction` off when the client app (web or mobile) sends its own copy (`source: "client"`).
