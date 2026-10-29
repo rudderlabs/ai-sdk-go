@@ -1430,12 +1430,15 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		responseText, responseOK = redactText(o.ResponseText)
 	}
 	i.mu.Lock()
-	tools := slices.Clone(i.tools)
-	i.mu.Unlock()
-	// Include tools added by redaction before the next segment starts empty.
+	// Drain tools added by redaction or tool callbacks before capturing totals.
 	// Calls whose outcome never arrived are sent now, as unknown.
-	i.fireToolEvents(tools, true)
-	i.mu.Lock()
+	for drained := 0; drained < len(i.tools); {
+		tools := slices.Clone(i.tools[drained:])
+		drained = len(i.tools)
+		i.mu.Unlock()
+		i.fireToolEvents(tools, true)
+		i.mu.Lock()
+	}
 	defer i.unlock()
 	if i.ended {
 		snapshot, ok = i.snapshotLocked()

@@ -67,6 +67,55 @@ func TestPauseRedactorAddedToolsEmitBeforeResponse(t *testing.T) {
 	}
 }
 
+func TestPauseToolCallbacksAddedToolsEmitBeforeResponse(t *testing.T) {
+	for _, source := range []string{"when", "properties"} {
+		t.Run(source, func(t *testing.T) {
+			var i *Interaction
+			addTool := func() {
+				i.RecordToolCalls(ToolCall{ID: "callback-tool", Name: "tool_b"})
+			}
+			rule := ToolEventRule{Event: "tool_a_declared"}
+			if source == "when" {
+				rule.When = func(map[string]any, any) bool { addTool(); return true }
+			} else {
+				rule.Properties = func(map[string]any, any) map[string]any { addTool(); return nil }
+			}
+			r := setupAI(t, WithCaptureContent(true), WithToolBreakdown(true),
+				WithEventRules(EventRules{Tools: map[string]ToolEventRule{
+					"tool_a": rule,
+					"tool_b": {Event: "tool_b_declared"},
+				}}),
+				WithRedactHook(func(text string) (string, error) {
+					i.RecordToolCalls(ToolCall{ID: "redactor-tool", Name: "tool_a"})
+					return text, nil
+				}))
+			_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+			if _, ok := i.Pause(PauseOptions{ResponseText: "approval"}); !ok {
+				t.Fatal("pause failed")
+			}
+			if got := mustJSON(r.names()); got != `["tool_a_declared","tool_b_declared","ai_response_received"]` {
+				t.Errorf("declared events: got %s", got)
+			}
+			if got := lastResponse(t, r)["tool_call_count"]; got != 2 {
+				t.Errorf("tool_call_count: got %v, want 2", got)
+			}
+			for _, name := range []string{"tool_a_declared", "tool_b_declared"} {
+				for _, event := range r.named(name) {
+					if event.Properties["tool_status"] != "unknown" {
+						t.Errorf("%s: unresolved tool status = %v", name, event.Properties["tool_status"])
+					}
+				}
+			}
+			i.Resume()
+			i.End(EndOptions{})
+			if len(r.named("tool_a_declared")) != 1 || len(r.named("tool_b_declared")) != 1 ||
+				lastResponse(t, r)["tool_call_count"] != 0 {
+				t.Fatal("callback tools were emitted or counted twice")
+			}
+		})
+	}
+}
+
 func TestPauseJSONPreservesOutcomeAndIntegration(t *testing.T) {
 	r := setupAI(t)
 	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
