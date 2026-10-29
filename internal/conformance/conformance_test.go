@@ -49,6 +49,7 @@ var gaps = map[string]string{}
 
 // Ops and APIs that belong to Node.js and Python integrations with no Go counterpart.
 var platformOps = map[string]string{
+	"bind_paused":                "Go has no bound stream API",
 	"langchain_tool":             "LangChain is a Node.js and Python framework",
 	"langchain_invoke":           "LangChain is a Node.js and Python framework",
 	"langchain_stream":           "LangChain is a Node.js and Python framework",
@@ -403,7 +404,15 @@ func (r *run) step(ctx context.Context, s obj) error {
 		r.cur.RecordCall(llmCall(s))
 	case "buffer_call":
 		interaction := r.cur
-		hook.OnBeforeEnd(interaction, func() { interaction.RecordCall(llmCall(s)) })
+		hook.OnBeforeEnd(interaction, func() {
+			interaction.RecordCall(llmCall(s))
+			if s["reenter_end"] == true {
+				interaction.End(rudderstackai.EndOptions{Status: rudderstackai.StatusError})
+			}
+		})
+	case "pause_on_shutdown_selection":
+		interaction := r.cur
+		hook.OnBeforeEnd(interaction, func() { interaction.Pause(rudderstackai.PauseOptions{}) })
 	case "record_tool_call":
 		if calls, ok := s["calls"].([]any); ok {
 			var tc []rudderstackai.ToolCall

@@ -44445,6 +44445,272 @@
           }
         }
       ]
+    },
+    {
+      "name": "v04_paused_end_buffer_reentry",
+      "description": "Since v0.4. An adapter finalizer reenters end during a paused end; exactly one paused segment counts its buffered usage.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_paused_end_buffer_reentry"
+          },
+          "steps": [
+            {
+              "op": "buffer_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01,
+              "reenter_end": true
+            },
+            {
+              "op": "end",
+              "status": "paused"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_paused_end_buffer_reentry",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_paused_end_buffer_reentry",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ],
+            "total_cost_usd": 0.01
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_bound_completion_after_pause",
+      "description": "Since v0.4. Normal bound stream completion leaves a paused interaction resumable. Go has no bound stream API.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_bound_completion_after_pause"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "bind_paused"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_bound_completion_after_pause",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_bound_completion_after_pause",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ],
+            "total_cost_usd": 0.01
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_shutdown_selection_then_pause",
+      "description": "Since v0.4. A pause after shutdown selects an interaction suppresses its stale finalization.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_shutdown_selection_then_pause"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "pause_on_shutdown_selection"
+            },
+            {
+              "op": "shutdown"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_shutdown_selection_then_pause",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_shutdown_selection_then_pause",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ],
+            "total_cost_usd": 0.01
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
     }
   ]
 }

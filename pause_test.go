@@ -5,11 +5,45 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 )
 
 var pauseCall = LLMCall{Provider: "openai", Model: "gpt-4o-mini", InputTokens: 10, OutputTokens: 2}
+
+func TestSharedPauseSnapshotOrder(t *testing.T) {
+	setupAI(t)
+	b, err := os.ReadFile("spec/fixtures/pause-snapshot-v0.1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Calls [][2]string `json:"calls"`
+		Seen  [][2]string `json:"seen_response_ids"`
+	}
+	if err := json.Unmarshal(b, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	for _, pair := range fixture.Calls {
+		i.RecordCall(LLMCall{Provider: pair[0], Model: "m", ResponseID: pair[1]})
+	}
+	snapshot, _ := i.Pause(PauseOptions{})
+	if mustJSON(snapshot.SeenResponseIDs) != mustJSON(fixture.Seen) {
+		t.Fatal(snapshot.SeenResponseIDs)
+	}
+	b, _ = json.Marshal(snapshot)
+	var stored PausedInteraction
+	if err := json.Unmarshal(b, &stored); err != nil {
+		t.Fatal(err)
+	}
+	_, resumed := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	next, _ := resumed.Pause(PauseOptions{})
+	if mustJSON(next.SeenResponseIDs) != mustJSON(fixture.Seen) {
+		t.Fatal(next.SeenResponseIDs)
+	}
+}
 
 func TestPauseDedupAcrossSegments(t *testing.T) {
 	for _, restore := range []bool{false, true} {

@@ -9,10 +9,9 @@ import (
 	"github.com/rudderlabs/ai-sdk-go/internal/dataplane"
 )
 
-// runCheck runs the agent against the mock LLM server, which replays the shared cassette once per
-// model call (one per worker run).
+// runCheck replays three distinct provider response IDs, one per worker run.
 func runCheck(sink *harness.Sink) error {
-	llm, err := harness.MockLLM("examples/node-anthropic.json", "examples/node-anthropic.json", "examples/node-anthropic.json")
+	llm, err := harness.MockLLM("examples/approval-loop-stream.json")
 	if err != nil {
 		return err
 	}

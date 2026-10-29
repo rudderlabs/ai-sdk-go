@@ -96,6 +96,102 @@
     }
   ],
   "facts": [
+    {
+      "name": "approval-loop: three distinct approval responses",
+      "cassette": "examples/approval-loop.json",
+      "calls": [
+        {
+          "api": "anthropic.messages",
+          "status": "success",
+          "model": "claude-haiku-4-5-20251001",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input": 1166,
+            "output": 14,
+            "cached": 1024,
+            "cache_write": 120,
+            "reasoning": 0
+          },
+          "tools": []
+        },
+        {
+          "api": "anthropic.messages",
+          "status": "success",
+          "model": "claude-haiku-4-5-20251001",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input": 1166,
+            "output": 14,
+            "cached": 1024,
+            "cache_write": 120,
+            "reasoning": 0
+          },
+          "tools": []
+        },
+        {
+          "api": "anthropic.messages",
+          "status": "success",
+          "model": "claude-haiku-4-5-20251001",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input": 1166,
+            "output": 14,
+            "cached": 1024,
+            "cache_write": 120,
+            "reasoning": 0
+          },
+          "tools": []
+        }
+      ]
+    },
+    {
+      "name": "approval-loop-stream: three distinct approval responses",
+      "cassette": "examples/approval-loop-stream.json",
+      "calls": [
+        {
+          "api": "anthropic.messages",
+          "status": "success",
+          "model": "claude-haiku-4-5-20251001",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input": 1166,
+            "output": 14,
+            "cached": 1024,
+            "cache_write": 120,
+            "reasoning": 0
+          },
+          "tools": []
+        },
+        {
+          "api": "anthropic.messages",
+          "status": "success",
+          "model": "claude-haiku-4-5-20251001",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input": 1166,
+            "output": 14,
+            "cached": 1024,
+            "cache_write": 120,
+            "reasoning": 0
+          },
+          "tools": []
+        },
+        {
+          "api": "anthropic.messages",
+          "status": "success",
+          "model": "claude-haiku-4-5-20251001",
+          "finish_reason": "end_turn",
+          "usage": {
+            "input": 1166,
+            "output": 14,
+            "cached": 1024,
+            "cache_write": 120,
+            "reasoning": 0
+          },
+          "tools": []
+        }
+      ]
+    },
     {"name": "node-openrouter: streamed chat, final usage chunk repeating finish_reason", "cassette": "examples/node-openrouter.json", "calls": [{"api": "openai.chat", "status": "success", "model": "openai/gpt-oss-20b", "finish_reason": "stop", "usage": {"input": 81, "output": 14, "cached": 0, "cache_write": 0, "reasoning": 0}, "tools": []}]},
     {"name": "node-litellm-proxy: x-litellm-model-name names the served deployment", "cassette": "examples/node-litellm-proxy.json", "calls": [{"api": "openai.chat", "status": "success", "model": "openai/qwen3:1.7b", "finish_reason": "stop", "usage": {"input": 18, "output": 13, "cached": 0, "cache_write": 0, "reasoning": 0}, "tools": []}]},
     {"name": "python-openrouter-quickstart: streamed chat, final usage chunk repeating finish_reason", "cassette": "examples/python-openrouter-quickstart.json", "calls": [{"api": "openai.chat", "status": "success", "model": "openai/gpt-oss-20b", "finish_reason": "stop", "usage": {"input": 81, "output": 14, "cached": 0, "cache_write": 0, "reasoning": 0}, "tools": []}]},

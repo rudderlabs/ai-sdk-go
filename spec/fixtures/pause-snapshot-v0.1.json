@@ -1,0 +1,31 @@
+{
+  "description": "Since v0.4. Provider/response ID pairs in pause snapshots use UTF-16 code-unit order in every SDK, and survive JSON restoration.",
+  "calls": [
+    [
+      "z",
+      ""
+    ],
+    [
+      "z",
+      "😀"
+    ],
+    [
+      "a",
+      "same"
+    ]
+  ],
+  "seen_response_ids": [
+    [
+      "a",
+      "same"
+    ],
+    [
+      "z",
+      "😀"
+    ],
+    [
+      "z",
+      ""
+    ]
+  ]
+}

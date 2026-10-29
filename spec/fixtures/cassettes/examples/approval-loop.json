@@ -1,0 +1,121 @@
+{
+  "synthetic": true,
+  "description": "Since v0.4. Three Anthropic Messages answers for the shared approval-loop example, with distinct response IDs for its three model calls. Synthetic, derived from the shared streaming approval cassette.",
+  "sources": [
+    "https://docs.anthropic.com/en/docs/build-with-claude/streaming",
+    "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching"
+  ],
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "msg_approval_1",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-haiku-4-5-20251001",
+          "content": [
+            {
+              "type": "text",
+              "text": "Yes, you can change it until the order ships."
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 22,
+            "cache_creation_input_tokens": 120,
+            "cache_read_input_tokens": 1024,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 120,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 14,
+            "service_tier": "standard"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "msg_approval_2",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-haiku-4-5-20251001",
+          "content": [
+            {
+              "type": "text",
+              "text": "Yes, you can change it until the order ships."
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 22,
+            "cache_creation_input_tokens": 120,
+            "cache_read_input_tokens": 1024,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 120,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 14,
+            "service_tier": "standard"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "msg_approval_3",
+          "type": "message",
+          "role": "assistant",
+          "model": "claude-haiku-4-5-20251001",
+          "content": [
+            {
+              "type": "text",
+              "text": "Yes, you can change it until the order ships."
+            }
+          ],
+          "stop_reason": "end_turn",
+          "stop_sequence": null,
+          "usage": {
+            "input_tokens": 22,
+            "cache_creation_input_tokens": 120,
+            "cache_read_input_tokens": 1024,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 120,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 14,
+            "service_tier": "standard"
+          }
+        }
+      }
+    }
+  ]
+}
