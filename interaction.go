@@ -987,7 +987,7 @@ var reservedProperties = set(
 )
 
 var toolEventReserved = func() map[string]bool {
-	m := set("agent_name", "tool_name", "tool_call_id", "tool_status", "tool_duration_ms", "mcp_server", "result_size_bytes")
+	m := set("agent_name", "tool_name", "tool_call_id", "tool_status", "tool_duration_ms")
 	for k := range reservedProperties {
 		m[k] = true
 	}
@@ -1047,14 +1047,6 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	i.mu.Lock()
 	defer i.unlock()
 	p := i.baseLocked()
-	// SDK overrides are no longer custom properties and must survive size trimming.
-	keys := make([]string, 0, len(custom))
-	for k, v := range custom {
-		if _, sdkOwned := p[k]; !sdkOwned {
-			p[k] = v
-			keys = append(keys, k)
-		}
-	}
 	p["trigger"] = string(i.trigger)
 	put(p, "agent_name", t.agentName)
 	p["tool_name"] = t.name
@@ -1076,6 +1068,14 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	// An unknown outcome never reports a 0 duration.
 	if t.duration != nil && (t.err != nil || *t.duration != 0) {
 		p["tool_duration_ms"] = roundMS(*t.duration)
+	}
+	// SDK overrides are no longer custom properties and must survive size trimming.
+	keys := make([]string, 0, len(custom))
+	for k, v := range custom {
+		if _, sdkOwned := p[k]; !sdkOwned {
+			p[k] = v
+			keys = append(keys, k)
+		}
 	}
 	p = fitToolEventProperties(rule.Event, p, keys)
 	i.sendLocked(rule.Event, func() map[string]any { return p })

@@ -370,5 +370,9 @@ func priceCredits(fn CreditsFunc, call CreditCall) (amount *float64) {
 		report(KindUserCallback, "credits", err)
 		return nil
 	}
+	if v != nil && !validRate(*v) {
+		report(KindUserCallback, "credits", errors.New("rudderstackai: credits must be finite and non-negative"))
+		return nil
+	}
 	return creditsOf(v)
 }

@@ -75,7 +75,7 @@ func rowKey(m *Object) string {
 	name := m.Get("event").(string)
 	props := obj(m.Get("properties"))
 	wrapper := obj(obj(m.Get("context")).Get("wrapperLibrary"))
-	if props.Get("source") == "client" && (clientCopies[name] || clientOnly[name] || clientTool(name, props, wrapper, []string{name})) {
+	if props.Get("source") == "client" && (clientCopies[name] || clientOnly[name] || name == "ai_limit_reached" || clientTool(name, props, wrapper, []string{name})) {
 		return name + " (browser)"
 	}
 	sdk := in(obj(obj(m.Get("context")).Get("wrapperLibrary")).Get("name"), sdkNames)
