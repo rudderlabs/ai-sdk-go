@@ -162,6 +162,8 @@ err := rudderstackai.RunTask(ctx, "alert-triage", rudderstackai.TaskOptions{Trig
 - Chaining: a task inside another interaction or task defaults `parent_interaction_id`, `conversation_id` and `trigger_source: agent` from it. Each task sends its own `ai_response_received`.
 - Flush: a top-level task waits for its classification and score (the classifier timeout plus a second, as `Flush`) and flushes its client when the client implements `Flusher`; a chained sub-task does not (`TaskOptions.Flush` overrides).
 - No prompt event, and no classification unless `Classify` is set ([TaskOptions](docs/configuration.md#taskoptions)).
+- Waiting for an approval or a person: `task.Pause(PauseOptions{Reason: PauseApproval})` sends a `paused` answer for the work so far and returns a JSON snapshot; pass it as `TaskOptions.Resume` in the run that continues, in any process. The final answer carries `pause_count` and `total_paused_ms` ([Pauses and resumes](docs/configuration.md#pauses-and-resumes)).
+- `WithTaskStartedEvents(true)` also sends `ai_task_started` when a run starts, so runs in flight or abandoned show up.
 
 ## MCP servers
 
@@ -383,7 +385,7 @@ No API was removed.
 ## Known limitations
 
 - Integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients only. There are no OpenAI Agents SDK, Claude Agent SDK, LangChain, LangGraph or Vercel AI SDK integrations (they have no Go version), and no OpenTelemetry span processor or exporter.
-- Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `EndOptions`.
+- Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `Interaction.Pause` or `EndOptions`.
 - Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint. A cancelled Chat Completions stream keeps 0 tokens (usage arrives only at the end).
 - Retries: genai retries, and openai-go / anthropic-sdk-go connection-error retries outside an interaction, are recorded per attempt ([Retries](docs/integrations.md#retries)).
 - Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
@@ -398,6 +400,7 @@ No API was removed.
 | [`google-genai`](examples/google-genai)               | `ruddergenai`: a tool call, then a streamed answer, with `tool_breakdown`                      |
 | [`bedrock-converse`](examples/bedrock-converse)       | `rudderbedrock`: `Converse` with a tool, then `ConverseStream`, priced through an inference profile |
 | [`background-agent`](examples/background-agent)       | `RunTask`: system-triggered work with a chained sub-task and `TrackScore`                      |
+| [`approval-loop`](examples/approval-loop)             | `RunTask` that pauses twice for approval and resumes from a stored snapshot; `ai_task_started` |
 | [`manual`](examples/manual)                           | `StartInteraction`, `RecordCall`, `RecordToolCalls`, a declared tool event, a custom classifier |
 | [`mcp-server`](examples/mcp-server)                   | stdio and streamable HTTP, `request_context`, a declared event, `request_capability`           |
 | [`mcp-server-mcpgo`](examples/mcp-server-mcpgo)       | The same server on mcp-go with `ruddermcpgo.WrapServer`, 2025-06-18 and 2026-07-28             |
