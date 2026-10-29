@@ -3,9 +3,67 @@ package rudderstackai
 import (
 	"context"
 	"math"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
+
+func TestTrimmingCustomPropertiesPreservesSDKFields(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		sdkVersions bool
+		padding     int
+	}{
+		{"sdk-small", true, 0},
+		{"sdk-oversized", true, 40_000},
+		{"custom-small", false, 0},
+		{"custom-oversized", false, 40_000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expected := map[string]any{
+				"conversation_id": "c1", "interaction_id": "i1", "feature": "support", "surface": "web",
+				"account_id": "acme", "on_behalf_of": "owner", "trigger_source": "api", "task_name": "lookup",
+				"trigger_event_id": "e1", "parent_interaction_id": "parent", "trigger": "user", "agent_name": "planner",
+				"tool_name": "search", "tool_call_id": "t1", "tool_status": "success", "tool_duration_ms": int64(12),
+				"mcp_server": "crm", "result_size_bytes": 6,
+			}
+			r := setupAI(t, WithEventRules(EventRules{Tools: map[string]ToolEventRule{
+				"search": {Event: "searched", Properties: func(map[string]any, any) map[string]any {
+					custom := map[string]any{"agent_version": "custom-version", "variant": "custom-variant", "padding": strings.Repeat("x", tc.padding)}
+					for k := range expected {
+						custom[k] = "custom"
+					}
+					return custom
+				}},
+			}}))
+			opts := InteractionOptions{
+				UserID: "u1", ConversationID: "c1", InteractionID: "i1", Feature: "support", Surface: SurfaceWeb,
+				AccountID: "acme", OnBehalfOf: "owner", TriggerSource: "api", TaskName: "lookup",
+				TriggerEventID: "e1", ParentInteractionID: "parent",
+			}
+			if tc.sdkVersions {
+				opts.AgentVersion, opts.Variant = "v1", "treatment"
+			}
+			run(t, opts, func(_ context.Context, i *Interaction) {
+				i.RecordToolCalls(ToolCall{ID: "t1", Name: "search", AgentName: "planner", MCPServer: "crm"})
+				i.RecordToolResult("t1", ToolResult{Error: Ptr(false), Duration: Ptr(12 * time.Millisecond), Result: "héllo"})
+			})
+			if tc.sdkVersions {
+				expected["agent_version"], expected["variant"] = "v1", "treatment"
+			}
+			if tc.padding == 0 {
+				expected["padding"] = ""
+				if !tc.sdkVersions {
+					expected["agent_version"], expected["variant"] = "custom-version", "custom-variant"
+				}
+			}
+			if got := r.props(t, "searched"); !reflect.DeepEqual(got, expected) {
+				t.Fatalf("properties: got %v, want %v", got, expected)
+			}
+		})
+	}
+}
 
 func TestCreditsHookAndOverflow(t *testing.T) {
 	r := setupAI(t, WithCredits(func(call CreditCall) (*float64, error) { return Ptr(2.0), nil }), WithLimits(Limits{MaxCallsPerInteraction: 1}))

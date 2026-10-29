@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"math"
 	"net/http"
 	"slices"
@@ -1045,12 +1044,16 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 			}
 		}
 	}
-	keys := slices.Collect(maps.Keys(custom))
 	i.mu.Lock()
 	defer i.unlock()
-	p := custom
-	for k, v := range i.baseLocked() {
-		p[k] = v
+	p := i.baseLocked()
+	// SDK overrides are no longer custom properties and must survive size trimming.
+	keys := make([]string, 0, len(custom))
+	for k, v := range custom {
+		if _, sdkOwned := p[k]; !sdkOwned {
+			p[k] = v
+			keys = append(keys, k)
+		}
 	}
 	p["trigger"] = string(i.trigger)
 	put(p, "agent_name", t.agentName)
