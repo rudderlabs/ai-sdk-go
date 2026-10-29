@@ -397,7 +397,7 @@ type outcomeHint struct {
 
 // Interaction is one user prompt and the one answer it gets, however many model calls, tools or
 // agents that takes. Integrations report each call into the interaction carried by the request
-// context; it sends ai_user_prompt_created and exactly one ai_response_received. Safe for
+// context; it sends ai_user_prompt_created, a response for each pause and one final response. Safe for
 // concurrent use.
 type Interaction struct {
 	agentVersion, variant                                                  string
@@ -1473,10 +1473,10 @@ func (i *Interaction) end(o EndOptions) {
 	if !i.clientDisconnected && i.disconnected != nil {
 		safely(func() { i.clientDisconnected = i.disconnected() })
 	}
-	derived := i.buildLocked(o, responseText, responseOK, false)
-	if derived["response_status"] == string(StatusPaused) {
+	hintedPause := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
+	if o.endReason == "" && (o.Status == StatusPaused || hintedPause) {
 		i.mu.Unlock()
-		i.pause(PauseOptions{Reason: PauseReason(derived["pause_reason"].(string)), ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
+		i.pause(PauseOptions{Reason: o.PauseReason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
 		return
 	}
 	i.ended = true
