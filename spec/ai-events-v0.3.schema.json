@@ -1711,7 +1711,12 @@
       ],
       "required": [
         "task_name"
-      ]
+      ],
+      "properties": {
+        "sample_rate": {
+          "$ref": "#/$defs/sample_rate"
+        }
+      }
     }
   }
 }

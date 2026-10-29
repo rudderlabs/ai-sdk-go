@@ -2,6 +2,12 @@
 
 Changes to [`ai-events-v0.3.schema.json`](ai-events-v0.3.schema.json), shared byte for byte by the Node.js, Python and Go SDKs.
 
+## Unreleased — pause and resume (SDK-5991)
+
+- Add repeated response segments with `pause_reason`, final `pause_count` and `total_paused_ms`, and optional `ai_task_started`. Preserve the client, server-field and sampling additions from SDK-5989, SDK-5990 and SDK-5992.
+- Extend pause, JSON snapshot and migration fixtures. Paused answers are unsampled by default; sampled segments retain the interaction ID and `sample_rate` across resumes. Declare sampling and version fields on task starts in the catalog.
+- Keep the existing schema filenames and emitted spec version; the final v0.4 layer follows separately.
+
 ## Unreleased — sampling (SDK-5992)
 
 - Add optional `sample_rate` on sampled server events, including `ai_limit_reached`, and declare it in the tracking plan. The shared sampling fixture fixes the interaction hash and keep/drop decision across SDKs.

@@ -1136,8 +1136,11 @@ func TestMixedEmittedEventsMatchAfterJSONRestoration(t *testing.T) {
 						run := func(restore bool) string {
 							r := setupAI(t, WithLLMCallEvents(true), WithToolBreakdown(true), WithLimits(Limits{MaxCallsPerInteraction: cap}))
 							client := &pauseReentrantClient{recorder: r}
-							_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", InteractionID: "round-trip", ConversationID: "conversation", NoPromptEvent: true, Analytics: client})
+							_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", InteractionID: "round-trip", ConversationID: "conversation", NoPromptEvent: true, Analytics: client, AgentVersion: "release", Variant: "experiment"})
+							i.SetConfidence(ConfidenceHigh)
 							call := pauseCall
+							call.Credits, call.CallPurpose = Ptr(2.0), "answer"
+							call.FallbackUsed, call.BYOK = Ptr(false), Ptr(true)
 							call.ResponseID = "first"
 							call.CostUSD = Ptr(0.01)
 							i.RecordCall(call)
@@ -1157,6 +1160,7 @@ func TestMixedEmittedEventsMatchAfterJSONRestoration(t *testing.T) {
 									f.ResponseID = "pending-fail"
 									f.ErrorType = "api_error"
 									f.CostUSD = Ptr(0.04)
+									f.Credits, f.CallPurpose = Ptr(0.0), "verification"
 									i.RecordCall(f)
 								}
 								i.RecordToolCalls(ToolCall{ID: "pending-a", Name: "tool-a"}, ToolCall{ID: "pending-b", Name: "tool-b"})
@@ -1186,6 +1190,7 @@ func TestMixedEmittedEventsMatchAfterJSONRestoration(t *testing.T) {
 								f.Model = "later"
 								f.ResponseID = "suffix"
 								f.CostUSD = Ptr(0.05)
+								f.Credits, f.CallPurpose = Ptr(3.0), "answer"
 								if suffix == "failure" {
 									f.ErrorType = "api_error"
 								}
@@ -1200,6 +1205,7 @@ func TestMixedEmittedEventsMatchAfterJSONRestoration(t *testing.T) {
 							call.Model = "final"
 							call.ResponseID = "final"
 							call.CostUSD = Ptr(0.06)
+							call.Credits, call.CallPurpose = Ptr(1.0), "answer"
 							i.RecordCall(call)
 							i.RecordToolCalls(ToolCall{ID: "final-tool", Name: "final-tool"})
 							i.End(EndOptions{})
@@ -1263,5 +1269,56 @@ func TestInFlightPauseGuardPrecedesInteractionMutex(t *testing.T) {
 	}
 	if len(r.named("ai_response_received")) != 1 || lastResponse(t, r)["llm_call_count"] != 2 || lastResponse(t, r)["total_tokens"] != 24 {
 		t.Fatal("capped finalizer lost or doubled usage", r.names())
+	}
+}
+
+func TestPausePreservesServerFieldsAndSegmentCompactions(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		t.Run(fmt.Sprint(restore), func(t *testing.T) {
+			r := setupAI(t)
+			client := &pauseReentrantClient{recorder: r}
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client, AgentVersion: "release", Variant: "experiment"})
+			i.SetConfidence(ConfidenceHigh)
+			i.RecordCompaction(2)
+			client.reenter = func() { i.RecordCompaction() }
+			snapshot, ok := i.Pause(PauseOptions{})
+			if !ok || lastResponse(t, r)["compaction_count"] != 2 {
+				t.Fatal("pause lost segment compactions")
+			}
+			if restore {
+				var stored PausedInteraction
+				if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+					t.Fatal(err)
+				}
+				_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored, AgentVersion: "wrong", Variant: "wrong"})
+			} else {
+				i.Resume()
+			}
+			i.End(EndOptions{})
+			p := lastResponse(t, r)
+			if p["agent_version"] != "release" || p["variant"] != "experiment" || p["confidence"] != "high" || p["compaction_count"] != 1 {
+				t.Fatal("resume lost server fields or repeated compactions", p)
+			}
+		})
+	}
+}
+
+func TestCreditsCallbackCanPauseBeforeDuplicateRecheck(t *testing.T) {
+	var i *Interaction
+	r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) {
+		call := pauseCall
+		call.ResponseID, call.Credits = "same", Ptr(2.0)
+		i.RecordCall(call)
+		i.Pause(PauseOptions{})
+		return Ptr(2.0), nil
+	}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	call := pauseCall
+	call.ResponseID = "same"
+	if i.RecordCall(call) || !i.Paused() {
+		t.Fatal("credits callback lost deduplication or pause state")
+	}
+	if p := lastResponse(t, r); p["total_credits"] != 2.0 || p["llm_call_count"] != 1 {
+		t.Fatal(p)
 	}
 }

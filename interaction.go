@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"slices"
@@ -316,21 +317,25 @@ type PausedInteraction struct {
 	// TotalPausedMS is the time spent paused before this pause.
 	TotalPausedMS int64 `json:"total_paused_ms"`
 	// PausedAt is when this pause started (Unix milliseconds).
-	PausedAt            int64   `json:"paused_at"`
-	UserID              string  `json:"user_id,omitempty"`
-	AnonymousID         string  `json:"anonymous_id,omitempty"`
-	Feature             string  `json:"feature,omitempty"`
-	Surface             Surface `json:"surface,omitempty"`
-	AccountID           string  `json:"account_id,omitempty"`
-	OnBehalfOf          string  `json:"on_behalf_of,omitempty"`
-	TriggerSource       string  `json:"trigger_source,omitempty"`
-	TaskName            string  `json:"task_name,omitempty"`
-	TriggerEventID      string  `json:"trigger_event_id,omitempty"`
-	ParentInteractionID string  `json:"parent_interaction_id,omitempty"`
-	Intent              string  `json:"intent,omitempty"`
-	TraceID             string  `json:"trace_id,omitempty"`
-	Outcome             string  `json:"outcome,omitempty"`
-	Integration         string  `json:"integration,omitempty"`
+	PausedAt            int64      `json:"paused_at"`
+	UserID              string     `json:"user_id,omitempty"`
+	AnonymousID         string     `json:"anonymous_id,omitempty"`
+	Feature             string     `json:"feature,omitempty"`
+	Surface             Surface    `json:"surface,omitempty"`
+	AccountID           string     `json:"account_id,omitempty"`
+	OnBehalfOf          string     `json:"on_behalf_of,omitempty"`
+	AgentVersion        string     `json:"agent_version,omitempty"`
+	Variant             string     `json:"variant,omitempty"`
+	Confidence          Confidence `json:"confidence,omitempty"`
+	CompactionCount     int        `json:"compaction_count,omitempty"`
+	TriggerSource       string     `json:"trigger_source,omitempty"`
+	TaskName            string     `json:"task_name,omitempty"`
+	TriggerEventID      string     `json:"trigger_event_id,omitempty"`
+	ParentInteractionID string     `json:"parent_interaction_id,omitempty"`
+	Intent              string     `json:"intent,omitempty"`
+	TraceID             string     `json:"trace_id,omitempty"`
+	Outcome             string     `json:"outcome,omitempty"`
+	Integration         string     `json:"integration,omitempty"`
 	// SeenResponseIDs retains provider/response ID pairs already counted. Since v0.4.
 	SeenResponseIDs [][2]string `json:"seen_response_ids,omitempty"`
 	// PendingCalls and PendingTools carry usage accepted after the paused segment closed. Since v0.4.
@@ -354,6 +359,7 @@ func resumeFrom(o *InteractionOptions) bool {
 	o.InteractionID, o.ConversationID, o.Trigger = r.InteractionID, r.ConversationID, r.Trigger
 	o.UserID, o.AnonymousID, o.Feature, o.Surface = r.UserID, r.AnonymousID, r.Feature, r.Surface
 	o.AccountID, o.OnBehalfOf, o.TriggerSource, o.TaskName = r.AccountID, r.OnBehalfOf, r.TriggerSource, r.TaskName
+	o.AgentVersion, o.Variant = r.AgentVersion, r.Variant
 	o.TriggerEventID, o.ParentInteractionID, o.Intent, o.TraceID = r.TriggerEventID, r.ParentInteractionID, r.Intent, r.TraceID
 	return true
 }
@@ -622,6 +628,8 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		i.userID, i.anonymousID = snapshot.UserID, snapshot.AnonymousID
 		i.feature, i.surface = snapshot.Feature, surfaceOf(snapshot.Surface)
 		i.accountID, i.onBehalfOf = snapshot.AccountID, snapshot.OnBehalfOf
+		i.agentVersion, i.variant = snapshot.AgentVersion, snapshot.Variant
+		i.confidence, i.compactions = snapshot.Confidence, nonNegative(snapshot.CompactionCount)
 		i.outcome, i.integration = snapshot.Outcome, snapshot.Integration
 		i.restorePending(snapshot)
 		i.pauseCount = max(snapshot.PauseCount, 0)
@@ -914,8 +922,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	if call.ResponseID != "" {
 		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok {
-			if earlier == nil { return false }
- fillString(&earlier.agentName, call.AgentName)
+			if earlier == nil {
+				return false
+			}
+			fillString(&earlier.agentName, call.AgentName)
 			fillString(&earlier.callPurpose, call.CallPurpose)
 			if call.BYOK != nil {
 				earlier.byok = call.BYOK
@@ -1460,6 +1470,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	i.tools, i.toolOverflow, i.toolsByID = nil, nil, map[string]*recordedTool{}
 	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
+	i.compactions = 0
 	unregister(i)
 	snapshot, ok = i.snapshotLocked()
 	// The flight stays in progress until unlock finishes delivery and deferred reporting.
@@ -1521,6 +1532,7 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		PauseCount: i.pauseCount, TotalPausedMS: roundMS(i.pausedTotal), PausedAt: i.pausedAt.UnixMilli(),
 		UserID: i.userID, AnonymousID: i.anonymousID, Feature: i.feature, Surface: i.surface,
 		AccountID: i.accountID, OnBehalfOf: i.onBehalfOf, TriggerSource: i.triggerSource, TaskName: i.taskName,
+		AgentVersion: i.agentVersion, Variant: i.variant, Confidence: i.confidence, CompactionCount: i.compactions,
 		TriggerEventID: i.triggerEventID, ParentInteractionID: i.parent, Intent: i.intent, TraceID: i.traceID,
 		Outcome: i.outcome, Integration: i.integration,
 	}
@@ -1582,6 +1594,25 @@ func pendingBool(p map[string]any, key string) bool   { b, _ := p[key].(bool); r
 
 func pendingCall(c *recordedCall) map[string]any {
 	p := map[string]any{}
+	if c.credits != nil {
+		p["credits"] = *c.credits
+	}
+	if c.uncredited {
+		p["uncredited"] = true
+	}
+	put(p, "call_purpose", c.callPurpose)
+	if c.fallbackUsed != nil {
+		p["fallback_used"] = *c.fallbackUsed
+	}
+	if c.byok != nil {
+		p["byok"] = *c.byok
+	}
+	if c.latency != nil {
+		p["latency_ms"] = float64(*c.latency) / float64(time.Millisecond)
+	}
+	if c.ttft != nil {
+		p["time_to_first_token_ms"] = float64(*c.ttft) / float64(time.Millisecond)
+	}
 	if c.unpriced {
 		p["unpriced"] = true
 	}
@@ -1670,6 +1701,23 @@ func pendingTool(c *recordedTool) map[string]any {
 func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	for _, p := range snapshot.PendingCalls {
 		c := &recordedCall{}
+		if p["credits"] != nil {
+			c.credits = Ptr(pendingNumber(p, "credits"))
+		}
+		c.uncredited = pendingBool(p, "uncredited")
+		c.callPurpose = pendingText(p, "call_purpose")
+		if v, ok := p["fallback_used"].(bool); ok {
+			c.fallbackUsed = Ptr(v)
+		}
+		if v, ok := p["byok"].(bool); ok {
+			c.byok = Ptr(v)
+		}
+		if p["latency_ms"] != nil {
+			c.latency = Ptr(time.Duration(pendingNumber(p, "latency_ms") * float64(time.Millisecond)))
+		}
+		if p["time_to_first_token_ms"] != nil {
+			c.ttft = Ptr(time.Duration(pendingNumber(p, "time_to_first_token_ms") * float64(time.Millisecond)))
+		}
 		c.unpriced = pendingBool(p, "unpriced")
 		c.feesUnknown = pendingBool(p, "fees_unknown")
 		c.provider = pendingText(p, "provider")
