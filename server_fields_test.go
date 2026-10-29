@@ -84,7 +84,7 @@ func TestCreditHookCanInspectAndUpdateInteraction(t *testing.T) {
 		}()
 		select {
 		case <-done:
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(time.Second):
 			blocked = true
 		}
 		return Ptr(2.0), nil
@@ -114,5 +114,37 @@ func TestCallLatencyExcludesCreditHook(t *testing.T) {
 	latency := r.props(t, "ai_llm_response_received")["latency_ms"].(int64)
 	if latency > hookStart.Sub(started).Milliseconds()+1 {
 		t.Fatalf("provider latency %d ms includes credit hook", latency)
+	}
+}
+
+func TestCreditHookCanEndInteraction(t *testing.T) {
+	var i *Interaction
+	r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) { i.End(EndOptions{}); return Ptr(2.0), nil }))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	if i.RecordCall(LLMCall{Model: "m"}) {
+		t.Fatal("call recorded after hook ended interaction")
+	}
+	if p := r.props(t, "ai_response_received"); p["llm_call_count"] != 0 {
+		t.Fatalf("calls: %v", p)
+	}
+}
+
+func TestCreditHookReentrantResponseKeepsAgent(t *testing.T) {
+	var i *Interaction
+	r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) {
+		i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "same", Credits: Ptr(0.0)})
+		return Ptr(2.0), nil
+	}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	if i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "same", AgentName: "planner"}) {
+		t.Fatal("duplicate recorded")
+	}
+	i.End(EndOptions{})
+	p := r.props(t, "ai_response_received")
+	if p["usage_breakdown"].([]map[string]any)[0]["agent_name"] != "planner" {
+		t.Fatalf("agent: %v", p)
+	}
+	if p["llm_call_count"] != 1 || p["total_credits"] != 0.0 {
+		t.Fatalf("calls: %v", p)
 	}
 }

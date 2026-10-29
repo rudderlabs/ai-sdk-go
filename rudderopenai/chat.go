@@ -51,7 +51,8 @@ func recordChatToolResults(c *kit.Call) {
 	for _, m := range kit.List(c.Request["messages"]) {
 		msg := kit.Map(m)
 		if msg["role"] == "tool" {
-			c.Interaction.RecordToolResult(kit.Str(msg["tool_call_id"]), rudderstackai.ToolResult{Result: kit.ParseToolValue(msg["content"])})
+			_, hasResult := msg["content"]
+			kit.RecordToolResult(c.Interaction, kit.Str(msg["tool_call_id"]), rudderstackai.ToolResult{Result: kit.ParseToolValue(msg["content"])}, hasResult)
 		}
 	}
 }

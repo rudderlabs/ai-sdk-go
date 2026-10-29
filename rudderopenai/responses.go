@@ -56,7 +56,8 @@ func recordResponsesToolResults(c *kit.Call) {
 	for _, it := range kit.List(c.Request["input"]) {
 		item := kit.Map(it)
 		if strings.HasSuffix(kit.Str(item["type"]), "_call_output") {
-			c.Interaction.RecordToolResult(kit.Str(item["call_id"]), rudderstackai.ToolResult{Result: kit.ParseToolValue(item["output"])})
+			_, hasResult := item["output"]
+			kit.RecordToolResult(c.Interaction, kit.Str(item["call_id"]), rudderstackai.ToolResult{Result: kit.ParseToolValue(item["output"])}, hasResult)
 		}
 	}
 }

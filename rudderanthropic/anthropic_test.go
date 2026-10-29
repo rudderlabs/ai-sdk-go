@@ -450,3 +450,13 @@ func TestClassifierClient(t *testing.T) {
 		t.Error("expected an error with no reply queued")
 	}
 }
+
+func TestContextLimitMessageClassifier(t *testing.T) {
+	e := &anthropic.Error{StatusCode: 400}
+	if err := json.Unmarshal([]byte(`{"error":{"type":"invalid_request_error","message":"prompt is too long"}}`), e); err != nil {
+		t.Fatal(err)
+	}
+	if got := rudderstackai.ErrorTypeOf(e); got != "context_limit" {
+		t.Fatalf("typed classifier: %s", got)
+	}
+}

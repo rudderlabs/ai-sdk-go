@@ -1,0 +1,101 @@
+{
+  "fixture_version": 1,
+  "description": "Credits follow the authoritative usage when a wrapper and a tracing product-event span report one call. Node and Python support this path; Go tracing emits spans without product-event twin merging.",
+  "cases": [
+    {
+      "name": "span_then_adapter",
+      "reports": [
+        {
+          "from_span": true,
+          "input_tokens": 1
+        },
+        {
+          "from_span": false,
+          "input_tokens": 10
+        }
+      ],
+      "hook": {
+        "1": 1,
+        "10": 10
+      },
+      "input_tokens": 10,
+      "credits": 10
+    },
+    {
+      "name": "adapter_then_span",
+      "reports": [
+        {
+          "from_span": false,
+          "input_tokens": 10
+        },
+        {
+          "from_span": true,
+          "input_tokens": 1
+        }
+      ],
+      "hook": {
+        "1": 1,
+        "10": 10
+      },
+      "input_tokens": 10,
+      "credits": 10
+    },
+    {
+      "name": "authoritative_usage_uncredited",
+      "reports": [
+        {
+          "from_span": true,
+          "input_tokens": 1
+        },
+        {
+          "from_span": false,
+          "input_tokens": 10
+        }
+      ],
+      "hook": {
+        "1": 1
+      },
+      "input_tokens": 10
+    },
+    {
+      "name": "authoritative_zero_credits",
+      "reports": [
+        {
+          "from_span": true,
+          "input_tokens": 1
+        },
+        {
+          "from_span": false,
+          "input_tokens": 10,
+          "credits": 0
+        }
+      ],
+      "hook": {
+        "1": 1,
+        "10": 10
+      },
+      "input_tokens": 10,
+      "credits": 0
+    },
+    {
+      "name": "unknown_span_usage",
+      "reports": [
+        {
+          "from_span": true,
+          "input_tokens": 1,
+          "usage_known": false
+        },
+        {
+          "from_span": false,
+          "input_tokens": 10
+        }
+      ],
+      "hook": {
+        "1": 1,
+        "10": 10
+      },
+      "input_tokens": 10,
+      "credits": 10
+    }
+  ]
+}

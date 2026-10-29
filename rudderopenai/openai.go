@@ -149,7 +149,7 @@ func init() {
 	kit.RegisterErrorClassifier(func(err error) (string, bool) {
 		var apiErr *openai.Error
 		if errors.As(err, &apiErr) {
-			return kit.HTTPErrorType(apiErr.StatusCode, map[string]any{"error": map[string]any{"code": apiErr.Code, "type": apiErr.Type}}), true
+			return kit.HTTPErrorType(apiErr.StatusCode, map[string]any{"error": map[string]any{"code": apiErr.Code, "type": apiErr.Type, "message": apiErr.Message}}), true
 		}
 		var streamErr *ssestream.StreamError
 		if errors.As(err, &streamErr) {

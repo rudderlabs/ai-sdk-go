@@ -93,11 +93,9 @@ func init() {
 		if !errors.As(err, &e) {
 			return "", false
 		}
-		if t := rudderstackai.ErrorTypeForStatus(e.StatusCode); t != "" {
-			return t, true
-		}
-		// 529 overloaded, 5xx, and an error event mid-stream (sent with the stream's 200).
-		return "api_error", true
+		var body map[string]any
+		_ = json.Unmarshal([]byte(e.RawJSON()), &body)
+		return kit.HTTPErrorType(e.StatusCode, body), true
 	})
 }
 
@@ -194,7 +192,8 @@ func recordToolResults(c *kit.Call) {
 				continue
 			}
 			failed := b["is_error"] == true
-			c.Interaction.RecordToolResult(kit.Str(b["tool_use_id"]), rudderstackai.ToolResult{Error: &failed, Result: kit.ToolResultValue(b["content"])})
+			_, hasResult := b["content"]
+			kit.RecordToolResult(c.Interaction, kit.Str(b["tool_use_id"]), rudderstackai.ToolResult{Error: &failed, Result: kit.ToolResultValue(b["content"])}, hasResult)
 		}
 	}
 }

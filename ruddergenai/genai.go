@@ -293,13 +293,15 @@ func recordFunctionResponses(i *rudderstackai.Interaction, contents any) {
 		response := kit.Map(fr["response"])
 		failed := response["error"] != nil
 		var result any = response
+		output, hasOutput := response["output"]
 		switch {
 		case failed:
 			result = response["error"]
-		case response["output"] != nil:
-			result = response["output"]
+		case hasOutput:
+			result = output
 		}
-		i.RecordToolResult(kit.Str(fr["id"]), rudderstackai.ToolResult{Error: &failed, Result: result})
+		_, hasResult := fr["response"]
+		kit.RecordToolResult(i, kit.Str(fr["id"]), rudderstackai.ToolResult{Error: &failed, Result: result}, hasResult)
 	}
 }
 
@@ -340,7 +342,7 @@ var rpcErrorTypes = map[string]string{
 }
 
 func errorType(status int, body map[string]any) string {
-	if t := rudderstackai.ErrorTypeForStatus(status); t != "" {
+	if t := kit.HTTPErrorType(status, body); t != "api_error" {
 		return t
 	}
 	return rpcErrorTypes[kit.Str(kit.Map(body["error"])["status"])]
@@ -357,7 +359,7 @@ func classifyError(err error) (string, bool) {
 	default:
 		return "", false
 	}
-	if t := rudderstackai.ErrorTypeForStatus(e.Code); t != "" {
+	if t := kit.HTTPErrorType(e.Code, map[string]any{"message": e.Message}); t != "api_error" {
 		return t, true
 	}
 	if t := rpcErrorTypes[e.Status]; t != "" {

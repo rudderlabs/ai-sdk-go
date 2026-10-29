@@ -91,8 +91,14 @@ func WithTracking(opts ...Option) func(*bedrockruntime.Options) {
 
 func init() { kit.RegisterErrorClassifier(classifyError) }
 
-// classifyError maps AWS errors: the exception name first, then the HTTP status.
+// classifyError preserves HTTP auth, rate and timeout errors before mapping AWS exception names.
 func classifyError(err error) (string, bool) {
+	var resp *smithyhttp.ResponseError
+	if errors.As(err, &resp) {
+		if t := rudderstackai.ErrorTypeForStatus(resp.HTTPStatusCode()); t != "" && t != "invalid_request" {
+			return t, true
+		}
+	}
 	var api smithy.APIError
 	if errors.As(err, &api) {
 		n := strings.ToLower(api.ErrorCode())
@@ -102,10 +108,12 @@ func classifyError(err error) (string, bool) {
 		case strings.Contains(n, "accessdenied"):
 			return "auth_error", true
 		case strings.Contains(n, "validationexception"):
+			if kit.ContextLimit("", api.ErrorMessage()) {
+				return "context_limit", true
+			}
 			return "invalid_request", true
 		}
 	}
-	var resp *smithyhttp.ResponseError
 	if errors.As(err, &resp) {
 		if t := rudderstackai.ErrorTypeForStatus(resp.HTTPStatusCode()); t != "" {
 			return t, true
@@ -185,7 +193,7 @@ func recordToolResults(i *rudderstackai.Interaction, messages []types.Message) {
 				continue
 			}
 			failed := r.Value.Status == types.ToolResultStatusError
-			i.RecordToolResult(*r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolResultValue(r.Value.Content)})
+			kit.RecordToolResult(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolResultValue(r.Value.Content)}, len(r.Value.Content) > 0)
 		}
 	}
 }

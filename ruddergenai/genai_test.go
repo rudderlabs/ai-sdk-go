@@ -605,3 +605,12 @@ func TestTransportDefaultBase(t *testing.T) {
 	}
 	want(t, rec.response(t), "llm_call_count", 1)
 }
+
+func TestContextLimitClassifiers(t *testing.T) {
+	message := "The input token count exceeds the maximum number of tokens allowed (32768)."
+	for _, err := range []error{genai.APIError{Code: 400, Message: message}, &genai.APIError{Code: 422, Message: message}} {
+		if got := rudderstackai.ErrorTypeOf(err); got != "context_limit" {
+			t.Fatalf("typed classifier: %s", got)
+		}
+	}
+}

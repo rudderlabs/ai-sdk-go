@@ -262,7 +262,8 @@ type ToolResult struct {
 	Error     *bool
 	ErrorType string
 	Duration  *time.Duration
-	Result    any
+	// Result is the observed output. Nil means absent; json.RawMessage("null") represents explicit JSON null.
+	Result any
 }
 
 // EndOptions configures [Interaction.End].
@@ -890,7 +891,7 @@ func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
 			if tool.args == nil {
 				tool.args = call.Args
 			}
-			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result})
+			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result}, call.Result != nil)
 			fire = append(fire, tool)
 		}
 		i.mu.Unlock()
@@ -915,6 +916,10 @@ func (i *Interaction) RecordToolCallCount(n int) {
 // RecordToolResult reports how a tool call recorded under id went. Results for IDs this
 // interaction never recorded (earlier turns) are ignored.
 func (i *Interaction) RecordToolResult(id string, result ToolResult) {
+	i.recordToolResult(id, result, result.Result != nil)
+}
+
+func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult bool) {
 	safely(func() {
 		if id == "" {
 			return
@@ -922,7 +927,7 @@ func (i *Interaction) RecordToolResult(id string, result ToolResult) {
 		i.mu.Lock()
 		tool := i.toolsByID[id]
 		if tool != nil {
-			mergeToolResult(tool, result)
+			mergeToolResult(tool, result, hasResult)
 		}
 		i.mu.Unlock()
 		if tool != nil {
@@ -951,7 +956,7 @@ func normalizeTool(name, server string) (string, string) {
 }
 
 // mergeToolResult: a failure from any source sticks; the first measured duration and output win.
-func mergeToolResult(tool *recordedTool, r ToolResult) {
+func mergeToolResult(tool *recordedTool, r ToolResult, hasResult bool) {
 	if r.Error != nil {
 		failed := (tool.err != nil && *tool.err) || *r.Error
 		tool.err = &failed
@@ -960,7 +965,7 @@ func mergeToolResult(tool *recordedTool, r ToolResult) {
 			tool.errorType = normalizeToolErrorType(r.ErrorType)
 		}
 	}
-	if r.Result != nil && !tool.hasResult {
+	if hasResult && !tool.hasResult {
 		tool.result, tool.hasResult, tool.settled = r.Result, true, true
 	}
 	if tool.duration == nil && r.Duration != nil && *r.Duration >= 0 {
@@ -969,8 +974,9 @@ func mergeToolResult(tool *recordedTool, r ToolResult) {
 	}
 }
 
+// New optional server fields are merged over app extras only when the SDK sets them.
 // Properties owned by the SDK: extra properties with these names are ignored.
-var reservedProperties = set("block_reason", "confidence", "total_credits", "compaction_count", "agent_version", "variant",
+var reservedProperties = set(
 	"spec_version", "conversation_id", "interaction_id", "feature", "response_status", "trigger",
 	"primary_model", "primary_provider", "latency_ms", "time_to_first_token_ms", "llm_call_count",
 	"tool_call_count", "total_input_tokens", "total_output_tokens", "total_reasoning_tokens",

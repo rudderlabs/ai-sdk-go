@@ -38078,8 +38078,8 @@
             "total_tokens": 1500,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "latency_ms": "<number>",
-            "time_to_first_token_ms": "<number>",
+            "latency_ms": 120,
+            "time_to_first_token_ms": 30,
             "call_purpose": "planning",
             "fallback_used": false,
             "byok": true
@@ -38105,7 +38105,7 @@
             "total_tokens": 1500,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "latency_ms": "<number>",
+            "latency_ms": 80,
             "call_purpose": "planning"
           },
           "context": {
@@ -38225,7 +38225,8 @@
             }
           }
         }
-      ]
+      ],
+      "exact_call_timing": true
     },
     {
       "name": "v04_per_call_detail_wrapper_stream",
@@ -41669,6 +41670,1009 @@
             "wrapperLibrary": {
               "specVersion": "0.3.0",
               "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_review_extra_fallback",
+      "description": "Existing custom v0.3 fields survive when the SDK does not set them; SDK values win when set.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_extra_fallback"
+          },
+          "steps": [
+            {
+              "op": "end",
+              "extra_properties": {
+                "confidence": "low",
+                "total_credits": 7,
+                "agent_version": "legacy",
+                "variant": "legacy",
+                "compaction_count": 9,
+                "response_text": "private",
+                "total_cost_usd": 99
+              }
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_extra_fallback",
+            "agent_version": "sdk",
+            "variant": "sdk"
+          },
+          "steps": [
+            {
+              "op": "set_confidence",
+              "value": "high"
+            },
+            {
+              "op": "record_compaction",
+              "count": 2
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "m",
+              "credits": 0
+            },
+            {
+              "op": "end",
+              "status": "blocked",
+              "block_reason": "guardrail",
+              "extra_properties": {
+                "confidence": "low",
+                "total_credits": 7,
+                "agent_version": "legacy",
+                "variant": "legacy",
+                "compaction_count": 9,
+                "block_reason": "policy"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_extra_fallback",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_extra_fallback",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "confidence": "low",
+            "total_credits": 7,
+            "agent_version": "legacy",
+            "variant": "legacy",
+            "compaction_count": 9
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_extra_fallback",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "agent_version": "sdk",
+            "variant": "sdk"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_extra_fallback",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "agent_version": "sdk",
+            "variant": "sdk",
+            "response_status": "blocked",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "primary_model": "m",
+            "primary_provider": "openai",
+            "confidence": "high",
+            "total_credits": 0,
+            "compaction_count": 2,
+            "block_reason": "guardrail",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "m",
+                "call_count": 1,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "credits": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_review_nested_versions",
+      "description": "Interaction version and variant overrides reach nested interactions and app limit events, then restore the enclosing scope.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "context",
+          "values": {
+            "agent_version": "outer",
+            "variant": "outer",
+            "user_id": "user_1"
+          },
+          "steps": [
+            {
+              "op": "interaction",
+              "options": {
+                "user_id": "user_1",
+                "feature": "parity",
+                "conversation_id": "conv_v04_nested_versions",
+                "agent_version": "inner",
+                "variant": "inner"
+              },
+              "steps": [
+                {
+                  "op": "interaction",
+                  "options": {
+                    "user_id": "user_1",
+                    "feature": "parity",
+                    "conversation_id": "conv_v04_nested_versions"
+                  },
+                  "steps": []
+                },
+                {
+                  "op": "track_limit_reached",
+                  "options": {
+                    "limit_type": "credits"
+                  }
+                }
+              ]
+            },
+            {
+              "op": "track_limit_reached",
+              "options": {
+                "limit_type": "messages"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_nested_versions",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "agent_version": "inner",
+            "variant": "inner"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_nested_versions",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "agent_version": "inner",
+            "variant": "inner",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_limit_reached",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_nested_versions",
+            "feature": "parity",
+            "agent_version": "inner",
+            "variant": "inner",
+            "limit_type": "credits"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_nested_versions",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "agent_version": "inner",
+            "variant": "inner"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_nested_versions",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "agent_version": "inner",
+            "variant": "inner",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_limit_reached",
+          "userId": "user_1",
+          "properties": {
+            "agent_version": "outer",
+            "variant": "outer",
+            "limit_type": "messages"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_review_context_providers",
+      "description": "Gemini and Bedrock context overflow errors classify as context_limit in both provider and interaction events.",
+      "config": {},
+      "replies": {
+        "google.generate": [
+          {
+            "status": 400,
+            "json": {
+              "error": {
+                "code": 400,
+                "status": "INVALID_ARGUMENT",
+                "message": "The input token count exceeds the maximum number of tokens allowed (32768)."
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_context_providers"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "google.generate",
+              "params": {
+                "model": "gemini-2.0-flash",
+                "contents": "hi"
+              },
+              "expect_error": true
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_context_providers"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "bedrock.converse",
+              "params": {
+                "modelId": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "text": "hi"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "expect_error": true,
+              "error": {
+                "code": "ValidationException",
+                "status": 400,
+                "message": "Input is too long for requested model."
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_context_providers",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "google-genai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_context_providers",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "error",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "primary_model": "gemini-2.0-flash",
+            "primary_provider": "gcp.gemini",
+            "error_type": "context_limit",
+            "usage_breakdown": [
+              {
+                "provider": "gcp.gemini",
+                "model": "gemini-2.0-flash",
+                "call_count": 1,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 1
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "google-genai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_context_providers",
+            "interaction_id": "$int2",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "bedrock"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_context_providers",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "response_status": "error",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "primary_model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "primary_provider": "aws.bedrock",
+            "error_type": "context_limit",
+            "usage_breakdown": [
+              {
+                "provider": "aws.bedrock",
+                "model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+                "call_count": 1,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 1
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "bedrock"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_review_null_result",
+      "description": "An explicitly observed JSON null result is four UTF-8 bytes; an omitted result remains absent.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "lookup": "looked_up"
+          }
+        }
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_null_result"
+          },
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "id": "null",
+                  "name": "lookup"
+                },
+                {
+                  "id": "absent",
+                  "name": "lookup"
+                }
+              ]
+            },
+            {
+              "op": "record_tool_result",
+              "id": "null",
+              "result": {
+                "result": null
+              }
+            },
+            {
+              "op": "record_tool_result",
+              "id": "null",
+              "result": {
+                "result": "later",
+                "error": false
+              }
+            },
+            {
+              "op": "record_tool_result",
+              "id": "absent",
+              "result": {
+                "error": false
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_null_result",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "looked_up",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_null_result",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "trigger": "user",
+            "tool_name": "lookup",
+            "tool_call_id": "null",
+            "tool_status": "unknown",
+            "result_size_bytes": 4
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "looked_up",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_null_result",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "trigger": "user",
+            "tool_name": "lookup",
+            "tool_call_id": "absent",
+            "tool_status": "success"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_null_result",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 2,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_review_google_null_output",
+      "description": "Gemini functionResponse output:null remains an observed null, rather than its enclosing object.",
+      "config": {
+        "emit_llm_calls": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "looked_up"
+          }
+        }
+      },
+      "replies": {
+        "google.generate": [
+          {
+            "json": {
+              "candidates": [
+                {
+                  "content": {
+                    "role": "model",
+                    "parts": [
+                      {
+                        "text": "Mock answer: Where is my refund?"
+                      }
+                    ]
+                  },
+                  "index": 0,
+                  "finishReason": "STOP"
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 25,
+                "candidatesTokenCount": 8,
+                "cachedContentTokenCount": 8,
+                "thoughtsTokenCount": 4,
+                "totalTokenCount": 37
+              },
+              "modelVersion": "gemini-2.5-flash",
+              "responseId": "google-plain"
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "register_price",
+          "model": "gemini-2.5-flash",
+          "input_per_mtok": 0.3,
+          "output_per_mtok": 2.5,
+          "cached_input_per_mtok": 0.03,
+          "provider": "google"
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_google_generate_plain",
+            "feature": "parity"
+          },
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "id": "call_null",
+                  "name": "lookup"
+                }
+              ]
+            },
+            {
+              "op": "call",
+              "api": "google.generate",
+              "params": {
+                "model": "gemini-2.5-flash",
+                "contents": [
+                  {
+                    "role": "user",
+                    "parts": [
+                      {
+                        "functionResponse": {
+                          "id": "call_null",
+                          "name": "lookup",
+                          "response": {
+                            "output": null
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_google_generate_plain",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "google-genai"
+            }
+          }
+        },
+        {
+          "event": "looked_up",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_google_generate_plain",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "trigger": "user",
+            "tool_name": "lookup",
+            "tool_call_id": "call_null",
+            "tool_status": "success",
+            "result_size_bytes": 4
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "google-genai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_google_generate_plain",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "gcp.gemini",
+            "model": "gemini-2.5-flash",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "reasoning_tokens": 4,
+            "total_tokens": 37,
+            "cached_input_tokens": 8,
+            "cache_write_tokens": 0,
+            "cost_usd": 3.534e-05,
+            "latency_ms": "<number>",
+            "response_id": "google-plain",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "google-genai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_google_generate_plain",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gemini-2.5-flash",
+            "primary_provider": "gcp.gemini",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_reasoning_tokens": 4,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 8,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 3.534e-05,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "gcp.gemini",
+                "model": "gemini-2.5-flash",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "reasoning_tokens": 4,
+                "total_tokens": 37,
+                "cached_input_tokens": 8,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 3.534e-05
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "google-genai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_review_tool_custom_fields",
+      "description": "Declared tool events preserve app server fields when unset and inherit SDK version fields when set.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "lookup": {
+              "event": "looked_up",
+              "properties_args": [
+                "confidence",
+                "total_credits",
+                "compaction_count",
+                "agent_version",
+                "variant",
+                "block_reason"
+              ]
+            }
+          }
+        }
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_null_result"
+          },
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "id": "custom",
+                  "name": "lookup",
+                  "args": {
+                    "confidence": "low",
+                    "total_credits": 7,
+                    "compaction_count": 9,
+                    "agent_version": "legacy",
+                    "variant": "legacy",
+                    "block_reason": "policy"
+                  },
+                  "error": false
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_null_result",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "looked_up",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_null_result",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "trigger": "user",
+            "tool_name": "lookup",
+            "tool_call_id": "custom",
+            "tool_status": "success",
+            "confidence": "low",
+            "total_credits": 7,
+            "compaction_count": 9,
+            "agent_version": "legacy",
+            "variant": "legacy",
+            "block_reason": "policy"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_null_result",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 1,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
             }
           }
         }

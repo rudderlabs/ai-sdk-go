@@ -19,6 +19,9 @@ func init() {
 		})
 		return interaction, ephemeral
 	}
+	hook.RecordToolResult = func(i any, id string, result any, hasResult bool) {
+		i.(*Interaction).recordToolResult(id, result.(ToolResult), hasResult)
+	}
 	hook.KeepMessages = func(i any, messages any) { i.(*Interaction).keepMessages(messages) }
 	hook.KeepsText = func(i any) bool { return i.(*Interaction).keepsText() }
 	hook.FirstToken = func(i any, at time.Time) { i.(*Interaction).firstTokenAt(at) }

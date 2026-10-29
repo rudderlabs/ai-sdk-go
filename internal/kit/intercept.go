@@ -286,7 +286,7 @@ func HTTPErrorType(status int, body map[string]any) string {
 		e = body
 	}
 	code, message := Str(e["code"]), strings.ToLower(Str(e["message"]))
-	if (status == 400 || status == 422 || status == 0) && (code == "context_length_exceeded" || strings.Contains(message, "maximum context length") || strings.Contains(message, "prompt is too long") || strings.Contains(message, "input is too long") || strings.Contains(message, "context window")) {
+	if (status == 400 || status == 422 || status == 0) && ContextLimit(code, message) {
 		return "context_limit"
 	}
 	if t := rudderstackai.ErrorTypeForStatus(status); t != "" {
@@ -521,4 +521,19 @@ func (c *Call) RecordCall(call rudderstackai.LLMCall) bool {
 	call.CallPurpose = c.Details.CallPurpose
 	call.FallbackUsed, call.BYOK = c.Details.FallbackUsed, c.Details.BYOK
 	return c.Interaction.RecordCall(call)
+}
+
+// ContextLimit reports whether a rejected request exceeded the model's context window.
+func ContextLimit(code, message string) bool {
+	switch strings.ToLower(code) {
+	case "context_length_exceeded", "context_window_exceeded", "prompt_too_long":
+		return true
+	}
+	message = strings.ToLower(message)
+	for _, part := range []string{"maximum context length", "context window", "prompt is too long", "input is too long", "exceeds the maximum number of tokens"} {
+		if strings.Contains(message, part) {
+			return true
+		}
+	}
+	return false
 }

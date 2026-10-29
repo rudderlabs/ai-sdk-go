@@ -136,3 +136,8 @@ func List(v any) []any {
 	l, _ := v.([]any)
 	return l
 }
+
+// RecordToolResult preserves observed JSON null separately from an omitted tool result.
+func RecordToolResult(i *rudderstackai.Interaction, id string, result rudderstackai.ToolResult, hasResult bool) {
+	hook.RecordToolResult(i, id, result, hasResult)
+}

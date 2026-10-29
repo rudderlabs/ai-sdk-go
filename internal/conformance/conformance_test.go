@@ -21,19 +21,21 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/internal/kit"
 	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 type obj = map[string]any
 
 type scenario struct {
-	Name         string           `json:"name"`
-	Description  string           `json:"description"`
-	Config       obj              `json:"config"`
-	Replies      map[string][]obj `json:"replies"`
-	Steps        []obj            `json:"steps"`
-	Expected     []obj            `json:"expected"`
-	ExactNumbers bool             `json:"exact_numbers"`
+	Name            string           `json:"name"`
+	Description     string           `json:"description"`
+	Config          obj              `json:"config"`
+	Replies         map[string][]obj `json:"replies"`
+	Steps           []obj            `json:"steps"`
+	Expected        []obj            `json:"expected"`
+	ExactCallTiming bool             `json:"exact_call_timing"`
+	ExactNumbers    bool             `json:"exact_numbers"`
 }
 
 // apiDriver runs one `call` step of an API. Integration test files register theirs in init.
@@ -300,7 +302,7 @@ func runScenario(t *testing.T, sc scenario) {
 		t.Fatalf("steps: %v", err)
 	}
 	rudderstackai.Flush(context.Background())
-	actual := normalise(rec.all())
+	actual := normalise(rec.all(), sc.ExactCallTiming)
 	for _, m := range rec.all() {
 		props := map[string]any(m.Properties)
 		if err := testkit.ValidateEvent(m.Event, jsonRoundTrip(props).(obj)); err != nil {
@@ -408,7 +410,8 @@ func (r *run) step(ctx context.Context, s obj) error {
 		}
 	case "record_tool_result":
 		c := toolCall(obj0(s["result"]))
-		r.cur.RecordToolResult(str(s["id"]), rudderstackai.ToolResult{Error: c.Error, ErrorType: c.ErrorType, Duration: c.Duration, Result: c.Result})
+		_, hasResult := obj0(s["result"])["result"]
+		kit.RecordToolResult(r.cur, str(s["id"]), rudderstackai.ToolResult{Error: c.Error, ErrorType: c.ErrorType, Duration: c.Duration, Result: c.Result}, hasResult)
 	case "track_action":
 		o := obj0(s["options"])
 		id := str(o["interaction_id"])
@@ -630,7 +633,7 @@ func modelPrice(p obj) rudderstackai.ModelPrice {
 
 var uuidV4 = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
-func normalise(msgs []analytics.Track) []obj {
+func normalise(msgs []analytics.Track, exactCallTiming bool) []obj {
 	ids := map[string]string{}
 	counters := map[string]int{}
 	symbol := func(v any, kind string) any {
@@ -675,6 +678,9 @@ func normalise(msgs []analytics.Track) []obj {
 			props["conversation_id"] = symbol(value, "conv")
 		}
 		for _, k := range []string{"latency_ms", "time_to_first_token_ms", "tool_duration_ms", "classifier_duration_ms"} {
+			if exactCallTiming && m.Event == "ai_llm_response_received" && (k == "latency_ms" || k == "time_to_first_token_ms") {
+				continue
+			}
 			if v, ok := props[k]; ok {
 				props[k] = measured(v)
 			}
