@@ -479,7 +479,8 @@ func boolPtr(v any) *bool {
 
 func interactionOptions(o obj) rudderstackai.InteractionOptions {
 	out := rudderstackai.InteractionOptions{
-		UserID: str(o["user_id"]), AnonymousID: str(o["anonymous_id"]), ConversationID: str(o["conversation_id"]),
+		OneShot: o["one_shot"] == true,
+		UserID:  str(o["user_id"]), AnonymousID: str(o["anonymous_id"]), ConversationID: str(o["conversation_id"]),
 		Feature: str(o["feature"]), Intent: str(o["intent"]), TraceID: str(o["trace_id"]), InputMethod: str(o["input_method"]),
 		PromptText: str(o["prompt_text"]), Trigger: rudderstackai.Trigger(str(o["trigger"])), AccountID: str(o["account_id"]),
 		OnBehalfOf: str(o["on_behalf_of"]), TriggerSource: str(o["trigger_source"]), TaskName: str(o["task_name"]),
@@ -497,7 +498,8 @@ func interactionOptions(o obj) rudderstackai.InteractionOptions {
 
 func taskOptions(o obj) rudderstackai.TaskOptions {
 	out := rudderstackai.TaskOptions{
-		UserID: str(o["user_id"]), AnonymousID: str(o["anonymous_id"]), ConversationID: str(o["conversation_id"]), Feature: str(o["feature"]), TraceID: str(o["trace_id"]),
+		OneShot: o["one_shot"] == true,
+		UserID:  str(o["user_id"]), AnonymousID: str(o["anonymous_id"]), ConversationID: str(o["conversation_id"]), Feature: str(o["feature"]), TraceID: str(o["trace_id"]),
 		AccountID: str(o["account_id"]), OnBehalfOf: str(o["on_behalf_of"]), TriggerSource: str(o["trigger_source"]),
 		ParentInteractionID: str(o["parent_interaction_id"]), ToolBreakdown: boolPtr(o["tool_breakdown"]),
 		Classify: boolPtr(o["classify"]), Surface: rudderstackai.Surface(str(o["surface"])), TriggerEventID: str(o["trigger_event_id"]),
@@ -595,6 +597,10 @@ func normalise(msgs []analytics.Track) []obj {
 	symbol := func(v any, kind string) any {
 		s, ok := v.(string)
 		if !ok || !uuidV4.MatchString(s) {
+			return v
+		}
+		// a one-shot interaction's conversation_id is its interaction_id
+		if v, ok := ids["int:"+s]; ok && kind == "conv" {
 			return v
 		}
 		key := kind + ":" + s

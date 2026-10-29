@@ -827,3 +827,19 @@ func TestErrorTypeOf(t *testing.T) {
 		}
 	}
 }
+
+func TestOneShotUsesInteractionID(t *testing.T) {
+	setupAI(t)
+	_, minted := StartInteraction(context.Background(), InteractionOptions{UserID: "u", OneShot: true})
+	_, own := StartInteraction(context.Background(), InteractionOptions{UserID: "u", InteractionID: "turn_1", OneShot: true})
+	var task *Interaction
+	_ = RunTask(context.Background(), "digest", TaskOptions{OneShot: true}, func(_ context.Context, i *Interaction) error {
+		task = i
+		return nil
+	})
+	if minted.ConversationID() != minted.ID() || own.ConversationID() != "turn_1" || task.ConversationID() != task.ID() {
+		t.Fatalf("conversation IDs %q, %q, %q", minted.ConversationID(), own.ConversationID(), task.ConversationID())
+	}
+	minted.End(EndOptions{})
+	own.End(EndOptions{})
+}

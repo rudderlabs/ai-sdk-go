@@ -28,6 +28,8 @@ type InteractionOptions struct {
 	// ConversationID is the conversation (thread, chat) ID. Minted when missing: every event
 	// needs one.
 	ConversationID string
+	// OneShot uses the interaction ID when no explicit or context conversation ID exists. Since v0.4; default false.
+	OneShot bool
 	// InteractionID replaces the generated UUID.
 	InteractionID string
 	// Feature is the AI feature, for example "support_bot".
@@ -462,9 +464,18 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 	if analyticsClient == nil {
 		analyticsClient = cv.analytics
 	}
+	interactionID := first(o.InteractionID, uuid.NewString())
+	conversationID := first(o.ConversationID, cv.conversationID)
+	if conversationID == "" {
+		if o.OneShot {
+			conversationID = interactionID
+		} else {
+			conversationID = uuid.NewString()
+		}
+	}
 	i := &Interaction{
-		id:                first(o.InteractionID, uuid.NewString()),
-		conversationID:    first(o.ConversationID, cv.conversationID, uuid.NewString()),
+		id:                interactionID,
+		conversationID:    conversationID,
 		userID:            id.userID,
 		anonymousID:       id.anonymousID,
 		feature:           first(o.Feature, cv.feature),
