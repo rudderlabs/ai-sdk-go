@@ -4,7 +4,6 @@
   "title": "RudderStack AI Product Analytics Events v0.3.0 (draft)",
   "description": "Event properties for ai_user_prompt_created, ai_response_received, ai_user_action, the optional per-call ai_llm_response_received, the opt-in ai_interaction_classified and ai_interaction_scored, the app-sent ai_limit_reached, customer-named declared tool events (declared_tool_event, mcp_declared_tool_event), and the MCP server events (mcp_client_seen, mcp_tool_called, mcp_elicitation_completed, mcp_capability_requested, mcp_resource_read, mcp_prompt_used, mcp_event_subscription_changed, mcp_event_delivered). Validate the `properties` object of each track call against the matching definition. Custom properties are allowed. The spec version is not a property: SDKs send it as context.wrapperLibrary.specVersion.",
   "$defs": {
-<<<<<<< HEAD
     "surface": {
       "enum": [
         "web",
@@ -37,19 +36,12 @@
       ],
       "description": "The tier that served the calls, as the provider reports it. fast covers premium tiers (OpenAI priority or fast, Anthropic fast mode); other covers e.g. reserved capacity."
     },
-=======
-    "surface": { "enum": ["web", "mobile", "slack", "teams", "email", "chatgpt_app", "claude_app", "ide", "api", "other"], "description": "Where the user met the AI. Set by the app; the SDK cannot tell." },
-    "source": { "enum": ["client", "server"], "description": "Which side sent the event; absent means server. Dashboards count answers with source absent or server." },
-    "service_tier": { "enum": ["batch", "flex", "standard", "fast", "other"], "description": "The tier that served the calls, as the provider reports it. fast covers premium tiers (OpenAI priority or fast, Anthropic fast mode); other covers e.g. reserved capacity." },
-    "sample_rate": { "type": "number", "minimum": 0, "maximum": 1, "description": "Since v0.4. The rate, above 0 and below 1, this event type was sampled at when it was sent (configure sample rates); absent means it was not sampled. Weight a row by 1 / sample_rate to estimate totals. The draw is keyed on interaction_id, so the sampled events of one interaction are kept or dropped together; spec/fixtures/sampling-v0.1.json fixes the draw across SDKs." },
->>>>>>> 52aa4a3 (feat(spec): add sample_rate and the shared sampling fixture (SDK-5992))
     "id_fields": {
       "type": "object",
       "required": [
         "interaction_id"
       ],
       "properties": {
-<<<<<<< HEAD
         "conversation_id": {
           "type": "string",
           "minLength": 1,
@@ -114,20 +106,10 @@
           "type": "string",
           "minLength": 1,
           "description": "Since v0.4. Experiment arm or rollout variant the interaction ran under, e.g. control."
+        },
+        "sample_rate": {
+          "$ref": "#/$defs/sample_rate"
         }
-=======
-        "conversation_id": { "type": "string", "minLength": 1 },
-        "interaction_id": { "type": "string", "minLength": 1 },
-        "sample_rate": { "$ref": "#/$defs/sample_rate" },
-        "feature": { "type": "string" },
-        "surface": { "$ref": "#/$defs/surface" },
-        "account_id": { "type": "string", "minLength": 1, "description": "Customer, workspace or tenant the work is for." },
-        "on_behalf_of": { "type": "string", "minLength": 1, "description": "The human who requested or owns the work. Not the actor: userId stays unset for system runs." },
-        "trigger_source": { "type": "string", "minLength": 1, "examples": ["schedule", "webhook", "slack", "queue", "agent", "api", "user", "mcp_event"], "description": "Why the run started. Other values are allowed. mcp_event: an MCP Events update started it; trigger_event_id carries the update's ID." },
-        "trigger_event_id": { "type": "string", "minLength": 1, "description": "The ID of the update that started the run. With trigger_source mcp_event, the event_id from mcp_event_delivered." },
-        "task_name": { "type": "string", "minLength": 1, "description": "The job or task being run, e.g. alert-triage." },
-        "parent_interaction_id": { "type": "string", "minLength": 1, "description": "The interaction that started this one (agent hand-offs, sub-tasks)." }
->>>>>>> 52aa4a3 (feat(spec): add sample_rate and the shared sampling fixture (SDK-5992))
       }
     },
     "ids": {
@@ -1090,7 +1072,6 @@
       "type": "object",
       "description": "Fields any MCP server event may carry. interaction_id and trace_id come from the request's _meta (com.rudderstack/interaction_id; W3C traceparent, else com.rudderstack/trace_id) as opaque, length-capped strings; without them the server mints interaction_id and sends no trace_id.",
       "properties": {
-<<<<<<< HEAD
         "mcp_session_id": {
           "type": "string",
           "minLength": 1,
@@ -1131,19 +1112,10 @@
         "trace_id": {
           "type": "string",
           "minLength": 1
+        },
+        "sample_rate": {
+          "$ref": "#/$defs/sample_rate"
         }
-=======
-        "mcp_session_id": { "type": "string", "minLength": 1, "description": "From the Mcp-Session-Id header (2025-06-18) or a host-provided session key in _meta; absent otherwise." },
-        "server_name": { "type": "string", "minLength": 1, "description": "This server." },
-        "server_version": { "type": "string", "minLength": 1 },
-        "account_id": { "type": "string", "minLength": 1, "description": "Workspace." },
-        "client_name": { "type": "string", "minLength": 1, "description": "From clientInfo: the request's _meta on 2026-07-28, the initialize request on 2025-06-18." },
-        "client_version": { "type": "string", "minLength": 1 },
-        "protocol_version": { "type": "string", "minLength": 1, "description": "The request's MCP protocol version (2026-07-28), or the negotiated one (2025-06-18)." },
-        "interaction_id": { "type": "string", "minLength": 1 },
-        "sample_rate": { "$ref": "#/$defs/sample_rate" },
-        "trace_id": { "type": "string", "minLength": 1 }
->>>>>>> 52aa4a3 (feat(spec): add sample_rate and the shared sampling fixture (SDK-5992))
       }
     },
     "mcp_error_type": {
@@ -1693,6 +1665,12 @@
           "description": "Since v0.4. Which limit, as the app names it."
         }
       }
+    },
+    "sample_rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Since v0.4. The rate, above 0 and below 1, this event type was sampled at when it was sent (configure sample rates); absent means it was not sampled. Weight a row by 1 / sample_rate to estimate totals. The draw is keyed on interaction_id, so the sampled events of one interaction are kept or dropped together; spec/fixtures/sampling-v0.1.json fixes the draw across SDKs."
     }
   }
 }
