@@ -206,3 +206,32 @@ func TestCreditHookReentrantResponseKeepsAgent(t *testing.T) {
 		t.Fatalf("calls: %v", p)
 	}
 }
+
+// The probe avoids hanging the suite when a marshaler would reenter a locked interaction.
+type interactionResultProbe struct {
+	interaction *Interaction
+	unlocked    bool
+}
+
+func (p *interactionResultProbe) MarshalJSON() ([]byte, error) {
+	if p.interaction.mu.TryLock() {
+		p.interaction.mu.Unlock()
+		p.unlocked = true
+		p.interaction.Ended()
+	}
+	return []byte(`{"ok":true}`), nil
+}
+func TestToolResultMarshalerCanReenter(t *testing.T) {
+	r := setupAI(t, WithEventRules(EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "lookup_done"}}}))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	probe := &interactionResultProbe{interaction: i}
+	i.RecordToolCalls(ToolCall{ID: "t", Name: "lookup"})
+	i.RecordToolResult("t", ToolResult{Result: probe})
+	i.End(EndOptions{})
+	if !probe.unlocked {
+		t.Fatal("tool result marshaled under interaction lock")
+	}
+	if got := r.props(t, "lookup_done")["result_size_bytes"]; got != 11 {
+		t.Fatal(got)
+	}
+}

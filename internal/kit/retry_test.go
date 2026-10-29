@@ -170,3 +170,25 @@ func TestHeldAttemptLatencyUsesFailureTime(t *testing.T) {
 		t.Fatalf("provider latency %d ms includes deferred settlement", latency)
 	}
 }
+
+func TestRetriedExplicitCallIncludesBackoff(t *testing.T) {
+	h := newHarness(t, failThenServe(1))
+	ctx, i := interaction(h.rec)
+	var starts []time.Time
+	h.spec.OnRequest = func(c *Call) { starts = append(starts, c.StartedAt) }
+	resp, err := h.attemptPost(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	time.Sleep(20 * time.Millisecond)
+	resp, err = h.attemptPost(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readAll(t, resp)
+	i.End(rudderstackai.EndOptions{})
+	if len(starts) != 2 || !starts[0].Equal(starts[1]) {
+		t.Fatalf("retry reset start: %v", starts)
+	}
+}

@@ -1044,6 +1044,14 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 			}
 		}
 	}
+	var resultSize *int
+	if t.hasResult {
+		if text, ok := t.result.(string); ok {
+			resultSize = Ptr(len(text))
+		} else if encoded, err := compactJSON(t.result); err == nil {
+			resultSize = Ptr(len(encoded))
+		}
+	}
 	i.mu.Lock()
 	defer i.unlock()
 	p := i.baseLocked()
@@ -1057,12 +1065,8 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 		p["tool_status"] = toolStatus(t.err)
 	}
 	put(p, "mcp_server", t.mcpServer)
-	if t.hasResult {
-		if text, ok := t.result.(string); ok {
-			p["result_size_bytes"] = len(text)
-		} else if encoded, err := compactJSON(t.result); err == nil {
-			p["result_size_bytes"] = len(encoded)
-		}
+	if resultSize != nil {
+		p["result_size_bytes"] = *resultSize
 	}
 
 	// An unknown outcome never reports a 0 duration.

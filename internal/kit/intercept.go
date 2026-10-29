@@ -148,6 +148,9 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		key = keyFor(ctx, s, req, raw)
 		prev = resume(key, n)
 	}
+	if prev != nil {
+		started = prev.call.StartedAt
+	}
 	var i *rudderstackai.Interaction
 	var ephemeral bool
 	if prev != nil && prev.call.Ephemeral {
