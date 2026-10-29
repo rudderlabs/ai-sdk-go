@@ -631,14 +631,17 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		i.agentVersion, i.variant = snapshot.AgentVersion, snapshot.Variant
 		i.confidence, i.compactions = snapshot.Confidence, nonNegative(snapshot.CompactionCount)
 		i.outcome, i.integration = snapshot.Outcome, snapshot.Integration
-		i.restorePending(snapshot)
 		i.pauseCount = max(snapshot.PauseCount, 0)
 		for _, pair := range snapshot.SeenResponseIDs {
+			if _, exists := i.seen[pair[0]+"\x00"+pair[1]]; exists {
+				continue
+			}
 			if len(i.seen) >= cfg().limits.MaxCallsPerInteraction {
 				break
 			}
 			i.seen[pair[0]+"\x00"+pair[1]] = nil
 		}
+		i.restorePending(snapshot)
 		i.pausedTotal = time.Duration(max(snapshot.TotalPausedMS, 0))*time.Millisecond +
 			max(now.Sub(time.UnixMilli(snapshot.PausedAt)), 0)
 	}
@@ -742,6 +745,16 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 		ctx = context.WithValue(ctx, keyValues, &cv)
 	}
 	ctx, i := StartInteraction(ctx, o)
+	if i.resumed {
+		cv := *valuesFrom(ctx)
+		cv.userID, cv.anonymousID, cv.conversationID = i.userID, i.anonymousID, i.conversationID
+		cv.feature, cv.surface = i.feature, i.surface
+		cv.accountID, cv.onBehalfOf = i.accountID, i.onBehalfOf
+		cv.agentVersion, cv.variant = i.agentVersion, i.variant
+		cv.cookies, cv.disconnected = nil, nil
+		cv.identityFromCookies = Ptr(false)
+		ctx = context.WithValue(ctx, keyValues, &cv)
+	}
 	completed := false
 	defer func() {
 		if completed {
@@ -860,7 +873,6 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		debugf("call reported after interaction ended", "interaction_id", i.id)
 		return false
 	}
-	i.resumeLocked()
 	i.settled = true
 	if i.integration == "" {
 		i.integration = call.Integration
@@ -940,6 +952,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			return false
 		}
 	}
+	i.resumeLocked()
 	var latency, ttft *time.Duration
 	if !call.StartedAt.IsZero() {
 		ended := call.EndedAt
@@ -1186,14 +1199,6 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 			}
 		}
 	}
-	var resultSize *int
-	if t.hasResult {
-		if text, ok := t.result.(string); ok {
-			resultSize = Ptr(len(text))
-		} else if encoded, err := compactJSON(t.result); err == nil {
-			resultSize = Ptr(len(encoded))
-		}
-	}
 	i.mu.Lock()
 	p := i.baseLocked()
 	p["trigger"] = string(i.trigger)
@@ -1206,9 +1211,6 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 		p["tool_status"] = toolStatus(t.err)
 	}
 	put(p, "mcp_server", t.mcpServer)
-	if resultSize != nil {
-		p["result_size_bytes"] = *resultSize
-	}
 
 	// An unknown outcome never reports a 0 duration.
 	if t.duration != nil && (t.err != nil || *t.duration != 0) {
@@ -1224,6 +1226,16 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	}
 	rates := cfg().sampleRates
 	i.mu.Unlock()
+	if t.hasResult {
+		if text, ok := t.result.(string); ok {
+			p["result_size_bytes"] = len(text)
+		} else if encoded, ok := encodeNow(t.result); ok {
+			p["result_size_bytes"] = len(encoded.(json.RawMessage))
+		} else {
+			report(KindUserCallback, "MarshalJSON", errUnencodable)
+		}
+	}
+
 	p = fitToolEventProperties(rule.Event, jsonSafeMap(p), keys, rates)
 	i.mu.Lock()
 	defer i.unlock()
@@ -1747,6 +1759,11 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		}
 		c.callCount = max(c.callCount, 1)
 		if !pendingBool(p, "history_only") {
+			if key := c.provider + "\x00" + c.responseID; c.responseID != "" {
+				if _, seen := i.seen[key]; seen {
+					i.seen[key] = c
+				}
+			}
 			i.calls = append(i.calls, c)
 			i.callCount += c.callCount
 		}

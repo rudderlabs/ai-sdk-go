@@ -520,10 +520,10 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if serverPrompt > 0 && clientPrompt == 0 && !optedOut("client_prompt") {
 				gap("interaction " + iid + ": server prompt with no client copy (browser copy not sent, or a different ID)")
 			}
-			if serverAnswer+serverPaused > 0 && clientAnswer == 0 && !optedOut("client_response") {
+			if serverAnswer+serverPaused > 0 && clientAnswer+clientPaused == 0 && !optedOut("client_response") {
 				gap("interaction " + iid + ": server answer with no client copy (not shown, client left, or client event lost)")
 			}
-			if clientAnswer > 0 && serverAnswer+serverPaused == 0 { // the browser sends a success copy for an approval pause
+			if clientAnswer+clientPaused > 0 && serverAnswer+serverPaused == 0 { // the browser sends a success copy for an approval pause
 				gap("interaction " + iid + ": client answer with no server answer (request never reached the SDK, or a different ID)")
 			}
 			for _, action := range serverActions(iid) {
@@ -542,7 +542,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		if optedOut("client_prompt") && clientPrompt > 0 {
 			fail("interaction %s: client prompt copy sent, but the plan opts it out", iid)
 		}
-		if optedOut("client_response") && clientAnswer > 0 {
+		if optedOut("client_response") && clientAnswer+clientPaused > 0 {
 			fail("interaction %s: client answer copy sent, but the plan opts it out", iid)
 		}
 		if optedOut("client_feedback") && slices.ContainsFunc(serverActions(iid), func(a string) bool { return actionCount(iid, "client", a) > 0 }) {

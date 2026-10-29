@@ -2,9 +2,12 @@ package rudderstackai
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"math"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestReviewUnsetToolFields(t *testing.T) {
@@ -114,4 +117,96 @@ func TestReviewSamplingToolBudget(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestReviewResumeContext(t *testing.T) {
+	for _, trigger := range []Trigger{TriggerUser, TriggerSystem} {
+		setupAI(t)
+		ctx := WithValues(context.Background(), ContextValues{UserID: "worker", AnonymousID: "worker-anon", ConversationID: "worker-conv", Feature: "worker-feature", Surface: SurfaceWeb, AccountID: "worker-account", OnBehalfOf: "worker-owner", AgentVersion: "worker-version", Variant: "worker-variant", Cookies: "ajs_anonymous_id=worker"})
+		snapshot := PausedInteraction{InteractionID: "restored", ConversationID: "saved", UserID: "saved-user", Trigger: trigger, PausedAt: time.Now().UnixMilli(), PauseCount: 1}
+		err := RunInteraction(ctx, InteractionOptions{Resume: &snapshot}, func(ctx context.Context, i *Interaction) error {
+			cv := valuesFrom(ctx)
+			if cv.userID != "saved-user" || cv.anonymousID != "" || cv.conversationID != "saved" || cv.feature != "" || cv.surface != "" || cv.accountID != "" || cv.onBehalfOf != "" || cv.agentVersion != "" || cv.variant != "" || len(cv.cookies) != 0 {
+				t.Errorf("restored scope: %+v", cv)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+func TestReviewDuplicateDoesNotResume(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	call := LLMCall{Provider: "openai", Model: "m", ResponseID: "r"}
+	i.RecordCall(call)
+	i.Pause(PauseOptions{})
+	if i.RecordCall(call) || !i.Paused() {
+		t.Fatal("duplicate resumed paused interaction")
+	}
+	if len(r.named("ai_response_received")) != 1 {
+		t.Fatal(r.names())
+	}
+	i.Resume()
+	i.End(EndOptions{})
+}
+func TestReviewCreditsPauseAcceptsAndResumes(t *testing.T) {
+	var i *Interaction
+	r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) { i.Pause(PauseOptions{}); return Ptr(2.0), nil }))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	if !i.RecordCall(LLMCall{Model: "m"}) || i.Paused() {
+		t.Fatal("accepted call remained paused")
+	}
+	i.End(EndOptions{})
+	if lastResponse(t, r)["total_credits"] != 2.0 {
+		t.Fatal(lastResponse(t, r))
+	}
+}
+func TestReviewPendingAgentRestoration(t *testing.T) {
+	setupAI(t)
+	snapshot := PausedInteraction{InteractionID: "restored", ConversationID: "saved", UserID: "u", Trigger: TriggerUser, PausedAt: time.Now().UnixMilli(), PauseCount: 1, SeenResponseIDs: [][2]string{{"openai", "completed"}, {"openai", "pending"}}, PendingCalls: []map[string]any{{"provider": "openai", "model": "m", "response_id": "pending", "call_count": 1, "last": true, "last_ok": true}}}
+	b, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored PausedInteraction
+	if err = json.Unmarshal(b, &stored); err != nil {
+		t.Fatal(err)
+	}
+	_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	if i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "pending", AgentName: "agent"}) {
+		t.Fatal("duplicate accepted")
+	}
+	if len(i.calls) != 1 || i.calls[0].agentName != "agent" || i.seen["openai\x00completed"] != nil {
+		t.Fatal("pending agent enrichment lost")
+	}
+	i.End(EndOptions{})
+}
+
+type reviewReentrantResult struct {
+	i       *Interaction
+	blocked bool
+}
+
+func (r *reviewReentrantResult) MarshalJSON() ([]byte, error) {
+	done := make(chan struct{})
+	go func() { r.i.SetOutcome("serialized"); close(done) }()
+	select {
+	case <-done:
+		return []byte(`{"ok":true}`), nil
+	case <-time.After(200 * time.Millisecond):
+		r.blocked = true
+		return nil, errors.New("interaction lock held")
+	}
+}
+func TestReviewResultSerializationUnlocked(t *testing.T) {
+	r := setupAI(t, WithEventRules(EventRules{Tools: map[string]ToolEventRule{"search": {Event: "searched"}}}))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	result := &reviewReentrantResult{i: i}
+	i.RecordToolCalls(ToolCall{Name: "search", Result: result})
+	if result.blocked || r.props(t, "searched")["result_size_bytes"] != 11 {
+		t.Fatal("result serialization held lock or lost byte size")
+	}
+	i.End(EndOptions{})
 }
