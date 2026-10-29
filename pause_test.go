@@ -962,3 +962,103 @@ func TestPauseDeliveryReentryRemainsInProgress(t *testing.T) {
 		t.Fatal("lost or doubled usage", r.names())
 	}
 }
+
+func TestMixedEmittedEventsMatchAfterJSONRestoration(t *testing.T) {
+	for _, cap := range []int{1, 1000} {
+		for _, aggregate := range []int{1, 3} {
+			for _, failed := range []bool{false, true} {
+				for _, suffix := range []string{"none", "failure", "success"} {
+					t.Run(fmt.Sprintf("%d/%d/%t/%s", cap, aggregate, failed, suffix), func(t *testing.T) {
+						run := func(restore bool) string {
+							r := setupAI(t, WithLLMCallEvents(true), WithToolBreakdown(true), WithLimits(Limits{MaxCallsPerInteraction: cap}))
+							client := &pauseReentrantClient{recorder: r}
+							_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", InteractionID: "round-trip", ConversationID: "conversation", NoPromptEvent: true, Analytics: client})
+							call := pauseCall
+							call.ResponseID = "first"
+							call.CostUSD = Ptr(0.01)
+							i.RecordCall(call)
+							i.RecordToolCalls(ToolCall{ID: "first-tool", Name: "first-tool"})
+							client.reenter = func() {
+								call.Model = "actual"
+								call.ResponseID = "pending-a"
+								call.CallCount = aggregate
+								call.CostUSD = Ptr(0.02)
+								i.RecordCall(call)
+								call.ResponseID = "pending-b"
+								call.CostUSD = Ptr(0.03)
+								i.RecordCall(call)
+								if failed {
+									f := pauseCall
+									f.Model = "failed"
+									f.ResponseID = "pending-fail"
+									f.ErrorType = "api_error"
+									f.CostUSD = Ptr(0.04)
+									i.RecordCall(f)
+								}
+								i.RecordToolCalls(ToolCall{ID: "pending-a", Name: "tool-a"}, ToolCall{ID: "pending-b", Name: "tool-b"})
+							}
+							snapshot, ok := i.Pause(PauseOptions{Reason: PauseApproval})
+							if !ok {
+								t.Fatal("pause failed")
+							}
+							client.reenter = func() {}
+							resume := func(s PausedInteraction) {
+								if restore {
+									var stored PausedInteraction
+									if err := json.Unmarshal([]byte(mustJSON(s)), &stored); err != nil {
+										t.Fatal(err)
+									}
+									_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored, Analytics: client})
+								}
+								i.Resume()
+							}
+							resume(snapshot)
+							call.ResponseID = "first"
+							if i.RecordCall(call) {
+								t.Fatal("lost deduplication")
+							}
+							if suffix != "none" {
+								f := pauseCall
+								f.Model = "later"
+								f.ResponseID = "suffix"
+								f.CostUSD = Ptr(0.05)
+								if suffix == "failure" {
+									f.ErrorType = "api_error"
+								}
+								i.RecordCall(f)
+							}
+							second, ok := i.Pause(PauseOptions{Reason: PauseHumanInput})
+							if !ok {
+								t.Fatal("second pause failed")
+							}
+							resume(second)
+							call = pauseCall
+							call.Model = "final"
+							call.ResponseID = "final"
+							call.CostUSD = Ptr(0.06)
+							i.RecordCall(call)
+							i.RecordToolCalls(ToolCall{ID: "final-tool", Name: "final-tool"})
+							i.End(EndOptions{})
+							var events []map[string]any
+							for _, e := range r.all() {
+								p := map[string]any{}
+								for k, v := range e.Properties {
+									if k != "latency_ms" && k != "total_paused_ms" {
+										p[k] = v
+									}
+								}
+								events = append(events, map[string]any{"event": e.Event, "properties": p})
+							}
+							return mustJSON(events)
+						}
+						expected := run(false)
+						restored := run(true)
+						if expected != restored {
+							t.Fatalf("round trip changed emitted events\nin process: %s\nrestored: %s", expected, restored)
+						}
+					})
+				}
+			}
+		}
+	}
+}
