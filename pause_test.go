@@ -8,9 +8,181 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 var pauseCall = LLMCall{Provider: "openai", Model: "gpt-4o-mini", InputTokens: 10, OutputTokens: 2}
+
+func TestHintedPauseMarksStateBeforeFinalization(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.hintOutcome(StatusPaused, "")
+	i.onBeforeEnd(func() { i.RecordCall(pauseCall); i.End(EndOptions{Status: StatusError}) })
+	i.End(EndOptions{})
+	if !i.Paused() || i.Ended() || len(r.named("ai_response_received")) != 1 || lastResponse(t, r)["llm_call_count"] != 1 {
+		t.Fatal("finalization ended a hinted pause")
+	}
+}
+
+type pauseReentrantClient struct {
+	*recorder
+	reenter func()
+}
+
+func (c *pauseReentrantClient) Enqueue(message analytics.Message) error {
+	err := c.recorder.Enqueue(message)
+	if event, ok := message.(analytics.Track); ok && event.Event == "ai_response_received" && event.Properties["response_status"] == "paused" {
+		c.reenter()
+	}
+	return err
+}
+
+func TestPauseEmissionPreservesEndReentryGuard(t *testing.T) {
+	r := setupAI(t)
+	client := &pauseReentrantClient{recorder: r}
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+	var nested PausedInteraction
+	var nestedOK bool
+	client.reenter = func() {
+		nested, nestedOK = i.Pause(PauseOptions{})
+		i.End(EndOptions{Status: StatusError})
+	}
+	i.onBeforeEnd(func() {
+		call := pauseCall
+		call.ResponseID = "buffered"
+		i.RecordCall(call)
+	})
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok || !nestedOK || mustJSON(snapshot) != mustJSON(nested) || i.Ended() || len(r.named("ai_response_received")) != 1 {
+		t.Fatal("emission callback ended the in-flight pause", snapshot, nested)
+	}
+}
+
+func TestEndDisconnectCallbackRunsWithoutInteractionLock(t *testing.T) {
+	for _, status := range []ResponseStatus{StatusPaused, StatusSuccess} {
+		t.Run(string(status), func(t *testing.T) {
+			r := setupAI(t)
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+			available := false
+			i.disconnected = func() bool {
+				done := make(chan struct{})
+				go func() { i.Paused(); close(done) }()
+				select {
+				case <-done:
+					available = true
+				case <-time.After(time.Second):
+				}
+				return true
+			}
+			i.End(EndOptions{Status: status})
+			if !available || lastResponse(t, r)["client_disconnected"] != true {
+				t.Fatal("disconnect callback ran while the interaction lock was held")
+			}
+		})
+	}
+}
+
+func TestConcurrentPauseWaitsForCompletedSnapshot(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	finalizing, release, secondStarted := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	type result struct {
+		snapshot PausedInteraction
+		ok       bool
+	}
+	first, second := make(chan result, 1), make(chan result, 1)
+	i.onBeforeEnd(func() {
+		close(finalizing)
+		<-release
+		call := pauseCall
+		call.ResponseID = "buffered"
+		i.RecordCall(call)
+	})
+	go func() { snapshot, ok := i.Pause(PauseOptions{}); first <- result{snapshot, ok} }()
+	<-finalizing
+	go func() {
+		close(secondStarted)
+		snapshot, ok := i.Pause(PauseOptions{})
+		second <- result{snapshot, ok}
+	}()
+	<-secondStarted
+	var early *result
+	select {
+	case got := <-second:
+		early = &got
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	a := <-first
+	var b result
+	if early != nil {
+		b = *early
+	} else {
+		b = <-second
+	}
+	if early != nil {
+		t.Error("concurrent pause returned before finalization completed")
+	}
+	if !a.ok || !b.ok || mustJSON(a.snapshot) != mustJSON(b.snapshot) || mustJSON(b.snapshot.SeenResponseIDs) != `[["openai","buffered"]]` {
+		t.Fatal(a, b)
+	}
+	if len(r.named("ai_response_received")) != 1 {
+		t.Fatal(r.names())
+	}
+	_, resumed := StartInteraction(context.Background(), InteractionOptions{Resume: &b.snapshot})
+	call := pauseCall
+	call.ResponseID = "buffered"
+	if resumed.RecordCall(call) {
+		t.Fatal("restored unfinished snapshot counted buffered response twice")
+	}
+}
+
+func TestFinalizationHooksRearmAcrossPauses(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	for range 2 {
+		i.onBeforeEnd(func() { i.RecordCall(pauseCall) })
+		i.Pause(PauseOptions{})
+		i.Resume()
+	}
+	i.End(EndOptions{})
+	for n, e := range r.named("ai_response_received") {
+		count := 1
+		if n == 2 {
+			count = 0
+		}
+		if e.Properties["llm_call_count"] != count || e.Properties["total_tokens"] != 12*count {
+			t.Fatal(e.Properties)
+		}
+	}
+}
+
+func TestSnapshotOrderingToleratesInvalidUnicode(t *testing.T) {
+	setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	for _, id := range []string{"\ue000", "\U00010000", "\xed\xa0\x80", "a"} {
+		call := pauseCall
+		call.ResponseID = id
+		i.RecordCall(call)
+	}
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok || len(snapshot.SeenResponseIDs) != 4 {
+		t.Fatal(snapshot)
+	}
+	b, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored PausedInteraction
+	if err := json.Unmarshal(b, &stored); err != nil {
+		t.Fatal(err)
+	}
+	_, resumed := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	if _, ok := resumed.Pause(PauseOptions{}); !ok {
+		t.Fatal("invalid Unicode prevented restoration")
+	}
+}
 
 func TestSharedPauseSnapshotOrder(t *testing.T) {
 	setupAI(t)

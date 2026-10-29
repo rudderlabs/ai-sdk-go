@@ -426,6 +426,7 @@ type Interaction struct {
 	// pausedAt is when the current pause started; zero while running.
 	pausedAt           time.Time
 	pausing            bool
+	pauseFlight        *pauseInFlight
 	pauseCount         int
 	pausedTotal        time.Duration
 	adapterAnalytics   analytics.Client
@@ -1344,26 +1345,52 @@ var finishErrors = map[string]string{"length": "length", "max_tokens": "length",
 // the snapshot to [Interaction.Resume] from, or to pass as [InteractionOptions.Resume] in another
 // process; ok is false once the interaction ended. A paused run is never ended by the TTL or
 // [Shutdown], and [RunInteraction] and [RunTask] leave it paused when fn returns nil. Pausing again
-// before a resume sends nothing.
+// before a resume sends nothing. Concurrent callers wait for the in-flight pause's completed snapshot.
 func (i *Interaction) Pause(o PauseOptions) (paused PausedInteraction, ok bool) {
 	safely(func() { paused, ok = i.pause(o) })
 	return paused, ok
 }
 
-func (i *Interaction) pause(o PauseOptions) (PausedInteraction, bool) {
+type pauseInFlight struct {
+	done     chan struct{}
+	snapshot PausedInteraction
+	ok       bool
+	complete bool
+}
+
+func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool) {
 	i.mu.Lock()
+	if flight := i.pauseFlight; flight != nil {
+		i.mu.Unlock()
+		<-flight.done
+		snapshot = flight.snapshot
+		snapshot.SeenResponseIDs = slices.Clone(snapshot.SeenResponseIDs)
+		return snapshot, flight.ok
+	}
 	if i.ended || !i.pausedAt.IsZero() {
 		defer i.mu.Unlock()
 		return i.snapshotLocked()
 	}
 	i.pausing = true
+	flight := &pauseInFlight{done: make(chan struct{})}
+	i.pauseFlight = flight
 	i.pausedAt = time.Now()
 	i.pauseCount++
 	hooks := i.beforeEnd
 	i.beforeEnd = nil
 	unregister(i)
 	i.mu.Unlock()
-	defer func() { i.mu.Lock(); i.pausing = false; i.mu.Unlock() }()
+	defer func() {
+		i.mu.Lock()
+		if i.pauseFlight == flight {
+			if !flight.complete {
+				i.completePauseLocked(snapshot, ok)
+			}
+			i.pausing, i.pauseFlight = false, nil
+		}
+		i.mu.Unlock()
+	}()
+	i.checkDisconnected()
 	for _, fn := range hooks {
 		safely(fn)
 	}
@@ -1380,7 +1407,9 @@ func (i *Interaction) pause(o PauseOptions) (PausedInteraction, bool) {
 	i.mu.Lock()
 	defer i.unlock()
 	if i.ended {
-		return i.snapshotLocked()
+		snapshot, ok = i.snapshotLocked()
+		i.completePauseLocked(snapshot, ok)
+		return snapshot, ok
 	}
 	var props map[string]any
 	safely(func() {
@@ -1397,7 +1426,35 @@ func (i *Interaction) pause(o PauseOptions) (PausedInteraction, bool) {
 	i.tools, i.toolOverflow, i.toolsByID = nil, nil, map[string]*recordedTool{}
 	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
 	unregister(i)
-	return i.snapshotLocked()
+	snapshot, ok = i.snapshotLocked()
+	// Publish before unlock emits events, so callbacks can safely ask for the completed pause.
+	i.completePauseLocked(snapshot, ok)
+	return snapshot, ok
+}
+
+func (i *Interaction) completePauseLocked(snapshot PausedInteraction, ok bool) {
+	flight := i.pauseFlight
+	flight.snapshot, flight.ok = snapshot, ok
+	flight.snapshot.SeenResponseIDs = slices.Clone(snapshot.SeenResponseIDs)
+	flight.complete = true
+	close(flight.done)
+}
+
+// checkDisconnected runs the request callback without holding the interaction lock.
+func (i *Interaction) checkDisconnected() {
+	i.mu.Lock()
+	fn, known := i.disconnected, i.clientDisconnected
+	i.mu.Unlock()
+	if known || fn == nil {
+		return
+	}
+	var disconnected bool
+	safely(func() { disconnected = fn() })
+	if disconnected {
+		i.mu.Lock()
+		i.clientDisconnected = true
+		i.mu.Unlock()
+	}
 }
 
 // Resume resumes a paused run in this process: the next segment starts now. A model or tool call
@@ -1473,12 +1530,10 @@ func (i *Interaction) end(o EndOptions) {
 		i.mu.Unlock()
 		return
 	}
-	if o.Status == StatusPaused && o.endReason == "" {
+	pausingHint := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
+	if o.endReason == "" && (o.Status == StatusPaused || pausingHint) {
 		if o.ClientDisconnected {
 			i.clientDisconnected = true
-		}
-		if !i.clientDisconnected && i.disconnected != nil {
-			safely(func() { i.clientDisconnected = i.disconnected() })
 		}
 		i.mu.Unlock()
 		i.pause(PauseOptions{Reason: o.PauseReason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
@@ -1508,9 +1563,6 @@ func (i *Interaction) end(o EndOptions) {
 	if o.ClientDisconnected {
 		i.clientDisconnected = true
 	}
-	if !i.clientDisconnected && i.disconnected != nil {
-		safely(func() { i.clientDisconnected = i.disconnected() })
-	}
 	hintedPause := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
 	if o.endReason == "" && (o.Status == StatusPaused || hintedPause) {
 		i.mu.Unlock()
@@ -1526,6 +1578,7 @@ func (i *Interaction) end(o EndOptions) {
 		i.started = time.Now()
 	}
 	i.mu.Unlock()
+	i.checkDisconnected()
 	// Mask once after the paused branch, outside the lock.
 	var responseText string
 	var responseOK bool
