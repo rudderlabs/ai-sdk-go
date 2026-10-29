@@ -3033,7 +3033,364 @@
       ],
       "args": [],
       "exit_code": 1,
-      "stdout": "events: {'ai_user_prompt_created': 1, 'ai_suggestion_shown': 1, 'ai_user_action': 1, 'ai_assistant_opened': 1, 'ai_assistant_closed': 1, 'ai_feedback_requested': 1, 'run_query': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: client prompt with no server prompt (request never reached the SDK, or a different ID)\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nnote: interaction 11111111-1111-4111-8111-111111111111: declared tool event ['run_query'] for an answer not in this capture\nFAIL: #0 ai_user_prompt_created (client schema): properties.agent_name: shorter than 1\nFAIL: #0 ai_user_prompt_created (client schema): properties.context_item_count: less than 0\nFAIL: #0 ai_user_prompt_created (client schema): properties.context_item_types: items not unique\nFAIL: #0 ai_user_prompt_created (client schema): properties.context_item_types[2]: not of type string\nFAIL: #0 ai_user_prompt_created (client schema): properties.input_method: not of type string\nFAIL: #0 ai_user_prompt_created (client schema): properties.mode: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.agent_name: shorter than 1\nFAIL: #0 ai_user_prompt_created (spec): properties.context_item_count: less than 0\nFAIL: #0 ai_user_prompt_created (spec): properties.context_item_types: items not unique\nFAIL: #0 ai_user_prompt_created (spec): properties.context_item_types[2]: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.input_method: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.mode: not of type string\nFAIL: #1 ai_suggestion_shown (client schema): properties.item_count: less than 0\nFAIL: #2 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #2 ai_user_action (client schema): properties.action_details.feedback_reasons: not of type array\nFAIL: #2 ai_user_action (client schema): properties.action_details.feedback_scope: not one of ['interaction', 'conversation', 'feature']\nFAIL: #2 ai_user_action (client schema): properties.action_details.items_accepted: not of type integer\nFAIL: #2 ai_user_action (client schema): properties.action_details.items_total: less than 0\nFAIL: #2 ai_user_action (spec): properties.action_details.feedback_reasons: not of type array\nFAIL: #2 ai_user_action (spec): properties.action_details.feedback_scope: not one of ['interaction', 'conversation', 'feature']\nFAIL: #2 ai_user_action (spec): properties.action_details.items_accepted: not of type integer\nFAIL: #2 ai_user_action (spec): properties.action_details.items_total: less than 0\nFAIL: #3 ai_assistant_opened (client schema): properties.entry_point: not of type string\nFAIL: #4 ai_assistant_closed (client schema): properties.close_method: not of type string\nFAIL: #5 ai_feedback_requested (client schema): properties.trigger: not of type string\nFAIL: #6 run_query (client schema): properties.tool_duration_ms: less than 0\nFAIL: #6 run_query (spec): properties.tool_duration_ms: less than 0\nRESULT: FAIL\n"
+      "stdout": "events: {'ai_user_prompt_created': 1, 'ai_suggestion_shown': 1, 'ai_user_action': 1, 'ai_assistant_opened': 1, 'ai_assistant_closed': 1, 'ai_feedback_requested': 1, 'run_query': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: client prompt with no server prompt (request never reached the SDK, or a different ID)\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nnote: interaction 11111111-1111-4111-8111-111111111111: declared tool event ['run_query'] for an answer not in this capture\nFAIL: #0 ai_user_prompt_created (client schema): properties.agent_name: shorter than 1\nFAIL: #0 ai_user_prompt_created (client schema): properties.context_item_count: less than 0\nFAIL: #0 ai_user_prompt_created (client schema): properties.context_item_types: items not unique\nFAIL: #0 ai_user_prompt_created (client schema): properties.context_item_types[2]: not of type string\nFAIL: #0 ai_user_prompt_created (client schema): properties.input_method: not of type string\nFAIL: #0 ai_user_prompt_created (client schema): properties.mode: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.agent_name: shorter than 1\nFAIL: #0 ai_user_prompt_created (spec): properties.context_item_count: less than 0\nFAIL: #0 ai_user_prompt_created (spec): properties.context_item_types: items not unique\nFAIL: #0 ai_user_prompt_created (spec): properties.context_item_types[2]: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.input_method: not of type string\nFAIL: #0 ai_user_prompt_created (spec): properties.mode: not of type string\nFAIL: #1 ai_suggestion_shown (client schema): properties.item_count: less than 0\nFAIL: #2 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #2 ai_user_action (client schema): properties.action_details.feedback_reasons: not of type array\nFAIL: #2 ai_user_action (client schema): properties.action_details.feedback_scope: not one of ['interaction', 'conversation', 'feature']\nFAIL: #2 ai_user_action (client schema): properties.action_details.items_accepted: not of type integer\nFAIL: #2 ai_user_action (client schema): properties.action_details.items_total: less than 0\nFAIL: #2 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nFAIL: #2 ai_user_action (spec): properties.action_details.feedback_reasons: not of type array\nFAIL: #2 ai_user_action (spec): properties.action_details.feedback_scope: not one of ['interaction', 'conversation', 'feature']\nFAIL: #2 ai_user_action (spec): properties.action_details.items_accepted: not of type integer\nFAIL: #2 ai_user_action (spec): properties.action_details.items_total: less than 0\nFAIL: #3 ai_assistant_opened (client schema): properties.entry_point: not of type string\nFAIL: #4 ai_assistant_closed (client schema): properties.close_method: not of type string\nFAIL: #5 ai_feedback_requested (client schema): properties.trigger: not of type string\nFAIL: #6 run_query (client schema): properties.tool_duration_ms: less than 0\nFAIL: #6 run_query (spec): properties.tool_duration_ms: less than 0\nRESULT: FAIL\n"
+    },
+    {
+      "name": "legacy_client_tool_name",
+      "command": "check",
+      "captures": [
+        "legacy_client_tool_name"
+      ],
+      "args": [
+        "--expect-legacy",
+        "run_query",
+        "--no-ai-events"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {}\nlegacy or other events (no wrapperLibrary): {'run_query': 1}\nsdks: {}\ninteractions: 0\nRESULT: PASS\n"
+    },
+    {
+      "name": "legacy_client_tool_status",
+      "command": "check",
+      "captures": [
+        "legacy_client_tool_status"
+      ],
+      "args": [
+        "--expect-legacy",
+        "run_query",
+        "--no-ai-events"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {}\nlegacy or other events (no wrapperLibrary): {'run_query': 1}\nsdks: {}\ninteractions: 0\nRESULT: PASS\n"
+    },
+    {
+      "name": "legacy_client_tool_name_tool_status",
+      "command": "check",
+      "captures": [
+        "legacy_client_tool_name_tool_status"
+      ],
+      "args": [
+        "--expect-legacy",
+        "run_query",
+        "--no-ai-events"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {}\nlegacy or other events (no wrapperLibrary): {'run_query': 1}\nsdks: {}\ninteractions: 0\nRESULT: PASS\n"
+    },
+    {
+      "name": "client_tool_only",
+      "command": "check",
+      "captures": [
+        "client_tool_only"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'run_query': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: declared tool event ['run_query'] for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "client_tool_only_switch_off",
+      "command": "check",
+      "captures": [
+        "client_tool_only_switch_off"
+      ],
+      "args": [
+        "--no-ai-events"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'run_query': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: declared tool event ['run_query'] for an answer not in this capture\nFAIL: 1 browser AI events sent with the AI events switch off (trackAi not gated on it)\nRESULT: FAIL\n"
+    },
+    {
+      "name": "client_tool_only_missing_status",
+      "command": "check",
+      "captures": [
+        "client_tool_only_missing_status"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'run_query': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: declared tool event ['run_query'] for an answer not in this capture\nFAIL: #0 run_query (client schema): properties: missing required 'tool_status'\nFAIL: #0 run_query (spec): properties: missing required 'tool_status'\nRESULT: FAIL\n"
+    },
+    {
+      "name": "legacy_client_and_sdk_tool_same_name",
+      "command": "check",
+      "captures": [
+        "legacy_client_and_sdk_tool_same_name"
+      ],
+      "args": [
+        "--expect-legacy",
+        "run_query"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'run_query': 1}\nlegacy or other events (no wrapperLibrary): {'run_query': 1}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: declared tool event ['run_query'] for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_download",
+      "command": "check",
+      "captures": [
+        "export_destination_category_download"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_dashboard",
+      "command": "check",
+      "captures": [
+        "export_destination_category_dashboard"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_agent",
+      "command": "check",
+      "captures": [
+        "export_destination_category_agent"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_ide",
+      "command": "check",
+      "captures": [
+        "export_destination_category_ide"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_invalid_http_url",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_http_url"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nFAIL: #1 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #1 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_network_url",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_network_url"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nFAIL: #1 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #1 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_mailto_url",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_mailto_url"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nFAIL: #1 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #1 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_file_url",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_file_url"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nFAIL: #1 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #1 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_empty",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_empty"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 2}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: shorter than 1\nFAIL: #1 ai_user_action (client schema): properties.action_details.destination: shorter than 1\nFAIL: #1 ai_user_action (spec): properties.action_details.destination: shorter than 1\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_category_download_server",
+      "command": "check",
+      "captures": [
+        "export_destination_category_download_server"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_download_client",
+      "command": "check",
+      "captures": [
+        "export_destination_category_download_client"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_dashboard_server",
+      "command": "check",
+      "captures": [
+        "export_destination_category_dashboard_server"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_dashboard_client",
+      "command": "check",
+      "captures": [
+        "export_destination_category_dashboard_client"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_agent_server",
+      "command": "check",
+      "captures": [
+        "export_destination_category_agent_server"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_agent_client",
+      "command": "check",
+      "captures": [
+        "export_destination_category_agent_client"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_ide_server",
+      "command": "check",
+      "captures": [
+        "export_destination_category_ide_server"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_category_ide_client",
+      "command": "check",
+      "captures": [
+        "export_destination_category_ide_client"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nRESULT: PASS\n"
+    },
+    {
+      "name": "export_destination_invalid_http_url_server",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_http_url_server"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_http_url_client",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_http_url_client"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_network_url_server",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_network_url_server"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_network_url_client",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_network_url_client"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_mailto_url_server",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_mailto_url_server"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_mailto_url_client",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_mailto_url_client"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_file_url_server",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_file_url_server"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_file_url_client",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_file_url_client"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (client schema): properties.action_details.destination: matches a schema it must not\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: matches a schema it must not\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_empty_server",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_empty_server"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: shorter than 1\nRESULT: FAIL\n"
+    },
+    {
+      "name": "export_destination_invalid_empty_client",
+      "command": "check",
+      "captures": [
+        "export_destination_invalid_empty_client"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {}\ninteractions: 1\nnote: interaction 11111111-1111-4111-8111-111111111111: ai_user_action for an answer not in this capture\nFAIL: #0 ai_user_action (client schema): properties.action_details.destination: shorter than 1\nFAIL: #0 ai_user_action (spec): properties.action_details.destination: shorter than 1\nRESULT: FAIL\n"
     }
   ]
 }

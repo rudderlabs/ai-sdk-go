@@ -156,8 +156,9 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 	actions := map[string]map[string]*counter{}                    // interaction -> side -> action_type counts
 	var runs, toolCalls []*Object
 
-	// browser AI event names: only these count as AI traffic when they carry source: client
+	// Client schema names and declared tools count as browser AI traffic.
 	isClientName := func(name string) bool { return strings.HasPrefix(name, "ai_") && sch.client.defs.Has(name) }
+	browserEvents := 0
 	for i, m := range events {
 		name, props := m.Get("event").(string), obj(m.Get("properties"))
 		user := m.Get("userId")
@@ -170,9 +171,12 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 		context := obj(m.Get("context"))
 		w := obj(context.Get("wrapperLibrary"))
-		// a legacy event may use source too; a client app's declared tool event carries tool_name or tool_status
+		// Legacy events can carry tool fields too; --expect-legacy disambiguates customer names.
 		isClient := props.Get("source") == "client" &&
-			(isClientName(name) || (!reserved(name) && w.Len() == 0 && (props.Has("tool_name") || props.Has("tool_status"))))
+			(isClientName(name) || (!reserved(name) && w.Len() == 0 && !slices.Contains(opts.expectLegacy, name) && (props.Has("tool_name") || props.Has("tool_status"))))
+		if isClient {
+			browserEvents++
+		}
 		where := fmt.Sprintf("#%d %s", i, name)
 		// Provenance: only the AI SDKs' wrapperLibrary marks an AI send; another adapter's tag is still legacy,
 		// unless the event uses an AI name not listed in --expect-legacy (then it fails the SDK-name check).
@@ -628,14 +632,10 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 	}
 	// browser AI events carry no wrapperLibrary: trackAi must follow the switch too
-	sdkEvents, browserEvents := 0, 0
+	sdkEvents := 0
 	for _, m := range events {
 		if in(obj(obj(m.Get("context")).Get("wrapperLibrary")).Get("name"), sdkNames) {
 			sdkEvents++
-		}
-		name := m.Get("event").(string)
-		if obj(m.Get("properties")).Get("source") == "client" && isClientName(name) {
-			browserEvents++
 		}
 	}
 	if opts.noAIEvents && sdkEvents > 0 {

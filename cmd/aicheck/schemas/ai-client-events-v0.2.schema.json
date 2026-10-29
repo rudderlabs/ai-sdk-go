@@ -106,7 +106,7 @@
             "feedback_scope": {"enum": ["interaction", "conversation", "feature"], "description": "Since v0.4. What the feedback is about; absent means interaction."},
             "items_total": {"type": "integer", "minimum": 0, "description": "Since v0.4. Number of actionable suggestion items offered."},
             "items_accepted": {"type": "integer", "minimum": 0, "description": "Since v0.4. Number of actionable suggestion items kept."},
-            "destination": {"type": "string", "minLength": 1, "examples": ["download", "dashboard", "agent", "ide"], "not": {"pattern": "[/?=]"}, "description": "Since v0.4. Export destination category, such as download, dashboard, agent or ide; never a URL."},
+            "destination": {"type": "string", "minLength": 1, "examples": ["download", "dashboard", "agent", "ide"], "not": {"pattern": "[/?=]|^[A-Za-z][A-Za-z0-9+.-]*:"}, "description": "Since v0.4. Export destination category, such as download, dashboard, agent or ide; never a URL."},
             "card_kind": { "type": "string" },
             "target_type": { "type": "string", "not": { "pattern": "[/?=]" } }
           },
