@@ -320,6 +320,9 @@ type pendingEvent struct {
 	event string
 	props func() map[string]any
 	at    time.Time
+	// rates is the snapshot a fitted event was sampled under, when pinned.
+	rates  map[string]float64
+	pinned bool
 }
 
 type outcomeHint struct {
@@ -1080,8 +1083,9 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 			keys = append(keys, k)
 		}
 	}
-	p = fitToolEventProperties(rule.Event, p, keys)
-	i.sendLocked(rule.Event, func() map[string]any { return p })
+	rates := cfg().sampleRates
+	p = fitToolEventProperties(rule.Event, p, keys, rates)
+	i.sendLockedRates(rule.Event, func() map[string]any { return p }, rates, true)
 }
 
 func toolStatus(err *bool) string {
@@ -1101,7 +1105,11 @@ func roundMS(d time.Duration) int64 {
 // sendLocked queues an event; the prompt event is held until the first call or the end, so it
 // carries that call's integration tag and an integration's client.
 func (i *Interaction) sendLocked(event string, props func() map[string]any) {
-	i.pending = append(i.pending, pendingEvent{event, props, time.Now()})
+	i.sendLockedRates(event, props, nil, false)
+}
+
+func (i *Interaction) sendLockedRates(event string, props func() map[string]any, rates map[string]float64, pinned bool) {
+	i.pending = append(i.pending, pendingEvent{event, props, time.Now(), rates, pinned})
 	if event != "ai_user_prompt_created" {
 		i.settled = true
 	}
@@ -1115,6 +1123,8 @@ type outgoing struct {
 	props       map[string]any
 	integration string
 	at          time.Time
+	rates       map[string]float64
+	pinned      bool
 }
 
 // flushLocked builds the pending events; unlock sends them.
@@ -1124,7 +1134,7 @@ func (i *Interaction) flushLocked() {
 	}
 	client := i.analytics()
 	for _, e := range i.pending {
-		i.outbox = append(i.outbox, outgoing{client, e.event, e.props(), i.integration, e.at})
+		i.outbox = append(i.outbox, outgoing{client, e.event, e.props(), i.integration, e.at, e.rates, e.pinned})
 	}
 	i.pending = nil
 }
@@ -1136,6 +1146,10 @@ func (i *Interaction) unlock() {
 	i.outbox = nil
 	i.mu.Unlock()
 	for _, e := range out {
+		if e.pinned {
+			emitAIRates(e.client, e.event, i.userID, i.anonymousID, e.props, i.msgContext, e.integration, e.at, e.rates)
+			continue
+		}
 		emitAI(e.client, e.event, i.userID, i.anonymousID, e.props, i.msgContext, e.integration, e.at)
 	}
 }

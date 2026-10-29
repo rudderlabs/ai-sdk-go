@@ -678,7 +678,8 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 	}
 	p["tool_name"] = rc.toolName
 	p["tool_status"] = status
-	emit(rc.opts.Analytics, rule.Event, rc.who, fitToolEventProperties(rule.Event, p, custom))
+	rates := cfg().sampleRates
+	emitRates(rc.opts.Analytics, rule.Event, rc.who, fitToolEventProperties(rule.Event, p, custom, rates), rates)
 }
 
 func (rc *reqCtx) inputKey(key, requestState string) string {

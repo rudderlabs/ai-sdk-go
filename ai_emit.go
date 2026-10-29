@@ -11,6 +11,11 @@ import (
 // emitAI sends one AI event, unless WithSampleRates samples it out. Never panics; without a client
 // the event is dropped with a warning.
 func emitAI(client analytics.Client, event, userID, anonymousID string, properties, msgContext map[string]any, integration string, at time.Time) {
+	emitAIRates(client, event, userID, anonymousID, properties, msgContext, integration, at, cfg().sampleRates)
+}
+
+// emitAIRates is emitAI under one rates snapshot, so an event fitted under it is sampled under it.
+func emitAIRates(client analytics.Client, event, userID, anonymousID string, properties, msgContext map[string]any, integration string, at time.Time, rates map[string]float64) {
 	safely(func() {
 		if client == nil {
 			warnOnce("no-client", "no RudderStack client configured (Configure(WithAnalytics(client))); AI events are dropped", 0)
@@ -18,7 +23,7 @@ func emitAI(client analytics.Client, event, userID, anonymousID string, properti
 			return
 		}
 		rememberClient(client)
-		properties, kept := sample(event, properties, cfg().sampleRates)
+		properties, kept := sample(event, properties, rates)
 		if !kept {
 			return
 		}
@@ -130,8 +135,8 @@ func fitProperties(event string, properties map[string]any) map[string]any {
 // fitToolEventProperties keeps a declared tool event within maxPropertiesBytes: when over, the
 // rule's Properties output (the custom keys) is dropped and the SDK-owned fields are kept, as when
 // Properties panics. fitProperties has nothing of its own to trim on these events.
-func fitToolEventProperties(event string, properties map[string]any, custom []string) map[string]any {
-	properties = sampleProperties(event, properties, cfg().sampleRates)
+func fitToolEventProperties(event string, properties map[string]any, custom []string, rates map[string]float64) map[string]any {
+	properties = sampleProperties(event, properties, rates)
 	if propertiesBytes(properties) <= maxPropertiesBytes {
 		return properties
 	}

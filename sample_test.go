@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -248,5 +249,29 @@ func TestInvalidSampleRatesChangeNothing(t *testing.T) {
 				t.Fatalf("llm calls %d", n)
 			}
 		})
+	}
+}
+
+// A Configure between fitting and emitting must not add sample_rate to an event already at budget.
+func TestFittedToolEventKeepsItsRatesSnapshot(t *testing.T) {
+	r := setupAI(t)
+	const event = "order_placed"
+	p := map[string]any{"server_name": "s", "interaction_id": keptID, "request_id": "r", "tool_name": "t", "tool_status": "success", "pad": "", "small": 1}
+	p["pad"] = strings.Repeat("x", maxPropertiesBytes-propertiesBytes(p)-5) // fits, but not with sample_rate
+	var rates map[string]float64                                            // snapshot taken before the concurrent Configure
+	fitted := fitToolEventProperties(event, p, []string{"pad", "small"}, rates)
+	if err := Configure(WithSampleRates(map[string]float64{event: 0.99})); err != nil {
+		t.Fatal(err)
+	}
+	emitRates(r, event, who{userID: "u"}, fitted, rates)
+	emitAIRates(r, event, "u", "", fitted, nil, "", time.Now(), rates)
+	got := r.named(event)
+	if len(got) != 2 {
+		t.Fatalf("got %d events", len(got))
+	}
+	for _, e := range got {
+		if _, ok := e.Properties["sample_rate"]; ok || e.Properties["pad"] == nil {
+			t.Fatalf("event changed after fitting: %d bytes, sample_rate %v", len(fmt.Sprint(e.Properties)), e.Properties["sample_rate"])
+		}
 	}
 }
