@@ -17,6 +17,10 @@ spec:
       name: ai_llm_response_received
       event_type: track
       description: Optional, one per model call. Totals belong on ai_response_received.
+    - id: ai_task_started
+      name: ai_task_started
+      event_type: track
+      description: Since v0.4. Optional, one per background run when it starts, never on a resume. Without an answer, the run is in flight or abandoned.
     - id: ai_interaction_classified
       name: ai_interaction_classified
       event_type: track

@@ -3855,6 +3855,58 @@
       ],
       "exit_code": 1,
       "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'ai_limit_reached': 3}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 8}\ninteractions: 2\nFAIL: #13 ai_limit_reached (spec): properties: missing required 'limit_type'\nRESULT: FAIL\n"
+    },
+    {
+      "name": "v04_task_started_only",
+      "command": "check",
+      "captures": [
+        "v04_task_started_only"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "events: {'ai_task_started': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 1}\ninteractions: 1\nRESULT: PASS\n"
+    },
+    {
+      "name": "v04_task_multi_pause",
+      "command": "check",
+      "captures": [
+        "v04_task_multi_pause"
+      ],
+      "args": [],
+      "exit_code": 0,
+      "stdout": "run: {'task_name': 'approval-loop', 'trigger_source': 'queue', 'trigger_event_id': None, 'conversation_id': 'conv_v04_task', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': 1, 'total_tokens': 120}\nrun: {'task_name': 'approval-loop', 'trigger_source': 'queue', 'trigger_event_id': None, 'conversation_id': 'conv_v04_task', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': 1, 'total_tokens': 60}\nrun: {'task_name': 'approval-loop', 'trigger_source': 'queue', 'trigger_event_id': None, 'conversation_id': 'conv_v04_task', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': 1, 'total_tokens': 35}\nevents: {'ai_task_started': 1, 'ai_response_received': 3}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 4}\ninteractions: 1\nRESULT: PASS\n"
+    },
+    {
+      "name": "v04_multi_pause_client_joins",
+      "command": "check",
+      "captures": [
+        "v04_multi_pause_client_joins"
+      ],
+      "args": [
+        "--expect-joins"
+      ],
+      "exit_code": 0,
+      "stdout": "events: {'ai_user_prompt_created': 2, 'ai_response_received': 6}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 4}\ninteractions: 1\nRESULT: PASS\n"
+    },
+    {
+      "name": "v04_pause_counters_unpaired",
+      "command": "check",
+      "captures": [
+        "v04_pause_counters_unpaired"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "run: {'task_name': 'approval-loop', 'trigger_source': 'queue', 'trigger_event_id': None, 'conversation_id': 'conv_v04_task', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': 1, 'total_tokens': 120}\nrun: {'task_name': 'approval-loop', 'trigger_source': 'queue', 'trigger_event_id': None, 'conversation_id': 'conv_v04_task', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': 1, 'total_tokens': 60}\nrun: {'task_name': 'approval-loop', 'trigger_source': 'queue', 'trigger_event_id': None, 'conversation_id': 'conv_v04_task', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': 1, 'total_tokens': 35}\nevents: {'ai_task_started': 1, 'ai_response_received': 3}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 4}\ninteractions: 1\nFAIL: #3 ai_response_received (spec): properties: missing required 'total_paused_ms'\nRESULT: FAIL\n"
+    },
+    {
+      "name": "v04_pause_counters_on_paused",
+      "command": "check",
+      "captures": [
+        "v04_pause_counters_on_paused"
+      ],
+      "args": [],
+      "exit_code": 1,
+      "stdout": "run: {'task_name': 'approval-loop', 'trigger_source': 'queue', 'trigger_event_id': None, 'conversation_id': 'conv_v04_task', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': 1, 'total_tokens': 120}\nrun: {'task_name': 'approval-loop', 'trigger_source': 'queue', 'trigger_event_id': None, 'conversation_id': 'conv_v04_task', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': 1, 'total_tokens': 60}\nrun: {'task_name': 'approval-loop', 'trigger_source': 'queue', 'trigger_event_id': None, 'conversation_id': 'conv_v04_task', 'account_id': None, 'on_behalf_of': None, 'parent_interaction_id': None, 'llm_call_count': 1, 'total_tokens': 35}\nevents: {'ai_task_started': 1, 'ai_response_received': 3}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'rudderstack-ai': 4}\ninteractions: 1\nFAIL: #1 ai_response_received (spec): properties.response_status: matches a schema it must not\nRESULT: FAIL\n"
     }
   ]
 }
