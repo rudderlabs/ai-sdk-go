@@ -1199,6 +1199,17 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 			}
 		}
 	}
+	// Encode outside the lock: an application MarshalJSON may re-enter the interaction.
+	resultSize := -1
+	if t.hasResult {
+		if text, ok := t.result.(string); ok {
+			resultSize = len(text)
+		} else if encoded, ok := encodeNow(t.result); ok {
+			resultSize = len(encoded.(json.RawMessage))
+		} else {
+			report(KindUserCallback, "MarshalJSON", errUnencodable)
+		}
+	}
 	i.mu.Lock()
 	p := i.baseLocked()
 	p["trigger"] = string(i.trigger)
@@ -1211,6 +1222,9 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 		p["tool_status"] = toolStatus(t.err)
 	}
 	put(p, "mcp_server", t.mcpServer)
+	if resultSize >= 0 {
+		p["result_size_bytes"] = resultSize
+	}
 
 	// An unknown outcome never reports a 0 duration.
 	if t.duration != nil && (t.err != nil || *t.duration != 0) {
@@ -1226,16 +1240,6 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	}
 	rates := cfg().sampleRates
 	i.mu.Unlock()
-	if t.hasResult {
-		if text, ok := t.result.(string); ok {
-			p["result_size_bytes"] = len(text)
-		} else if encoded, ok := encodeNow(t.result); ok {
-			p["result_size_bytes"] = len(encoded.(json.RawMessage))
-		} else {
-			report(KindUserCallback, "MarshalJSON", errUnencodable)
-		}
-	}
-
 	p = fitToolEventProperties(rule.Event, jsonSafeMap(p), keys, rates)
 	i.mu.Lock()
 	defer i.unlock()
