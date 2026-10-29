@@ -532,10 +532,8 @@ spec:
       type: string
       description: Since v0.4. On exported, where the output went, as a snake_case label of 1-64 ASCII characters, starting with a lowercase letter, followed by lowercase letters, digits or underscores. Examples are download, dashboard, agent and ide.
       config:
-        pattern: ^[a-z][a-z0-9_]*
+        pattern: ^[a-z][a-z0-9_]*$
         max_length: 64
-        not:
-          pattern: "[^a-z0-9_]"
     - id: card_kind
       name: card_kind
       type: string
