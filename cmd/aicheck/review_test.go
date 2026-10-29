@@ -126,3 +126,43 @@ func TestReviewLimitRows(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewZeroSampleRate(t *testing.T) {
+	var out, stderr bytes.Buffer
+	capture := `{"type":"track","event":"ai_limit_reached","userId":"u","properties":{"limit_type":"credits","sample_rate":0},"context":{"wrapperLibrary":{"name":"rudderstack-ai","version":"0.7.0","specVersion":"0.3.0","integration":"manual"}}}`
+	value, err := parseJSON(capture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := readSchema("", specSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := readSchema("", clientSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemas, err := newSchemas(spec, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := check([]*Object{obj(value)}, schemas, options{}, &out)
+	if err != nil || code != 1 || !strings.Contains(out.String(), "sample_rate") {
+		t.Fatal(code, err, out.String(), stderr.String())
+	}
+}
+
+func TestReviewSampleRateCatalog(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "spec/rudderstack-catalog/properties.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, section, ok := strings.Cut(string(b), "    - id: sample_rate\n")
+	if !ok {
+		t.Fatal("missing sample rate")
+	}
+	section, _, _ = strings.Cut(section, "    - id:")
+	if !strings.Contains(section, "exclusive_minimum: 0") || strings.Contains(section, "        minimum: 0") {
+		t.Fatal(section)
+	}
+}

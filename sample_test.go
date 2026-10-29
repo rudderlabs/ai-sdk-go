@@ -78,7 +78,7 @@ func TestSampleLimitEventsByInteraction(t *testing.T) {
 	if err := validateEvent("ai_limit_reached", p); err != nil {
 		t.Fatal(err)
 	}
-	for _, rate := range []any{-0.1, 1.1, "0.1"} {
+	for _, rate := range []any{0, -0.1, 1.1, "0.1"} {
 		invalid := map[string]any{}
 		for key, value := range p {
 			invalid[key] = value

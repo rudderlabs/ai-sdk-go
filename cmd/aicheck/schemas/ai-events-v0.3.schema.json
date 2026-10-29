@@ -1671,7 +1671,7 @@
     },
     "sample_rate": {
       "type": "number",
-      "minimum": 0,
+      "exclusiveMinimum": 0,
       "maximum": 1,
       "description": "Since v0.4. The rate, above 0 and below 1, this event type was sampled at when it was sent (configure sample rates); absent means it was not sampled. Weight a row by 1 / sample_rate to estimate totals. The draw is keyed on interaction_id, so the sampled events of one interaction are kept or dropped together; spec/fixtures/sampling-v0.1.json fixes the draw across SDKs."
     }

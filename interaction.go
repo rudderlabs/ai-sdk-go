@@ -986,7 +986,7 @@ var reservedProperties = set(
 )
 
 var toolEventReserved = func() map[string]bool {
-	m := set("agent_name", "tool_name", "tool_call_id", "tool_status", "tool_duration_ms")
+	m := set("sample_rate", "agent_name", "tool_name", "tool_call_id", "tool_status", "tool_duration_ms")
 	for k := range reservedProperties {
 		m[k] = true
 	}

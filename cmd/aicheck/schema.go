@@ -217,6 +217,8 @@ func message(k jsonschema.ErrorKind, schemaObj *Object) string {
 		return "longer than " + repr(schemaObj.Get("maxLength"))
 	case *kind.Minimum:
 		return "less than " + repr(schemaObj.Get("minimum"))
+	case *kind.ExclusiveMinimum:
+		return "less than or equal to " + repr(schemaObj.Get("exclusiveMinimum"))
 	case *kind.Maximum:
 		return "greater than " + repr(schemaObj.Get("maximum"))
 	case *kind.Pattern:

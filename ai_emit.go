@@ -131,6 +131,7 @@ func fitProperties(event string, properties map[string]any) map[string]any {
 // rule's Properties output (the custom keys) is dropped and the SDK-owned fields are kept, as when
 // Properties panics. fitProperties has nothing of its own to trim on these events.
 func fitToolEventProperties(event string, properties map[string]any, custom []string) map[string]any {
+	properties = sampleProperties(event, properties, cfg().sampleRates)
 	if propertiesBytes(properties) <= maxPropertiesBytes {
 		return properties
 	}

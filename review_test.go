@@ -64,3 +64,54 @@ func TestReviewDuplicateInvalidCreditsClear(t *testing.T) {
 	}
 	i.End(EndOptions{})
 }
+
+func TestReviewSampleOwned(t *testing.T) {
+	for _, rates := range []map[string]float64{nil, {"event": 1}} {
+		p := map[string]any{"sample_rate": 0.1, "other": 1}
+		out, kept := sample("event", p, rates)
+		if !kept || out["sample_rate"] != nil || p["sample_rate"] != 0.1 {
+			t.Fatal(out, p)
+		}
+	}
+}
+func TestReviewSamplingToolBudget(t *testing.T) {
+	for _, mcp := range []bool{false, true} {
+		for _, supplied := range []bool{false, true} {
+			r := setupAI(t, WithSampleRates(map[string]float64{"searched": 0.5}))
+			id := "3f2c9a4e-8b1d-4c6f-9e2a-7d5b1c0e4a93"
+			base := map[string]any{"interaction_id": id, "tool_name": "search", "tool_status": "success"}
+			if !mcp {
+				base["conversation_id"] = "c"
+				base["trigger"] = "user"
+			}
+			custom := map[string]any{"padding": ""}
+			if supplied {
+				custom["sample_rate"] = 0.1
+			}
+			p := map[string]any{}
+			for k, v := range base {
+				p[k] = v
+			}
+			for k, v := range custom {
+				p[k] = v
+			}
+			custom["padding"] = strings.Repeat("x", maxPropertiesBytes-propertiesBytes(p))
+			rule := ToolEventRule{Event: "searched", Properties: func(map[string]any, any) map[string]any { return custom }}
+			if mcp {
+				rc := &reqCtx{opts: &options{Options: Options{Analytics: r}, rules: map[string]ToolEventRule{"search": rule}}, base: base, toolName: "search", tool: &toolState{}}
+				rc.declaredEvent(nil, "success")
+			} else {
+				if err := Configure(WithEventRules(EventRules{Tools: map[string]ToolEventRule{"search": rule}})); err != nil {
+					t.Fatal(err)
+				}
+				_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", ConversationID: "c", InteractionID: id, NoPromptEvent: true})
+				i.RecordToolCalls(ToolCall{Name: "search", Error: Ptr(false)})
+				i.End(EndOptions{})
+			}
+			got := r.props(t, "searched")
+			if propertiesBytes(got) > maxPropertiesBytes || got["sample_rate"] != 0.5 {
+				t.Errorf("mcp=%v supplied=%v bytes=%d stamp=%v", mcp, supplied, propertiesBytes(got), got["sample_rate"])
+			}
+		}
+	}
+}

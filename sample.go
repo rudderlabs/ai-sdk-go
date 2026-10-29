@@ -46,7 +46,7 @@ func sampleBucket(interactionID string) float64 {
 func sample(event string, properties map[string]any, rates map[string]float64) (_ map[string]any, kept bool) {
 	rate, ok := rates[event]
 	if !ok || rate >= 1 {
-		return properties, true
+		return sampleProperties(event, properties, rates), true
 	}
 	var draw float64
 	if id, _ := properties["interaction_id"].(string); id != "" {
@@ -64,4 +64,23 @@ func sample(event string, properties map[string]any, rates map[string]float64) (
 	}
 	out["sample_rate"] = rate
 	return out, true
+}
+
+// sampleProperties prepares SDK-owned metadata without drawing a sampling decision.
+// Declared tool fitting includes this metadata before the emitter draws once.
+func sampleProperties(event string, properties map[string]any, rates map[string]float64) map[string]any {
+	rate := rates[event]
+	_, supplied := properties["sample_rate"]
+	if !supplied && !(rate > 0 && rate < 1) {
+		return properties
+	}
+	out := maps.Clone(properties)
+	if out == nil {
+		out = map[string]any{}
+	}
+	delete(out, "sample_rate")
+	if rate > 0 && rate < 1 {
+		out["sample_rate"] = rate
+	}
+	return out
 }
