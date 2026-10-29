@@ -3272,7 +3272,7 @@
             "total_tokens": 74,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 5.84e-05,
+            "total_cost_usd": 0.0000584,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -3285,7 +3285,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.92e-05
+                "cost_usd": 0.0000292
               },
               {
                 "provider": "openai",
@@ -3297,7 +3297,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.92e-05
+                "cost_usd": 0.0000292
               }
             ]
           },
@@ -3679,7 +3679,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.92e-05,
+            "total_cost_usd": 0.0000292,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -3692,7 +3692,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.92e-05
+                "cost_usd": 0.0000292
               }
             ]
           },
@@ -3983,7 +3983,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.92e-05
+                "cost_usd": 0.0000292
               },
               {
                 "provider": "openai",
@@ -4127,7 +4127,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "cost_usd": 2.92e-05,
+            "cost_usd": 0.0000292,
             "latency_ms": "<number>",
             "response_id": "chatcmpl-1",
             "finish_reason": "stop"
@@ -4182,7 +4182,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.92e-05,
+            "total_cost_usd": 0.0000292,
             "finish_reason": "stop",
             "error_type": "rate_limit",
             "usage_breakdown": [
@@ -4196,7 +4196,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 1,
-                "cost_usd": 2.92e-05
+                "cost_usd": 0.0000292
               }
             ]
           },
@@ -8487,7 +8487,7 @@
             "total_tokens": 52,
             "total_cached_input_tokens": 30,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.62e-05,
+            "total_cost_usd": 0.0000262,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -8500,7 +8500,7 @@
                 "cached_input_tokens": 30,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.62e-05
+                "cost_usd": 0.0000262
               }
             ]
           },
@@ -15164,7 +15164,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 4.9e-05,
+            "total_cost_usd": 0.000049,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -15177,7 +15177,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 4.9e-05
+                "cost_usd": 0.000049
               }
             ]
           },
@@ -21745,7 +21745,7 @@
             "total_tokens": 1,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "cost_usd": 8e-08,
+            "cost_usd": 8e-8,
             "latency_ms": "<number>",
             "response_id": "chatcmpl-1",
             "finish_reason": "stop"
@@ -21771,7 +21771,7 @@
             "total_tokens": 21,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "cost_usd": 1.58e-06,
+            "cost_usd": 0.00000158,
             "latency_ms": "<number>",
             "response_id": "chatcmpl-2",
             "finish_reason": "stop"
@@ -21802,7 +21802,7 @@
             "total_tokens": 22,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 1.66e-06,
+            "total_cost_usd": 0.00000166,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -21815,7 +21815,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 1.66e-06
+                "cost_usd": 0.00000166
               }
             ]
           },
@@ -24125,7 +24125,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.92e-05,
+            "total_cost_usd": 0.0000292,
             "finish_reason": "length",
             "error_type": "length",
             "usage_breakdown": [
@@ -24139,7 +24139,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.92e-05
+                "cost_usd": 0.0000292
               }
             ]
           },
@@ -24272,7 +24272,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.92e-05,
+            "total_cost_usd": 0.0000292,
             "finish_reason": "refusal",
             "usage_breakdown": [
               {
@@ -24285,7 +24285,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.92e-05
+                "cost_usd": 0.0000292
               }
             ]
           },
@@ -24398,7 +24398,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.92e-05,
+            "total_cost_usd": 0.0000292,
             "finish_reason": "content_filter",
             "error_type": "content_filter",
             "usage_breakdown": [
@@ -24412,7 +24412,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.92e-05
+                "cost_usd": 0.0000292
               }
             ]
           },
@@ -24696,7 +24696,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.92e-05,
+            "total_cost_usd": 0.0000292,
             "finish_reason": "length",
             "error_type": "length",
             "usage_breakdown": [
@@ -24711,7 +24711,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.92e-05
+                "cost_usd": 0.0000292
               }
             ]
           },
@@ -26260,7 +26260,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 8,
             "cache_write_tokens": 0,
-            "cost_usd": 3.534e-05,
+            "cost_usd": 0.00003534,
             "latency_ms": "<number>",
             "response_id": "google-plain",
             "finish_reason": "stop"
@@ -26292,7 +26292,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 8,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 3.534e-05,
+            "total_cost_usd": 0.00003534,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -26306,7 +26306,7 @@
                 "cached_input_tokens": 8,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 3.534e-05
+                "cost_usd": 0.00003534
               }
             ]
           },
@@ -26418,7 +26418,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 8,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 3.534e-05,
+            "total_cost_usd": 0.00003534,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -26432,7 +26432,7 @@
                 "cached_input_tokens": 8,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 3.534e-05
+                "cost_usd": 0.00003534
               }
             ]
           },
@@ -27223,7 +27223,7 @@
             "total_tokens": 30,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 3.54e-05,
+            "total_cost_usd": 0.0000354,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -27237,7 +27237,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 3.54e-05
+                "cost_usd": 0.0000354
               }
             ]
           },
@@ -27347,7 +27347,7 @@
             "total_tokens": 36,
             "total_cached_input_tokens": 12,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.076e-05,
+            "total_cost_usd": 0.00002076,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -27360,7 +27360,7 @@
                 "cached_input_tokens": 12,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 2.076e-05
+                "cost_usd": 0.00002076
               }
             ]
           },
@@ -33211,7 +33211,7 @@
             "total_tokens": 40,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "cost_usd": 1.5e-05,
+            "cost_usd": 0.000015,
             "latency_ms": "<number>",
             "response_id": "chatcmpl-6",
             "finish_reason": "stop"
@@ -33242,7 +33242,7 @@
             "total_tokens": 40,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 1.5e-05,
+            "total_cost_usd": 0.000015,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -33256,7 +33256,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 1.5e-05
+                "cost_usd": 0.000015
               }
             ]
           },
@@ -42519,7 +42519,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 8,
             "cache_write_tokens": 0,
-            "cost_usd": 3.534e-05,
+            "cost_usd": 0.00003534,
             "latency_ms": "<number>",
             "response_id": "google-plain",
             "finish_reason": "stop"
@@ -42551,7 +42551,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 8,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 3.534e-05,
+            "total_cost_usd": 0.00003534,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -42565,7 +42565,7 @@
                 "cached_input_tokens": 8,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 3.534e-05
+                "cost_usd": 0.00003534
               }
             ]
           },
@@ -42864,8 +42864,6 @@
             "interaction_id": "$int1",
             "feature": "approvals",
             "response_status": "success",
-            "pause_count": 2,
-            "total_paused_ms": "<number>",
             "trigger": "user",
             "primary_model": "gpt-4.1-mini",
             "primary_provider": "openai",
@@ -42889,7 +42887,9 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ]
+            ],
+            "pause_count": 2,
+            "total_paused_ms": "<number>"
           },
           "context": {
             "wrapperLibrary": {
@@ -42995,8 +42995,6 @@
             "conversation_id": "conv_v04_implicit",
             "interaction_id": "$int1",
             "response_status": "success",
-            "pause_count": 1,
-            "total_paused_ms": "<number>",
             "trigger": "user",
             "primary_model": "gpt-4.1-mini",
             "primary_provider": "openai",
@@ -43020,7 +43018,9 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ]
+            ],
+            "pause_count": 1,
+            "total_paused_ms": "<number>"
           },
           "context": {
             "wrapperLibrary": {
@@ -43258,8 +43258,6 @@
             "interaction_id": "$int1",
             "feature": "approvals",
             "response_status": "success",
-            "pause_count": 1,
-            "total_paused_ms": "<number>",
             "trigger": "user",
             "primary_model": "gpt-4.1-mini",
             "primary_provider": "openai",
@@ -43283,7 +43281,9 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ]
+            ],
+            "pause_count": 1,
+            "total_paused_ms": "<number>"
           },
           "context": {
             "wrapperLibrary": {
@@ -43472,8 +43472,6 @@
             "trigger_source": "queue",
             "task_name": "approval-loop",
             "response_status": "success",
-            "pause_count": 2,
-            "total_paused_ms": "<number>",
             "trigger": "system",
             "primary_model": "gpt-4.1-mini",
             "primary_provider": "openai",
@@ -43497,7 +43495,9 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ]
+            ],
+            "pause_count": 2,
+            "total_paused_ms": "<number>"
           },
           "context": {
             "wrapperLibrary": {
@@ -43831,8 +43831,6 @@
             "interaction_id": "$int1",
             "feature": "approvals",
             "response_status": "success",
-            "pause_count": 2,
-            "total_paused_ms": "<number>",
             "trigger": "user",
             "primary_model": "gpt-4.1-mini",
             "primary_provider": "openai",
@@ -43856,7 +43854,9 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ]
+            ],
+            "pause_count": 2,
+            "total_paused_ms": "<number>"
           },
           "context": {
             "wrapperLibrary": {
@@ -43965,6 +43965,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -43978,8 +43979,7 @@
                 "error_count": 0,
                 "cost_usd": 0.01
               }
-            ],
-            "total_cost_usd": 0.01
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -44031,6 +44031,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -44045,7 +44046,6 @@
                 "cost_usd": 0.01
               }
             ],
-            "total_cost_usd": 0.01,
             "pause_count": 2,
             "total_paused_ms": "<number>"
           },
@@ -44168,6 +44168,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -44181,8 +44182,7 @@
                 "error_count": 0,
                 "cost_usd": 0.01
               }
-            ],
-            "total_cost_usd": 0.01
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -44234,6 +44234,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -44248,7 +44249,6 @@
                 "cost_usd": 0.01
               }
             ],
-            "total_cost_usd": 0.01,
             "pause_count": 2,
             "total_paused_ms": "<number>"
           },
@@ -44331,6 +44331,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -44344,8 +44345,7 @@
                 "error_count": 0,
                 "cost_usd": 0.01
               }
-            ],
-            "total_cost_usd": 0.01
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -44427,6 +44427,7 @@
             "response_status": "paused",
             "pause_reason": "other",
             "trigger": "user",
+            "client_disconnected": true,
             "latency_ms": "<number>",
             "llm_call_count": 0,
             "tool_call_count": 0,
@@ -44434,8 +44435,7 @@
             "total_output_tokens": 0,
             "total_tokens": 0,
             "total_cached_input_tokens": 0,
-            "total_cache_write_tokens": 0,
-            "client_disconnected": true
+            "total_cache_write_tokens": 0
           },
           "context": {
             "wrapperLibrary": {
@@ -44510,6 +44510,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -44523,8 +44524,7 @@
                 "error_count": 0,
                 "cost_usd": 0.01
               }
-            ],
-            "total_cost_usd": 0.01
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -44597,6 +44597,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -44610,8 +44611,7 @@
                 "error_count": 0,
                 "cost_usd": 0.01
               }
-            ],
-            "total_cost_usd": 0.01
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -44687,6 +44687,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
             "usage_breakdown": [
               {
                 "provider": "openai",
@@ -44700,8 +44701,7 @@
                 "error_count": 0,
                 "cost_usd": 0.01
               }
-            ],
-            "total_cost_usd": 0.01
+            ]
           },
           "context": {
             "wrapperLibrary": {

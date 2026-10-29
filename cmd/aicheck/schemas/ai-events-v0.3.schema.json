@@ -486,7 +486,7 @@
             "incomplete",
             "blocked"
           ],
-          "description": "Since v0.4, each response covers one segment. paused: the run stopped to wait for something outside it (pause_reason). A run can pause more than once: each pause sends one ai_response_received with this status, and the resumed run reports the same interaction_id without a new prompt event, until a final answer with another status (pause_count). Every one of these events carries only its own segment's totals, so summing them counts each call once. incomplete: the run stopped at a cap (max turns, max output tokens, a cost budget, a time limit); error_type names the cap. blocked: the app declined to answer on purpose (block_reason)."
+          "description": "Since v0.4. paused: the run stopped to wait for something outside it (pause_reason); the resumed run reports the same interaction_id without a new prompt event. incomplete: the run stopped at a cap (max turns, max output tokens, a cost budget, a time limit); error_type names the cap. blocked: the app declined to answer on purpose (block_reason); not a failure. Since v0.4, each response covers one segment. paused: the run stopped to wait for something outside it (pause_reason). A run can pause more than once: each pause sends one ai_response_received with this status, and the resumed run reports the same interaction_id without a new prompt event, until a final answer with another status (pause_count). Every one of these events carries only its own segment's totals, so summing them counts each call once. incomplete: the run stopped at a cap (max turns, max output tokens, a cost budget, a time limit); error_type names the cap."
         },
         "block_reason": {
           "enum": [
@@ -1711,12 +1711,7 @@
       ],
       "required": [
         "task_name"
-      ],
-      "properties": {
-        "sample_rate": {
-          "$ref": "#/$defs/sample_rate"
-        }
-      }
+      ]
     }
   }
 }
