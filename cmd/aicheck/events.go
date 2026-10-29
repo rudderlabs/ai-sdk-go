@@ -171,9 +171,10 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 		context := obj(m.Get("context"))
 		w := obj(context.Get("wrapperLibrary"))
-		// Legacy events can carry tool fields too; --expect-legacy disambiguates customer names.
+		// AI join IDs identify client tools even when their customer name is also legacy.
+		joinedClientTool := !reserved(name) && props.Has("conversation_id") && props.Has("interaction_id") && props.Has("tool_name")
 		isClient := props.Get("source") == "client" &&
-			(isClientName(name) || (!reserved(name) && w.Len() == 0 && !slices.Contains(opts.expectLegacy, name) && (props.Has("tool_name") || props.Has("tool_status"))))
+			(isClientName(name) || joinedClientTool || (!reserved(name) && w.Len() == 0 && !slices.Contains(opts.expectLegacy, name) && (props.Has("tool_name") || props.Has("tool_status"))))
 		if isClient {
 			browserEvents++
 		}
@@ -192,10 +193,10 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			continue
 		}
 		names.add(name)
-		isMCP := mcpEvents[name] || w.Get("integration") == "mcp"
+		isMCP := mcpEvents[name] || (!isClient && w.Get("integration") == "mcp")
 		// a raw tracing span may carry a custom eventName; past the legacy branch, any other event with a
 		// customer name was sent by an AI SDK as a declared tool event
-		isSpan := name == "ai_otel_span" || (in(w.Get("integration"), tracing) && !knownEvents[name])
+		isSpan := name == "ai_otel_span" || (!isClient && in(w.Get("integration"), tracing) && !knownEvents[name])
 		isDeclared := !reserved(name) && !isSpan
 		if !truthy(user) && !truthy(anon) { // the browser SDK sends anonymousId on every event
 			fail("%s: no userId or anonymousId", where)
