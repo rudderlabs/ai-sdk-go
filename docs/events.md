@@ -38,7 +38,7 @@ Properties on every interaction event (prompt, answer, per-call, declared tool, 
 | `trigger_event_id`      | `TriggerEventID`, for example the `event_id` of an MCP Events delivery                             |
 | `parent_interaction_id` | `ParentInteractionID`, the enclosing interaction of a chained task, or the ended interaction a late call belonged to |
 
-Empty values are left out. The SDK never sends `source` (its events are the server copies) or `spec_version` (the version travels in [`context.wrapperLibrary`](#contextwrapperlibrary)). `ai_user_action` carries only `conversation_id`, `interaction_id`, `account_id`, `on_behalf_of` and `surface` of these.
+An event kept by [sampling](configuration.md#sampling) also carries `sample_rate`, interaction and MCP events alike. Empty values are left out. The SDK never sends `source` (its events are the server copies) or `spec_version` (the version travels in [`context.wrapperLibrary`](#contextwrapperlibrary)). `ai_user_action` carries only `conversation_id`, `interaction_id`, `account_id`, `on_behalf_of` and `surface` of these.
 
 ## ai_user_prompt_created
 

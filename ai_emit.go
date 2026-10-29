@@ -8,7 +8,8 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
-// emitAI sends one AI event. Never panics; without a client the event is dropped with a warning.
+// emitAI sends one AI event, unless WithSampleRates samples it out. Never panics; without a client
+// the event is dropped with a warning.
 func emitAI(client analytics.Client, event, userID, anonymousID string, properties, msgContext map[string]any, integration string, at time.Time) {
 	safely(func() {
 		if client == nil {
@@ -17,6 +18,10 @@ func emitAI(client analytics.Client, event, userID, anonymousID string, properti
 			return
 		}
 		rememberClient(client)
+		properties, kept := sample(event, properties, cfg().sampleRates)
+		if !kept {
+			return
+		}
 		wrapper := map[string]any{
 			"name":        LibraryName,
 			"version":     Version,

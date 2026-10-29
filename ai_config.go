@@ -31,6 +31,7 @@ type config struct {
 	traceIDFrom         func(context.Context) string
 	onError             func(error, ErrorInfo)
 	limits              Limits
+	sampleRates         map[string]float64
 }
 
 func defaultConfig() config {
