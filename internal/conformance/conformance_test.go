@@ -1,4 +1,4 @@
-// Package conformance runs the shared cross-SDK fixture spec/fixtures/conformance-v0.3.json
+// Package conformance runs the shared cross-SDK fixture spec/fixtures/conformance-v0.4.json
 // (format: spec/fixtures/FIXTURE-FORMAT.md) against this SDK and its integrations.
 package conformance
 
@@ -106,7 +106,7 @@ func TestMain(m *testing.M) {
 
 func loadFixture(t *testing.T) []scenario {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(testkit.RepoRoot(), "spec/fixtures/conformance-v0.3.json"))
+	raw, err := os.ReadFile(filepath.Join(testkit.RepoRoot(), "spec/fixtures/conformance-v0.4.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

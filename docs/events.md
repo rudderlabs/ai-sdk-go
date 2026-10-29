@@ -1,6 +1,6 @@
 # Events
 
-Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md). The JSON Schema is [`spec/ai-events-v0.3.schema.json`](../spec/ai-events-v0.3.schema.json), shared with the Node.js and Python SDKs; a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
+Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md). The JSON Schema is [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json), shared with the Node.js and Python SDKs; a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
 
 Every event's `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget loses its captured text first (`response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process.
 
@@ -443,7 +443,7 @@ Every event carries `context.wrapperLibrary` beside the `context.library` analyt
   "wrapperLibrary": {
     "name": "ai-sdk-go",
     "version": "0.1.0",
-    "specVersion": "0.3.0",
+    "specVersion": "0.4.0",
     "integration": "openai"
   }
 }
@@ -455,7 +455,7 @@ Client events for web and mobile SDKs, including additions since v0.4: [client-e
 
 ## Server fields added since v0.4
 
-These additions retain specVersion `0.3.0` until the final stacked layer.
+These additions are part of AI events spec v0.4.0. Events carry specVersion `0.4.0`; the client schema remains v0.2.
 `InteractionOptions`, `TaskOptions`, `ContextValues`, `TrackActionOptions`, and `TrackScoreOptions`
 accept `AgentVersion` and `Variant`. Use `EndOptions{Status: StatusBlocked, BlockReason: BlockPolicy}`
 for intentional declines, `SetConfidence(ConfidenceHigh)` for app confidence, and

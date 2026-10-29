@@ -1,7 +1,7 @@
 // Package harness runs an example's end-to-end check, against a mock data plane or live: in
 // live mode a local recorder forwards every batch to RUDDERSTACK_DATA_PLANE_URL and keeps only
 // what it accepts. Every kept event is checked for the SDK's context and validated against
-// spec/ai-events-v0.3.schema.json. It also serves the examples outside a check.
+// spec/ai-events-v0.4.schema.json. It also serves the examples outside a check.
 package harness
 
 import (
@@ -139,7 +139,7 @@ func Validate(msgs []dataplane.Message) error {
 		wl, _ := m.Context["wrapperLibrary"].(map[string]any)
 		lib, _ := m.Context["library"].(map[string]any)
 		integration := Integration(m)
-		if m.Type != "track" || wl["name"] != "ai-sdk-go" || integration == "" || wl["specVersion"] != "0.3.0" || lib["name"] != "analytics-go" {
+		if m.Type != "track" || wl["name"] != "ai-sdk-go" || integration == "" || wl["specVersion"] != "0.4.0" || lib["name"] != "analytics-go" {
 			return fmt.Errorf("%s: type %q, context %v", m.Event, m.Type, m.Context)
 		}
 		def := m.Event
@@ -164,8 +164,8 @@ func Validate(msgs []dataplane.Message) error {
 }
 
 const (
-	schemaURL  = "https://rudderstack.com/schemas/ai-events/0.3.0"
-	schemaPath = "spec/ai-events-v0.3.schema.json"
+	schemaURL  = "https://rudderstack.com/schemas/ai-events/0.4.0"
+	schemaPath = "spec/ai-events-v0.4.schema.json"
 )
 
 // compiler loads the schema from the repository.

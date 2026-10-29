@@ -2,11 +2,13 @@
 
 ## Unreleased
 
+- Release AI events spec v0.4.0 with the v0.4 server schema and conformance fixture; the migration checker accepts 0.3.0 and 0.4.0 captures. The client schema remains v0.2.
+
 - SDK-5991: support repeated pauses and persisted resumes on top of the client, server-field and sampling stack. Preserve sampling decisions, server scope, confidence and pending call credits across JSON restore; count compactions per response segment.
 - SDK-5992: add per-event sampling with `WithSampleRates`, a stable interaction ID draw and `sample_rate` on kept events.
 - SDK-5990: add server fields, credit pricing, declined answers, denied tools, confidence, versions, per-call detail, compactions and app-sent limit events.
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
-- SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events. Schema filenames and spec version remain unchanged.
+- SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events.
 
 ## [0.3.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.2.0...v0.3.0) (2026-10-27)
 

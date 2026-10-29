@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rudderstack.com/schemas/ai-client-events/0.2.0",
-  "title": "RudderStack AI client events v0.2.0 (draft, follows AI events spec v0.3; includes additions since v0.4)",
+  "title": "RudderStack AI client events v0.2.0 (draft, follows AI events spec v0.4; includes additions since v0.4)",
   "description": "Event properties for the events a client app sends with a RudderStack web or mobile SDK (JavaScript, iOS, Android, React Native, Flutter): client copies of server events and engagement events with no server counterpart. Every one carries source: client. Since v0.4. When a feature has no thread (a one-shot interaction), set the required conversation_id to interaction_id. Existing captures may omit it only on the first client prompt of a chat thread the server has not yet created. declared_tool_event validates a customer-named tool event the client sends for a tool it ran itself.",
   "$defs": {
     "common": {

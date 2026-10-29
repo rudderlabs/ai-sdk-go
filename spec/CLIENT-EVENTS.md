@@ -1,6 +1,6 @@
 # Client events — additions since v0.4
 
-A client is a web or mobile app using a RudderStack SDK: JavaScript, iOS, Android, React Native or Flutter. All client events carry `source: "client"`. Validate them against [ai-client-events-v0.2.schema.json](ai-client-events-v0.2.schema.json); client copies of prompt, response, action and declared tool events also validate against [ai-events-v0.3.schema.json](ai-events-v0.3.schema.json). SDK events continue to emit `context.wrapperLibrary.specVersion: "0.3.0"` in this layer.
+A client is a web or mobile app using a RudderStack SDK: JavaScript, iOS, Android, React Native or Flutter. All client events carry `source: "client"`. Validate them against [ai-client-events-v0.2.schema.json](ai-client-events-v0.2.schema.json); client copies of prompt, response, action and declared tool events also validate against [ai-events-v0.4.schema.json](ai-events-v0.4.schema.json). SDK events emit `context.wrapperLibrary.specVersion: "0.4.0"`. The migration checker also accepts existing 0.3.0 captures.
 
 ## One-shot interactions
 

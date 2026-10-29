@@ -38,7 +38,7 @@ func TestEventsReachTheDataPlane(t *testing.T) {
 		if lib["name"] != "analytics-go" {
 			t.Errorf("context.library = %v", lib)
 		}
-		if wl["name"] != "ai-sdk-go" || wl["version"] != Version || wl["specVersion"] != "0.3.0" || wl["integration"] != "mcp" {
+		if wl["name"] != "ai-sdk-go" || wl["version"] != Version || wl["specVersion"] != "0.4.0" || wl["integration"] != "mcp" {
 			t.Errorf("context.wrapperLibrary = %v", wl)
 		}
 		if err := validateEvent(m.Event, m.Properties); err != nil {

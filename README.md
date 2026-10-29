@@ -1,6 +1,6 @@
 # RudderStack AI SDK for Go
 
-Standard AI product events for Go services, sent through the RudderStack Go client you already use and following the [AI events spec v0.3](spec/ai-events-v0.3.schema.json):
+Standard AI product events for Go services, sent through the RudderStack Go client you already use and following the [AI events spec v0.4](spec/ai-events-v0.4.schema.json):
 
 - AI interactions in chat apps and background agents: each answer becomes a small set of track events (prompt, answer with models, tokens, cost, latency and status, feedback, scores), however many model calls it took.
 - MCP servers: each request an AI client makes becomes a track event that says which client called, which tool, whether it worked, and for which customer.
@@ -290,7 +290,7 @@ An analytics-go client (v4.4.0, the minimum) sends its queue on `Flush`; a custo
 | `mcp_capability_requested`                              | Opt-in: the agent called the injected `request_capability` tool              |
 | `mcp_event_subscription_changed`, `mcp_event_delivered` | Experimental, opt-in: the MCP Events draft extension                         |
 
-Every event's properties stay within 30,000 serialized bytes (RudderStack rejects events over 32 KiB): captured text goes first, then breakdown entries, and a declared tool event loses its `Properties` output, so metrics still arrive. Every event carries `context.wrapperLibrary` (`name: "ai-sdk-go"`, `version`, `specVersion: "0.3.0"`, `integration`) beside analytics-go's own `context.library`. Sample payloads, every property and error types: [docs/events.md](docs/events.md). Schema: [`spec/ai-events-v0.3.schema.json`](spec/ai-events-v0.3.schema.json); tracking plan: [`spec/rudderstack-catalog/`](spec/rudderstack-catalog).
+Every event's properties stay within 30,000 serialized bytes (RudderStack rejects events over 32 KiB): captured text goes first, then breakdown entries, and a declared tool event loses its `Properties` output, so metrics still arrive. Every event carries `context.wrapperLibrary` (`name: "ai-sdk-go"`, `version`, `specVersion: "0.4.0"`, `integration`) beside analytics-go's own `context.library`. Sample payloads, every property and error types: [docs/events.md](docs/events.md). Schema: [`spec/ai-events-v0.4.schema.json`](spec/ai-events-v0.4.schema.json); tracking plan: [`spec/rudderstack-catalog/`](spec/rudderstack-catalog).
 
 ## Configuration
 
@@ -373,6 +373,15 @@ Each module requires the oldest version it supports, so adding it never upgrades
 | `.../rudderotel`                              | `go.opentelemetry.io/otel/trace` v1.47.0                        |                  |
 
 Every module runs the shared cross-SDK fixtures in [`spec/fixtures/`](spec/fixtures) with the Node.js and Python SDKs.
+
+## Upgrading to AI events spec v0.4
+
+Events carry `specVersion` `0.4.0`. The server schema and conformance fixture are now `ai-events-v0.4.schema.json` and `conformance-v0.4.json`. The client schema remains `ai-client-events-v0.2.schema.json`, following the v0.3 release precedent. The migration checker accepts both 0.3.0 and 0.4.0 captures.
+
+- **One-shot and client events (SDK-5989)**: opt into `OneShot` for interactions without a thread. Shared client schemas cover prompts, suggestions, feedback, exports, conversation and agent controls, limits and declared tools on web and mobile.
+- **Server fields (SDK-5990)**: blocked answers, denied tools, confidence, credits, per-call timing and purpose, fallback and BYOK flags, agent versions, variants, MCP result sizes, compaction and `context_limit` errors.
+- **Sampling (SDK-5992)**: `WithSampleRates` controls each event; kept events carry `sample_rate`. Events of one interaction share a stable draw. Answers are unsampled by default.
+- **Pause/resume (SDK-5991)**: paused and final answer segments share an interaction ID, including after JSON restore. Final answers carry pause counts and total paused time. Optional `ai_task_started` fires once per new background run.
 
 ## Upgrading to 0.3.0
 

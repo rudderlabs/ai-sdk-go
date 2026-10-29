@@ -81,7 +81,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -124,7 +124,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -301,7 +301,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -344,7 +344,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -434,7 +434,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -475,7 +475,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -538,7 +538,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -579,7 +579,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -669,7 +669,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -710,7 +710,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -780,7 +780,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -822,7 +822,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -951,7 +951,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -994,7 +994,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -1088,7 +1088,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "vercel-ai-sdk"
             }
           }
@@ -1131,7 +1131,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "vercel-ai-sdk"
             }
           }
@@ -1229,7 +1229,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -1272,7 +1272,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -1369,7 +1369,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -1412,7 +1412,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -1516,7 +1516,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -1557,7 +1557,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -1625,7 +1625,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -1650,7 +1650,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -1909,7 +1909,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -1950,7 +1950,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2086,7 +2086,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2140,7 +2140,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2212,7 +2212,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2253,7 +2253,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2326,7 +2326,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2368,7 +2368,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2489,7 +2489,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2515,7 +2515,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2540,7 +2540,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2595,7 +2595,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2683,7 +2683,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2727,7 +2727,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2873,7 +2873,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -2917,7 +2917,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -3071,7 +3071,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3139,7 +3139,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3225,7 +3225,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -3268,7 +3268,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -3367,7 +3367,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -3410,7 +3410,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }
@@ -3430,7 +3430,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "tracing"
             }
           }

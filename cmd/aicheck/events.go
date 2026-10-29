@@ -15,7 +15,7 @@ import (
 // spec/fixtures/migration-check-v0.1.json.
 
 // specVersion is the AI events spec version the bundled schema describes and the SDKs send.
-const specVersion = "0.3.0"
+const specVersion = "0.4.0"
 
 var (
 	sdkNames   = []string{"@rudderstack/ai", "ai-sdk-go", "rudderstack-ai"} // context.wrapperLibrary.name: Node.js, Go, Python
@@ -248,7 +248,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 		}
 		// wrapper metadata on every SDK event; tracing spans (ai_otel_span) carry no specVersion
-		if !isClient && !in(w.Get("integration"), tracing) && w.Get("specVersion") != specVersion {
+		if !isClient && !in(w.Get("integration"), tracing) && w.Get("specVersion") != "0.3.0" && w.Get("specVersion") != specVersion {
 			fail("%s: context.wrapperLibrary.specVersion is %s", where, repr(w.Get("specVersion")))
 		}
 		if !isClient && !in(w.Get("name"), sdkNames) {

@@ -1,6 +1,6 @@
 {
   "fixture_version": 1,
-  "spec_version": "0.3.0",
+  "spec_version": "0.4.0",
   "description": "Cross-SDK conformance scenarios for the RudderStack AI SDKs (Node.js @rudderstack/ai, Python rudderstack-ai). Each scenario sets config, queues exact provider replies, runs steps and lists the normalised events every SDK must emit. See FIXTURE-FORMAT.md.",
   "scenarios": [
     {
@@ -82,7 +82,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -126,7 +126,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -337,7 +337,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -379,7 +379,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -464,7 +464,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -507,7 +507,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -712,7 +712,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -756,7 +756,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -830,7 +830,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -871,7 +871,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -997,7 +997,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -1039,7 +1039,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -1164,7 +1164,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -1206,7 +1206,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -1267,7 +1267,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -1308,7 +1308,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -1371,7 +1371,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -1412,7 +1412,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -1512,7 +1512,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -1564,7 +1564,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -1664,7 +1664,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -1717,7 +1717,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -1773,7 +1773,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -1814,7 +1814,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2026,7 +2026,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2067,7 +2067,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2149,7 +2149,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2191,7 +2191,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2409,7 +2409,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2461,7 +2461,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2681,7 +2681,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2706,7 +2706,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2731,7 +2731,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2756,7 +2756,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2808,7 +2808,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2907,7 +2907,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2949,7 +2949,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -2969,7 +2969,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -3065,7 +3065,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3106,7 +3106,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3125,7 +3125,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -3248,7 +3248,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3303,7 +3303,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3390,7 +3390,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -3433,7 +3433,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -3520,7 +3520,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -3563,7 +3563,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -3655,7 +3655,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3698,7 +3698,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3784,7 +3784,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3825,7 +3825,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -3947,7 +3947,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4000,7 +4000,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4108,7 +4108,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4134,7 +4134,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4158,7 +4158,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4202,7 +4202,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4285,7 +4285,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4328,7 +4328,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4370,7 +4370,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -4411,7 +4411,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -4461,7 +4461,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -4516,7 +4516,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -4535,7 +4535,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -4617,7 +4617,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4659,7 +4659,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4742,7 +4742,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4784,7 +4784,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4876,7 +4876,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -4979,7 +4979,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -5072,7 +5072,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai",
               "wrapperLibrary": {
                 "name": "outer-lib",
@@ -5120,7 +5120,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai",
               "wrapperLibrary": {
                 "name": "outer-lib",
@@ -5168,7 +5168,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -5195,7 +5195,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -5264,7 +5264,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -5305,7 +5305,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -5372,7 +5372,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -5414,7 +5414,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -5507,7 +5507,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -5569,7 +5569,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -5610,7 +5610,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -5699,7 +5699,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -5741,7 +5741,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -5757,7 +5757,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -5844,7 +5844,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -5885,7 +5885,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -5985,7 +5985,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -6027,7 +6027,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -6118,7 +6118,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -6161,7 +6161,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -6379,7 +6379,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -6420,7 +6420,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -6529,7 +6529,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -6571,7 +6571,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -6695,7 +6695,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -6722,7 +6722,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -6766,7 +6766,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7019,7 +7019,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7061,7 +7061,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7122,7 +7122,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7163,7 +7163,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7226,7 +7226,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -7267,7 +7267,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -7357,7 +7357,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7384,7 +7384,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7427,7 +7427,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7554,7 +7554,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7598,7 +7598,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7751,7 +7751,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7793,7 +7793,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -7885,7 +7885,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -7926,7 +7926,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -7982,7 +7982,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8023,7 +8023,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8079,7 +8079,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8120,7 +8120,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8213,7 +8213,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -8254,7 +8254,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -8336,7 +8336,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -8379,7 +8379,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -8463,7 +8463,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8506,7 +8506,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8609,7 +8609,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8703,7 +8703,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8747,7 +8747,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8854,7 +8854,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -8908,7 +8908,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -8935,7 +8935,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -8990,7 +8990,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9004,7 +9004,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9028,7 +9028,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9091,7 +9091,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9116,7 +9116,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9141,7 +9141,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9250,7 +9250,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -9347,7 +9347,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -9373,7 +9373,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -9415,7 +9415,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -9432,7 +9432,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9494,7 +9494,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9515,7 +9515,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9567,7 +9567,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9613,7 +9613,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9639,7 +9639,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -9759,7 +9759,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -9801,7 +9801,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -9906,7 +9906,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -9957,7 +9957,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -10072,7 +10072,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -10127,7 +10127,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -10361,7 +10361,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -10416,7 +10416,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -10541,7 +10541,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -10611,7 +10611,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -10656,7 +10656,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -10701,7 +10701,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -10806,7 +10806,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -10847,7 +10847,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -10982,7 +10982,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -11067,7 +11067,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -11092,7 +11092,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -11108,7 +11108,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11149,7 +11149,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -11199,7 +11199,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11225,7 +11225,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11241,7 +11241,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11267,7 +11267,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11315,7 +11315,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11340,7 +11340,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11355,7 +11355,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11380,7 +11380,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11423,7 +11423,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11447,7 +11447,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11463,7 +11463,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11489,7 +11489,7 @@
           "context": {
             "sessionId": 1760342400123,
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11538,7 +11538,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11552,7 +11552,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11576,7 +11576,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11625,7 +11625,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11657,7 +11657,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11681,7 +11681,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11736,7 +11736,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11761,7 +11761,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11781,7 +11781,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11837,7 +11837,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11862,7 +11862,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -11882,7 +11882,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -12094,7 +12094,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12115,7 +12115,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12137,7 +12137,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12179,7 +12179,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12367,7 +12367,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -12387,7 +12387,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -12407,7 +12407,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -12448,7 +12448,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -12566,7 +12566,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12587,7 +12587,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12606,7 +12606,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12647,7 +12647,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12782,7 +12782,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12801,7 +12801,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12842,7 +12842,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -12960,7 +12960,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -13005,7 +13005,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -13104,7 +13104,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -13122,7 +13122,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -13162,7 +13162,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -13216,7 +13216,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13242,7 +13242,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13263,7 +13263,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13317,7 +13317,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13341,7 +13341,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13360,7 +13360,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13407,7 +13407,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13431,7 +13431,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13482,7 +13482,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13507,7 +13507,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13582,7 +13582,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13608,7 +13608,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13629,7 +13629,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13680,7 +13680,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13704,7 +13704,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13724,7 +13724,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -13836,7 +13836,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -13939,7 +13939,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14027,7 +14027,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14068,7 +14068,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14110,7 +14110,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -14157,7 +14157,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -14172,7 +14172,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -14223,7 +14223,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -14244,7 +14244,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -14265,7 +14265,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -14304,7 +14304,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -14346,7 +14346,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -14371,7 +14371,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -14458,7 +14458,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14498,7 +14498,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14518,7 +14518,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14605,7 +14605,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14645,7 +14645,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14665,7 +14665,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14744,7 +14744,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14784,7 +14784,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14863,7 +14863,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14904,7 +14904,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -14988,7 +14988,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -15028,7 +15028,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -15042,7 +15042,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -15066,7 +15066,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -15141,7 +15141,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15183,7 +15183,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15340,7 +15340,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15381,7 +15381,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15443,7 +15443,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15483,7 +15483,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15616,7 +15616,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15656,7 +15656,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15725,7 +15725,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15749,7 +15749,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15789,7 +15789,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -15956,7 +15956,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16001,7 +16001,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16015,7 +16015,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16058,7 +16058,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16156,7 +16156,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16199,7 +16199,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16283,7 +16283,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16326,7 +16326,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16487,7 +16487,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16542,7 +16542,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16702,7 +16702,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16757,7 +16757,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -16968,7 +16968,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17024,7 +17024,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17195,7 +17195,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17238,7 +17238,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17252,7 +17252,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17295,7 +17295,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17472,7 +17472,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17515,7 +17515,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17623,7 +17623,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17664,7 +17664,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17790,7 +17790,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17813,7 +17813,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17856,7 +17856,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -17979,7 +17979,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18022,7 +18022,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18145,7 +18145,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18188,7 +18188,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18354,7 +18354,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18397,7 +18397,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18440,7 +18440,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18509,7 +18509,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18529,7 +18529,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18720,7 +18720,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18763,7 +18763,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18777,7 +18777,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18820,7 +18820,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -18959,7 +18959,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19002,7 +19002,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19016,7 +19016,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19057,7 +19057,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19231,7 +19231,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19275,7 +19275,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19290,7 +19290,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19334,7 +19334,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19450,7 +19450,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19493,7 +19493,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19591,7 +19591,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19619,7 +19619,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -19754,7 +19754,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -19798,7 +19798,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -19884,7 +19884,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -19925,7 +19925,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20091,7 +20091,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20139,7 +20139,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20228,7 +20228,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20255,7 +20255,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20299,7 +20299,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20521,7 +20521,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20565,7 +20565,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20696,7 +20696,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20720,7 +20720,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20745,7 +20745,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20787,7 +20787,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -20930,7 +20930,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -20972,7 +20972,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21096,7 +21096,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21140,7 +21140,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21311,7 +21311,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21331,7 +21331,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21373,7 +21373,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21497,7 +21497,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21522,7 +21522,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21548,7 +21548,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21601,7 +21601,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21726,7 +21726,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21752,7 +21752,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21778,7 +21778,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21821,7 +21821,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -21970,7 +21970,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -22013,7 +22013,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -22097,7 +22097,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -22138,7 +22138,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -22254,7 +22254,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22296,7 +22296,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22385,7 +22385,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22425,7 +22425,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22476,7 +22476,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22517,7 +22517,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22568,7 +22568,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22609,7 +22609,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22718,7 +22718,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22759,7 +22759,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22773,7 +22773,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22814,7 +22814,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22859,7 +22859,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22900,7 +22900,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22932,7 +22932,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -22971,7 +22971,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -23014,7 +23014,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -23040,7 +23040,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -23104,7 +23104,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -23145,7 +23145,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -23211,7 +23211,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -23252,7 +23252,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -23354,7 +23354,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -23380,7 +23380,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -23422,7 +23422,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -23541,7 +23541,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -23583,7 +23583,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -23671,7 +23671,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -23696,7 +23696,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -23833,7 +23833,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -23875,7 +23875,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -23955,7 +23955,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -23998,7 +23998,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24101,7 +24101,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24145,7 +24145,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24248,7 +24248,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24291,7 +24291,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24374,7 +24374,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24418,7 +24418,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24496,7 +24496,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24538,7 +24538,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24671,7 +24671,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24717,7 +24717,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24839,7 +24839,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24882,7 +24882,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -24968,7 +24968,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -24991,7 +24991,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -25013,7 +25013,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -25090,7 +25090,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -25461,7 +25461,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -25574,7 +25574,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -25666,7 +25666,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -25727,7 +25727,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -25792,7 +25792,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -25833,7 +25833,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "langchain"
             }
           }
@@ -25896,7 +25896,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -25920,7 +25920,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -25944,7 +25944,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -25967,7 +25967,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -26032,7 +26032,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -26114,7 +26114,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -26157,7 +26157,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -26240,7 +26240,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26267,7 +26267,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26312,7 +26312,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26393,7 +26393,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26438,7 +26438,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26554,7 +26554,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26605,7 +26605,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26708,7 +26708,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26752,7 +26752,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26828,7 +26828,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26869,7 +26869,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26955,7 +26955,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -26996,7 +26996,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27076,7 +27076,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27118,7 +27118,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27198,7 +27198,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27243,7 +27243,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27323,7 +27323,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27366,7 +27366,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27438,7 +27438,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27479,7 +27479,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27550,7 +27550,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27592,7 +27592,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27658,7 +27658,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27700,7 +27700,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27757,7 +27757,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27798,7 +27798,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27855,7 +27855,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27896,7 +27896,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27953,7 +27953,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -27994,7 +27994,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -28053,7 +28053,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -28095,7 +28095,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -28182,7 +28182,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -28207,7 +28207,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -28254,7 +28254,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -28375,7 +28375,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -28423,7 +28423,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -28524,7 +28524,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -28576,7 +28576,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -28750,7 +28750,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -28823,7 +28823,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29002,7 +29002,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29070,7 +29070,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29112,7 +29112,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29138,7 +29138,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29272,7 +29272,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29317,7 +29317,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29414,7 +29414,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29470,7 +29470,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29596,7 +29596,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29623,7 +29623,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29668,7 +29668,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29823,7 +29823,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29850,7 +29850,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29895,7 +29895,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -29985,7 +29985,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -30030,7 +30030,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -30101,7 +30101,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -30144,7 +30144,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai-agents"
             }
           }
@@ -30263,7 +30263,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -30289,7 +30289,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -30338,7 +30338,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -30539,7 +30539,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -30592,7 +30592,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -30764,7 +30764,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -30791,7 +30791,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -30811,7 +30811,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -30861,7 +30861,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31038,7 +31038,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31062,7 +31062,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31086,7 +31086,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31110,7 +31110,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31134,7 +31134,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31175,7 +31175,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31266,7 +31266,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31307,7 +31307,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31322,7 +31322,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31363,7 +31363,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31518,7 +31518,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31544,7 +31544,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31570,7 +31570,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31614,7 +31614,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31710,7 +31710,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31751,7 +31751,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31821,7 +31821,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31847,7 +31847,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -31889,7 +31889,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -32003,7 +32003,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -32058,7 +32058,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -32178,7 +32178,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -32316,7 +32316,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -32384,7 +32384,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -32446,7 +32446,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -32531,7 +32531,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -32558,7 +32558,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -32602,7 +32602,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -32747,7 +32747,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -32774,7 +32774,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -32818,7 +32818,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -32983,7 +32983,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33009,7 +33009,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33035,7 +33035,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33061,7 +33061,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33104,7 +33104,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33191,7 +33191,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33218,7 +33218,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33262,7 +33262,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33375,7 +33375,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33403,7 +33403,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33448,7 +33448,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33575,7 +33575,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33601,7 +33601,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33626,7 +33626,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33679,7 +33679,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -33747,7 +33747,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -33769,7 +33769,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -33791,7 +33791,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -33814,7 +33814,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -33836,7 +33836,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -33910,7 +33910,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34040,7 +34040,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -34066,7 +34066,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -34108,7 +34108,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -34184,7 +34184,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34207,7 +34207,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34248,7 +34248,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34264,7 +34264,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34334,7 +34334,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34375,7 +34375,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34390,7 +34390,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34430,7 +34430,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34496,7 +34496,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34512,7 +34512,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34528,7 +34528,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34548,7 +34548,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34604,7 +34604,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34644,7 +34644,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34735,7 +34735,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34776,7 +34776,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34791,7 +34791,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34832,7 +34832,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34847,7 +34847,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34887,7 +34887,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -34974,7 +34974,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35016,7 +35016,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35031,7 +35031,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35073,7 +35073,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35088,7 +35088,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35129,7 +35129,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35329,7 +35329,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -35371,7 +35371,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -35386,7 +35386,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -35428,7 +35428,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -35442,7 +35442,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -35486,7 +35486,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "claude-agent-sdk"
             }
           }
@@ -35559,7 +35559,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35600,7 +35600,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35616,7 +35616,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35658,7 +35658,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35722,7 +35722,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35764,7 +35764,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35779,7 +35779,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35819,7 +35819,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35876,7 +35876,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35917,7 +35917,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -35989,7 +35989,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36087,7 +36087,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36114,7 +36114,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36138,7 +36138,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36162,7 +36162,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36187,7 +36187,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36258,7 +36258,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36422,7 +36422,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -36448,7 +36448,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -36477,7 +36477,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -36504,7 +36504,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -36574,7 +36574,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -36654,7 +36654,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36738,7 +36738,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36779,7 +36779,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36799,7 +36799,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36820,7 +36820,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36835,7 +36835,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36876,7 +36876,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36920,7 +36920,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -36960,7 +36960,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37010,7 +37010,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37050,7 +37050,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37070,7 +37070,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37113,7 +37113,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37153,7 +37153,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37226,7 +37226,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37253,7 +37253,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37268,7 +37268,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37294,7 +37294,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37309,7 +37309,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37334,7 +37334,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37407,7 +37407,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37426,7 +37426,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37453,7 +37453,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37468,7 +37468,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37493,7 +37493,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37588,7 +37588,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37612,7 +37612,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37636,7 +37636,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37659,7 +37659,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37704,7 +37704,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37719,7 +37719,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37743,7 +37743,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37765,7 +37765,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37818,7 +37818,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37862,7 +37862,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37902,7 +37902,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37964,7 +37964,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -37982,7 +37982,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38060,7 +38060,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38087,7 +38087,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38111,7 +38111,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38135,7 +38135,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38157,7 +38157,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38221,7 +38221,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38439,7 +38439,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -38467,7 +38467,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -38510,7 +38510,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -38598,7 +38598,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38622,7 +38622,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38664,7 +38664,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38691,7 +38691,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38708,7 +38708,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38727,7 +38727,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38799,7 +38799,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38820,7 +38820,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38841,7 +38841,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38860,7 +38860,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -38885,7 +38885,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -39009,7 +39009,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -39050,7 +39050,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -39065,7 +39065,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39106,7 +39106,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39121,7 +39121,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -39162,7 +39162,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "anthropic"
             }
           }
@@ -39247,7 +39247,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39272,7 +39272,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39313,7 +39313,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39399,7 +39399,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39424,7 +39424,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39465,7 +39465,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39559,7 +39559,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39584,7 +39584,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39625,7 +39625,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39718,7 +39718,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39743,7 +39743,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39784,7 +39784,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39869,7 +39869,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39894,7 +39894,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -39935,7 +39935,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40006,7 +40006,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -40024,7 +40024,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -40043,7 +40043,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -40379,7 +40379,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40403,7 +40403,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40417,7 +40417,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40441,7 +40441,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40481,7 +40481,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40508,7 +40508,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40551,7 +40551,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40575,7 +40575,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40615,7 +40615,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40629,7 +40629,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40653,7 +40653,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40693,7 +40693,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40707,7 +40707,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40731,7 +40731,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40771,7 +40771,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40949,7 +40949,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40973,7 +40973,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -40987,7 +40987,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41011,7 +41011,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41051,7 +41051,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41075,7 +41075,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41115,7 +41115,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41315,7 +41315,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41339,7 +41339,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41379,7 +41379,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41393,7 +41393,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41417,7 +41417,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41457,7 +41457,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41471,7 +41471,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41495,7 +41495,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41513,7 +41513,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -41553,7 +41553,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41646,7 +41646,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41687,7 +41687,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "openai"
             }
           }
@@ -41773,7 +41773,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -41803,7 +41803,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -41820,7 +41820,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -41867,7 +41867,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -41937,7 +41937,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -41964,7 +41964,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -41981,7 +41981,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -41998,7 +41998,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42025,7 +42025,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42040,7 +42040,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42130,7 +42130,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -42171,7 +42171,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -42186,7 +42186,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -42227,7 +42227,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "bedrock"
             }
           }
@@ -42303,7 +42303,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42323,7 +42323,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42342,7 +42342,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42367,7 +42367,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42479,7 +42479,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -42499,7 +42499,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -42526,7 +42526,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -42571,7 +42571,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "google-genai"
             }
           }
@@ -42640,7 +42640,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42665,7 +42665,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42690,7 +42690,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42769,7 +42769,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42810,7 +42810,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42851,7 +42851,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42893,7 +42893,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42943,7 +42943,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -42983,7 +42983,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43024,7 +43024,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43080,7 +43080,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43120,7 +43120,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43142,7 +43142,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43204,7 +43204,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43245,7 +43245,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43287,7 +43287,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43374,7 +43374,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43416,7 +43416,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43458,7 +43458,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43501,7 +43501,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43557,7 +43557,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43574,7 +43574,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43616,7 +43616,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43655,7 +43655,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43736,7 +43736,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43777,7 +43777,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43818,7 +43818,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43860,7 +43860,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43941,7 +43941,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -43983,7 +43983,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44008,7 +44008,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44051,7 +44051,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44144,7 +44144,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44186,7 +44186,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44211,7 +44211,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44254,7 +44254,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44307,7 +44307,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44349,7 +44349,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44375,7 +44375,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44413,7 +44413,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44439,7 +44439,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44486,7 +44486,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44528,7 +44528,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44573,7 +44573,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44615,7 +44615,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44663,7 +44663,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }
@@ -44705,7 +44705,7 @@
           },
           "context": {
             "wrapperLibrary": {
-              "specVersion": "0.3.0",
+              "specVersion": "0.4.0",
               "integration": "manual"
             }
           }

@@ -78,7 +78,7 @@ func TestFixtures(t *testing.T) {
 
 func TestDocumentsEveryStandardUserAction(t *testing.T) {
 	root := repoRoot(t)
-	b, err := os.ReadFile(filepath.Join(root, "spec", "ai-events-v0.3.schema.json"))
+	b, err := os.ReadFile(filepath.Join(root, "spec", "ai-events-v0.4.schema.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

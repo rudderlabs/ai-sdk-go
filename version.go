@@ -8,4 +8,4 @@ const LibraryName = "ai-sdk-go"
 
 // SpecVersion is the AI events spec version this SDK implements, sent as
 // context.wrapperLibrary.specVersion.
-const SpecVersion = "0.3.0"
+const SpecVersion = "0.4.0"

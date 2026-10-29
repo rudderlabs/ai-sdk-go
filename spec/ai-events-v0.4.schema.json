@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rudderstack.com/schemas/ai-events/0.3.0",
-  "title": "RudderStack AI Product Analytics Events v0.3.0 (draft)",
+  "$id": "https://rudderstack.com/schemas/ai-events/0.4.0",
+  "title": "RudderStack AI Product Analytics Events v0.4.0 (draft)",
   "description": "Event properties for ai_user_prompt_created, ai_response_received, ai_user_action, the optional per-call ai_llm_response_received, the optional ai_task_started, the opt-in ai_interaction_classified and ai_interaction_scored, the app-sent ai_limit_reached, customer-named declared tool events (declared_tool_event, mcp_declared_tool_event), and the MCP server events (mcp_client_seen, mcp_tool_called, mcp_elicitation_completed, mcp_capability_requested, mcp_resource_read, mcp_prompt_used, mcp_event_subscription_changed, mcp_event_delivered). Validate the `properties` object of each track call against the matching definition. Custom properties are allowed. The spec version is not a property: SDKs send it as context.wrapperLibrary.specVersion.",
   "$defs": {
     "surface": {

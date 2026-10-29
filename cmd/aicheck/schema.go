@@ -21,7 +21,7 @@ import (
 // failing keyword, the schema's own value of it and the instance location, and never echoes the
 // captured value.
 
-//go:embed schemas/ai-events-v0.3.schema.json
+//go:embed schemas/ai-events-v0.4.schema.json
 var specSchema []byte
 
 //go:embed schemas/ai-client-events-v0.2.schema.json

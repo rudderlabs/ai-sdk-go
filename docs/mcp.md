@@ -85,7 +85,7 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 
 ## Events
 
-Every event is a track call, within the 30,000-byte [properties budget](events.md), with `context.wrapperLibrary` = `{name: "ai-sdk-go", version, specVersion: "0.3.0", integration: "mcp"}` and, when known, `server_name`, `account_id`, `mcp_session_id`, `client_name`, `client_version`, `protocol_version`, `interaction_id` and `trace_id`. Schemas: [`spec/ai-events-v0.3.schema.json`](../spec/ai-events-v0.3.schema.json). Events without a user are sent with `anonymousId: "ai_system"`.
+Every event is a track call, within the 30,000-byte [properties budget](events.md), with `context.wrapperLibrary` = `{name: "ai-sdk-go", version, specVersion: "0.4.0", integration: "mcp"}` and, when known, `server_name`, `account_id`, `mcp_session_id`, `client_name`, `client_version`, `protocol_version`, `interaction_id` and `trace_id`. Schemas: [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json). Events without a user are sent with `anonymousId: "ai_system"`.
 
 | Event                            | When                                                                   | Main properties |
 | -------------------------------- | ---------------------------------------------------------------------- | --------------- |

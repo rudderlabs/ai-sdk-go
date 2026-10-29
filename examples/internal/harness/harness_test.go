@@ -16,7 +16,7 @@ import (
 func ctx() map[string]any {
 	return map[string]any{
 		"library":        map[string]any{"name": "analytics-go"},
-		"wrapperLibrary": map[string]any{"name": "ai-sdk-go", "integration": "mcp", "specVersion": "0.3.0"},
+		"wrapperLibrary": map[string]any{"name": "ai-sdk-go", "integration": "mcp", "specVersion": "0.4.0"},
 	}
 }
 
