@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -429,7 +430,7 @@ type Interaction struct {
 	// pausedAt is when the current pause started; zero while running.
 	pausedAt           time.Time
 	pausing            bool
-	pauseFlight        *pauseInFlight
+	pauseGuard         atomic.Bool // checked before mu, including callback reentry
 	pauseCount         int
 	pausedTotal        time.Duration
 	adapterAnalytics   analytics.Client
@@ -1382,21 +1383,19 @@ func (i *Interaction) Pause(o PauseOptions) (paused PausedInteraction, ok bool) 
 	return paused, ok
 }
 
-type pauseInFlight struct{}
-
 func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool) {
-	i.mu.Lock()
-	if i.pauseFlight != nil {
-		i.mu.Unlock()
+	// Reentry must return even if the caller already holds mu. Delivery and deferred
+	// error reporting remain part of this flight until all of its defers finish.
+	if !i.pauseGuard.CompareAndSwap(false, true) {
 		return PausedInteraction{}, false
 	}
+	defer i.pauseGuard.Store(false)
+	i.mu.Lock()
 	if i.ended || !i.pausedAt.IsZero() {
 		defer i.mu.Unlock()
 		return i.snapshotLocked()
 	}
 	i.pausing = true
-	flight := &pauseInFlight{}
-	i.pauseFlight = flight
 	i.pausedAt = time.Now()
 	i.pauseCount++
 	hooks := i.beforeEnd
@@ -1405,11 +1404,9 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	i.mu.Unlock()
 	defer func() {
 		i.mu.Lock()
-		if i.pauseFlight == flight {
-			// Include writes accepted while unlocked delivery was in progress.
-			snapshot, ok = i.snapshotLocked()
-			i.pausing, i.pauseFlight = false, nil
-		}
+		// Include writes accepted while unlocked delivery was in progress.
+		snapshot, ok = i.snapshotLocked()
+		i.pausing = false
 		i.mu.Unlock()
 	}()
 	i.checkDisconnected()
@@ -1472,6 +1469,9 @@ func (i *Interaction) checkDisconnected() {
 // Resume resumes a paused run in this process: the next segment starts now. A model or tool call
 // recorded while paused resumes it too. It does nothing unless the run is paused.
 func (i *Interaction) Resume() {
+	if i.pauseGuard.Load() {
+		return
+	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.resumeLocked()
@@ -1735,6 +1735,9 @@ func (i *Interaction) End(o EndOptions) {
 }
 
 func (i *Interaction) end(o EndOptions) {
+	if i.pauseGuard.Load() {
+		return
+	}
 	i.mu.Lock()
 	if i.ended || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) {
 		i.mu.Unlock()

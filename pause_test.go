@@ -1062,3 +1062,42 @@ func TestMixedEmittedEventsMatchAfterJSONRestoration(t *testing.T) {
 		}
 	}
 }
+
+func TestInFlightPauseGuardPrecedesInteractionMutex(t *testing.T) {
+	r := setupAI(t, WithLimits(Limits{MaxCallsPerInteraction: 1}))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	i.RecordCall(pauseCall)
+	nested := make(chan bool, 1)
+	i.onBeforeEnd(func() {
+		i.mu.Lock()
+		go func() {
+			_, ok := i.Pause(PauseOptions{})
+			i.End(EndOptions{})
+			i.Resume()
+			nested <- ok
+		}()
+		timedOut := false
+		select {
+		case ok := <-nested:
+			if ok {
+				t.Error("in-flight pause returned ok")
+			}
+		case <-time.After(time.Second):
+			timedOut = true
+		}
+		i.mu.Unlock()
+		if timedOut {
+			<-nested
+			t.Error("Pause waited for the mutex before checking its in-progress guard")
+		}
+		call := pauseCall
+		call.ResponseID = "finalized"
+		i.RecordCall(call)
+	})
+	if _, ok := i.Pause(PauseOptions{}); !ok {
+		t.Fatal("outer pause failed")
+	}
+	if len(r.named("ai_response_received")) != 1 || lastResponse(t, r)["llm_call_count"] != 2 || lastResponse(t, r)["total_tokens"] != 24 {
+		t.Fatal("capped finalizer lost or doubled usage", r.names())
+	}
+}
