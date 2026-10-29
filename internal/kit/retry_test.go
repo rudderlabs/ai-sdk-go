@@ -152,3 +152,21 @@ func TestConnectionErrorHeldInsideInteraction(t *testing.T) {
 	i.End(rudderstackai.EndOptions{})
 	want(t, h.rec.props(t, "ai_response_received"), map[string]any{"response_status": "success", "llm_call_count": 1})
 }
+
+func TestHeldAttemptLatencyUsesFailureTime(t *testing.T) {
+	h := newHarness(t, failThenServe(1))
+	ctx, i := interaction(h.rec)
+	started := time.Now()
+	resp, err := h.attemptPost(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	failureElapsed := time.Since(started).Milliseconds()
+	time.Sleep(60 * time.Millisecond)
+	i.End(rudderstackai.EndOptions{})
+	latency := h.rec.props(t, "ai_llm_response_received")["latency_ms"].(int64)
+	if latency > failureElapsed+1 {
+		t.Fatalf("provider latency %d ms includes deferred settlement", latency)
+	}
+}

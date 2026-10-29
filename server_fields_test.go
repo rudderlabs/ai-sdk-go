@@ -71,3 +71,48 @@ func TestCallTimingPreservesZeroAndFalse(t *testing.T) {
 		t.Fatalf("timing and flags: %v", p)
 	}
 }
+
+func TestCreditHookCanInspectAndUpdateInteraction(t *testing.T) {
+	var i *Interaction
+	blocked := false
+	r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) {
+		done := make(chan struct{})
+		go func() {
+			_ = i.Ended()
+			i.SetConfidence(ConfidenceHigh)
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(100 * time.Millisecond):
+			blocked = true
+		}
+		return Ptr(2.0), nil
+	}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.RecordCall(LLMCall{Model: "m"})
+	if blocked {
+		t.Fatal("credit hook could not call locking interaction methods")
+	}
+	i.End(EndOptions{})
+	if p := r.props(t, "ai_response_received"); p["confidence"] != "high" || p["total_credits"] != 2.0 {
+		t.Fatalf("hook changes: %v", p)
+	}
+}
+
+func TestCallLatencyExcludesCreditHook(t *testing.T) {
+	var hookStart time.Time
+	r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(CreditCall) (*float64, error) {
+		hookStart = time.Now()
+		time.Sleep(60 * time.Millisecond)
+		return Ptr(2.0), nil
+	}))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	started := time.Now()
+	i.RecordCall(LLMCall{Model: "m", StartedAt: started})
+	i.End(EndOptions{})
+	latency := r.props(t, "ai_llm_response_received")["latency_ms"].(int64)
+	if latency > hookStart.Sub(started).Milliseconds()+1 {
+		t.Fatalf("provider latency %d ms includes credit hook", latency)
+	}
+}

@@ -30,6 +30,7 @@ type Call struct {
 	// Model is the requested model.
 	Model     string
 	StartedAt time.Time
+	EndedAt   time.Time
 	// Request is the decoded request body.
 	Request map[string]any
 	// HTTPRequest is the request as sent.
@@ -196,6 +197,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		}
 	}
 	if err != nil {
+		c.EndedAt = time.Now()
 		t := ErrorTypeOfTransport(err)
 		safe(func() { NoteCallError(i, err, t) })
 		// A connection error carries no body to tell a retry by: inside an interaction it waits
@@ -208,6 +210,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		return resp, err
 	}
 	if resp.StatusCode >= 400 {
+		c.EndedAt = time.Now()
 		raw := peekBody(resp)
 		var decoded map[string]any
 		_ = json.Unmarshal(raw, &decoded)
@@ -513,6 +516,7 @@ func (b *sseBody) Close() error {
 // RecordCall adds observed boundaries and app metadata before recording a call.
 func (c *Call) RecordCall(call rudderstackai.LLMCall) bool {
 	call.StartedAt = c.StartedAt
+	call.EndedAt = c.EndedAt
 	call.FirstTokenAt = c.FirstTokenAt
 	call.CallPurpose = c.Details.CallPurpose
 	call.FallbackUsed, call.BYOK = c.Details.FallbackUsed, c.Details.BYOK

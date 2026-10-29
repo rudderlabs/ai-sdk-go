@@ -723,6 +723,10 @@ func (i *Interaction) RecordCall(call LLMCall) (recorded bool) {
 
 func (i *Interaction) recordCall(call LLMCall) bool {
 	c := cfg()
+	// Freeze the provider boundary before pricing or waiting for the interaction lock.
+	if !call.StartedAt.IsZero() && call.EndedAt.IsZero() {
+		call.EndedAt = time.Now()
+	}
 	call.Provider = routedProvider(call.Provider, call.Model)
 	call.RequestedModel = routedModel(call.RequestedModel, call.Model)
 	i.mu.Lock()
@@ -786,12 +790,27 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		credits = nil
 	}
 	if credits == nil && c.credits != nil && call.ErrorType == "" && !call.UsageUnknown {
+		// App callbacks may inspect, update or end this interaction.
+		i.mu.Unlock()
 		credits = priceCredits(c.credits, CreditCall{
 			Provider: call.Provider, Model: call.Model, InputTokens: input, OutputTokens: output,
 			ReasoningTokens: reasoning, CachedInputTokens: nonNegative(call.CachedInputTokens), CacheWriteTokens: cacheWrite,
 			ServiceTier: tier, CostUSD: cost, CallCount: callCount, AgentName: call.AgentName,
 			CallPurpose: call.CallPurpose, FallbackUsed: call.FallbackUsed, BYOK: call.BYOK,
 		})
+		i.mu.Lock()
+		if i.ended {
+			return false
+		}
+		// Another call may have recorded this response while the hook ran.
+		if call.ResponseID != "" {
+			if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok {
+				if earlier.agentName == "" {
+					earlier.agentName = call.AgentName
+				}
+				return false
+			}
+		}
 	}
 	var latency, ttft *time.Duration
 	if !call.StartedAt.IsZero() {
