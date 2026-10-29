@@ -129,6 +129,13 @@ func present(o *Object, want map[string]bool) []string {
 	return out
 }
 
+// clientTool recognizes joined tools even when their name is also expected legacy traffic.
+func clientTool(name string, props, wrapper *Object, expectedLegacy []string) bool {
+	toolField := props.Has("tool_name") || props.Has("tool_status")
+	joined := props.Has("conversation_id") && props.Has("interaction_id")
+	return !reserved(name) && toolField && (joined || (wrapper.Len() == 0 && !slices.Contains(expectedLegacy, name)))
+}
+
 type side struct{ event, side string }
 
 func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, error) {
@@ -172,9 +179,8 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		context := obj(m.Get("context"))
 		w := obj(context.Get("wrapperLibrary"))
 		// AI join IDs identify client tools even when their customer name is also legacy.
-		joinedClientTool := !reserved(name) && props.Has("conversation_id") && props.Has("interaction_id") && props.Has("tool_name")
 		isClient := props.Get("source") == "client" &&
-			(isClientName(name) || joinedClientTool || (!reserved(name) && w.Len() == 0 && !slices.Contains(opts.expectLegacy, name) && (props.Has("tool_name") || props.Has("tool_status"))))
+			(isClientName(name) || clientTool(name, props, w, opts.expectLegacy))
 		if isClient {
 			browserEvents++
 		}
@@ -253,7 +259,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			!in(props.Get("feature"), opts.feature) {
 			fail("%s: feature %s not in %s", where, repr(props.Get("feature")), reprList(opts.feature))
 		}
-		system := props.Get("trigger") == "system"
+		system := name != "ai_feedback_requested" && props.Get("trigger") == "system"
 		optionalSurface := name == "ai_user_action" && !isClient && !props.Has("surface") // trackAction
 		if len(opts.surface) > 0 && !system && !optionalSurface && (isClient || clientCopies[name]) &&
 			!in(props.Get("surface"), opts.surface) {
@@ -346,7 +352,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 			// a paused run resumes under the same interaction_id: count only final answers
 			paused := name == "ai_response_received" && props.Get("response_status") == "paused"
-			scoped := name == "ai_user_action" && in(obj(props.Get("action_details")).Get("feedback_scope"), scopedFeedback)
+			scoped := name == "ai_user_action" && in(props.Get("action_type"), []string{"feedback_given", "feedback_retracted", "feedback_dismissed"}) && in(obj(props.Get("action_details")).Get("feedback_scope"), scopedFeedback)
 			switch {
 			case paused:
 				c[side{name + " (paused)", s}]++

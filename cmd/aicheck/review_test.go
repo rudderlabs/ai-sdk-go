@@ -1,0 +1,77 @@
+package main
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func reviewCheck(t *testing.T, capture string, args ...string) (int, string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "capture.jsonl")
+	if err := os.WriteFile(path, []byte(capture), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, stderr bytes.Buffer
+	code := run(append([]string{path}, args...), &out, &stderr)
+	if stderr.Len() > 0 {
+		t.Fatal(stderr.String())
+	}
+	return code, out.String()
+}
+
+func TestReviewFeedbackSystemTrigger(t *testing.T) {
+	capture := `{"type":"track","event":"ai_feedback_requested","userId":"u1","properties":{"source":"client","feature":"support_bot","surface":"mobile","conversation_id":"c1","interaction_id":"11111111-1111-4111-8111-111111111111","trigger":"system"}}`
+	if code, out := reviewCheck(t, capture); code != 0 {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+}
+
+func TestReviewJoinedToolMissingName(t *testing.T) {
+	capture := `{"type":"track","event":"run_query","userId":"u1","properties":{"source":"client","conversation_id":"c1","interaction_id":"11111111-1111-4111-8111-111111111111","tool_status":"success"}}`
+	code, out := reviewCheck(t, capture, "--expect-legacy", "run_query", "--no-ai-events")
+	if code != 1 || !strings.Contains(out, "tool_name") || !strings.Contains(out, "AI events") {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+}
+
+func TestReviewActionScopeRequiresAnswer(t *testing.T) {
+	capture := `{"type":"track","event":"ai_user_action","userId":"u1","properties":{"source":"client","conversation_id":"c1","interaction_id":"11111111-1111-4111-8111-111111111111","action_type":"accepted","action_details":{"feedback_scope":"feature"}}}`
+	if code, out := reviewCheck(t, capture, "--expect-joins"); code != 1 || !strings.Contains(out, "for an answer not in this capture") {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+}
+
+func TestReviewClientToolRows(t *testing.T) {
+	capture, err := os.ReadFile(filepath.Join(repoRoot(t), "spec/fixtures/migration-check/client_tool_legacy_valid_migration.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(capture)), "\n")
+	for index, want := range map[int]string{2: "run_query", 3: "run_query (browser)"} {
+		value, err := parseJSON(lines[index])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := rowKey(obj(value)); got != want {
+			t.Errorf("row %d = %s, want %s", index, got, want)
+		}
+	}
+}
+
+func TestReviewCatalogDestinationLimit(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join(repoRoot(t), "spec/rudderstack-catalog/properties.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, section, found := strings.Cut(string(data), "    - id: destination\n")
+	if !found {
+		t.Fatal("missing destination")
+	}
+	section, _, _ = strings.Cut(section, "    - id:")
+	if !strings.Contains(section, "max_length: 64") || strings.Contains(section, "maxLength:") {
+		t.Fatal(section)
+	}
+}
