@@ -14,6 +14,93 @@ import (
 
 var pauseCall = LLMCall{Provider: "openai", Model: "gpt-4o-mini", InputTokens: 10, OutputTokens: 2}
 
+func TestRestoreSharedPendingUsageWithoutReplayingCallEvents(t *testing.T) {
+	for _, unpriced := range []bool{false, true} {
+		t.Run(fmt.Sprint(unpriced), func(t *testing.T) {
+			r := setupAI(t, WithLLMCallEvents(true), WithToolBreakdown(true))
+			b, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fixture struct {
+				Snapshot PausedInteraction
+				Expected map[string]any
+			}
+			if err := json.Unmarshal(b, &fixture); err != nil {
+				t.Fatal(err)
+			}
+			if unpriced {
+				fixture.Snapshot.PendingCalls[0]["unpriced"] = true
+				delete(fixture.Expected, "total_cost_usd")
+			}
+			_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &fixture.Snapshot})
+			if len(r.names()) != 0 {
+				t.Fatal("restoration replayed events", r.names())
+			}
+			call := pauseCall
+			call.ResponseID = "late"
+			if i.RecordCall(call) {
+				t.Fatal("restoration lost response ID history")
+			}
+			i.End(EndOptions{})
+			got := lastResponse(t, r)
+			if unpriced && got["total_cost_usd"] != nil {
+				t.Fatal("partial pending cost became a known total", got)
+			}
+			for key, want := range fixture.Expected {
+				if mustJSON(got[key]) != mustJSON(want) {
+					t.Errorf("%s: got %v, want %v", key, got[key], want)
+				}
+			}
+			if len(r.named("ai_llm_response_received")) != 0 {
+				t.Fatal("restoration replayed calls")
+			}
+
+		})
+	}
+}
+
+func TestPauseCallbackReentryReturnsImmediately(t *testing.T) {
+	for _, source := range []string{"finalizer", "redactor", "disconnect"} {
+		t.Run(source, func(t *testing.T) {
+			var i *Interaction
+			entered, returned := make(chan struct{}), make(chan bool, 1)
+			reenter := func() {
+				close(entered)
+				_, ok := i.Pause(PauseOptions{})
+				returned <- ok
+			}
+			r := setupAI(t, WithCaptureContent(true), WithRedactHook(func(text string) (string, error) {
+				if source == "redactor" {
+					reenter()
+				}
+				return text, nil
+			}))
+			_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+			if source == "finalizer" {
+				i.onBeforeEnd(reenter)
+			}
+			if source == "disconnect" {
+				i.disconnected = func() bool { reenter(); return false }
+			}
+			done := make(chan bool, 1)
+			go func() { _, ok := i.Pause(PauseOptions{ResponseText: "approval"}); done <- ok }()
+			<-entered
+			select {
+			case ok := <-returned:
+				if ok {
+					t.Fatal("reentrant pause exposed an unfinished snapshot")
+				}
+			case <-time.After(time.Second):
+				t.Fatal("callback waited on its own in-flight pause")
+			}
+			if !<-done || len(r.named("ai_response_received")) != 1 {
+				t.Fatal("outer pause did not finish")
+			}
+		})
+	}
+}
+
 func TestHintedPauseMarksStateBeforeFinalization(t *testing.T) {
 	r := setupAI(t)
 	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
@@ -36,6 +123,72 @@ func (c *pauseReentrantClient) Enqueue(message analytics.Message) error {
 		c.reenter()
 	}
 	return err
+}
+
+func TestPauseDeliveryCarriesLateUsageIntoNextSegment(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		t.Run(fmt.Sprint(restore), func(t *testing.T) {
+			r := setupAI(t)
+			client := &pauseReentrantClient{recorder: r}
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+			call := pauseCall
+			call.ResponseID = "first"
+			i.RecordCall(call)
+			delivering, release := make(chan struct{}), make(chan struct{})
+			client.reenter = func() { close(delivering); <-release }
+			type result struct {
+				snapshot PausedInteraction
+				ok       bool
+			}
+			done := make(chan result, 1)
+			go func() { snapshot, ok := i.Pause(PauseOptions{}); done <- result{snapshot, ok} }()
+			<-delivering
+			call.ResponseID, call.InputTokens, call.CostUSD = "late", 5, Ptr(0.01)
+			if !i.RecordCall(call) {
+				t.Error("late call rejected")
+			}
+			i.RecordToolCalls(ToolCall{Name: "late-tool", ID: "late-tool"})
+			during, duringOK := i.Pause(PauseOptions{})
+			close(release)
+			first := <-done
+			after, afterOK := i.Pause(PauseOptions{})
+			if !first.ok || !duringOK || !afterOK || mustJSON(first.snapshot) != mustJSON(during) || mustJSON(after) != mustJSON(during) {
+				t.Fatal("snapshots did not include writes accepted during delivery", first, during, after)
+			}
+			if mustJSON(after.SeenResponseIDs) != `[["openai","first"],["openai","late"]]` {
+				t.Fatal(after)
+			}
+			if restore {
+				var stored PausedInteraction
+				if err := json.Unmarshal([]byte(mustJSON(after)), &stored); err != nil {
+					t.Fatal(err)
+				}
+				_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+			}
+			i.Resume()
+			if i.Paused() || i.RecordCall(call) {
+				t.Fatal("resume lost response ID history")
+			}
+			i.End(EndOptions{})
+			segments := r.named("ai_response_received")
+			if len(segments) != 2 {
+				t.Fatal(r.names())
+			}
+			for n, e := range segments {
+				wantTokens, wantTools := 12, 0
+				if n == 1 {
+					wantTokens, wantTools = 7, 1
+				}
+				if e.Properties["llm_call_count"] != 1 || e.Properties["total_tokens"] != wantTokens || e.Properties["tool_call_count"] != wantTools {
+					t.Fatal(e.Properties)
+				}
+			}
+			if segments[1].Properties["total_cost_usd"] != 0.01 {
+				t.Fatal(segments[1].Properties)
+			}
+
+		})
+	}
 }
 
 func TestPauseEmissionPreservesEndReentryGuard(t *testing.T) {
@@ -83,7 +236,7 @@ func TestEndDisconnectCallbackRunsWithoutInteractionLock(t *testing.T) {
 	}
 }
 
-func TestConcurrentPauseWaitsForCompletedSnapshot(t *testing.T) {
+func TestConcurrentPauseReportsInProgressUntilCompletedSnapshot(t *testing.T) {
 	r := setupAI(t)
 	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
 	finalizing, release, secondStarted := make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -107,23 +260,19 @@ func TestConcurrentPauseWaitsForCompletedSnapshot(t *testing.T) {
 		second <- result{snapshot, ok}
 	}()
 	<-secondStarted
-	var early *result
+	var b result
 	select {
-	case got := <-second:
-		early = &got
-	case <-time.After(50 * time.Millisecond):
+	case b = <-second:
+	case <-time.After(time.Second):
+		close(release)
+		t.Fatal("concurrent pause waited on unfinished finalization")
 	}
 	close(release)
 	a := <-first
-	var b result
-	if early != nil {
-		b = *early
-	} else {
-		b = <-second
+	if b.ok {
+		t.Fatal("concurrent pause exposed an unfinished snapshot")
 	}
-	if early != nil {
-		t.Error("concurrent pause returned before finalization completed")
-	}
+	b.snapshot, b.ok = i.Pause(PauseOptions{})
 	if !a.ok || !b.ok || mustJSON(a.snapshot) != mustJSON(b.snapshot) || mustJSON(b.snapshot.SeenResponseIDs) != `[["openai","buffered"]]` {
 		t.Fatal(a, b)
 	}

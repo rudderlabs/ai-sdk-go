@@ -330,6 +330,9 @@ type PausedInteraction struct {
 	TraceID             string  `json:"trace_id,omitempty"`
 	// SeenResponseIDs retains provider/response ID pairs already counted. Since v0.4.
 	SeenResponseIDs [][2]string `json:"seen_response_ids,omitempty"`
+	// PendingCalls and PendingTools carry usage accepted after the paused segment closed. Since v0.4.
+	PendingCalls []map[string]any `json:"pending_calls,omitempty"`
+	PendingTools []map[string]any `json:"pending_tools,omitempty"`
 }
 
 // resumeFrom applies a Resume snapshot's fields to o; false (with a warning) when it is not one.
@@ -614,6 +617,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		i.userID, i.anonymousID = snapshot.UserID, snapshot.AnonymousID
 		i.feature, i.surface = snapshot.Feature, surfaceOf(snapshot.Surface)
 		i.accountID, i.onBehalfOf = snapshot.AccountID, snapshot.OnBehalfOf
+		i.restorePending(snapshot)
 		i.pauseCount = max(snapshot.PauseCount, 0)
 		for _, pair := range snapshot.SeenResponseIDs {
 			if len(i.seen) >= cfg().limits.MaxCallsPerInteraction {
@@ -1343,36 +1347,35 @@ var finishErrors = map[string]string{"length": "length", "max_tokens": "length",
 // it sends ai_response_received with response_status paused and this segment's totals, then starts
 // the next segment's totals from zero, so summing the segments counts each call once. It returns
 // the snapshot to [Interaction.Resume] from, or to pass as [InteractionOptions.Resume] in another
-// process; ok is false once the interaction ended. A paused run is never ended by the TTL or
+// process; ok is false once the interaction ended or while pause finalization is in progress.
+// Callers, including callbacks, can retry after finalization; Pause never waits on another pause.
+// A paused run is never ended by the TTL or
 // [Shutdown], and [RunInteraction] and [RunTask] leave it paused when fn returns nil. Pausing again
-// before a resume sends nothing. Concurrent callers wait for the in-flight pause's completed snapshot.
+// before a resume sends nothing.
 func (i *Interaction) Pause(o PauseOptions) (paused PausedInteraction, ok bool) {
 	safely(func() { paused, ok = i.pause(o) })
 	return paused, ok
 }
 
 type pauseInFlight struct {
-	done     chan struct{}
-	snapshot PausedInteraction
-	ok       bool
 	complete bool
 }
 
 func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool) {
 	i.mu.Lock()
 	if flight := i.pauseFlight; flight != nil {
-		i.mu.Unlock()
-		<-flight.done
-		snapshot = flight.snapshot
-		snapshot.SeenResponseIDs = slices.Clone(snapshot.SeenResponseIDs)
-		return snapshot, flight.ok
+		defer i.mu.Unlock()
+		if !flight.complete {
+			return PausedInteraction{}, false
+		}
+		return i.snapshotLocked()
 	}
 	if i.ended || !i.pausedAt.IsZero() {
 		defer i.mu.Unlock()
 		return i.snapshotLocked()
 	}
 	i.pausing = true
-	flight := &pauseInFlight{done: make(chan struct{})}
+	flight := &pauseInFlight{}
 	i.pauseFlight = flight
 	i.pausedAt = time.Now()
 	i.pauseCount++
@@ -1383,9 +1386,8 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	defer func() {
 		i.mu.Lock()
 		if i.pauseFlight == flight {
-			if !flight.complete {
-				i.completePauseLocked(snapshot, ok)
-			}
+			// Include writes accepted while unlocked delivery was in progress.
+			snapshot, ok = i.snapshotLocked()
 			i.pausing, i.pauseFlight = false, nil
 		}
 		i.mu.Unlock()
@@ -1408,7 +1410,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	defer i.unlock()
 	if i.ended {
 		snapshot, ok = i.snapshotLocked()
-		i.completePauseLocked(snapshot, ok)
+		flight.complete = true
 		return snapshot, ok
 	}
 	var props map[string]any
@@ -1428,16 +1430,8 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	unregister(i)
 	snapshot, ok = i.snapshotLocked()
 	// Publish before unlock emits events, so callbacks can safely ask for the completed pause.
-	i.completePauseLocked(snapshot, ok)
-	return snapshot, ok
-}
-
-func (i *Interaction) completePauseLocked(snapshot PausedInteraction, ok bool) {
-	flight := i.pauseFlight
-	flight.snapshot, flight.ok = snapshot, ok
-	flight.snapshot.SeenResponseIDs = slices.Clone(snapshot.SeenResponseIDs)
 	flight.complete = true
-	close(flight.done)
+	return snapshot, ok
 }
 
 // checkDisconnected runs the request callback without holding the interaction lock.
@@ -1504,7 +1498,205 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		}
 		return compareUTF16(a[1], b[1])
 	})
+	calls := append(slices.Clone(i.calls), i.overflow...)
+	for _, c := range calls {
+		p := pendingCall(c)
+		if c == i.lastCall {
+			p["last"] = true
+		}
+		if c == i.lastOK {
+			p["last_ok"] = true
+		}
+		snapshot.PendingCalls = append(snapshot.PendingCalls, p)
+	}
+	for _, role := range []struct {
+		c   *recordedCall
+		key string
+	}{{i.lastCall, "last"}, {i.lastOK, "last_ok"}} {
+		if role.c != nil && !slices.Contains(calls, role.c) {
+			p := pendingCall(role.c)
+			p["history_only"], p[role.key] = true, true
+			snapshot.PendingCalls = append(snapshot.PendingCalls, p)
+		}
+	}
+	for _, t := range append(slices.Clone(i.tools), i.toolOverflow...) {
+		snapshot.PendingTools = append(snapshot.PendingTools, pendingTool(t))
+	}
 	return snapshot, true
+}
+
+// Snapshot records contain only usage and tool metadata; no content or callback objects.
+func pendingNumber(p map[string]any, key string) float64 {
+	var n float64
+	switch v := p[key].(type) {
+	case int:
+		n = float64(v)
+	case int64:
+		n = float64(v)
+	case float64:
+		n = v
+	}
+	if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 9007199254740991 {
+		return 0
+	}
+	return n
+}
+func pendingText(p map[string]any, key string) string { s, _ := p[key].(string); return s }
+func pendingBool(p map[string]any, key string) bool   { b, _ := p[key].(bool); return b }
+
+func pendingCall(c *recordedCall) map[string]any {
+	p := map[string]any{}
+	if c.unpriced {
+		p["unpriced"] = true
+	}
+	if c.feesUnknown {
+		p["fees_unknown"] = true
+	}
+	if c.provider != "" {
+		p["provider"] = c.provider
+	}
+	if c.model != "" {
+		p["model"] = c.model
+	}
+	if c.requestedModel != "" {
+		p["requested_model"] = c.requestedModel
+	}
+	if c.agentName != "" {
+		p["agent_name"] = c.agentName
+	}
+	p["call_count"] = c.callCount
+	p["error_count"] = c.errorCount
+	p["input_tokens"] = c.inputTokens
+	p["output_tokens"] = c.outputTokens
+	if c.reasoningTokens != nil {
+		p["reasoning_tokens"] = *c.reasoningTokens
+	}
+	p["cached_input_tokens"] = c.cachedInputTokens
+	p["cache_write_tokens"] = c.cacheWriteTokens
+	p["cache_write_1h_tokens"] = c.cacheWrite1
+	if c.costUSD != nil {
+		p["cost_usd"] = *c.costUSD
+	}
+	if c.finishReason != "" {
+		p["finish_reason"] = c.finishReason
+	}
+	if c.errorType != "" {
+		p["error_type"] = c.errorType
+	}
+	if c.responseID != "" {
+		p["response_id"] = c.responseID
+	}
+	if c.serviceTier != "" {
+		p["service_tier"] = c.serviceTier
+	}
+	p["server_tool_call_count"] = c.serverToolCallCount
+	if c.serverToolCostUSD != nil {
+		p["server_tool_cost_usd"] = *c.serverToolCostUSD
+	}
+	return p
+}
+
+func pendingTool(c *recordedTool) map[string]any {
+	p := map[string]any{}
+	if c.name != "" {
+		p["tool_name"] = c.name
+	}
+	if c.rawName != "" {
+		p["raw_name"] = c.rawName
+	}
+	if c.id != "" {
+		p["tool_call_id"] = c.id
+	}
+	if c.agentName != "" {
+		p["agent_name"] = c.agentName
+	}
+	if c.mcpServer != "" {
+		p["mcp_server"] = c.mcpServer
+	}
+	if c.parentTool != "" {
+		p["parent_tool"] = c.parentTool
+	}
+	p["call_count"] = c.calls
+	if c.err != nil {
+		p["error"] = *c.err
+	}
+	if c.errorType != "" {
+		p["error_type"] = c.errorType
+	}
+	if c.duration != nil {
+		p["duration_ms"] = float64(*c.duration) / float64(time.Millisecond)
+	}
+	p["settled"] = c.settled
+	p["fired"] = c.fired
+	return p
+}
+
+func (i *Interaction) restorePending(snapshot *PausedInteraction) {
+	for _, p := range snapshot.PendingCalls {
+		c := &recordedCall{}
+		c.unpriced = pendingBool(p, "unpriced")
+		c.feesUnknown = pendingBool(p, "fees_unknown")
+		c.provider = pendingText(p, "provider")
+		c.model = pendingText(p, "model")
+		c.requestedModel = pendingText(p, "requested_model")
+		c.agentName = pendingText(p, "agent_name")
+		c.callCount = int(pendingNumber(p, "call_count"))
+		c.errorCount = int(pendingNumber(p, "error_count"))
+		c.inputTokens = int(pendingNumber(p, "input_tokens"))
+		c.outputTokens = int(pendingNumber(p, "output_tokens"))
+		if p["reasoning_tokens"] != nil {
+			c.reasoningTokens = Ptr(int(pendingNumber(p, "reasoning_tokens")))
+		}
+		c.cachedInputTokens = int(pendingNumber(p, "cached_input_tokens"))
+		c.cacheWriteTokens = int(pendingNumber(p, "cache_write_tokens"))
+		c.cacheWrite1 = int(pendingNumber(p, "cache_write_1h_tokens"))
+		if p["cost_usd"] != nil {
+			c.costUSD = Ptr(pendingNumber(p, "cost_usd"))
+		}
+		c.finishReason = pendingText(p, "finish_reason")
+		c.errorType = pendingText(p, "error_type")
+		c.responseID = pendingText(p, "response_id")
+		c.serviceTier = pendingText(p, "service_tier")
+		c.serverToolCallCount = int(pendingNumber(p, "server_tool_call_count"))
+		if p["server_tool_cost_usd"] != nil {
+			c.serverToolCostUSD = Ptr(pendingNumber(p, "server_tool_cost_usd"))
+		}
+		c.callCount = max(c.callCount, 1)
+		if !pendingBool(p, "history_only") {
+			i.calls = append(i.calls, c)
+			i.callCount += c.callCount
+		}
+		if pendingBool(p, "last") {
+			i.lastCall = c
+		}
+		if pendingBool(p, "last_ok") {
+			i.lastOK = c
+		}
+	}
+	for _, p := range snapshot.PendingTools {
+		c := &recordedTool{}
+		c.name = pendingText(p, "tool_name")
+		c.rawName = pendingText(p, "raw_name")
+		c.id = pendingText(p, "tool_call_id")
+		c.agentName = pendingText(p, "agent_name")
+		c.mcpServer = pendingText(p, "mcp_server")
+		c.parentTool = pendingText(p, "parent_tool")
+		c.calls = int(pendingNumber(p, "call_count"))
+		if v, ok := p["error"].(bool); ok {
+			c.err = Ptr(v)
+		}
+		c.errorType = pendingText(p, "error_type")
+		if p["duration_ms"] != nil {
+			c.duration = Ptr(time.Duration(pendingNumber(p, "duration_ms") * float64(time.Millisecond)))
+		}
+		c.settled = pendingBool(p, "settled")
+		c.fired = pendingBool(p, "fired")
+		c.calls = max(c.calls, 1)
+		i.tools = append(i.tools, c)
+		if c.id != "" {
+			i.toolsByID[c.id] = c
+		}
+	}
 }
 
 // taskStarted sends ai_task_started when it is switched on and the run did not resume.

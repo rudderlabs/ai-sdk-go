@@ -1,0 +1,68 @@
+{
+  "description": "Since v0.4. Usage accepted after pause capture is pending in the next segment and survives JSON restoration without replaying call events. Only usage and tool metadata are portable.",
+  "snapshot": {
+    "interaction_id": "pending-run",
+    "conversation_id": "pending-conversation",
+    "trigger": "user",
+    "user_id": "u",
+    "pause_count": 1,
+    "total_paused_ms": 0,
+    "paused_at": 1,
+    "seen_response_ids": [
+      [
+        "openai",
+        "first"
+      ],
+      [
+        "openai",
+        "late"
+      ]
+    ],
+    "pending_calls": [
+      {
+        "provider": "openai",
+        "model": "m",
+        "response_id": "late",
+        "agent_name": "a",
+        "call_count": 3,
+        "error_count": 1,
+        "input_tokens": 9,
+        "output_tokens": 4,
+        "reasoning_tokens": 1,
+        "cached_input_tokens": 2,
+        "cache_write_tokens": 1,
+        "cache_write_1h_tokens": 1,
+        "cost_usd": 0.02,
+        "finish_reason": "stop",
+        "server_tool_call_count": 2,
+        "server_tool_cost_usd": 0.001,
+        "last": true,
+        "last_ok": true
+      }
+    ],
+    "pending_tools": [
+      {
+        "tool_name": "late-tool",
+        "raw_name": "late-tool",
+        "tool_call_id": "late-tool",
+        "call_count": 2,
+        "error": false,
+        "duration_ms": 3.5,
+        "settled": true,
+        "fired": false
+      }
+    ]
+  },
+  "expected": {
+    "llm_call_count": 3,
+    "tool_call_count": 2,
+    "total_input_tokens": 9,
+    "total_output_tokens": 4,
+    "total_tokens": 13,
+    "total_reasoning_tokens": 1,
+    "total_cached_input_tokens": 2,
+    "total_cache_write_tokens": 1,
+    "total_cost_usd": 0.02,
+    "finish_reason": "stop"
+  }
+}
