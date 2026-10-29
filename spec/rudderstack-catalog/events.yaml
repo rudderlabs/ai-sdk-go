@@ -1,4 +1,4 @@
-# AI events spec v0.3 events for the RudderStack data catalog (rudder-cli, rudder/v1).
+# AI events spec v0.4 events for the RudderStack data catalog (rudder-cli, rudder/v1).
 version: rudder/v1
 kind: events
 metadata:
@@ -25,6 +25,10 @@ spec:
       name: ai_interaction_scored
       event_type: track
       description: Opt-in. One named quality score of an interaction, from an LLM judge, a code check or a human.
+    - id: ai_limit_reached
+      name: ai_limit_reached
+      event_type: track
+      description: Sent by the app when a user or account hits a usage limit of the AI feature.
     - id: ai_user_action
       name: ai_user_action
       event_type: track

@@ -6,47 +6,166 @@
   "$defs": {
     "common": {
       "type": "object",
-      "required": ["source"],
+      "required": [
+        "source"
+      ],
       "properties": {
-        "source": { "const": "client" },
-        "feature": { "type": "string", "minLength": 1 },
-        "surface": { "enum": ["web", "mobile", "slack", "teams", "email", "chatgpt_app", "claude_app", "ide", "api", "other"] },
-        "conversation_id": { "type": "string", "minLength": 1 }
+        "source": {
+          "const": "client"
+        },
+        "feature": {
+          "type": "string",
+          "minLength": 1
+        },
+        "surface": {
+          "enum": [
+            "web",
+            "mobile",
+            "slack",
+            "teams",
+            "email",
+            "chatgpt_app",
+            "claude_app",
+            "ide",
+            "api",
+            "other"
+          ]
+        },
+        "conversation_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agent_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Version of the agent or AI feature that answered (prompt, config or code release), as the app names it."
+        },
+        "variant": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Experiment arm or rollout variant the interaction ran under, e.g. control."
+        }
       }
     },
     "with_conversation": {
-      "allOf": [{ "$ref": "#/$defs/common" }],
-      "required": ["conversation_id"]
+      "allOf": [
+        {
+          "$ref": "#/$defs/common"
+        }
+      ],
+      "required": [
+        "conversation_id"
+      ]
     },
     "with_interaction": {
-      "allOf": [{ "$ref": "#/$defs/with_conversation" }],
-      "required": ["interaction_id"],
-      "properties": { "interaction_id": { "type": "string", "minLength": 1 } }
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_conversation"
+        }
+      ],
+      "required": [
+        "interaction_id"
+      ],
+      "properties": {
+        "interaction_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "ai_assistant_opened": {
-      "allOf": [{ "$ref": "#/$defs/common" }],
+      "allOf": [
+        {
+          "$ref": "#/$defs/common"
+        }
+      ],
       "properties": {
-        "entry_point": {"type": "string", "examples": ["launcher", "shortcut", "deep_link", "auto"], "description": "Since v0.4. How the assistant was opened in the web or mobile app."}
+        "entry_point": {
+          "type": "string",
+          "examples": [
+            "launcher",
+            "shortcut",
+            "deep_link",
+            "auto"
+          ],
+          "description": "Since v0.4. How the assistant was opened in the web or mobile app."
+        }
       }
     },
     "ai_assistant_closed": {
-      "allOf": [{ "$ref": "#/$defs/common" }],
+      "allOf": [
+        {
+          "$ref": "#/$defs/common"
+        }
+      ],
       "properties": {
-        "open_duration_ms": { "type": "integer", "minimum": 0 },
-        "close_method": {"type": "string", "examples": ["close_button", "escape", "outside_click", "navigation"], "description": "Since v0.4. How the assistant was closed in the web or mobile app."}
+        "open_duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "close_method": {
+          "type": "string",
+          "examples": [
+            "close_button",
+            "escape",
+            "outside_click",
+            "navigation"
+          ],
+          "description": "Since v0.4. How the assistant was closed in the web or mobile app."
+        }
       }
     },
-    "ai_conversation_started": { "allOf": [{ "$ref": "#/$defs/common" }] },
+    "ai_conversation_started": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/common"
+        }
+      ]
+    },
     "ai_conversation_switched": {
-      "allOf": [{ "$ref": "#/$defs/with_conversation" }],
-      "required": ["from_conversation_id"],
-      "properties": { "from_conversation_id": { "type": "string", "minLength": 1 } }
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_conversation"
+        }
+      ],
+      "required": [
+        "from_conversation_id"
+      ],
+      "properties": {
+        "from_conversation_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     },
     "ai_conversation_renamed": {
-      "allOf": [{ "$ref": "#/$defs/with_conversation" }],
-      "not": { "anyOf": [{ "required": ["title"] }, { "required": ["name"] }] }
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_conversation"
+        }
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "title"
+            ]
+          },
+          {
+            "required": [
+              "name"
+            ]
+          }
+        ]
+      }
     },
-    "ai_conversation_deleted": { "allOf": [{ "$ref": "#/$defs/with_conversation" }] },
+    "ai_conversation_deleted": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_conversation"
+        }
+      ]
+    },
     "ai_conversation_pinned": {"allOf": [{"$ref": "#/$defs/with_conversation"}], "description": "Since v0.4. The user pinned a conversation.", "not": { "anyOf": [{ "required": ["title"] }, { "required": ["name"] }] }},
     "ai_conversation_shared": {
       "description": "Since v0.4. The user shared a conversation. Never send the share URL.",
@@ -55,114 +174,489 @@
     },
     "ai_agent_selected": {
       "description": "Since v0.4. The user picked the agent, mode or persona that answers next. Names join agent_name in the server's usage_breakdown.",
-      "allOf": [{ "$ref": "#/$defs/common" }],
-      "anyOf": [{ "required": ["agent_name"] }, { "required": ["mode"] }],
+      "allOf": [
+        {
+          "$ref": "#/$defs/common"
+        }
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "agent_name"
+          ]
+        },
+        {
+          "required": [
+            "mode"
+          ]
+        }
+      ],
       "properties": {
-        "agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. The agent or persona the user selected."},
-        "from_agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. Previously selected agent or persona."},
-        "mode": {"type": "string", "minLength": 1, "description": "Since v0.4. The mode the user selected."},
-        "from_mode": {"type": "string", "minLength": 1, "description": "Since v0.4. Previously selected mode."}
+        "agent_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. The agent or persona the user selected."
+        },
+        "from_agent_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Previously selected agent or persona."
+        },
+        "mode": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. The mode the user selected."
+        },
+        "from_mode": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Previously selected mode."
+        }
       }
     },
     "ai_suggestion_shown": {
       "description": "Since v0.4. AI output the user can act on appeared, inline in the app or in the assistant: a fix, an autofill, action items, a proposed investigation, starter prompts. The denominator of acceptance rate. A normal chat answer sends nothing for rendering.",
-      "allOf": [{ "$ref": "#/$defs/with_interaction" }],
-      "required": ["suggestion_kind"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_interaction"
+        }
+      ],
+      "required": [
+        "suggestion_kind"
+      ],
       "properties": {
-        "suggestion_kind": {"type": "string", "minLength": 1, "examples": ["fix", "autofill", "action_items", "investigation", "starter"], "description": "Since v0.4. The kind of actionable AI output shown."},
-        "item_count": {"type": "integer", "minimum": 0, "description": "Since v0.4. Parts the suggestion has, for output with several."}
+        "suggestion_kind": {
+          "type": "string",
+          "minLength": 1,
+          "examples": [
+            "fix",
+            "autofill",
+            "action_items",
+            "investigation",
+            "starter"
+          ],
+          "description": "Since v0.4. The kind of actionable AI output shown."
+        },
+        "item_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Since v0.4. Parts the suggestion has, for output with several."
+        }
       }
     },
     "ai_feedback_requested": {
       "description": "Since v0.4. The app asked for feedback (a rating prompt, a survey). The denominator of feedback response rate.",
-      "allOf": [{ "$ref": "#/$defs/with_interaction" }],
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_interaction"
+        }
+      ],
       "properties": {
-        "trigger": { "type": "string", "minLength": 1, "examples": ["after_answer", "after_n_answers", "on_close", "manual"], "description": "Since v0.4. What made the app ask. This client trigger describes a feedback request." }
+        "trigger": {
+          "type": "string",
+          "minLength": 1,
+          "examples": [
+            "after_answer",
+            "after_n_answers",
+            "on_close",
+            "manual"
+          ],
+          "description": "Since v0.4. What made the app ask. This client trigger describes a feedback request."
+        }
       }
     },
     "ai_limit_reached": {
       "description": "Since v0.4. The user hit a usage wall in the app. Upgrade clicks stay the app's own events.",
-      "allOf": [{ "$ref": "#/$defs/common" }],
-      "required": ["limit_type"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/common"
+        }
+      ],
+      "required": [
+        "limit_type"
+      ],
       "properties": {
-        "limit_type": {"enum": ["rate", "quota", "credits", "plan"], "description": "Since v0.4. The usage wall encountered by the user."},
-        "interaction_id": { "type": "string", "minLength": 1 }
+        "limit_type": {
+          "enum": [
+            "rate",
+            "quota",
+            "credits",
+            "plan"
+          ],
+          "description": "Since v0.4. The usage wall encountered by the user."
+        },
+        "interaction_id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "ai_user_action": {
-      "allOf": [{ "$ref": "#/$defs/with_interaction" }],
-      "required": ["action_type"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_interaction"
+        }
+      ],
+      "required": [
+        "action_type"
+      ],
       "properties": {
         "action_type": {
           "description": "Since v0.4. Adds feedback_dismissed, exported and reverted; suggestion actions apply only to actionable output.",
-          "enum": ["feedback_given", "feedback_retracted", "feedback_dismissed", "copied_response", "shared", "exported", "reported", "regenerated", "accepted", "rejected", "edited", "reverted", "clicked_through"]
+          "enum": [
+            "feedback_given",
+            "feedback_retracted",
+            "feedback_dismissed",
+            "copied_response",
+            "shared",
+            "exported",
+            "reported",
+            "regenerated",
+            "accepted",
+            "rejected",
+            "edited",
+            "reverted",
+            "clicked_through"
+          ]
         },
         "action_details": {
           "type": "object",
           "properties": {
-            "feedback_type": { "type": "string" },
-            "feedback_text": { "type": "string" },
-            "feedback_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Since v0.4. The app's preset choices the user picked."},
-            "feedback_scope": {"enum": ["interaction", "conversation", "feature"], "description": "Since v0.4. What the feedback is about; absent means interaction."},
-            "items_total": {"type": "integer", "minimum": 0, "description": "Since v0.4. Number of actionable suggestion items offered."},
-            "items_accepted": {"type": "integer", "minimum": 0, "description": "Since v0.4. Number of actionable suggestion items kept."},
-            "destination": {"type": "string", "pattern": "^[a-z][a-z0-9_]*", "maxLength": 64, "not": {"pattern": "[^a-z0-9_]"}, "examples": ["download", "dashboard", "agent", "ide"], "description": "Since v0.4. On exported: where the output went, as a snake_case label (1-64 ASCII characters; starts with a lowercase letter, followed by lowercase letters, digits or underscores)."},
-            "card_kind": { "type": "string" },
-            "target_type": { "type": "string", "not": { "pattern": "[/?=]" } }
+            "feedback_type": {
+              "type": "string"
+            },
+            "feedback_text": {
+              "type": "string"
+            },
+            "feedback_reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Since v0.4. The app's preset choices the user picked."
+            },
+            "feedback_scope": {
+              "enum": [
+                "interaction",
+                "conversation",
+                "feature"
+              ],
+              "description": "Since v0.4. What the feedback is about; absent means interaction."
+            },
+            "items_total": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Since v0.4. Number of actionable suggestion items offered."
+            },
+            "items_accepted": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Since v0.4. Number of actionable suggestion items kept."
+            },
+            "destination": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*",
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^a-z0-9_]"
+              },
+              "examples": [
+                "download",
+                "dashboard",
+                "agent",
+                "ide"
+              ],
+              "description": "Since v0.4. On exported: where the output went, as a snake_case label (1-64 ASCII characters; starts with a lowercase letter, followed by lowercase letters, digits or underscores)."
+            },
+            "card_kind": {
+              "type": "string"
+            },
+            "target_type": {
+              "type": "string",
+              "not": {
+                "pattern": "[/?=]"
+              }
+            }
           },
-          "not": { "anyOf": [{ "required": ["url"] }, { "required": ["target_url"] }] }
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "url"
+                ]
+              },
+              {
+                "required": [
+                  "target_url"
+                ]
+              }
+            ]
+          }
         }
       }
     },
     "ai_user_prompt_created": {
-      "allOf": [{ "$ref": "#/$defs/common" }],
-      "required": ["interaction_id"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/common"
+        }
+      ],
+      "required": [
+        "interaction_id"
+      ],
       "properties": {
-        "interaction_id": { "type": "string", "minLength": 1 },
-        "prompt_text": { "type": "string" },
-        "prompt_source": { "enum": ["composer", "starter_suggestion", "follow_up_action", "retry"] },
-        "suggestion_id": { "type": "string", "minLength": 1 },
-        "prompt_length": { "type": "integer", "minimum": 0 },
-        "input_method": {"type": "string", "examples": ["text", "voice", "button"], "description": "Since v0.4. How the prompt was entered, such as text, voice or button."},
-        "agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. The agent or persona the user selected."},
-        "mode": {"type": "string", "minLength": 1, "description": "Since v0.4. The mode the user selected."},
-        "context_item_count": {"type": "integer", "minimum": 0, "description": "Since v0.4. Context the user attached that is not a file (a dashboard, a query, a selection)."},
-        "context_item_types": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "description": "Since v0.4. App-defined kinds, each listed once. Never names or content."}
+        "interaction_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt_text": {
+          "type": "string"
+        },
+        "prompt_source": {
+          "enum": [
+            "composer",
+            "starter_suggestion",
+            "follow_up_action",
+            "retry"
+          ]
+        },
+        "suggestion_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input_method": {
+          "type": "string",
+          "examples": [
+            "text",
+            "voice",
+            "button"
+          ],
+          "description": "Since v0.4. How the prompt was entered, such as text, voice or button."
+        },
+        "agent_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. The agent or persona the user selected."
+        },
+        "mode": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. The mode the user selected."
+        },
+        "context_item_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Since v0.4. Context the user attached that is not a file (a dashboard, a query, a selection)."
+        },
+        "context_item_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Since v0.4. App-defined kinds, each listed once. Never names or content."
+        }
       }
     },
     "ai_response_received": {
-      "allOf": [{ "$ref": "#/$defs/with_interaction" }],
-      "required": ["response_status"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_interaction"
+        }
+      ],
+      "required": [
+        "response_status"
+      ],
       "properties": {
-        "response_status": { "enum": ["success", "error", "timeout", "cancelled"] },
-        "client_error_kind": { "enum": ["offline", "interrupted", "http_4xx", "http_5xx", "agent_error", "unknown"] },
-        "time_to_first_render_ms": { "type": "integer", "minimum": 0 }
+        "response_status": {
+          "enum": [
+            "success",
+            "error",
+            "timeout",
+            "cancelled",
+            "blocked"
+          ],
+          "description": "Since v0.4. blocked means the app intentionally declined to answer."
+        },
+        "client_error_kind": {
+          "enum": [
+            "offline",
+            "interrupted",
+            "http_4xx",
+            "http_5xx",
+            "agent_error",
+            "unknown"
+          ]
+        },
+        "time_to_first_render_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "block_reason": {
+          "enum": [
+            "guardrail",
+            "policy",
+            "unsupported",
+            "skipped",
+            "other"
+          ],
+          "description": "Since v0.4. With response_status blocked: why. guardrail: a safety or moderation check stopped it. policy: a business rule (plan, permission, region). unsupported: the request is outside what the AI does. skipped: the app chose not to answer (e.g. a duplicate or empty prompt)."
+        }
       },
       "not": {
         "anyOf": [
-          { "required": ["response_text"] }, { "required": ["primary_model"] }, { "required": ["primary_provider"] },
-          { "required": ["total_tokens"] }, { "required": ["total_cost_usd"] }, { "required": ["llm_call_count"] },
-          { "required": ["tool_call_count"] }, { "required": ["usage_breakdown"] }, { "required": ["tool_breakdown"] },
-          { "required": ["finish_reason"] }, { "required": ["trace_id"] }, { "required": ["client_disconnected"] },
-          { "required": ["total_input_tokens"] }, { "required": ["total_output_tokens"] }, { "required": ["error_type"] }
+          {
+            "required": [
+              "response_text"
+            ]
+          },
+          {
+            "required": [
+              "primary_model"
+            ]
+          },
+          {
+            "required": [
+              "primary_provider"
+            ]
+          },
+          {
+            "required": [
+              "total_tokens"
+            ]
+          },
+          {
+            "required": [
+              "total_cost_usd"
+            ]
+          },
+          {
+            "required": [
+              "llm_call_count"
+            ]
+          },
+          {
+            "required": [
+              "tool_call_count"
+            ]
+          },
+          {
+            "required": [
+              "usage_breakdown"
+            ]
+          },
+          {
+            "required": [
+              "tool_breakdown"
+            ]
+          },
+          {
+            "required": [
+              "finish_reason"
+            ]
+          },
+          {
+            "required": [
+              "trace_id"
+            ]
+          },
+          {
+            "required": [
+              "client_disconnected"
+            ]
+          },
+          {
+            "required": [
+              "total_input_tokens"
+            ]
+          },
+          {
+            "required": [
+              "total_output_tokens"
+            ]
+          },
+          {
+            "required": [
+              "error_type"
+            ]
+          }
         ]
       }
     },
     "declared_tool_event": {
       "description": "Since v0.4. A customer-named tool event for a tool the client ran itself, where the server never sees the outcome. The name never starts with ai_ or mcp_. Tool arguments and results are never sent.",
-      "allOf": [{ "$ref": "#/$defs/with_interaction" }],
-      "required": ["tool_name", "tool_status"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_interaction"
+        }
+      ],
+      "required": [
+        "tool_name",
+        "tool_status"
+      ],
       "properties": {
-        "tool_name": {"type": "string", "minLength": 1, "description": "Since v0.4. Name of the tool executed by the client."},
-        "tool_call_id": {"type": "string", "minLength": 1, "description": "Since v0.4. Identifier of the client tool call."},
-        "tool_status": {"enum": ["success", "error", "unknown"], "description": "Since v0.4. Outcome of the client tool execution."},
-        "tool_duration_ms": {"type": "number", "minimum": 0, "description": "Since v0.4. Measured client tool execution duration in milliseconds."},
-        "agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. The agent or persona the user selected."}
+        "tool_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Name of the tool executed by the client."
+        },
+        "tool_call_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Identifier of the client tool call."
+        },
+        "tool_status": {
+          "enum": [
+            "success",
+            "error",
+            "unknown"
+          ],
+          "description": "Since v0.4. Outcome of the client tool execution."
+        },
+        "tool_duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Since v0.4. Measured client tool execution duration in milliseconds."
+        },
+        "agent_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. The agent or persona the user selected."
+        }
       },
       "not": {
         "anyOf": [
-          { "required": ["arguments"] }, { "required": ["args"] }, { "required": ["params"] },
-          { "required": ["result"] }, { "required": ["results"] }
+          {
+            "required": [
+              "arguments"
+            ]
+          },
+          {
+            "required": [
+              "args"
+            ]
+          },
+          {
+            "required": [
+              "params"
+            ]
+          },
+          {
+            "required": [
+              "result"
+            ]
+          },
+          {
+            "required": [
+              "results"
+            ]
+          }
         ]
       }
     }

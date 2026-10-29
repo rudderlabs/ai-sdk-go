@@ -2700,6 +2700,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-1",
             "finish_reason": "tool_calls"
           },
@@ -2724,6 +2725,7 @@
             "total_tokens": 47,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-2",
             "finish_reason": "stop"
           },
@@ -2748,6 +2750,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-3",
             "finish_reason": "stop"
           },
@@ -3269,7 +3272,7 @@
             "total_tokens": 74,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.0000584,
+            "total_cost_usd": 5.84e-05,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -3282,7 +3285,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0000292
+                "cost_usd": 2.92e-05
               },
               {
                 "provider": "openai",
@@ -3294,7 +3297,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0000292
+                "cost_usd": 2.92e-05
               }
             ]
           },
@@ -3676,7 +3679,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.0000292,
+            "total_cost_usd": 2.92e-05,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -3689,7 +3692,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0000292
+                "cost_usd": 2.92e-05
               }
             ]
           },
@@ -3980,7 +3983,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0000292
+                "cost_usd": 2.92e-05
               },
               {
                 "provider": "openai",
@@ -4124,7 +4127,8 @@
             "total_tokens": 37,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "cost_usd": 0.0000292,
+            "cost_usd": 2.92e-05,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-1",
             "finish_reason": "stop"
           },
@@ -4149,6 +4153,7 @@
             "total_tokens": 0,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "error_type": "rate_limit"
           },
           "context": {
@@ -4177,7 +4182,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.0000292,
+            "total_cost_usd": 2.92e-05,
             "finish_reason": "stop",
             "error_type": "rate_limit",
             "usage_breakdown": [
@@ -4191,7 +4196,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 1,
-                "cost_usd": 0.0000292
+                "cost_usd": 2.92e-05
               }
             ]
           },
@@ -6710,6 +6715,8 @@
             "total_tokens": 37,
             "cached_input_tokens": 5,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
             "response_id": "chatcmpl-1",
             "error_type": "rate_limit"
           },
@@ -7370,6 +7377,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "resp_1",
             "finish_reason": "failed",
             "error_type": "api_error"
@@ -8479,7 +8487,7 @@
             "total_tokens": 52,
             "total_cached_input_tokens": 30,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.0000262,
+            "total_cost_usd": 2.62e-05,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -8492,7 +8500,7 @@
                 "cached_input_tokens": 30,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0000262
+                "cost_usd": 2.62e-05
               }
             ]
           },
@@ -8689,6 +8697,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-1",
             "finish_reason": "stop"
           },
@@ -8814,8 +8823,8 @@
             "conversation_id": "digest:T024BE7LD:2026-10-14",
             "interaction_id": "$int1",
             "account_id": "T024BE7LD",
-            "task_name": "daily-digest",
             "trigger_source": "schedule",
+            "task_name": "daily-digest",
             "response_status": "success",
             "trigger": "system",
             "primary_model": "gpt-4.1-mini",
@@ -9358,6 +9367,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-1",
             "finish_reason": "stop"
           },
@@ -10678,10 +10688,10 @@
                 "max_duration_ms": "<number>"
               },
               {
-                "agent_name": "researcher",
                 "tool_name": "lookup_order",
-                "parent_tool": "task",
                 "call_count": 1,
+                "agent_name": "researcher",
+                "parent_tool": "task",
                 "error_count": 0,
                 "duration_ms": "<number>",
                 "measured_count": 1,
@@ -11075,6 +11085,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-1",
             "finish_reason": "stop"
           },
@@ -12099,7 +12110,8 @@
             "trigger": "user",
             "tool_name": "lookup_order",
             "tool_call_id": "toolu_a",
-            "tool_status": "success"
+            "tool_status": "success",
+            "result_size_bytes": 2
           },
           "context": {
             "wrapperLibrary": {
@@ -12120,7 +12132,8 @@
             "trigger": "user",
             "tool_name": "refund",
             "tool_call_id": "toolu_b",
-            "tool_status": "error"
+            "tool_status": "error",
+            "result_size_bytes": 8
           },
           "context": {
             "wrapperLibrary": {
@@ -12369,7 +12382,8 @@
             "trigger": "user",
             "tool_name": "lookup_order",
             "tool_call_id": "call_1",
-            "tool_status": "unknown"
+            "tool_status": "unknown",
+            "result_size_bytes": 20
           },
           "context": {
             "wrapperLibrary": {
@@ -12568,7 +12582,8 @@
             "tool_name": "lookup_order",
             "tool_call_id": "toolu_1",
             "tool_status": "success",
-            "tool_duration_ms": "<number>"
+            "tool_duration_ms": "<number>",
+            "result_size_bytes": 2
           },
           "context": {
             "wrapperLibrary": {
@@ -15149,7 +15164,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.000049,
+            "total_cost_usd": 4.9e-05,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -15162,7 +15177,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.000049
+                "cost_usd": 4.9e-05
               }
             ]
           },
@@ -15728,6 +15743,7 @@
             "total_tokens": 23,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-rid",
             "finish_reason": "stop"
           },
@@ -15961,6 +15977,7 @@
             "tool_call_count": 0,
             "total_input_tokens": 10,
             "total_output_tokens": 50,
+            "total_reasoning_tokens": 30,
             "total_tokens": 60,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
@@ -15973,15 +15990,14 @@
                 "call_count": 1,
                 "input_tokens": 10,
                 "output_tokens": 50,
+                "reasoning_tokens": 30,
                 "total_tokens": 60,
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.02,
-                "reasoning_tokens": 30
+                "cost_usd": 0.02
               }
-            ],
-            "total_reasoning_tokens": 30
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -19024,6 +19040,7 @@
             "total_tokens": 152,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
+            "error_type": "no_result",
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -19036,8 +19053,7 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ],
-            "error_type": "no_result"
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -20233,6 +20249,7 @@
             "cache_write_tokens": 300,
             "cache_write_1h_tokens": 200,
             "cost_usd": 0.001815,
+            "latency_ms": "<number>",
             "response_id": "msg_1",
             "finish_reason": "end_turn"
           },
@@ -20526,8 +20543,8 @@
             "tool_call_count": 0,
             "total_input_tokens": 70,
             "total_output_tokens": 90,
-            "total_tokens": 160,
             "total_reasoning_tokens": 55,
+            "total_tokens": 160,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
             "finish_reason": "end_turn",
@@ -20538,8 +20555,8 @@
                 "call_count": 2,
                 "input_tokens": 70,
                 "output_tokens": 90,
-                "total_tokens": 160,
                 "reasoning_tokens": 55,
+                "total_tokens": 160,
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0
@@ -20697,6 +20714,7 @@
             "total_tokens": 75,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "msg_think_none",
             "finish_reason": "end_turn"
           },
@@ -20717,12 +20735,13 @@
             "model": "claude-sonnet-4-5",
             "input_tokens": 25,
             "output_tokens": 50,
+            "reasoning_tokens": 0,
             "total_tokens": 75,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "msg_think_zero",
-            "finish_reason": "end_turn",
-            "reasoning_tokens": 0
+            "finish_reason": "end_turn"
           },
           "context": {
             "wrapperLibrary": {
@@ -21497,6 +21516,7 @@
             "total_tokens": 37,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-1",
             "finish_reason": "stop"
           },
@@ -21522,6 +21542,7 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "cost_usd": 0.0001825,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-2",
             "finish_reason": "stop"
           },
@@ -21724,7 +21745,8 @@
             "total_tokens": 1,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "cost_usd": 8e-8,
+            "cost_usd": 8e-08,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-1",
             "finish_reason": "stop"
           },
@@ -21749,7 +21771,8 @@
             "total_tokens": 21,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "cost_usd": 0.00000158,
+            "cost_usd": 1.58e-06,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-2",
             "finish_reason": "stop"
           },
@@ -21779,7 +21802,7 @@
             "total_tokens": 22,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.00000166,
+            "total_cost_usd": 1.66e-06,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -21792,7 +21815,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.00000166
+                "cost_usd": 1.66e-06
               }
             ]
           },
@@ -22255,6 +22278,7 @@
             "total_output_tokens": 12,
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
             "error_type": "cancelled",
             "usage_breakdown": [
               {
@@ -22268,8 +22292,7 @@
                 "cache_write_tokens": 0,
                 "error_count": 1
               }
-            ],
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -22384,6 +22407,7 @@
             "total_output_tokens": 24,
             "total_tokens": 74,
             "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -22397,8 +22421,7 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ],
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -22473,8 +22496,8 @@
             "tool_call_count": 0,
             "total_input_tokens": 30,
             "total_output_tokens": 5,
-            "total_tokens": 35,
             "total_reasoning_tokens": 3,
+            "total_tokens": 35,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
             "usage_breakdown": [
@@ -22484,8 +22507,8 @@
                 "call_count": 1,
                 "input_tokens": 30,
                 "output_tokens": 5,
-                "total_tokens": 35,
                 "reasoning_tokens": 3,
+                "total_tokens": 35,
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0
@@ -23012,8 +23035,8 @@
             "total_output_tokens": 0,
             "total_tokens": 0,
             "total_cached_input_tokens": 0,
-            "error_type": "rate_limit",
-            "total_cache_write_tokens": 0
+            "total_cache_write_tokens": 0,
+            "error_type": "rate_limit"
           },
           "context": {
             "wrapperLibrary": {
@@ -23104,6 +23127,7 @@
             "total_output_tokens": 0,
             "total_tokens": 0,
             "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
             "error_type": "rate_limit",
             "usage_breakdown": [
               {
@@ -23117,8 +23141,7 @@
                 "cache_write_tokens": 0,
                 "error_count": 1
               }
-            ],
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -23211,6 +23234,7 @@
             "total_output_tokens": 0,
             "total_tokens": 0,
             "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
             "error_type": "api_error",
             "usage_breakdown": [
               {
@@ -23224,8 +23248,7 @@
                 "cache_write_tokens": 0,
                 "error_count": 1
               }
-            ],
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -23349,9 +23372,11 @@
             "output_tokens": 1,
             "total_tokens": 26,
             "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
             "response_id": "msg_cut",
-            "error_type": "api_error",
-            "cache_write_tokens": 0
+            "error_type": "api_error"
           },
           "context": {
             "wrapperLibrary": {
@@ -23379,6 +23404,7 @@
             "total_output_tokens": 1,
             "total_tokens": 26,
             "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
             "error_type": "api_error",
             "usage_breakdown": [
               {
@@ -23392,8 +23418,7 @@
                 "cache_write_tokens": 0,
                 "error_count": 1
               }
-            ],
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -23540,6 +23565,7 @@
             "total_output_tokens": 12,
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
             "finish_reason": "tool_calls",
             "usage_breakdown": [
               {
@@ -23553,8 +23579,7 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ],
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -23832,6 +23857,7 @@
             "total_output_tokens": 12,
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -23845,8 +23871,7 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ],
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -23951,8 +23976,10 @@
             "tool_call_count": 1,
             "total_input_tokens": 25,
             "total_output_tokens": 12,
+            "total_reasoning_tokens": 0,
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
             "finish_reason": "tool_calls",
             "usage_breakdown": [
               {
@@ -23961,15 +23988,13 @@
                 "call_count": 1,
                 "input_tokens": 25,
                 "output_tokens": 12,
+                "reasoning_tokens": 0,
                 "total_tokens": 37,
                 "cached_input_tokens": 0,
-                "reasoning_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ],
-            "total_reasoning_tokens": 0,
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -24100,7 +24125,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.0000292,
+            "total_cost_usd": 2.92e-05,
             "finish_reason": "length",
             "error_type": "length",
             "usage_breakdown": [
@@ -24114,7 +24139,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0000292
+                "cost_usd": 2.92e-05
               }
             ]
           },
@@ -24246,7 +24271,8 @@
             "total_output_tokens": 12,
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
-            "total_cost_usd": 0.0000292,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 2.92e-05,
             "finish_reason": "refusal",
             "usage_breakdown": [
               {
@@ -24257,12 +24283,11 @@
                 "output_tokens": 12,
                 "total_tokens": 37,
                 "cached_input_tokens": 0,
-                "cost_usd": 0.0000292,
                 "cache_write_tokens": 0,
-                "error_count": 0
+                "error_count": 0,
+                "cost_usd": 2.92e-05
               }
-            ],
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -24373,7 +24398,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.0000292,
+            "total_cost_usd": 2.92e-05,
             "finish_reason": "content_filter",
             "error_type": "content_filter",
             "usage_breakdown": [
@@ -24387,7 +24412,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0000292
+                "cost_usd": 2.92e-05
               }
             ]
           },
@@ -24671,7 +24696,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.0000292,
+            "total_cost_usd": 2.92e-05,
             "finish_reason": "length",
             "error_type": "length",
             "usage_breakdown": [
@@ -24686,7 +24711,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0000292
+                "cost_usd": 2.92e-05
               }
             ]
           },
@@ -24835,8 +24860,10 @@
             "tool_call_count": 0,
             "total_input_tokens": 25,
             "total_output_tokens": 12,
+            "total_reasoning_tokens": 0,
             "total_tokens": 37,
             "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
             "finish_reason": "refusal",
             "usage_breakdown": [
               {
@@ -24845,15 +24872,13 @@
                 "call_count": 1,
                 "input_tokens": 25,
                 "output_tokens": 12,
+                "reasoning_tokens": 0,
                 "total_tokens": 37,
                 "cached_input_tokens": 0,
-                "reasoning_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ],
-            "total_reasoning_tokens": 0,
-            "total_cache_write_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -26235,7 +26260,8 @@
             "total_tokens": 37,
             "cached_input_tokens": 8,
             "cache_write_tokens": 0,
-            "cost_usd": 0.00003534,
+            "cost_usd": 3.534e-05,
+            "latency_ms": "<number>",
             "response_id": "google-plain",
             "finish_reason": "stop"
           },
@@ -26266,7 +26292,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 8,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.00003534,
+            "total_cost_usd": 3.534e-05,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -26280,7 +26306,7 @@
                 "cached_input_tokens": 8,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.00003534
+                "cost_usd": 3.534e-05
               }
             ]
           },
@@ -26392,7 +26418,7 @@
             "total_tokens": 37,
             "total_cached_input_tokens": 8,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.00003534,
+            "total_cost_usd": 3.534e-05,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -26406,7 +26432,7 @@
                 "cached_input_tokens": 8,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.00003534
+                "cost_usd": 3.534e-05
               }
             ]
           },
@@ -27197,7 +27223,7 @@
             "total_tokens": 30,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.0000354,
+            "total_cost_usd": 3.54e-05,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -27211,7 +27237,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0000354
+                "cost_usd": 3.54e-05
               }
             ]
           },
@@ -27321,7 +27347,7 @@
             "total_tokens": 36,
             "total_cached_input_tokens": 12,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.00002076,
+            "total_cost_usd": 2.076e-05,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -27334,7 +27360,7 @@
                 "cached_input_tokens": 12,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.00002076
+                "cost_usd": 2.076e-05
               }
             ]
           },
@@ -28175,6 +28201,7 @@
             "total_tokens": 99,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "google-code-execution",
             "finish_reason": "stop"
           },
@@ -29816,6 +29843,7 @@
             "total_tokens": 60,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "resp_oa_tool_error_1",
             "finish_reason": "stop"
           },
@@ -29977,6 +30005,7 @@
             "tool_call_count": 0,
             "total_input_tokens": 40,
             "total_output_tokens": 64,
+            "total_reasoning_tokens": 0,
             "total_tokens": 104,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
@@ -29996,8 +30025,7 @@
                 "cache_write_tokens": 0,
                 "error_count": 0
               }
-            ],
-            "total_reasoning_tokens": 0
+            ]
           },
           "context": {
             "wrapperLibrary": {
@@ -30254,6 +30282,7 @@
             "cached_input_tokens": 10,
             "cache_write_tokens": 5,
             "cost_usd": 0.00023175,
+            "latency_ms": "<number>",
             "response_id": "req-bedrock-tool-use",
             "finish_reason": "tool_calls"
           },
@@ -30754,6 +30783,8 @@
             "cached_input_tokens": 10,
             "cache_write_tokens": 5,
             "cost_usd": 0.00023175,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
             "response_id": "req-stream-tools",
             "finish_reason": "tool_calls"
           },
@@ -31025,6 +31056,7 @@
             "total_tokens": 6,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "finish_reason": "length"
           },
           "context": {
@@ -31048,6 +31080,7 @@
             "total_tokens": 6,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "finish_reason": "content_filter"
           },
           "context": {
@@ -31071,6 +31104,7 @@
             "total_tokens": 6,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "finish_reason": "content_filter"
           },
           "context": {
@@ -31094,6 +31128,7 @@
             "total_tokens": 6,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "finish_reason": "stop"
           },
           "context": {
@@ -31501,6 +31536,8 @@
             "total_tokens": 0,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
             "response_id": "req-retry-stream",
             "error_type": "rate_limit"
           },
@@ -31526,6 +31563,7 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "cost_usd": 0.00021,
+            "latency_ms": "<number>",
             "response_id": "req-retry-converse",
             "finish_reason": "stop"
           },
@@ -31801,6 +31839,8 @@
             "total_tokens": 0,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
             "response_id": "req-no-stop",
             "error_type": "api_error"
           },
@@ -32511,6 +32551,7 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "cost_usd": 0.00042,
+            "latency_ms": "<number>",
             "response_id": "gen-1",
             "finish_reason": "stop"
           },
@@ -32725,6 +32766,8 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "cost_usd": 0.000123,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
             "response_id": "gen-2",
             "finish_reason": "tool_calls"
           },
@@ -32959,6 +33002,7 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "cost_usd": 0.15,
+            "latency_ms": "<number>",
             "response_id": "gen-3",
             "finish_reason": "stop"
           },
@@ -32984,6 +33028,7 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "cost_usd": 0.15,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-4",
             "finish_reason": "stop"
           },
@@ -33009,6 +33054,7 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "cost_usd": 0.15,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-5",
             "finish_reason": "stop"
           },
@@ -33164,7 +33210,8 @@
             "total_tokens": 40,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
-            "cost_usd": 0.000015,
+            "cost_usd": 1.5e-05,
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-6",
             "finish_reason": "stop"
           },
@@ -33194,7 +33241,7 @@
             "total_tokens": 40,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.000015,
+            "total_cost_usd": 1.5e-05,
             "finish_reason": "stop",
             "usage_breakdown": [
               {
@@ -33208,7 +33255,7 @@
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.000015
+                "cost_usd": 1.5e-05
               }
             ]
           },
@@ -33348,6 +33395,8 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "cost_usd": 0.0002,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
             "response_id": "chatcmpl-7",
             "finish_reason": "stop"
           },
@@ -33545,6 +33594,7 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "cost_usd": 4.5,
+            "latency_ms": "<number>",
             "response_id": "gen-8",
             "finish_reason": "stop"
           },
@@ -33569,6 +33619,7 @@
             "total_tokens": 1100,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
             "response_id": "gen-9",
             "finish_reason": "stop"
           },
@@ -34007,6 +34058,8 @@
             "total_tokens": 0,
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
             "response_id": "chatcmpl-10",
             "error_type": "cancelled"
           },
@@ -36388,6 +36441,7 @@
             "cached_input_tokens": 0,
             "cache_write_tokens": 0,
             "service_tier": "fast",
+            "latency_ms": "<number>",
             "response_id": "chatcmpl-tier",
             "finish_reason": "stop"
           },
@@ -36416,6 +36470,7 @@
             "server_tool_call_count": 2,
             "server_tool_cost_usd": 0.02,
             "cost_usd": 0.02021,
+            "latency_ms": "<number>",
             "response_id": "msg_tier_1",
             "finish_reason": "end_turn"
           },
@@ -36442,6 +36497,7 @@
             "cache_write_tokens": 0,
             "service_tier": "other",
             "cost_usd": 0.00021,
+            "latency_ms": "<number>",
             "response_id": "msg_tier_2",
             "finish_reason": "end_turn"
           },
@@ -37098,6 +37154,2014 @@
             "wrapperLibrary": {
               "specVersion": "0.3.0",
               "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_blocked_answers",
+      "description": "response_status blocked with block_reason (default other); error_type is never sent on a blocked answer; the app-set outcome may be unsupported (in the default outcomes).",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_blocked"
+          },
+          "steps": [
+            {
+              "op": "set_outcome",
+              "value": "unsupported"
+            },
+            {
+              "op": "end",
+              "status": "blocked",
+              "block_reason": "unsupported"
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_blocked"
+          },
+          "steps": [
+            {
+              "op": "end",
+              "status": "blocked",
+              "error_type": "guardrail_trip"
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_blocked"
+          },
+          "steps": [
+            {
+              "op": "end",
+              "block_reason": "policy"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_blocked",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_blocked",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "blocked",
+            "block_reason": "unsupported",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "outcome": "unsupported"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_blocked",
+            "interaction_id": "$int2",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_blocked",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "response_status": "blocked",
+            "block_reason": "other",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_blocked",
+            "interaction_id": "$int3",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_blocked",
+            "interaction_id": "$int3",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_confidence_and_handoff",
+      "description": "App-set confidence (low, medium, high; another value is not sent). A hand-off to a person is outcome escalated plus the hand-off tool's declared tool event.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "handoff_to_human": "handed_off"
+          }
+        }
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_confidence"
+          },
+          "steps": [
+            {
+              "op": "set_confidence",
+              "value": "medium"
+            },
+            {
+              "op": "set_outcome",
+              "value": "escalated"
+            },
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "id": "call_h",
+                  "name": "handoff_to_human",
+                  "error": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_confidence"
+          },
+          "steps": [
+            {
+              "op": "set_confidence",
+              "value": "sure"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_confidence",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "handed_off",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_confidence",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "trigger": "user",
+            "tool_name": "handoff_to_human",
+            "tool_call_id": "call_h",
+            "tool_status": "success"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_confidence",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 1,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "outcome": "escalated",
+            "confidence": "medium"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_confidence",
+            "interaction_id": "$int2",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_confidence",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_credits_hook",
+      "description": "The credits hook prices each successful call beside USD: credits on the per-call event and usage_breakdown entries, total_credits on the answer when every successful call has credits. Credits set on record_call win; failed calls never ask the hook; an uncredited successful call leaves total_credits out.",
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "by_model": {
+            "gpt-4.1-mini": 2.5
+          }
+        }
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "register_price",
+          "model": "gpt-4.1-mini",
+          "input_per_mtok": 0.4,
+          "output_per_mtok": 1.6
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_credits"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500,
+              "credits": 4
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500,
+              "error_type": "rate_limit"
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_credits"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 1000,
+              "output_tokens": 500
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cost_usd": 0.0012,
+            "credits": 2.5
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cost_usd": 0.0012,
+            "credits": 4
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "error_type": "rate_limit"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "error",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 3,
+            "tool_call_count": 0,
+            "total_input_tokens": 3000,
+            "total_output_tokens": 1500,
+            "total_tokens": 4500,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0024,
+            "total_credits": 6.5,
+            "error_type": "rate_limit",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 3,
+                "input_tokens": 3000,
+                "output_tokens": 1500,
+                "total_tokens": 4500,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 1,
+                "cost_usd": 0.0024,
+                "credits": 6.5
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits",
+            "interaction_id": "$int2",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "cost_usd": 0.0012,
+            "credits": 2.5
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 2,
+            "tool_call_count": 0,
+            "total_input_tokens": 2000,
+            "total_output_tokens": 1000,
+            "total_tokens": 3000,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "total_tokens": 1500,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.0012,
+                "credits": 2.5
+              },
+              {
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "call_count": 1,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "total_tokens": 1500,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_credits_hook_throws",
+      "description": "A credits hook that raises leaves the call without credits; the answer is still sent.",
+      "config": {
+        "credits": "throw"
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_credits_throw"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits_throw",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_credits_throw",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 1000,
+            "total_output_tokens": 500,
+            "total_tokens": 1500,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "total_tokens": 1500,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_limit_reached",
+      "description": "ai_limit_reached from track_limit_reached: limit_type plus the scope from the options or the enclosing context; interaction_id when the limit stopped one. Without limit_type it is dropped.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "context",
+          "values": {
+            "user_id": "user_1",
+            "account_id": "acct_1",
+            "agent_version": "v7"
+          },
+          "steps": [
+            {
+              "op": "track_limit_reached",
+              "options": {
+                "limit_type": "credits",
+                "feature": "parity"
+              }
+            }
+          ]
+        },
+        {
+          "op": "track_limit_reached",
+          "options": {
+            "limit_type": "messages",
+            "user_id": "user_2",
+            "interaction_id": "int_1",
+            "conversation_id": "conv_v04_limit",
+            "surface": "web",
+            "on_behalf_of": "owner_1",
+            "variant": "b"
+          }
+        },
+        {
+          "op": "track_limit_reached",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_limit_reached",
+          "userId": "user_1",
+          "properties": {
+            "limit_type": "credits",
+            "feature": "parity",
+            "account_id": "acct_1",
+            "agent_version": "v7"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_limit_reached",
+          "userId": "user_2",
+          "properties": {
+            "limit_type": "messages",
+            "interaction_id": "int_1",
+            "conversation_id": "conv_v04_limit",
+            "surface": "web",
+            "on_behalf_of": "owner_1",
+            "variant": "b"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_per_call_detail",
+      "description": "Per-call latency_ms and time_to_first_token_ms when the call was timed, app-set call_purpose, fallback_used and byok on ai_llm_response_received; usage_breakdown groups by call_purpose.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_per_call"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500,
+              "timing": {
+                "duration_ms": 120,
+                "first_token_ms": 30
+              },
+              "call_purpose": "planning",
+              "fallback_used": false,
+              "byok": true
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500,
+              "timing": {
+                "duration_ms": 80
+              },
+              "call_purpose": "planning"
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500,
+              "call_purpose": "summarize",
+              "fallback_used": true
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_per_call",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_per_call",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
+            "call_purpose": "planning",
+            "fallback_used": false,
+            "byok": true
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_per_call",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "call_purpose": "planning"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_per_call",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "call_purpose": "summarize",
+            "fallback_used": true
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_per_call",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_per_call",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 4,
+            "tool_call_count": 0,
+            "total_input_tokens": 4000,
+            "total_output_tokens": 2000,
+            "total_tokens": 6000,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "call_purpose": "planning",
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 2,
+                "input_tokens": 2000,
+                "output_tokens": 1000,
+                "total_tokens": 3000,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              },
+              {
+                "call_purpose": "summarize",
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "total_tokens": 1500,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              },
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "total_tokens": 1500,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_per_call_detail_wrapper_stream",
+      "description": "A streamed call through a wrapper created with call_purpose and byok: the integration times the call (latency_ms, time_to_first_token_ms) and every call through it carries the wrapper's fields.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "sse": [
+              {
+                "data": {
+                  "id": "chatcmpl-1",
+                  "object": "chat.completion.chunk",
+                  "created": 1,
+                  "model": "gpt-4.1-mini",
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "role": "assistant",
+                        "content": ""
+                      },
+                      "finish_reason": null
+                    }
+                  ]
+                }
+              },
+              {
+                "data": {
+                  "id": "chatcmpl-1",
+                  "object": "chat.completion.chunk",
+                  "created": 1,
+                  "model": "gpt-4.1-mini",
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "content": "Mock "
+                      },
+                      "finish_reason": null
+                    }
+                  ]
+                }
+              },
+              {
+                "data": {
+                  "id": "chatcmpl-1",
+                  "object": "chat.completion.chunk",
+                  "created": 1,
+                  "model": "gpt-4.1-mini",
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "content": "answer: "
+                      },
+                      "finish_reason": null
+                    }
+                  ]
+                }
+              },
+              {
+                "data": {
+                  "id": "chatcmpl-1",
+                  "object": "chat.completion.chunk",
+                  "created": 1,
+                  "model": "gpt-4.1-mini",
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "content": "Where "
+                      },
+                      "finish_reason": null
+                    }
+                  ]
+                }
+              },
+              {
+                "data": {
+                  "id": "chatcmpl-1",
+                  "object": "chat.completion.chunk",
+                  "created": 1,
+                  "model": "gpt-4.1-mini",
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "content": "is "
+                      },
+                      "finish_reason": null
+                    }
+                  ]
+                }
+              },
+              {
+                "data": {
+                  "id": "chatcmpl-1",
+                  "object": "chat.completion.chunk",
+                  "created": 1,
+                  "model": "gpt-4.1-mini",
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "content": "my "
+                      },
+                      "finish_reason": null
+                    }
+                  ]
+                }
+              },
+              {
+                "data": {
+                  "id": "chatcmpl-1",
+                  "object": "chat.completion.chunk",
+                  "created": 1,
+                  "model": "gpt-4.1-mini",
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "content": "refund? "
+                      },
+                      "finish_reason": null
+                    }
+                  ]
+                }
+              },
+              {
+                "data": {
+                  "id": "chatcmpl-1",
+                  "object": "chat.completion.chunk",
+                  "created": 1,
+                  "model": "gpt-4.1-mini",
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {},
+                      "finish_reason": "stop"
+                    }
+                  ]
+                }
+              },
+              {
+                "data": {
+                  "id": "chatcmpl-1",
+                  "object": "chat.completion.chunk",
+                  "created": 1,
+                  "model": "gpt-4.1-mini",
+                  "choices": [],
+                  "usage": {
+                    "prompt_tokens": 25,
+                    "completion_tokens": 12,
+                    "total_tokens": 37,
+                    "prompt_tokens_details": {
+                      "cached_tokens": 0
+                    }
+                  }
+                }
+              },
+              {
+                "data": "[DONE]"
+              }
+            ]
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_wrapper"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "call_options": {
+                "call_purpose": "answer",
+                "byok": true
+              },
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ],
+                "stream": true
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_wrapper",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_wrapper",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
+            "call_purpose": "answer",
+            "byok": true,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_wrapper",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "time_to_first_token_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "call_purpose": "answer",
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_versions",
+      "description": "agent_version and variant scope every event: from interaction or task options, the enclosing context, or track_action / track_score options.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "context",
+          "values": {
+            "variant": "treatment"
+          },
+          "steps": [
+            {
+              "op": "interaction",
+              "options": {
+                "user_id": "user_1",
+                "feature": "parity",
+                "conversation_id": "conv_v04_versions",
+                "agent_version": "2026-10-29"
+              },
+              "steps": [
+                {
+                  "op": "record_call",
+                  "provider": "openai",
+                  "model": "gpt-4.1-mini",
+                  "input_tokens": 1000,
+                  "output_tokens": 500
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "task",
+          "task_name": "triage",
+          "options": {
+            "agent_version": "v1",
+            "variant": "a"
+          },
+          "steps": []
+        },
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "copied_response",
+            "interaction_id": "int_1",
+            "conversation_id": "conv_v04_versions",
+            "user_id": "user_1",
+            "agent_version": "v1",
+            "variant": "a"
+          }
+        },
+        {
+          "op": "track_score",
+          "options": {
+            "interaction_id": "int_1",
+            "conversation_id": "conv_v04_versions",
+            "user_id": "user_1",
+            "evaluation_name": "groundedness",
+            "score_value": 1,
+            "evaluator": "human",
+            "agent_version": "v1",
+            "variant": "a"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_versions",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "agent_version": "2026-10-29",
+            "variant": "treatment"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_versions",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "agent_version": "2026-10-29",
+            "variant": "treatment",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_versions",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "agent_version": "2026-10-29",
+            "variant": "treatment",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 1000,
+            "total_output_tokens": 500,
+            "total_tokens": 1500,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "total_tokens": 1500,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "anonymousId": "ai_system",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "$int2",
+            "task_name": "triage",
+            "agent_version": "v1",
+            "variant": "a",
+            "response_status": "success",
+            "trigger": "system",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_versions",
+            "interaction_id": "int_1",
+            "action_type": "copied_response",
+            "agent_version": "v1",
+            "variant": "a"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_interaction_scored",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_versions",
+            "interaction_id": "int_1",
+            "agent_version": "v1",
+            "variant": "a",
+            "evaluation_name": "groundedness",
+            "score_value": 1,
+            "evaluator": "human"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_mcp_client_tool_events",
+      "description": "Declared tool events of tool calls the app made as an MCP client carry mcp_server; result_size_bytes is the UTF-8 size of the result the SDK saw (a string as is, anything else as compact JSON); a denied call is tool_status denied.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "lookup": "looked_up",
+            "mcp__docs__search": "searched",
+            "wipe": "wiped"
+          }
+        }
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_mcp_client"
+          },
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "id": "call_1",
+                  "name": "lookup",
+                  "mcp_server": "crm",
+                  "error": false,
+                  "result": {
+                    "rows": [
+                      "é",
+                      2
+                    ]
+                  }
+                },
+                {
+                  "id": "call_2",
+                  "name": "mcp__docs__search",
+                  "error": false,
+                  "result": "héllo"
+                },
+                {
+                  "id": "call_3",
+                  "name": "wipe",
+                  "error": true,
+                  "error_type": "denied"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_mcp_client",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "looked_up",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_mcp_client",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "trigger": "user",
+            "tool_name": "lookup",
+            "tool_call_id": "call_1",
+            "tool_status": "success",
+            "mcp_server": "crm",
+            "result_size_bytes": 17
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "searched",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_mcp_client",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "trigger": "user",
+            "tool_name": "search",
+            "tool_call_id": "call_2",
+            "tool_status": "success",
+            "mcp_server": "docs",
+            "result_size_bytes": 6
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "wiped",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_mcp_client",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "trigger": "user",
+            "tool_name": "wipe",
+            "tool_call_id": "call_3",
+            "tool_status": "denied"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_mcp_client",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 3,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_compaction_and_context_limit",
+      "description": "compaction_count counts recorded compactions; a provider error for a request over the context window is error_type context_limit (OpenAI code context_length_exceeded, Anthropic prompt is too long).",
+      "config": {},
+      "replies": {
+        "openai.chat": [
+          {
+            "status": 400,
+            "json": {
+              "error": {
+                "message": "This model's maximum context length is 128000 tokens.",
+                "type": "invalid_request_error",
+                "param": "messages",
+                "code": "context_length_exceeded"
+              }
+            }
+          }
+        ],
+        "anthropic.messages": [
+          {
+            "status": 400,
+            "json": {
+              "type": "error",
+              "error": {
+                "type": "invalid_request_error",
+                "message": "prompt is too long: 210000 tokens > 200000 maximum"
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_compaction"
+          },
+          "steps": [
+            {
+              "op": "record_compaction"
+            },
+            {
+              "op": "record_compaction",
+              "count": 2
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 1000,
+              "output_tokens": 500
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_compaction"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "expect_error": true,
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "feature": "parity",
+            "conversation_id": "conv_v04_compaction"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "anthropic.messages",
+              "expect_error": true,
+              "params": {
+                "model": "claude-haiku-4-5",
+                "max_tokens": 100,
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_compaction",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_compaction",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 1000,
+            "total_output_tokens": 500,
+            "total_tokens": 1500,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "compaction_count": 3,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "total_tokens": 1500,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_compaction",
+            "interaction_id": "$int2",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_compaction",
+            "interaction_id": "$int2",
+            "feature": "parity",
+            "response_status": "error",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "error_type": "context_limit",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 1
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_compaction",
+            "interaction_id": "$int3",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "anthropic"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_compaction",
+            "interaction_id": "$int3",
+            "feature": "parity",
+            "response_status": "error",
+            "trigger": "user",
+            "primary_model": "claude-haiku-4-5",
+            "primary_provider": "anthropic",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "error_type": "context_limit",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-4-5",
+                "call_count": 1,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 1
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "anthropic"
             }
           }
         }
