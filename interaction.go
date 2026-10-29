@@ -563,10 +563,14 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 	if header == "" {
 		header = requestCookies(o.Request)
 	}
-	id := resolveIdentity(identityInputs{
+	in := identityInputs{
 		userID: o.UserID, anonymousID: o.AnonymousID,
 		cookies: rudderstackCookies(header, o.CookieValues), fromCookies: o.IdentityFromCookies,
-	}, cv, c)
+	}
+	if resumed {
+		in.fromCookies = Ptr(false) // the snapshot's identity wins, and this request's session is not its
+	}
+	id := resolveIdentity(in, cv, c)
 	trigger := o.Trigger
 	if trigger != TriggerSystem {
 		trigger = TriggerUser
@@ -982,8 +986,8 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	if len(i.calls) < cfg().limits.MaxCallsPerInteraction {
 		i.calls = append(i.calls, r)
-		if call.ResponseID != "" && len(i.seen) < cfg().limits.MaxCallsPerInteraction {
-			i.seen[call.Provider+"\x00"+call.ResponseID] = r
+		if call.ResponseID != "" {
+			i.admitSeenLocked(call.Provider+"\x00"+call.ResponseID, r)
 		}
 	} else {
 		i.capLocked()
@@ -1486,11 +1490,30 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	i.tools, i.toolOverflow, i.toolsByID = nil, nil, map[string]*recordedTool{}
 	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
+	i.prompt, i.answer, i.messages = "", "", nil // not in the snapshot, so not in an in-process resume
 	i.compactions = 0
 	unregister(i)
 	snapshot, ok = i.snapshotLocked()
 	// The flight stays in progress until unlock finishes delivery and deferred reporting.
 	return snapshot, ok
+}
+
+// admitSeenLocked remembers a response ID of the current segment. At the limit it evicts the
+// smallest completed-segment key (nil value), so earlier segments never crowd out new IDs.
+func (i *Interaction) admitSeenLocked(key string, r *recordedCall) {
+	if len(i.seen) >= cfg().limits.MaxCallsPerInteraction {
+		evict, found := "", false
+		for k, v := range i.seen {
+			if v == nil && (!found || compareUTF16(k, evict) < 0) {
+				evict, found = k, true
+			}
+		}
+		if !found {
+			return
+		}
+		delete(i.seen, evict)
+	}
+	i.seen[key] = r
 }
 
 // checkDisconnected runs the request callback without holding the interaction lock.
@@ -1599,6 +1622,8 @@ func pendingNumber(p map[string]any, key string) float64 {
 		n = float64(v)
 	case float64:
 		n = v
+	case json.Number: // a snapshot decoded with Decoder.UseNumber
+		n, _ = v.Float64()
 	}
 	if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 9007199254740991 {
 		return 0

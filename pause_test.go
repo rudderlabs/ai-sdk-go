@@ -1,11 +1,13 @@
 package rudderstackai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -903,6 +905,112 @@ func TestResumeDoesNotInheritAnotherActor(t *testing.T) {
 	}
 }
 
+func TestPauseDedupAtTheCallLimit(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		t.Run(fmt.Sprint(restore), func(t *testing.T) {
+			setupAI(t, WithLimits(Limits{MaxCallsPerInteraction: 1}))
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+			a := pauseCall
+			a.ResponseID = "a"
+			i.RecordCall(a)
+			snapshot, _ := i.Pause(PauseOptions{})
+			if restore {
+				b, _ := json.Marshal(snapshot)
+				var stored PausedInteraction
+				if err := json.Unmarshal(b, &stored); err != nil {
+					t.Fatal(err)
+				}
+				_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+			} else {
+				i.Resume()
+			}
+			b := pauseCall
+			b.ResponseID = "b"
+			if !i.RecordCall(b) {
+				t.Fatal("fresh response refused")
+			}
+			if i.RecordCall(b) {
+				t.Fatal("the current segment's response was counted twice")
+			}
+		})
+	}
+}
+
+func TestPauseClearsCompletedSegmentText(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		t.Run(fmt.Sprint(restore), func(t *testing.T) {
+			var turns atomic.Int32
+			setupAI(t, WithClassifier(&ClassifierOptions{Classify: func(context.Context, ClassifyTurn) (ClassifyResult, error) {
+				turns.Add(1)
+				return ClassifyResult{Intent: "other", Outcome: "unclear"}, nil
+			}}))
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", PromptText: "hi"})
+			i.RecordCall(LLMCall{Provider: "openai", Model: "m", OutputText: "answer"})
+			snapshot, _ := i.Pause(PauseOptions{})
+			if restore {
+				b, _ := json.Marshal(snapshot)
+				var stored PausedInteraction
+				if err := json.Unmarshal(b, &stored); err != nil {
+					t.Fatal(err)
+				}
+				_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+			} else {
+				i.Resume()
+			}
+			i.End(EndOptions{})
+			waitBackgroundWork(5 * time.Second)
+			if turns.Load() != 0 {
+				t.Fatalf("classified a resumed run with no new text: %d", turns.Load())
+			}
+		})
+	}
+}
+
+func TestRestorePendingUsageDecodedWithUseNumber(t *testing.T) {
+	b, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalOf := func(useNumber bool) map[string]any {
+		r := setupAI(t)
+		var fixture struct {
+			Snapshot PausedInteraction
+		}
+		d := json.NewDecoder(bytes.NewReader(b))
+		if useNumber {
+			d.UseNumber()
+		}
+		if err := d.Decode(&fixture); err != nil {
+			t.Fatal(err)
+		}
+		_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &fixture.Snapshot})
+		i.End(EndOptions{})
+		p := lastResponse(t, r)
+		delete(p, "total_paused_ms") // wall-clock
+		return p
+	}
+	want, got := finalOf(false), finalOf(true)
+	if want["total_input_tokens"] == nil || mustJSON(got) != mustJSON(want) {
+		t.Fatalf("UseNumber restore differs:\n got %v\nwant %v", got, want)
+	}
+}
+
+func TestResumeIgnoresRequestCookies(t *testing.T) {
+	r := setupAI(t)
+	_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "a"})
+	snapshot, _ := first.Pause(PauseOptions{})
+	cookies := "rl_user_id=RS_ENC_v3_InVzw6lyXzQyIOKckyI%3D; rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQ5OTk5OSwibWFudWFsVHJhY2siOnRydWV9"
+	_, resumed := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshot, Cookies: cookies, IdentityFromCookies: Ptr(true)})
+	resumed.End(EndOptions{})
+	final := r.named("ai_response_received")[1]
+	if final.UserId != "a" {
+		t.Fatalf("user %q", final.UserId)
+	}
+	if _, ok := final.Context.Extra["sessionId"]; ok {
+		t.Fatalf("another visitor's session on the resumed event: %v", final.Context.Extra)
+	}
+}
+
 func TestRejectSnapshotWithoutPauseTimestampsAndCounters(t *testing.T) {
 	setupAI(t)
 	_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
@@ -1182,7 +1290,8 @@ func TestMixedEmittedEventsMatchAfterJSONRestoration(t *testing.T) {
 							}
 							resume(snapshot)
 							call.ResponseID = "first"
-							if i.RecordCall(call) {
+							// At the limit, current-segment IDs displace completed-segment history.
+							if i.RecordCall(call) && cap > 1 {
 								t.Fatal("lost deduplication")
 							}
 							if suffix != "none" {

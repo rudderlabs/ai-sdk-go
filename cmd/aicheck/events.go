@@ -491,7 +491,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if s == "client" {
 				limit = shown
 			}
-			if n := c[side{"ai_response_received", s}]; n > limit {
+			n := c[side{"ai_response_received", s}]
+			if s == "client" {
+				n += c[side{"ai_response_received (paused)", s}]
+			}
+			if n > limit {
 				atMost := ""
 				if limit > 1 {
 					atMost = "at most "

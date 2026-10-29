@@ -180,6 +180,14 @@ func TestReviewPausedOnlyJoins(t *testing.T) {
 		t.Fatal(code, out.String(), stderr.String())
 	}
 }
+func TestReviewPausedClientDuplicate(t *testing.T) {
+	var out, stderr bytes.Buffer
+	code := run([]string{"testdata/review_paused_duplicate_client.jsonl", "--expect-joins"}, &out, &stderr)
+	if code != 1 || !strings.Contains(out.String(), "2 client ai_response_received") {
+		t.Fatal(code, out.String(), stderr.String())
+	}
+}
+
 func TestReviewTaskCatalogFields(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(repoRoot(t), "spec/rudderstack-catalog/tracking-plan.yaml"))
 	if err != nil {
