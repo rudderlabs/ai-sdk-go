@@ -750,3 +750,171 @@ func TestRejectSnapshotWithoutPauseTimestampsAndCounters(t *testing.T) {
 	first.End(EndOptions{})
 	resumed.End(EndOptions{})
 }
+
+// TryLock detects the original bug without stranding the test process on a callback deadlock.
+func TestAllCallbackTypesReleaseLockAndAllowLifecycleReentry(t *testing.T) {
+	for _, source := range []string{"onError-call", "onError-tool", "redactor", "finalizer", "when", "properties", "delivery", "disconnect", "marshal"} {
+		t.Run(source, func(t *testing.T) {
+			var i *Interaction
+			entered := false
+			var nestedOK, accepted bool
+			reenter := func() {
+				if entered {
+					return
+				}
+				entered = true
+				if !i.mu.TryLock() {
+					t.Error("application callback held the interaction mutex")
+					return
+				}
+				i.mu.Unlock()
+				_, nestedOK = i.Pause(PauseOptions{})
+				i.End(EndOptions{})
+				call := pauseCall
+				call.ResponseID = "callback"
+				accepted = i.RecordCall(call)
+			}
+			r := setupAI(t, WithLLMCallEvents(true), WithCaptureContent(true), WithToolBreakdown(true),
+				WithLimits(Limits{MaxCallsPerInteraction: 1}),
+				WithOnError(func(error, ErrorInfo) {
+					if source == "onError-call" || source == "onError-tool" {
+						reenter()
+					}
+				}),
+				WithRedactHook(func(text string) (string, error) {
+					if source == "redactor" {
+						reenter()
+					}
+					return text, nil
+				}),
+				WithEventRules(EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "lookup_done",
+					When: func(map[string]any, any) bool {
+						if source == "when" {
+							reenter()
+						}
+						return true
+					},
+					Properties: func(map[string]any, any) map[string]any {
+						if source == "properties" {
+							reenter()
+						}
+						if source == "marshal" {
+							return map[string]any{"value": reentrantJSON{reenter}}
+						}
+						return nil
+					},
+				}}}))
+			client := &pauseReentrantClient{recorder: r, reenter: func() {
+				if source == "delivery" {
+					reenter()
+				}
+			}}
+			_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true, Analytics: client})
+			call := pauseCall
+			call.ResponseID = "initial"
+			i.RecordCall(call)
+			i.RecordToolCalls(ToolCall{ID: "tool", Name: "lookup"})
+			i.onBeforeEnd(func() {
+				if source == "finalizer" {
+					reenter()
+				}
+				if source == "onError-call" {
+					call.ResponseID = "overflow"
+					i.RecordCall(call)
+				}
+				if source == "onError-tool" {
+					i.RecordToolCalls(ToolCall{ID: "overflow", Name: "other"})
+				}
+			})
+			if source == "disconnect" {
+				i.disconnected = func() bool { reenter(); return false }
+			}
+			done := make(chan bool, 1)
+			go func() { _, ok := i.Pause(PauseOptions{ResponseText: "approval"}); done <- ok }()
+			select {
+			case ok := <-done:
+				if !ok {
+					t.Fatal("outer pause failed")
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("callback deadlocked")
+			}
+			if !entered || (source != "delivery" && nestedOK) || !accepted {
+				t.Fatal("callback lifecycle results", entered, nestedOK, accepted)
+			}
+			i.Resume()
+			i.End(EndOptions{})
+			segments := r.named("ai_response_received")
+			calls := 2
+			if source == "onError-call" {
+				calls = 3
+			}
+			if len(segments) != 2 || len(r.named("ai_llm_response_received")) != calls || len(r.named("lookup_done")) != 1 {
+				t.Fatal("double or missing emission", r.names())
+			}
+			total, tokens := 0, 0
+			for _, e := range segments {
+				total += e.Properties["llm_call_count"].(int)
+				tokens += e.Properties["total_tokens"].(int)
+			}
+			if total != calls || tokens != calls*12 {
+				t.Fatal("lost usage", total, tokens)
+			}
+		})
+	}
+}
+
+type reentrantJSON struct{ callback func() }
+
+func (v reentrantJSON) MarshalJSON() ([]byte, error) { v.callback(); return []byte(`"value"`), nil }
+
+func TestBackgroundCallbackTypesAllowLifecycleReentry(t *testing.T) {
+	for _, source := range []string{"classifier", "evaluator"} {
+		t.Run(source, func(t *testing.T) {
+			var i *Interaction
+			result := make(chan bool, 1)
+			reenter := func() {
+				if !i.mu.TryLock() {
+					result <- false
+					return
+				}
+				i.mu.Unlock()
+				_, ok := i.Pause(PauseOptions{})
+				i.End(EndOptions{})
+				accepted := i.RecordCall(pauseCall)
+				result <- !ok && !accepted
+			}
+			var option ConfigOption
+			if source == "classifier" {
+				option = WithClassifier(&ClassifierOptions{Classify: func(context.Context, ClassifyTurn) (ClassifyResult, error) {
+					reenter()
+					return ClassifyResult{Intent: "other", Outcome: "resolved"}, nil
+				}})
+			} else {
+				option = WithEvaluator(func(context.Context, EvaluationTurn) ([]Score, error) {
+					reenter()
+					return []Score{{EvaluationName: "quality", Evaluator: EvaluatorCode, ScoreValue: Ptr(1.0)}}, nil
+				})
+			}
+			r := setupAI(t, option)
+			_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+			i.RecordCall(pauseCall)
+			i.End(EndOptions{ResponseText: "done"})
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if !i.waitBackground(ctx) {
+				t.Fatal("background callback deadlocked")
+			}
+			if !<-result {
+				t.Fatal("background reentry failed")
+			}
+			event := "ai_interaction_classified"
+			if source == "evaluator" {
+				event = "ai_interaction_scored"
+			}
+			if len(r.named("ai_response_received")) != 1 || len(r.named(event)) != 1 || lastResponse(t, r)["total_tokens"] != 12 {
+				t.Fatal("double emission or lost usage", r.names())
+			}
+		})
+	}
+}

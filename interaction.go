@@ -158,11 +158,11 @@ type LLMCall struct {
 	OutputText string
 }
 
-// capLocked reports, once per interaction, that MaxCallsPerInteraction was reached.
+// capLocked queues a notice, once per interaction; unlock reports it after publishing usage.
 func (i *Interaction) capLocked() {
 	if !i.capped {
 		i.capped = true
-		limitReached("MaxCallsPerInteraction")
+		i.capPending = true
 	}
 }
 
@@ -446,6 +446,8 @@ type Interaction struct {
 	overflow           []*recordedCall // calls past MaxCallsPerInteraction, one per usage group
 	toolOverflow       []*recordedTool // tool calls past it, one per tool_breakdown identity
 	capped             bool
+	capPending         bool
+	buildErrors        []error
 	toolsByID          map[string]*recordedTool
 	hint               *outcomeHint
 	clientDisconnected bool
@@ -997,7 +999,7 @@ func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
 			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result}, call.Result != nil)
 			fire = append(fire, tool)
 		}
-		i.mu.Unlock()
+		i.unlock()
 		i.fireToolEvents(fire, false)
 	})
 }
@@ -1014,7 +1016,7 @@ func (i *Interaction) RecordToolCallCount(n int) {
 	} else {
 		i.foldToolLocked(&recordedTool{calls: n})
 	}
-	i.mu.Unlock()
+	i.unlock()
 }
 
 // RecordToolResult reports how a tool call recorded under id went. Results for IDs this
@@ -1170,7 +1172,6 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 		}
 	}
 	i.mu.Lock()
-	defer i.unlock()
 	p := i.baseLocked()
 	p["trigger"] = string(i.trigger)
 	put(p, "agent_name", t.agentName)
@@ -1199,7 +1200,10 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 		}
 	}
 	rates := cfg().sampleRates
-	p = fitToolEventProperties(rule.Event, p, keys, rates)
+	i.mu.Unlock()
+	p = fitToolEventProperties(rule.Event, jsonSafeMap(p), keys, rates)
+	i.mu.Lock()
+	defer i.unlock()
 	i.sendLockedRates(rule.Event, func() map[string]any { return p }, rates, true)
 }
 
@@ -1259,6 +1263,10 @@ func (i *Interaction) flushLocked() {
 func (i *Interaction) unlock() {
 	out := i.outbox
 	i.outbox = nil
+	capped := i.capPending
+	i.capPending = false
+	errors := i.buildErrors
+	i.buildErrors = nil
 	i.mu.Unlock()
 	for _, e := range out {
 		if e.pinned {
@@ -1267,6 +1275,23 @@ func (i *Interaction) unlock() {
 		}
 		emitAI(e.client, e.event, i.userID, i.anonymousID, e.props, i.msgContext, e.integration, e.at)
 	}
+	if capped {
+		limitReached("MaxCallsPerInteraction")
+	}
+	for _, err := range errors {
+		report(KindInternal, "interaction.build", err)
+	}
+}
+
+// buildSafelyLocked contains a builder panic but leaves reporting to unlock. Even an
+// internal failure must never call the application's error handler with i.mu held.
+func (i *Interaction) buildSafelyLocked(fn func()) {
+	defer func() {
+		if value := recover(); value != nil {
+			i.buildErrors = append(i.buildErrors, recovered(value))
+		}
+	}()
+	fn()
 }
 
 func (i *Interaction) baseLocked() map[string]any {
@@ -1414,7 +1439,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		return snapshot, ok
 	}
 	var props map[string]any
-	safely(func() {
+	i.buildSafelyLocked(func() {
 		props = customProperties(o.ExtraProperties)
 		maps.Copy(props, i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false))
 	})
@@ -1779,7 +1804,7 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	i.mu.Lock()
 	var props map[string]any
-	safely(func() {
+	i.buildSafelyLocked(func() {
 		props = customProperties(o.ExtraProperties)
 		maps.Copy(props, i.buildLocked(o, responseText, responseOK, true))
 	})
