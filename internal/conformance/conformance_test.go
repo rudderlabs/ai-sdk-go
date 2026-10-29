@@ -401,6 +401,9 @@ func (r *run) step(ctx context.Context, s obj) error {
 		})
 	case "record_call":
 		r.cur.RecordCall(llmCall(s))
+	case "buffer_call":
+		interaction := r.cur
+		hook.OnBeforeEnd(interaction, func() { interaction.RecordCall(llmCall(s)) })
 	case "record_tool_call":
 		if calls, ok := s["calls"].([]any); ok {
 			var tc []rudderstackai.ToolCall

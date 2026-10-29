@@ -4,11 +4,139 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
 
 var pauseCall = LLMCall{Provider: "openai", Model: "gpt-4o-mini", InputTokens: 10, OutputTokens: 2}
+
+func TestPauseDedupAcrossSegments(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		t.Run(fmt.Sprint(restore), func(t *testing.T) {
+			r := setupAI(t)
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+			call := pauseCall
+			call.ResponseID, call.CostUSD = "same", Ptr(0.01)
+			i.RecordCall(call)
+			for range 2 {
+				snapshot, _ := i.Pause(PauseOptions{})
+				if restore {
+					b, _ := json.Marshal(snapshot)
+					var stored PausedInteraction
+					if err := json.Unmarshal(b, &stored); err != nil {
+						t.Fatal(err)
+					}
+					_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+				} else {
+					i.Resume()
+				}
+				if i.RecordCall(call) {
+					t.Fatal("duplicate counted after pause")
+				}
+			}
+			call.ResponseID = "fresh"
+			i.RecordCall(call)
+			i.End(EndOptions{})
+			for n, e := range r.named("ai_response_received") {
+				count := 1
+				if n == 1 {
+					count = 0
+				}
+				if e.Properties["llm_call_count"] != count || e.Properties["total_tokens"] != 12*count {
+					t.Fatal(e.Properties)
+				}
+			}
+		})
+	}
+}
+
+func TestPauseFlushesFinalizationBeforeJSONHandoff(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	finished := 0
+	i.onBeforeEnd(func() { finished++; i.RecordCall(pauseCall) })
+	snapshot, _ := i.Pause(PauseOptions{})
+	if finished != 1 || lastResponse(t, r)["llm_call_count"] != 1 {
+		t.Fatal("pause lost buffered call")
+	}
+	b, _ := json.Marshal(snapshot)
+	var stored PausedInteraction
+	if err := json.Unmarshal(b, &stored); err != nil {
+		t.Fatal(err)
+	}
+	_, resumed := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	resumed.End(EndOptions{})
+	if finished != 1 || lastResponse(t, r)["llm_call_count"] != 0 {
+		t.Fatal(lastResponse(t, r))
+	}
+}
+
+func TestPausedEndProtectsAdapterReentry(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.onBeforeEnd(func() { i.RecordCall(pauseCall); i.End(EndOptions{Status: StatusError}) })
+	i.End(EndOptions{Status: StatusPaused})
+	if !i.Paused() || i.Ended() || len(r.named("ai_response_received")) != 1 || lastResponse(t, r)["response_status"] != "paused" {
+		t.Fatal("adapter reentry finalized paused end")
+	}
+}
+
+func TestPauseMarksStateBeforeRedactorReentry(t *testing.T) {
+	var i *Interaction
+	r := setupAI(t, WithCaptureContent(true), WithRedactHook(func(text string) (string, error) {
+		if !i.Paused() {
+			t.Error("not paused during redaction")
+		}
+		i.End(EndOptions{Status: StatusError})
+		return text, nil
+	}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	i.RecordCall(pauseCall)
+	i.Pause(PauseOptions{ResponseText: "approval"})
+	if !i.Paused() || i.Ended() || len(r.named("ai_response_received")) != 1 {
+		t.Fatal("reentry finalized pause")
+	}
+}
+
+func TestPauseAfterSDKSelection(t *testing.T) {
+	for _, reason := range []string{endReasonTTL, endReasonShutdown} {
+		t.Run(reason, func(t *testing.T) {
+			r := setupAI(t)
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+			var selected []*Interaction
+			if reason == endReasonShutdown {
+				selected = takeOpen()
+			} else {
+				open.mu.Lock()
+				i.opened = time.Now().Add(-time.Hour)
+				open.lastSweep = time.Time{}
+				open.mu.Unlock()
+				selected = expiredInteractions(time.Second)
+			}
+			if len(selected) != 1 {
+				t.Fatal("interaction not selected")
+			}
+			i.Pause(PauseOptions{})
+			for _, in := range selected {
+				in.End(EndOptions{Status: StatusIncomplete, endReason: reason})
+			}
+			if !i.Paused() || i.Ended() || len(r.named("ai_response_received")) != 1 {
+				t.Fatal("selected pause finalized")
+			}
+		})
+	}
+}
+
+func TestPausedEndMasksOnceAndAppliesDisconnect(t *testing.T) {
+	calls := 0
+	r := setupAI(t, WithCaptureContent(true), WithRedactHook(func(text string) (string, error) { calls++; return text, nil }))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	i.End(EndOptions{Status: StatusPaused, ClientDisconnected: true, ResponseText: "approval"})
+	if calls != 1 || lastResponse(t, r)["client_disconnected"] != true {
+		t.Fatal(calls, lastResponse(t, r))
+	}
+}
 
 func lastResponse(t *testing.T, r *recorder) map[string]any {
 	t.Helper()
