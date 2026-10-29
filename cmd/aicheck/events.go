@@ -25,7 +25,7 @@ var (
 	failureStatuses = []string{"cancelled", "error", "incomplete", "timeout"} // what an app-caught failure may report
 	clientOnly      = set("ai_assistant_opened", "ai_assistant_closed", "ai_conversation_started",
 		"ai_conversation_switched", "ai_conversation_renamed", "ai_conversation_deleted", "ai_conversation_pinned",
-		"ai_conversation_shared", "ai_agent_selected", "ai_suggestion_shown", "ai_feedback_requested", "ai_limit_reached")
+		"ai_conversation_shared", "ai_agent_selected", "ai_suggestion_shown", "ai_feedback_requested")
 	// feedback about a whole conversation or feature: its interaction_id is minted for it, no answer has it
 	scopedFeedback = []string{"conversation", "feature"}
 	mcpEvents      = set("mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
