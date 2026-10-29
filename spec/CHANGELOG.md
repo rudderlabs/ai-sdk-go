@@ -2,6 +2,10 @@
 
 Changes to [`ai-events-v0.3.schema.json`](ai-events-v0.3.schema.json), shared byte for byte by the Node.js, Python and Go SDKs.
 
+## Unreleased — sampling (SDK-5992)
+
+- Add optional `sample_rate` on sampled server events, including `ai_limit_reached`, and declare it in the tracking plan. The shared sampling fixture fixes the interaction hash and keep/drop decision across SDKs.
+
 ## Unreleased — since v0.4 (SDK-5990)
 
 Server fields customers already send by hand:

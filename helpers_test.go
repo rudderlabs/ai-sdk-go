@@ -30,6 +30,7 @@ var mcpEventDefs = []string{
 	"mcp_declared_tool_event",
 	"ai_user_prompt_created", "ai_response_received", "ai_llm_response_received",
 	"ai_interaction_classified", "ai_interaction_scored", "ai_user_action", "declared_tool_event",
+	"ai_limit_reached",
 }
 
 func loadSchemas() {

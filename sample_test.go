@@ -66,6 +66,45 @@ func TestSampleRateStamp(t *testing.T) {
 	}
 }
 
+func TestSampleLimitEventsByInteraction(t *testing.T) {
+	r := setupAI(t, WithSampleRates(map[string]float64{"ai_limit_reached": 0.1}))
+	for _, id := range []string{"interaction-ü-✓", "i1"} {
+		TrackLimitReached(context.Background(), TrackLimitReachedOptions{UserID: "u", LimitType: "credits", InteractionID: id})
+	}
+	p := r.props(t, "ai_limit_reached")
+	if p["interaction_id"] != "interaction-ü-✓" || p["sample_rate"] != 0.1 {
+		t.Fatalf("properties = %v", p)
+	}
+	if err := validateEvent("ai_limit_reached", p); err != nil {
+		t.Fatal(err)
+	}
+	for _, rate := range []any{-0.1, 1.1, "0.1"} {
+		invalid := map[string]any{}
+		for key, value := range p {
+			invalid[key] = value
+		}
+		invalid["sample_rate"] = rate
+		if err := validateEvent("ai_limit_reached", invalid); err == nil {
+			t.Errorf("sample_rate %v accepted", rate)
+		}
+	}
+}
+
+func TestSampleAccountWideLimitEventsAtRandom(t *testing.T) {
+	r := setupAI(t, WithSampleRates(map[string]float64{"ai_limit_reached": 0.5}))
+	draws := []float64{0.4, 0.6}
+	prev := sampleRandom
+	sampleRandom = func() float64 { d := draws[0]; draws = draws[1:]; return d }
+	t.Cleanup(func() { sampleRandom = prev })
+	for range 2 {
+		TrackLimitReached(context.Background(), TrackLimitReachedOptions{UserID: "u", LimitType: "credits"})
+	}
+	p := r.props(t, "ai_limit_reached")
+	if len(p) != 2 || p["limit_type"] != "credits" || p["sample_rate"] != 0.5 {
+		t.Fatalf("properties = %v", p)
+	}
+}
+
 func TestNoSampleRateWithoutARateOrAtRate1(t *testing.T) {
 	r := setupAI(t, WithLLMCallEvents(true), WithSampleRates(map[string]float64{"ai_user_prompt_created": 1}))
 	sampledAnswer(t, "i1", 1)

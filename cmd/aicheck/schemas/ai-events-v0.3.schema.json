@@ -1627,6 +1627,9 @@
         "limit_type"
       ],
       "properties": {
+        "sample_rate": {
+          "$ref": "#/$defs/sample_rate"
+        },
         "conversation_id": {
           "$ref": "#/$defs/id_fields/properties/conversation_id"
         },

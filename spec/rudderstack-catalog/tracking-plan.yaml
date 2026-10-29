@@ -248,6 +248,7 @@ spec:
       id: ai_limit_reached_rule
       event: '#event:ai_limit_reached'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:conversation_id'
         - property: '#property:interaction_id'
         - property: '#property:feature'

@@ -33,6 +33,36 @@ func TestBundledSchemasMatchSpec(t *testing.T) {
 	}
 }
 
+func TestBundledSchemaValidatesLimitEventSampleRate(t *testing.T) {
+	spec, err := readSchema("", specSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := readSchema("", clientSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sch, err := newSchemas(spec, client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rate := range []string{"0.1", "-0.1", "1.1", `"0.1"`} {
+		t.Run(rate, func(t *testing.T) {
+			v, err := parseJSON(`{"limit_type":"credits","interaction_id":"interaction-ü-✓","sample_rate":` + rate + `}`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fails, err := sch.errors(spec, "ai_limit_reached", v.(*Object))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if valid := len(fails) == 0; valid != (rate == "0.1") {
+				t.Fatalf("sample_rate %s: errors = %v", rate, fails)
+			}
+		})
+	}
+}
+
 // testdata/values.expected holds, per line of testdata/values.txt, Python's
 // [repr(v), json.dumps(v, sort_keys=True), json.dumps(v, sort_keys=True, indent=2)] for
 // v = json.loads(line), or "error" when json.loads rejects the line (NaN and Infinity too).
