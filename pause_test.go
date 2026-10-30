@@ -1506,3 +1506,40 @@ func TestTraceCallbackPauseDoesNotLeaveStartedCallPaused(t *testing.T) {
 		t.Fatal("interaction stayed paused after its model call started")
 	}
 }
+
+// A wrapper's error end that lands while another goroutine delivers a pause must still be sent.
+func TestRunInteractionErrorDuringPauseDeliveryEndsAfterPause(t *testing.T) {
+	for _, panics := range []bool{false, true} {
+		t.Run(fmt.Sprint(panics), func(t *testing.T) {
+			r := setupAI(t)
+			client := &pauseReentrantClient{recorder: r}
+			delivering, release, paused := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			client.reenter = func() { close(delivering); <-release }
+			run := func() {
+				_ = RunInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true, Analytics: client}, func(_ context.Context, i *Interaction) error {
+					go func() { i.Pause(PauseOptions{}); close(paused) }()
+					<-delivering
+					if panics {
+						panic(errors.New("boom"))
+					}
+					return errors.New("boom")
+				})
+			}
+			if panics {
+				func() { defer func() { _ = recover() }(); run() }()
+			} else {
+				run()
+			}
+			close(release)
+			<-paused
+			deadline := time.Now().Add(5 * time.Second)
+			for len(r.named("ai_response_received")) < 2 && time.Now().Before(deadline) {
+				time.Sleep(5 * time.Millisecond)
+			}
+			got := r.named("ai_response_received")
+			if len(got) != 2 || got[1].Properties["response_status"] != "error" {
+				t.Fatalf("final error response missing: %v", r.names())
+			}
+		})
+	}
+}

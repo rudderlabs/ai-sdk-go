@@ -291,6 +291,8 @@ type EndOptions struct {
 
 	// endReason is set when the SDK ends the interaction itself (end_reason).
 	endReason string
+	// afterPause makes a wrapper-owned terminal end wait for an in-flight pause instead of being dropped.
+	afterPause bool
 }
 
 // PauseOptions configures [Interaction.Pause].
@@ -447,6 +449,8 @@ type Interaction struct {
 	pausedAt               time.Time
 	pausing                bool
 	pauseGuard             atomic.Bool // checked before mu, including callback reentry
+	pendingMu              sync.Mutex  // orders pauseGuard release against pendingEnd
+	pendingEnd             *EndOptions // wrapper end that arrived mid-pause; sent when the pause finishes
 	pauseCount             int
 	pausedTotal            time.Duration
 	adapterAnalytics       analytics.Client
@@ -783,7 +787,7 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 		if e, ok := r.(error); ok {
 			t = i.answerErrorType(e)
 		}
-		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t})
+		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t, afterPause: true})
 		// nil: runtime.Goexit (t.FailNow), which must keep unwinding rather than become a panic.
 		if r != nil {
 			panic(r)
@@ -793,7 +797,7 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 	completed = true
 	if err != nil {
 		t := i.answerErrorType(err)
-		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t})
+		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t, afterPause: true})
 		return err
 	}
 	// A paused run stays open for its resume.
@@ -1511,7 +1515,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	if !i.pauseGuard.CompareAndSwap(false, true) {
 		return PausedInteraction{}, false
 	}
-	defer i.pauseGuard.Store(false)
+	defer i.releasePause()
 	i.mu.Lock()
 	if i.ended || !i.pausedAt.IsZero() {
 		defer i.mu.Unlock()
@@ -1965,9 +1969,31 @@ func (i *Interaction) End(o EndOptions) {
 	safely(func() { i.end(o) })
 }
 
+// releasePause ends the pause flight, then sends the wrapper end that arrived during it.
+func (i *Interaction) releasePause() {
+	i.pendingMu.Lock()
+	i.pauseGuard.Store(false)
+	pending := i.pendingEnd
+	i.pendingEnd = nil
+	i.pendingMu.Unlock()
+	if pending != nil {
+		i.end(*pending)
+	}
+}
+
 func (i *Interaction) end(o EndOptions) {
 	if i.pauseGuard.Load() {
-		return
+		if o.afterPause {
+			i.pendingMu.Lock()
+			if i.pauseGuard.Load() {
+				i.pendingEnd = &o
+				i.pendingMu.Unlock()
+				return
+			}
+			i.pendingMu.Unlock()
+		} else {
+			return
+		}
 	}
 	i.mu.Lock()
 	if i.ended || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) || (o.endReason == endReasonTTL && !ttlSelected(i)) {
