@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"fmt"
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -111,6 +112,22 @@ func fitProperties(event string, properties map[string]any) map[string]any {
 			}
 		}
 	}
+	// Sampling metadata shares the budget with application response extras.
+	if event == "ai_response_received" {
+		var extras []string
+		for key := range p {
+			if !reservedProperties[key] && !responseMetricProperties[key] {
+				extras = append(extras, key)
+			}
+		}
+		slices.Sort(extras)
+		for _, key := range extras {
+			delete(p, key)
+			if fits() {
+				return trimmed()
+			}
+		}
+	}
 	for _, key := range []string{"tool_breakdown", "usage_breakdown"} {
 		entries, ok := p[key].([]map[string]any)
 		if !ok {
@@ -171,3 +188,5 @@ func redactText(text string) (out string, ok bool) {
 	}
 	return out, true
 }
+
+var responseMetricProperties = set("sample_rate", "agent_version", "variant", "confidence", "compaction_count", "total_credits", "pause_count", "total_paused_ms")
