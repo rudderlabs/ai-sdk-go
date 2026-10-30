@@ -1,7 +1,7 @@
 package rudderstackai
 
 // Version is the SDK version sent as context.wrapperLibrary.version.
-const Version = "0.3.0" // x-release-please-version
+const Version = "0.4.0" // x-release-please-version
 
 // LibraryName is sent as context.wrapperLibrary.name.
 const LibraryName = "ai-sdk-go"
