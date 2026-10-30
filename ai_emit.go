@@ -8,8 +8,14 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
-// emitAI sends one AI event. Never panics; without a client the event is dropped with a warning.
+// emitAI sends one AI event, unless WithSampleRates samples it out. Never panics; without a client
+// the event is dropped with a warning.
 func emitAI(client analytics.Client, event, userID, anonymousID string, properties, msgContext map[string]any, integration string, at time.Time) {
+	emitAIRates(client, event, userID, anonymousID, properties, msgContext, integration, at, cfg().sampleRates)
+}
+
+// emitAIRates is emitAI under one rates snapshot, so an event fitted under it is sampled under it.
+func emitAIRates(client analytics.Client, event, userID, anonymousID string, properties, msgContext map[string]any, integration string, at time.Time, rates map[string]float64) {
 	safely(func() {
 		if client == nil {
 			warnOnce("no-client", "no RudderStack client configured (Configure(WithAnalytics(client))); AI events are dropped", 0)
@@ -17,6 +23,10 @@ func emitAI(client analytics.Client, event, userID, anonymousID string, properti
 			return
 		}
 		rememberClient(client)
+		properties, kept := sample(event, properties, rates)
+		if !kept {
+			return
+		}
 		wrapper := map[string]any{
 			"name":        LibraryName,
 			"version":     Version,
@@ -100,6 +110,25 @@ func fitProperties(event string, properties map[string]any) map[string]any {
 				return trimmed()
 			}
 		}
+		// Other details (a large feedback_value) go last; the IDs, action_type and sample_rate stay.
+		delete(p, "action_details")
+		if fits() {
+			return trimmed()
+		}
+	}
+	// Sampling metadata shares the budget with application response extras; drop them in bulk
+	// so the response is serialized once, not per extra.
+	if event == "ai_response_received" {
+		dropped := false
+		for key := range p {
+			if !reservedProperties[key] && !responseMetricProperties[key] {
+				delete(p, key)
+				dropped = true
+			}
+		}
+		if dropped && fits() {
+			return trimmed()
+		}
 	}
 	for _, key := range []string{"tool_breakdown", "usage_breakdown"} {
 		entries, ok := p[key].([]map[string]any)
@@ -125,7 +154,8 @@ func fitProperties(event string, properties map[string]any) map[string]any {
 // fitToolEventProperties keeps a declared tool event within maxPropertiesBytes: when over, the
 // rule's Properties output (the custom keys) is dropped and the SDK-owned fields are kept, as when
 // Properties panics. fitProperties has nothing of its own to trim on these events.
-func fitToolEventProperties(event string, properties map[string]any, custom []string) map[string]any {
+func fitToolEventProperties(event string, properties map[string]any, custom []string, rates map[string]float64) map[string]any {
+	properties = sampleProperties(event, properties, rates)
 	if propertiesBytes(properties) <= maxPropertiesBytes {
 		return properties
 	}
@@ -160,3 +190,5 @@ func redactText(text string) (out string, ok bool) {
 	}
 	return out, true
 }
+
+var responseMetricProperties = set("sample_rate", "block_reason", "agent_version", "variant", "confidence", "compaction_count", "total_credits", "pause_count", "total_paused_ms")

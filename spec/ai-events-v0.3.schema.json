@@ -106,6 +106,9 @@
           "type": "string",
           "minLength": 1,
           "description": "Since v0.4. Experiment arm or rollout variant the interaction ran under, e.g. control."
+        },
+        "sample_rate": {
+          "$ref": "#/$defs/sample_rate"
         }
       }
     },
@@ -1109,6 +1112,9 @@
         "trace_id": {
           "type": "string",
           "minLength": 1
+        },
+        "sample_rate": {
+          "$ref": "#/$defs/sample_rate"
         }
       }
     },
@@ -1621,6 +1627,9 @@
         "limit_type"
       ],
       "properties": {
+        "sample_rate": {
+          "$ref": "#/$defs/sample_rate"
+        },
         "conversation_id": {
           "$ref": "#/$defs/id_fields/properties/conversation_id"
         },
@@ -1659,6 +1668,12 @@
           "description": "Since v0.4. Which limit, as the app names it."
         }
       }
+    },
+    "sample_rate": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "description": "Since v0.4. The rate, above 0 and below 1, this event type was sampled at when it was sent (configure sample rates); absent means it was not sampled. Weight a row by 1 / sample_rate to estimate totals. The draw is keyed on interaction_id, so the sampled events of one interaction are kept or dropped together; spec/fixtures/sampling-v0.1.json fixes the draw across SDKs."
     }
   }
 }

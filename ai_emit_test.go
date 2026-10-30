@@ -95,7 +95,7 @@ func TestEmitMCPFitsAndRemembersClient(t *testing.T) {
 
 func TestFitToolEventPropertiesDropsCustom(t *testing.T) {
 	p := map[string]any{"tool_name": "t", "big": strings.Repeat("x", 31_000), "small": 1}
-	got := fitToolEventProperties("order_placed", p, []string{"big", "small"})
+	got := fitToolEventProperties("order_placed", p, []string{"big", "small"}, nil)
 	if _, ok := got["big"]; ok || got["small"] != nil || got["tool_name"] != "t" {
 		t.Fatalf("got %v", got)
 	}
@@ -103,7 +103,7 @@ func TestFitToolEventPropertiesDropsCustom(t *testing.T) {
 		t.Fatal("the caller's map changed")
 	}
 	small := map[string]any{"tool_name": "t", "small": 1}
-	if got := fitToolEventProperties("order_placed", small, []string{"small"}); got["small"] != 1 {
+	if got := fitToolEventProperties("order_placed", small, []string{"small"}, nil); got["small"] != 1 {
 		t.Fatal("a fitting event lost its properties")
 	}
 }

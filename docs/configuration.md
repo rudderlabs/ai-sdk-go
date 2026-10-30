@@ -54,6 +54,7 @@ err := rudderstackai.Configure(
 | `WithLimits(Limits)`                    | see [Limits](#limits) | Memory caps. A zero field keeps its default.                                                                  |
 | `WithOnError(fn)`                       | none    | `func(err error, info ErrorInfo)` sees [errors the SDK contained](#errors), at most once per kind a minute. Nil removes it.     |
 | `WithAzureDeploymentModels(map)`        | none    | Azure OpenAI deployment name to base model, used only to price calls with provider `azure.ai.openai`. Replaces the previous mapping; nil clears it; empty names or models are rejected; matched case-insensitively. |
+| `WithSampleRates(map[string]float64)`   | none    | Share of each event to send, by event name, from 0 to 1 (see [Sampling](#sampling)). Replaces the previous rates; nil clears them; a rate outside 0 to 1 or an empty event name is rejected. |
 
 ## Which client is used
 
@@ -305,6 +306,24 @@ client.Close()              // analytics-go: stop the client; the SDK never clos
 - A top-level `RunTask` waits for its own classification and score and flushes its client, at most `TaskOptions.FlushTimeout` (default 2 seconds) for both; running out is reported as `flush_timeout`, and the client's own flush error as `flush_failed`.
 - Serverless: on Lambda, `Flush` before returning with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM.
 - Events are queued in analytics-go, so delivery errors are its own: handle them with its `Config.Callback`.
+
+## Sampling
+
+`WithSampleRates` cuts the volume of high-frequency events, such as `ai_llm_response_received` and `mcp_tool_called`, at the source:
+
+```go
+err := rudderstackai.Configure(rudderstackai.WithSampleRates(map[string]float64{
+	"ai_llm_response_received": 0.1,
+	"mcp_tool_called":          0.05,
+}))
+```
+
+- **What is kept.** An event with a rate below 1 is sent for that share of interactions. The draw is a hash of `interaction_id` (the same in the Go, Node.js and Python SDKs), so every sampled event of one interaction is kept or dropped together, and an interaction kept at a lower rate is also kept at every higher one. An event without an `interaction_id` (`mcp_client_seen`) is drawn at random.
+- **The stamp.** A kept event carries `sample_rate` (`0.1`); weight each row by `1 / sample_rate` to estimate totals. Events without a rate below 1 carry none.
+- **The default.** Events you do not list are all sent. Leave `ai_response_received` out: cost totals, answer counts and the client/server gap need every answer, and its `llm_call_count`, `tool_call_count` and token totals still count the calls whose own events were sampled out. You can list it; then every metric built on it is an estimate.
+- **Scope.** It applies to every event the SDK sends, product, declared tool and MCP server events alike (MCP servers follow `Configure`, not `Options`, for this).
+
+Sampling runs before the event reaches your analytics-go client, so it works with any client version. A `BeforeEnqueue` hook on the client (where your analytics-go version has one) still sees every event the SDK sends, `sample_rate` included, and stays the place for app-wide drop and edit rules. A hook that drops some of the sampled events itself makes `sample_rate` overstate what arrived: sample in `WithSampleRates`, not in the hook.
 
 ## Limits
 

@@ -16,6 +16,7 @@ spec:
       id: ai_user_prompt_created_rule
       event: '#event:ai_user_prompt_created'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:conversation_id'
           required: true
         - property: '#property:interaction_id'
@@ -48,6 +49,7 @@ spec:
       id: ai_response_received_rule
       event: '#event:ai_response_received'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:conversation_id'
           required: true
         - property: '#property:interaction_id'
@@ -143,6 +145,7 @@ spec:
           required: true
         - property: '#property:interaction_id'
           required: true
+        - property: '#property:sample_rate'
         - property: '#property:feature'
         - property: '#property:surface'
         - property: '#property:account_id'
@@ -185,6 +188,7 @@ spec:
       id: ai_interaction_classified_rule
       event: '#event:ai_interaction_classified'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:conversation_id'
           required: true
         - property: '#property:interaction_id'
@@ -215,6 +219,7 @@ spec:
       id: ai_interaction_scored_rule
       event: '#event:ai_interaction_scored'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:conversation_id'
           required: true
         - property: '#property:interaction_id'
@@ -243,6 +248,7 @@ spec:
       id: ai_limit_reached_rule
       event: '#event:ai_limit_reached'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:conversation_id'
         - property: '#property:interaction_id'
         - property: '#property:feature'
@@ -258,6 +264,7 @@ spec:
       id: ai_user_action_rule
       event: '#event:ai_user_action'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:conversation_id'
           required: true
         - property: '#property:interaction_id'
@@ -286,6 +293,7 @@ spec:
       id: mcp_client_seen_rule
       event: '#event:mcp_client_seen'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
         - property: '#property:server_name'
           required: true
@@ -313,6 +321,7 @@ spec:
         - property: '#property:client_version'
         - property: '#property:protocol_version'
         - property: '#property:interaction_id'
+        - property: '#property:sample_rate'
         - property: '#property:trace_id'
         - property: '#property:request_id'
           required: true
@@ -342,6 +351,7 @@ spec:
       id: mcp_elicitation_completed_rule
       event: '#event:mcp_elicitation_completed'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
         - property: '#property:server_name'
         - property: '#property:account_id'
@@ -358,6 +368,7 @@ spec:
       id: mcp_capability_requested_rule
       event: '#event:mcp_capability_requested'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
         - property: '#property:server_name'
         - property: '#property:account_id'
@@ -372,6 +383,7 @@ spec:
       id: mcp_resource_read_rule
       event: '#event:mcp_resource_read'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
         - property: '#property:server_name'
         - property: '#property:account_id'
@@ -394,6 +406,7 @@ spec:
       id: mcp_prompt_used_rule
       event: '#event:mcp_prompt_used'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
         - property: '#property:server_name'
         - property: '#property:account_id'
@@ -416,6 +429,7 @@ spec:
       id: mcp_event_subscription_changed_rule
       event: '#event:mcp_event_subscription_changed'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
         - property: '#property:server_name'
         - property: '#property:account_id'
@@ -437,6 +451,7 @@ spec:
       id: mcp_event_delivered_rule
       event: '#event:mcp_event_delivered'
       properties:
+        - property: '#property:sample_rate'
         - property: '#property:server_name'
         - property: '#property:account_id'
         - property: '#property:subscription_id'

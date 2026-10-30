@@ -55,11 +55,20 @@ type who struct {
 	anonymousID string
 }
 
-// emit sends one MCP track call, within the properties budget. Never panics; a client error
-// drops the event.
+// emit sends one MCP track call, within the properties budget, unless WithSampleRates samples it
+// out. Never panics; a client error drops the event.
 func emit(client analytics.Client, event string, w who, properties map[string]any) {
+	emitRates(client, event, w, properties, cfg().sampleRates)
+}
+
+// emitRates is emit under one rates snapshot, so an event fitted under it is sampled under it.
+func emitRates(client analytics.Client, event string, w who, properties map[string]any, rates map[string]float64) {
 	safely(func() {
 		rememberClient(client)
+		properties, kept := sample(event, properties, rates)
+		if !kept {
+			return
+		}
 		msg := analytics.Track{
 			Event:             event,
 			UserId:            w.userID,

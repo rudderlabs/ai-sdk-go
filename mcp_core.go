@@ -40,6 +40,7 @@ var sentiments = []string{"negative", "neutral", "positive"}
 
 // owned are the properties the integration sets; a declared tool rule cannot override them.
 var owned = map[string]bool{
+	"sample_rate":    true,
 	"mcp_session_id": true, "server_name": true, "server_version": true, "account_id": true, "client_name": true,
 	"client_version": true, "protocol_version": true, "interaction_id": true, "trace_id": true,
 	"tool_name": true, "tool_status": true,
@@ -677,7 +678,8 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 	}
 	p["tool_name"] = rc.toolName
 	p["tool_status"] = status
-	emit(rc.opts.Analytics, rule.Event, rc.who, fitToolEventProperties(rule.Event, p, custom))
+	rates := cfg().sampleRates
+	emitRates(rc.opts.Analytics, rule.Event, rc.who, fitToolEventProperties(rule.Event, p, custom, rates), rates)
 }
 
 func (rc *reqCtx) inputKey(key, requestState string) string {

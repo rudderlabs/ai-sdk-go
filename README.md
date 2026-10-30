@@ -310,6 +310,7 @@ Every event's properties stay within 30,000 serialized bytes (RudderStack reject
 | `WithEvaluator(fn)`              | none    | Your scoring function, run after each successful answer; nil turns it off                     |
 | `WithServerFeedback(on)`         | on      | Off: `TrackAction` sends nothing (the client app sends `ai_user_action`)                      |
 | `WithTraceIDFrom(fn)`            | none    | Where `trace_id` comes from, for example `rudderotel.TraceID`                                 |
+| `WithSampleRates(map)`           | none    | Send that share of each listed event, keyed on `interaction_id`; kept events carry `sample_rate` ([Sampling](docs/configuration.md#sampling)) |
 
 Integration options: `WithProvider` and `WithAnalytics` on every integration but Bedrock (`WithAnalytics` only), and `rudderopenai.WithStreamUsage(bool)` (streamed Chat Completions ask for usage, with a resend when a host rejects it; true always asks, false never). `EstimateCost(provider, model, input, output, cached, cacheWrite, opts ...CostOptions)` prices one call from the registered table, with `CostOptions{CacheWrite1hTokens, ServiceTier, ServerToolCalls}`. Per-interaction options, client precedence, cost rules, warehouse column types and the API reference: [docs/configuration.md](docs/configuration.md).
 
