@@ -22,9 +22,19 @@ func TestSharedContextSignals(t *testing.T) {
 	}
 	for _, c := range fixture.Cases {
 		t.Run(c.Name, func(t *testing.T) {
-			if got := HTTPErrorType(c.Status, map[string]any{"error": map[string]any{"code": c.Code, "message": c.Message}}); got != c.Expected {
-				t.Fatalf("got %s, want %s", got, c.Expected)
+			expected := c.Expected
+			if c.Status == 500 && ContextLimit(c.Code, c.Message) {
+				expected = "context_limit"
+			}
+			if got := HTTPErrorType(c.Status, map[string]any{"error": map[string]any{"code": c.Code, "message": c.Message}}); got != expected {
+				t.Fatalf("got %s, want %s", got, expected)
 			}
 		})
+	}
+}
+
+func TestWrappedContextLimit500(t *testing.T) {
+	if got := HTTPErrorType(500, map[string]any{"error": map[string]any{"message": "upstream failed: prompt is too long"}}); got != "context_limit" {
+		t.Fatal(got)
 	}
 }

@@ -742,15 +742,6 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	if call.ErrorType == "" {
 		i.keepAnswerLocked(call.OutputText)
 	}
-	if call.ResponseID != "" {
-		key := call.Provider + "\x00" + call.ResponseID
-		if earlier, ok := i.seen[key]; ok {
-			if call.AgentName != "" && earlier.agentName == "" {
-				earlier.agentName = call.AgentName
-			}
-			return false
-		}
-	}
 	input, output := nonNegative(call.InputTokens), nonNegative(call.OutputTokens)
 	var reasoning *int
 	if call.ReasoningTokens != nil {
@@ -802,14 +793,21 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		if i.ended {
 			return false
 		}
-		// Another call may have recorded this response while the hook ran.
-		if call.ResponseID != "" {
-			if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok {
-				if earlier.agentName == "" {
-					earlier.agentName = call.AgentName
-				}
-				return false
+	}
+	if call.ResponseID != "" {
+		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok {
+			fillString(&earlier.agentName, call.AgentName)
+			fillString(&earlier.callPurpose, call.CallPurpose)
+			if call.BYOK != nil {
+				earlier.byok = call.BYOK
 			}
+			if call.FallbackUsed != nil {
+				earlier.fallbackUsed = call.FallbackUsed
+			}
+			if call.Credits != nil || (earlier.credits == nil && credits != nil) {
+				earlier.credits = credits
+			}
+			return false
 		}
 	}
 	var latency, ttft *time.Duration

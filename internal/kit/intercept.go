@@ -135,12 +135,12 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	if ctx.Value(trackedKey{s.Integration}) != nil || Untracked(ctx) || req.Method != http.MethodPost {
 		return next(req)
 	}
+	started := time.Now()
 	body, raw := readBody(req)
 	if s.Untracked != nil && s.Untracked(req, body) {
 		return next(req)
 	}
 	stream := s.IsStream != nil && s.IsStream(req, body)
-	started := time.Now()
 	n, numbered := retryNumber(req)
 	var key attemptKey
 	var prev *attempt
@@ -289,7 +289,7 @@ func HTTPErrorType(status int, body map[string]any) string {
 		e = body
 	}
 	code, message := Str(e["code"]), strings.ToLower(Str(e["message"]))
-	if (status == 400 || status == 422 || status == 0) && ContextLimit(code, message) {
+	if (status == 400 || status == 422 || status == 0 || status >= 500 && status != 504) && ContextLimit(code, message) {
 		return "context_limit"
 	}
 	if t := rudderstackai.ErrorTypeForStatus(status); t != "" {

@@ -37,3 +37,30 @@ func TestReviewInvalidCreditHookReports(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewDuplicateWrapperMetadata(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "r", InputTokens: 5})
+	if i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "r", CallPurpose: "answer", BYOK: Ptr(true), FallbackUsed: Ptr(false), Credits: Ptr(2.0)}) {
+		t.Fatal("duplicate counted")
+	}
+	if i.callCount != 1 || i.calls[0].callPurpose != "answer" || i.calls[0].byok == nil || i.calls[0].fallbackUsed == nil || i.calls[0].credits == nil || *i.calls[0].credits != 2 {
+		t.Fatal(i.calls[0])
+	}
+	i.End(EndOptions{})
+	if r.props(t, "ai_response_received")["total_credits"] != 2.0 {
+		t.Fatal(r.props(t, "ai_response_received"))
+	}
+}
+
+func TestReviewDuplicateInvalidCreditsClear(t *testing.T) {
+	setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "r", Credits: Ptr(2.0)})
+	i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "r", Credits: Ptr(-1.0)})
+	if i.calls[0].credits != nil {
+		t.Fatal("stale credits retained")
+	}
+	i.End(EndOptions{})
+}
