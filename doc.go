@@ -1,5 +1,5 @@
 // Package rudderstackai sends RudderStack AI product analytics events from Go
-// services. It implements the AI events spec v0.3.0 (spec/ai-events-v0.3.schema.json).
+// services. It implements the AI events spec v0.4.0 (spec/ai-events-v0.4.schema.json).
 //
 // AI interactions: [RunInteraction] (or [StartInteraction] and [Interaction.End]) turns one
 // user prompt and its answer into ai_user_prompt_created and one ai_response_received with

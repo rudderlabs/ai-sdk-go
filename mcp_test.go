@@ -47,7 +47,7 @@ func TestClientSeenOncePerClientAtInitialize(t *testing.T) {
 		t.Errorf("identity = %q/%q", m.UserId, m.AnonymousId)
 	}
 	wl := m.Context.Extra["wrapperLibrary"].(map[string]any)
-	if wl["name"] != "ai-sdk-go" || wl["specVersion"] != "0.3.0" || wl["integration"] != "mcp" || wl["version"] != Version {
+	if wl["name"] != "ai-sdk-go" || wl["specVersion"] != "0.4.0" || wl["integration"] != "mcp" || wl["version"] != Version {
 		t.Errorf("wrapperLibrary = %v", wl)
 	}
 }

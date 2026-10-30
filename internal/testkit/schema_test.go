@@ -9,7 +9,7 @@ import (
 
 func TestRepoRoot(t *testing.T) {
 	root := RepoRoot()
-	if _, err := os.Stat(filepath.Join(root, "spec", "ai-events-v0.3.schema.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, "spec", "ai-events-v0.4.schema.json")); err != nil {
 		t.Fatal(err)
 	}
 }

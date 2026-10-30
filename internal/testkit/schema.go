@@ -12,7 +12,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-const schemaURL = "https://rudderstack.com/schemas/ai-events/0.3.0"
+const schemaURL = "https://rudderstack.com/schemas/ai-events/0.4.0"
 
 // RepoRoot returns the nearest directory at or above the working directory that holds the spec.
 // It panics when there is none: tests always run inside the module.
@@ -27,12 +27,12 @@ func RepoRoot() string {
 func findRoot(dir string) string {
 	for {
 		// The repository root holds the spec; integration modules have their own go.mod.
-		if _, err := os.Stat(filepath.Join(dir, "spec", "ai-events-v0.3.schema.json")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "spec", "ai-events-v0.4.schema.json")); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			panic("testkit: no spec/ai-events-v0.3.schema.json above " + dir)
+			panic("testkit: no spec/ai-events-v0.4.schema.json above " + dir)
 		}
 		dir = parent
 	}
@@ -77,12 +77,12 @@ func loadSchemas(path string) (map[string]*jsonschema.Schema, error) {
 	return out, nil
 }
 
-// ValidateEvent checks an event's properties against spec/ai-events-v0.3.schema.json: reserved
+// ValidateEvent checks an event's properties against spec/ai-events-v0.4.schema.json: reserved
 // names (ai_*, mcp_*) against `$defs/<event>`, customer-named events against
 // `$defs/declared_tool_event`. A reserved name with no definition is an error.
 func ValidateEvent(event string, properties map[string]any) error {
 	schemaOnce.Do(func() {
-		schemas, schemaErr = loadSchemas(filepath.Join(RepoRoot(), "spec", "ai-events-v0.3.schema.json"))
+		schemas, schemaErr = loadSchemas(filepath.Join(RepoRoot(), "spec", "ai-events-v0.4.schema.json"))
 	})
 	if schemaErr != nil {
 		return schemaErr

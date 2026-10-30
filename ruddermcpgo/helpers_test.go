@@ -19,7 +19,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-const schemaURL = "https://rudderstack.com/schemas/ai-events/0.3.0"
+const schemaURL = "https://rudderstack.com/schemas/ai-events/0.4.0"
 
 var (
 	schemaOnce sync.Once
@@ -27,11 +27,11 @@ var (
 	schemaErr  error
 )
 
-// validateEvent checks one event's properties against its v0.3 schema definition;
+// validateEvent checks one event's properties against its v0.4 schema definition;
 // customer-named events use mcp_declared_tool_event.
 func validateEvent(event string, props map[string]any) error {
 	schemaOnce.Do(func() {
-		f, err := os.Open("../spec/ai-events-v0.3.schema.json")
+		f, err := os.Open("../spec/ai-events-v0.4.schema.json")
 		if err != nil {
 			schemaErr = err
 			return

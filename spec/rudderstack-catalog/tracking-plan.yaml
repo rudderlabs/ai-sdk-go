@@ -1,4 +1,4 @@
-# AI events spec v0.4 tracking plan (rudder-cli, rudder/v1). Mirrors spec/ai-events-v0.3.schema.json.
+# AI events spec v0.4 tracking plan (rudder-cli, rudder/v1). Mirrors spec/ai-events-v0.4.schema.json.
 # Custom properties are allowed, as in the schema. The tracking plan validates events; it does not set
 # warehouse column types (see the README's "Warehouse column types").
 # Conditional rules stay in the schema only: conversation_id is optional on a client copy of

@@ -16,7 +16,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-const schemaURL = "https://rudderstack.com/schemas/ai-events/0.3.0"
+const schemaURL = "https://rudderstack.com/schemas/ai-events/0.4.0"
 
 var (
 	schemaOnce sync.Once
@@ -34,7 +34,7 @@ var mcpEventDefs = []string{
 }
 
 func loadSchemas() {
-	f, err := os.Open("spec/ai-events-v0.3.schema.json")
+	f, err := os.Open("spec/ai-events-v0.4.schema.json")
 	if err != nil {
 		schemaErr = err
 		return

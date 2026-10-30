@@ -1,6 +1,6 @@
 # Paused runs and task starts
 
-Since v0.4. These additions are declared in the existing `ai-events-v0.3.schema.json` and `ai-client-events-v0.2.schema.json` pending the final version layer. SDK `SPEC_VERSION` remains `0.3.0`; existing captures remain valid.
+Since v0.4. These additions are declared in `ai-events-v0.4.schema.json` and `ai-client-events-v0.2.schema.json`. SDK `SPEC_VERSION` is `0.4.0`; the migration checker accepts both 0.3.0 and 0.4.0 captures.
 
 A run has one interaction ID and one prompt event. Every pause sends `ai_response_received` with `response_status: paused` and a `pause_reason`. Resuming keeps the IDs and starts a new segment; it sends neither another prompt nor another task-started event. A final end is idempotent. `end` with an explicit or derived paused status behaves like `pause`; a repeated pause before a resume sends nothing. A model or tool call recorded while paused resumes the interaction automatically.
 
@@ -26,4 +26,4 @@ Pause timestamps use the wall clock so cross-process waits can be measured; nega
 
 `ai_task_started` is optional and off by default (`emitTaskStarted`, `emit_task_started`, `WithTaskStartedEvents`). It is sent before a new task's work and contains `conversation_id`, `interaction_id`, `task_name`, and supplied `trigger_source` and `parent_interaction_id`, plus the run's background fields. Resumes and ordinary interactions send none. A task start without a final response identifies an in-flight or abandoned run; its most recent paused response identifies a wait.
 
-`fixtures/conformance-v0.3.json` covers repeated pauses, explicit and implicit resumes, persisted snapshots, no-ops, final ends while paused and chained task starts. Approval-loop examples in each SDK demonstrate three worker invocations separated by two approvals.
+`fixtures/conformance-v0.4.json` covers repeated pauses, explicit and implicit resumes, persisted snapshots, no-ops, final ends while paused and chained task starts. Approval-loop examples in each SDK demonstrate three worker invocations separated by two approvals.

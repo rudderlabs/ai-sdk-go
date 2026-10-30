@@ -5,7 +5,7 @@ Shared, byte for byte, by the Node.js (`npx @rudderstack/ai check`), Python (`py
 ```json
 {
   "fixture_version": 1,
-  "spec_version": "0.3.0",
+  "spec_version": "0.4.0",
   "description": "...",
   "cases": [
     { "name": "...", "command": "check" | "what-changes", "captures": ["pass"], "args": ["--expect-joins"], "exit_code": 0, "stdout": "..." | null }
@@ -13,7 +13,7 @@ Shared, byte for byte, by the Node.js (`npx @rudderstack/ai check`), Python (`py
 }
 ```
 
-A driver runs the checker in process with the arguments `[what-changes]? <captures...> <args...>`: `what-changes` first for that command (Node.js also puts `check` first for the other), then each capture as the path `migration-check/<capture>.jsonl` next to this file (a capture without a file, such as `does-not-exist`, is a missing file), then `args` unchanged. It compares the exit code, and stdout exactly unless `stdout` is `null` (`--help`, whose usage names the SDK's own command). stderr is not compared. Every checker uses its bundled schemas: `spec/ai-events-v0.3.schema.json` and `spec/ai-client-events-v0.2.schema.json`.
+A driver runs the checker in process with the arguments `[what-changes]? <captures...> <args...>`: `what-changes` first for that command (Node.js also puts `check` first for the other), then each capture as the path `migration-check/<capture>.jsonl` next to this file (a capture without a file, such as `does-not-exist`, is a missing file), then `args` unchanged. It compares the exit code, and stdout exactly unless `stdout` is `null` (`--help`, whose usage names the SDK's own command). stderr is not compared. Every checker uses its bundled schemas: `spec/ai-events-v0.4.schema.json` and `spec/ai-client-events-v0.2.schema.json`.
 
 The captures come from the `rudder-ai-events-verify` skill's tested fixtures and from real recordings of the three SDKs (`go_recorder`, `node_recorder`, `python_recorder`); `formatting`, `mcp`, `duplicates`, `wc_edge_*` and the error captures cover the output rules below. The Python checker generates `stdout` and `exit_code`; regenerate them after an intended change and review the diff.
 
