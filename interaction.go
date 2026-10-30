@@ -1981,6 +1981,25 @@ func (i *Interaction) releasePause() {
 	}
 }
 
+// endBlockedLocked releases mu after end found the run busy or settled. A wrapper-owned end that
+// met a pause started since the first guard waits for that pause instead of being dropped.
+func (i *Interaction) endBlockedLocked(o EndOptions) {
+	wait := o.afterPause && i.pausing && !i.ended
+	i.mu.Unlock()
+	if !wait {
+		return
+	}
+	i.pendingMu.Lock()
+	if i.pauseGuard.Load() {
+		i.pendingEnd = &o
+		i.pendingMu.Unlock()
+		return
+	}
+	i.pendingMu.Unlock()
+	// The pause finished in between: evaluate the end again.
+	i.end(o)
+}
+
 func (i *Interaction) end(o EndOptions) {
 	if i.pauseGuard.Load() {
 		if o.afterPause {
@@ -1997,7 +2016,7 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	i.mu.Lock()
 	if i.ended || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) || (o.endReason == endReasonTTL && !ttlSelected(i)) {
-		i.mu.Unlock()
+		i.endBlockedLocked(o)
 		return
 	}
 	pausingHint := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
@@ -2027,7 +2046,7 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	i.mu.Lock()
 	if i.ended || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) || (o.endReason == endReasonTTL && !ttlSelected(i)) {
-		i.mu.Unlock()
+		i.endBlockedLocked(o)
 		return
 	}
 	if o.ClientDisconnected {

@@ -1543,3 +1543,29 @@ func TestRunInteractionErrorDuringPauseDeliveryEndsAfterPause(t *testing.T) {
 		})
 	}
 }
+
+// A pause that starts after the wrapper's end passed its first guard (here from a before-end hook)
+// must not drop that end.
+func TestRunInteractionErrorEndQueuedWhenPauseStartsDuringFinalization(t *testing.T) {
+	r := setupAI(t)
+	client := &pauseReentrantClient{recorder: r}
+	delivering, release, paused := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	client.reenter = func() { close(delivering); <-release }
+	_ = RunInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true, Analytics: client}, func(_ context.Context, i *Interaction) error {
+		i.onBeforeEnd(func() {
+			go func() { i.Pause(PauseOptions{}); close(paused) }()
+			<-delivering
+		})
+		return errors.New("boom")
+	})
+	close(release)
+	<-paused
+	deadline := time.Now().Add(5 * time.Second)
+	for len(r.named("ai_response_received")) < 2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	got := r.named("ai_response_received")
+	if len(got) != 2 || got[1].Properties["response_status"] != "error" {
+		t.Fatalf("final error response missing: %v", r.names())
+	}
+}
