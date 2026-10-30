@@ -189,4 +189,4 @@ func redactText(text string) (out string, ok bool) {
 	return out, true
 }
 
-var responseMetricProperties = set("sample_rate", "agent_version", "variant", "confidence", "compaction_count", "total_credits", "pause_count", "total_paused_ms")
+var responseMetricProperties = set("sample_rate", "block_reason", "agent_version", "variant", "confidence", "compaction_count", "total_credits", "pause_count", "total_paused_ms")

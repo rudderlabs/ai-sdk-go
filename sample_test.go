@@ -286,3 +286,14 @@ func TestSampledResponseExtrasStayWithinBudget(t *testing.T) {
 		t.Fatalf("%d bytes: rate %v", propertiesBytes(got), got["sample_rate"])
 	}
 }
+
+func TestOverBudgetBlockedResponseKeepsBlockReason(t *testing.T) {
+	r := setupAI(t, WithSampleRates(map[string]float64{"ai_response_received": 0.99}))
+	p := map[string]any{"interaction_id": keptID, "conversation_id": "c", "response_status": "blocked", "block_reason": "policy", "trigger": "user", "llm_call_count": 0, "tool_call_count": 0, "latency_ms": 0, "padding": ""}
+	p["padding"] = strings.Repeat("x", maxPropertiesBytes-propertiesBytes(p))
+	emitAIRates(r, "ai_response_received", "u", "", p, nil, "", time.Now(), cfg().sampleRates)
+	got := r.props(t, "ai_response_received")
+	if propertiesBytes(got) > maxPropertiesBytes || got["block_reason"] != "policy" {
+		t.Fatalf("%d bytes: block_reason %v", propertiesBytes(got), got["block_reason"])
+	}
+}
