@@ -1440,3 +1440,54 @@ func TestCreditsCallbackCanPauseBeforeDuplicateRecheck(t *testing.T) {
 		t.Fatal(p)
 	}
 }
+
+func TestResumeWithoutTraceIDIgnoresRequestTrace(t *testing.T) {
+	r := setupAI(t, WithTraceIDFrom(func(context.Context) string { return "worker-trace" }))
+	_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "u", TraceID: "none"})
+	first.SetTraceID("")
+	snapshot, _ := first.Pause(PauseOptions{})
+	_, resumed := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshot})
+	resumed.callStarted(context.Background(), IntegrationOpenAI)
+	resumed.End(EndOptions{})
+	if got := r.named("ai_response_received")[1].Properties["trace_id"]; got != nil {
+		t.Fatalf("trace_id %v taken from the resuming request", got)
+	}
+}
+
+func TestPendingEventOnlyRuleKeepsResultSize(t *testing.T) {
+	setupAI(t, WithEventRules(EventRules{Tools: map[string]ToolEventRule{"late": {Event: "late_declared"}}}))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.mu.Lock()
+	i.pausing, i.pausedAt = true, time.Now() // paused-response delivery in progress
+	i.mu.Unlock()
+	i.RecordToolCalls(ToolCall{Name: "late", Result: "abcdef"})
+	i.preparePendingRules()
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if len(i.tools) != 1 || i.tools[0].ruleOutcome == nil || i.tools[0].ruleOutcome.resultSize != 6 {
+		t.Fatalf("result size lost: %+v", i.tools)
+	}
+}
+
+func TestResumeRejectsMissingOrNullPauseTiming(t *testing.T) {
+	for _, drop := range []string{"paused_at", "total_paused_ms"} {
+		for _, null := range []bool{false, true} {
+			setupAI(t)
+			raw := map[string]any{"interaction_id": "old", "conversation_id": "c", "trigger": "user", "pause_count": 1, "total_paused_ms": 0, "paused_at": 1}
+			if null {
+				raw[drop] = nil
+			} else {
+				delete(raw, drop)
+			}
+			var s PausedInteraction
+			if err := json.Unmarshal([]byte(mustJSON(raw)), &s); err != nil {
+				t.Fatal(err)
+			}
+			_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &s, UserID: "u"})
+			if i.ID() == "old" {
+				t.Fatalf("accepted snapshot with %s missing=%v null=%v", drop, !null, null)
+			}
+			i.End(EndOptions{})
+		}
+	}
+}

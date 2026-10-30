@@ -452,6 +452,7 @@ type Interaction struct {
 	adapterAnalytics       analytics.Client
 	intent, outcome        string
 	traceID                string
+	restored               bool // from a snapshot: the request context never supplies the trace ID
 	integration            string
 	ended                  bool
 	firstToken             time.Duration
@@ -647,6 +648,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 			i.compactions = *snapshot.PendingCompactions
 		}
 		i.outcome, i.integration = snapshot.Outcome, snapshot.Integration
+		i.restored = true
 		i.pauseCount = max(snapshot.PauseCount, 0)
 		for _, pair := range snapshot.SeenResponseIDs {
 			if _, exists := i.seen[pair[0]+"\x00"+pair[1]]; exists {
@@ -675,7 +677,7 @@ func first2(a, b Surface) Surface {
 // fillTraceID takes the trace ID [WithTraceIDFrom] finds in the context, unless one is set.
 func (i *Interaction) fillTraceID(ctx context.Context) {
 	i.mu.Lock()
-	needed := i.traceID == "" && !i.ended && ctx != nil
+	needed := i.traceID == "" && !i.ended && !i.restored && ctx != nil
 	i.mu.Unlock()
 	if !needed {
 		return
@@ -1260,7 +1262,7 @@ func (i *Interaction) preparePendingRules() {
 		var rule ToolEventRule
 		for _, t := range i.tools {
 			r, ok := cfg().toolRules[first(t.rawName, t.name)]
-			if !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil) {
+			if !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
 				selected, rule = t, r
 				break
 			}

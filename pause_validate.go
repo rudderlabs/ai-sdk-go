@@ -124,6 +124,12 @@ func (s *PausedInteraction) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*s = PausedInteraction(decoded)
+	// A missing or null timing field would decode as zero and count the wait from the Unix epoch.
+	for _, key := range []string{"paused_at", "total_paused_ms"} {
+		if raw := bytes.TrimSpace(fields[key]); len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+			s.invalidSnapshot = true
+		}
+	}
 	for _, key := range []string{"report_count", "successful_call_sequence", "pending_compactions"} {
 		if bytes.Equal(bytes.TrimSpace(fields[key]), []byte("null")) {
 			s.invalidSnapshot = true
