@@ -1569,3 +1569,35 @@ func TestRunInteractionErrorEndQueuedWhenPauseStartsDuringFinalization(t *testin
 		t.Fatalf("final error response missing: %v", r.names())
 	}
 }
+
+// RunTask's flush must wait for a final error end queued behind a concurrent pause delivery.
+func TestRunTaskFlushWaitsForEndQueuedBehindPause(t *testing.T) {
+	r := setupAI(t)
+	client := &pauseReentrantClient{recorder: r}
+	delivering, release, paused, returned := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
+	client.reenter = func() { close(delivering); <-release }
+	go func() {
+		defer close(returned)
+		_ = RunTask(context.Background(), "job", TaskOptions{Analytics: client}, func(_ context.Context, i *Interaction) error {
+			go func() { i.Pause(PauseOptions{}); close(paused) }()
+			<-delivering
+			return errors.New("boom")
+		})
+	}()
+	select {
+	case <-returned:
+		t.Fatal("RunTask returned before the queued final response was sent")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	<-paused
+	select {
+	case <-returned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("RunTask did not return")
+	}
+	got := r.named("ai_response_received")
+	if len(got) != 2 || got[1].Properties["response_status"] != "error" {
+		t.Fatalf("final error response missing at return: %v", r.names())
+	}
+}

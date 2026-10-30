@@ -448,9 +448,10 @@ type Interaction struct {
 	// pausedAt is when the current pause started; zero while running.
 	pausedAt               time.Time
 	pausing                bool
-	pauseGuard             atomic.Bool // checked before mu, including callback reentry
-	pendingMu              sync.Mutex  // orders pauseGuard release against pendingEnd
-	pendingEnd             *EndOptions // wrapper end that arrived mid-pause; sent when the pause finishes
+	pauseGuard             atomic.Bool   // checked before mu, including callback reentry
+	pendingMu              sync.Mutex    // orders pauseGuard release against pendingEnd
+	pendingEnd             *EndOptions   // wrapper end that arrived mid-pause; sent when the pause finishes
+	pendingDone            chan struct{} // closed once pendingEnd is sent; RunTask's flush waits on it
 	pauseCount             int
 	pausedTotal            time.Duration
 	adapterAnalytics       analytics.Client
@@ -1973,11 +1974,22 @@ func (i *Interaction) End(o EndOptions) {
 func (i *Interaction) releasePause() {
 	i.pendingMu.Lock()
 	i.pauseGuard.Store(false)
-	pending := i.pendingEnd
-	i.pendingEnd = nil
+	pending, done := i.pendingEnd, i.pendingDone
+	i.pendingEnd, i.pendingDone = nil, nil
 	i.pendingMu.Unlock()
 	if pending != nil {
 		i.end(*pending)
+	}
+	if done != nil {
+		close(done)
+	}
+}
+
+// queueEndLocked holds a wrapper end until the in-flight pause finishes; pendingMu is held.
+func (i *Interaction) queueEndLocked(o EndOptions) {
+	i.pendingEnd = &o
+	if i.pendingDone == nil {
+		i.pendingDone = make(chan struct{})
 	}
 }
 
@@ -1991,7 +2003,7 @@ func (i *Interaction) endBlockedLocked(o EndOptions) {
 	}
 	i.pendingMu.Lock()
 	if i.pauseGuard.Load() {
-		i.pendingEnd = &o
+		i.queueEndLocked(o)
 		i.pendingMu.Unlock()
 		return
 	}
@@ -2005,7 +2017,7 @@ func (i *Interaction) end(o EndOptions) {
 		if o.afterPause {
 			i.pendingMu.Lock()
 			if i.pauseGuard.Load() {
-				i.pendingEnd = &o
+				i.queueEndLocked(o)
 				i.pendingMu.Unlock()
 				return
 			}
@@ -2139,6 +2151,17 @@ func (i *Interaction) sendBackground(event string, extra map[string]any) {
 // waitBackground waits for this interaction's classification and scores until ctx ends; false
 // when they did not finish.
 func (i *Interaction) waitBackground(ctx context.Context) bool {
+	i.pendingMu.Lock()
+	queued := i.pendingDone
+	i.pendingMu.Unlock()
+	if queued != nil {
+		// A final end queued behind a concurrent pause is sent by that pause's goroutine.
+		select {
+		case <-queued:
+		case <-ctx.Done():
+			return false
+		}
+	}
 	i.mu.Lock()
 	ch := i.background
 	i.mu.Unlock()
