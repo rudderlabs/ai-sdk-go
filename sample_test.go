@@ -297,3 +297,34 @@ func TestOverBudgetBlockedResponseKeepsBlockReason(t *testing.T) {
 		t.Fatalf("%d bytes: block_reason %v", propertiesBytes(got), got["block_reason"])
 	}
 }
+
+// A valid action at the budget must stay within it once the sampling stamp is added.
+func TestSampledActionStaysWithinBudgetWithLargeFeedbackValue(t *testing.T) {
+	r := setupAI(t, WithSampleRates(map[string]float64{"ai_user_action": 0.5}))
+	o := TrackActionOptions{
+		ActionType: ActionFeedbackGiven, InteractionID: keptID, ConversationID: "c", UserID: "u",
+		ActionDetails: map[string]any{"feedback_type": "thumbs", "feedback_value": ""},
+	}
+	probe := map[string]any{"conversation_id": "c", "interaction_id": keptID, "action_type": string(o.ActionType), "action_details": map[string]any{"feedback_type": "thumbs", "feedback_value": ""}}
+	o.ActionDetails["feedback_value"] = strings.Repeat("x", maxPropertiesBytes-propertiesBytes(probe)) // exactly at budget before the stamp
+	TrackAction(context.Background(), o)
+	p := r.props(t, "ai_user_action")
+	if n := propertiesBytes(p); n > maxPropertiesBytes {
+		t.Fatalf("%d bytes", n)
+	}
+	if p["sample_rate"] != 0.5 || p["interaction_id"] != keptID || p["conversation_id"] != "c" || p["action_type"] != string(ActionFeedbackGiven) {
+		t.Fatalf("ids or stamp lost: %v", p)
+	}
+}
+
+// Many small extras are removed in one pass, keeping the SDK-owned fields.
+func TestManySmallResponseExtrasAreTrimmedInBulk(t *testing.T) {
+	p := map[string]any{"interaction_id": keptID, "conversation_id": "c", "response_status": "success", "sample_rate": 0.5}
+	for n := range 3000 {
+		p[fmt.Sprintf("extra_%04d", n)] = strings.Repeat("x", 10)
+	}
+	got := fitProperties("ai_response_received", p)
+	if propertiesBytes(got) > maxPropertiesBytes || got["sample_rate"] != 0.5 || got["response_status"] != "success" || got["extra_0000"] != nil {
+		t.Fatalf("%d bytes: %v", propertiesBytes(got), len(got))
+	}
+}

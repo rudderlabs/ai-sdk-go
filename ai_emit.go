@@ -2,7 +2,6 @@ package rudderstackai
 
 import (
 	"fmt"
-	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -111,21 +110,24 @@ func fitProperties(event string, properties map[string]any) map[string]any {
 				return trimmed()
 			}
 		}
+		// Other details (a large feedback_value) go last; the IDs, action_type and sample_rate stay.
+		delete(p, "action_details")
+		if fits() {
+			return trimmed()
+		}
 	}
-	// Sampling metadata shares the budget with application response extras.
+	// Sampling metadata shares the budget with application response extras; drop them in bulk
+	// so the response is serialized once, not per extra.
 	if event == "ai_response_received" {
-		var extras []string
+		dropped := false
 		for key := range p {
 			if !reservedProperties[key] && !responseMetricProperties[key] {
-				extras = append(extras, key)
+				delete(p, key)
+				dropped = true
 			}
 		}
-		slices.Sort(extras)
-		for _, key := range extras {
-			delete(p, key)
-			if fits() {
-				return trimmed()
-			}
+		if dropped && fits() {
+			return trimmed()
 		}
 	}
 	for _, key := range []string{"tool_breakdown", "usage_breakdown"} {
