@@ -164,7 +164,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 	var runs, toolCalls []*Object
 
 	// Client schema names and declared tools count as browser AI traffic.
-	isClientName := func(name string) bool { return strings.HasPrefix(name, "ai_") && sch.client.defs.Has(name) }
+	isClientName := func(name string) bool { return sch.client.defs.Has(name) && name != "declared_tool_event" }
 	browserEvents := 0
 	for i, m := range events {
 		name, props := m.Get("event").(string), obj(m.Get("properties"))
@@ -203,7 +203,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		// a raw tracing span may carry a custom eventName; past the legacy branch, any other event with a
 		// customer name was sent by an AI SDK as a declared tool event
 		isSpan := name == "ai_otel_span" || (!isClient && in(w.Get("integration"), tracing) && !knownEvents[name])
-		isDeclared := !reserved(name) && !isSpan
+		isDeclared := !reserved(name) && !isSpan && !(isClient && sch.client.defs.Has(name))
 		if !truthy(user) && !truthy(anon) { // the browser SDK sends anonymousId on every event
 			fail("%s: no userId or anonymousId", where)
 		}
@@ -215,7 +215,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 		if isClient { // client names come from the client schema's $defs
 			clientDefinition := name
-			if !reserved(name) {
+			if !sch.client.defs.Has(name) {
 				clientDefinition = "declared_tool_event"
 			}
 			errs, err := sch.errors(sch.client, clientDefinition, props)

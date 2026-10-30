@@ -75,3 +75,29 @@ func TestReviewCatalogDestinationLimit(t *testing.T) {
 		t.Fatal(section)
 	}
 }
+
+func TestReviewClientSchemaOverrideName(t *testing.T) {
+	schema := filepath.Join(t.TempDir(), "client.json")
+	if err := os.WriteFile(schema, []byte(`{"$id":"https://example.com/client","$defs":{"custom_browser_event":{"type":"object","required":["source","required_value"]}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	capture := `{"type":"track","event":"custom_browser_event","userId":"u","properties":{"source":"client"}}`
+	if code, out := reviewCheck(t, capture, "--client-schema", schema); code != 1 || !strings.Contains(out, "required_value") {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+}
+
+func TestReviewConversationForbiddenFields(t *testing.T) {
+	for _, event := range []string{"ai_conversation_pinned", "ai_conversation_shared"} {
+		fields := []string{"title", "name"}
+		if event == "ai_conversation_shared" {
+			fields = append(fields, "share_link")
+		}
+		for _, field := range fields {
+			capture := `{"type":"track","event":"` + event + `","userId":"u","properties":{"source":"client","conversation_id":"c","` + field + `":"secret"}}`
+			if code, out := reviewCheck(t, capture); code != 1 {
+				t.Errorf("%s %s: exit %d: %s", event, field, code, out)
+			}
+		}
+	}
+}
