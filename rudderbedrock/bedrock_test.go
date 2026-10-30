@@ -284,6 +284,8 @@ func TestClassifyError(t *testing.T) {
 		{&smithy.GenericAPIError{Code: "ValidationException"}, "invalid_request", true},
 		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 403}}, Err: &smithy.GenericAPIError{Code: "ValidationException", Message: "prompt is too long"}}, "auth_error", true},
 		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 429}}, Err: &smithy.GenericAPIError{Code: "ValidationException", Message: "prompt is too long"}}, "rate_limit", true},
+		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 500}}, Err: &smithy.GenericAPIError{Code: "ValidationException", Message: "prompt is too long"}}, "api_error", true},
+		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 400}}, Err: &smithy.GenericAPIError{Code: "ValidationException", Message: "prompt is too long"}}, "context_limit", true},
 		{&smithy.GenericAPIError{Code: "Other"}, "", false},
 		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 429}}, Err: errors.New("x")}, "rate_limit", true},
 		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 503}}, Err: errors.New("x")}, "", false},

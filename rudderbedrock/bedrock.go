@@ -109,6 +109,9 @@ func classifyError(err error) (string, bool) {
 			return "auth_error", true
 		case strings.Contains(n, "validationexception"):
 			if kit.ContextLimit("", api.ErrorMessage()) {
+				if resp != nil {
+					return kit.HTTPErrorType(resp.HTTPStatusCode(), map[string]any{"message": api.ErrorMessage()}), true
+				}
 				return "context_limit", true
 			}
 			return "invalid_request", true

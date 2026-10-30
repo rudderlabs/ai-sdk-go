@@ -805,11 +805,8 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 				earlier.fallbackUsed = call.FallbackUsed
 			}
 			// Hook-derived credits priced the duplicate's discarded usage, so only explicit ones merge.
-			if call.Credits != nil {
+			if call.Credits != nil && call.ErrorType != "cancelled" && earlier.errorType != "cancelled" {
 				earlier.credits = creditsOf(call.Credits)
-				if call.ErrorType == "cancelled" {
-					earlier.credits = nil
-				}
 			}
 			return false
 		}
