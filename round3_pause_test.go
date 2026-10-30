@@ -155,19 +155,6 @@ func TestRound3EmptyToolsStayPaused(t *testing.T) {
 	i.End(EndOptions{})
 }
 
-func TestRound3RestoreAtOpenLimit(t *testing.T) {
-	setupAI(t, WithLimits(Limits{MaxOpenInteractions: 1}))
-	_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
-	s, _ := first.Pause(PauseOptions{})
-	_, other := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
-	_, resumed := StartInteraction(context.Background(), InteractionOptions{Resume: &s})
-	if resumed.Ended() || resumed.ID() != first.ID() {
-		t.Fatal("tracked restore refused at limit")
-	}
-	resumed.End(EndOptions{})
-	other.End(EndOptions{})
-}
-
 func TestRound3StaleTTLSelection(t *testing.T) {
 	setupAI(t)
 	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})

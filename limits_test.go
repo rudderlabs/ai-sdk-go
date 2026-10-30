@@ -262,3 +262,75 @@ func TestTimedOutTextSkipsTheRedactHook(t *testing.T) {
 		t.Fatalf("mask = %q, %v, hook called %v", out, ok, called)
 	}
 }
+
+func pausedSlotsFixture(t *testing.T, o ...ConfigOption) (*Interaction, PausedInteraction) {
+	t.Helper()
+	setupAI(t, append(o, WithLimits(Limits{MaxOpenInteractions: 1}))...)
+	_, a := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	snap, ok := a.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("pause failed")
+	}
+	return a, snap
+}
+
+func TestPausedRunKeepsItsSlotAndBlocksNewInteractions(t *testing.T) {
+	a, _ := pausedSlotsFixture(t)
+	_, b := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	if !b.Ended() {
+		t.Fatal("B admitted while A is paused at limit 1")
+	}
+	a.End(EndOptions{})
+	_, c := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	if c.Ended() {
+		t.Fatal("C refused after A ended")
+	}
+	c.End(EndOptions{})
+}
+
+func TestResumeInProcessSucceedsAtLimit(t *testing.T) {
+	a, _ := pausedSlotsFixture(t)
+	_, b := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	if !b.Ended() {
+		t.Fatal("B admitted")
+	}
+	a.Resume()
+	if a.Paused() || openCount() != 1 {
+		t.Fatalf("resume failed: paused=%v open=%d", a.Paused(), openCount())
+	}
+	a.End(EndOptions{})
+}
+
+func TestRestoreOfCountedPausedRunSucceedsAtLimit(t *testing.T) {
+	a, snap := pausedSlotsFixture(t)
+	_, b := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	if !b.Ended() {
+		t.Fatal("B admitted")
+	}
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snap})
+	if restored.Ended() || restored.ID() != a.ID() || openCount() != 1 {
+		t.Fatalf("counted restore refused (ended=%v open=%d)", restored.Ended(), openCount())
+	}
+	restored.End(EndOptions{})
+	_, c := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	if c.Ended() {
+		t.Fatal("C refused after the restored run ended")
+	}
+	c.End(EndOptions{})
+}
+
+func TestRestoreOfForeignPausedRunGoesThroughAdmission(t *testing.T) {
+	a, snap := pausedSlotsFixture(t)
+	foreign := snap
+	foreign.InteractionID = "other-worker-run"
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &foreign})
+	if !restored.Ended() {
+		t.Fatal("uncounted restore bypassed the limit")
+	}
+	a.End(EndOptions{})
+	_, ok := StartInteraction(context.Background(), InteractionOptions{Resume: &foreign})
+	if ok.Ended() {
+		t.Fatal("uncounted restore refused with room")
+	}
+	ok.End(EndOptions{})
+}

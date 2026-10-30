@@ -11,7 +11,8 @@ import (
 // Limits caps the memory the SDK holds. A zero field keeps its default. Identical defaults in
 // Node.js and Python.
 type Limits struct {
-	// MaxOpenInteractions is how many interactions may be open at once (default 10,000). Past it,
+	// MaxOpenInteractions is how many interactions may be open or paused at once (default 10,000);
+	// a paused run holds its slot until it ends. Past it,
 	// new interactions are not tracked: your code runs as usual and limit_reached is reported.
 	MaxOpenInteractions int
 	// InteractionTTL is how long an interaction may stay open (default 1 hour). Past it, the next
@@ -67,13 +68,14 @@ func limitReached(name string) {
 var open = struct {
 	mu        sync.Mutex
 	list      *list.List
+	paused    map[string]struct{} // IDs of paused runs, which hold a slot until they end
 	lastSweep time.Time
-}{list: list.New()}
+}{list: list.New(), paused: map[string]struct{}{}}
 
-// register opens i; false when MaxOpenInteractions is reached.
+// register opens i; false when MaxOpenInteractions is reached. A restore of a run that holds a
+// slot here (paused in this process) takes it over; any other restore is admitted like a new run.
 func register(i *Interaction) bool {
-	if i.resumed {
-		reopen(i)
+	if i.resumed && takePausedSlot(i) {
 		return true
 	}
 	if !opened(i, cfg().limits.MaxOpenInteractions) {
@@ -86,7 +88,7 @@ func register(i *Interaction) bool {
 func opened(i *Interaction, limit int) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	if open.list.Len() >= limit {
+	if open.list.Len()+len(open.paused) >= limit {
 		return false
 	}
 	i.opened = time.Now()
@@ -102,13 +104,37 @@ func unregister(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
+	delete(open.paused, i.id)
+}
+
+// holdPausedSlot keeps a paused run counted toward MaxOpenInteractions, off the TTL list.
+func holdPausedSlot(i *Interaction) {
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	open.paused[i.id] = struct{}{}
+}
+
+// takePausedSlot moves a paused run's slot to i; false when this process holds none for its ID.
+func takePausedSlot(i *Interaction) bool {
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	if _, held := open.paused[i.id]; !held {
+		return false
+	}
+	delete(open.paused, i.id)
+	if i.elem == nil {
+		i.opened = time.Now()
+		i.elem = open.list.PushBack(i)
+	}
+	return true
 }
 
 // reopen puts a resumed interaction back on the open list, whatever MaxOpenInteractions says: it
-// was tracked before its pause.
+// held a slot before its pause.
 func reopen(i *Interaction) {
 	open.mu.Lock()
 	defer open.mu.Unlock()
+	delete(open.paused, i.id)
 	if i.elem == nil {
 		i.opened = time.Now()
 		i.elem = open.list.PushBack(i)
@@ -177,6 +203,7 @@ func resetOpenForTest() {
 	defer open.mu.Unlock()
 	// A new list: interactions of earlier tests that end later are not on it.
 	open.list = list.New()
+	open.paused = map[string]struct{}{}
 	open.lastSweep = time.Time{}
 }
 

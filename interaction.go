@@ -1502,9 +1502,9 @@ var finishErrors = map[string]string{"length": "length", "max_tokens": "length",
 // the snapshot to [Interaction.Resume] from, or to pass as [InteractionOptions.Resume] in another
 // process; ok is false once the interaction ended or while pause finalization is in progress.
 // Callers, including callbacks, can retry after finalization; Pause never waits on another pause.
-// A paused run is never ended by the TTL or
-// [Shutdown], and [RunInteraction] and [RunTask] leave it paused when fn returns nil. Pausing again
-// before a resume sends nothing.
+// A paused run is never ended by the TTL or [Shutdown], but it keeps counting toward
+// [Limits.MaxOpenInteractions] until it ends; resuming a run that counts always succeeds.
+// [RunInteraction] and [RunTask] leave it paused when fn returns nil. Pausing again before a resume sends nothing.
 func (i *Interaction) Pause(o PauseOptions) (paused PausedInteraction, ok bool) {
 	safely(func() { paused, ok = i.pause(o) })
 	return paused, ok
@@ -1578,6 +1578,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	i.prompt, i.answer, i.messages = "", "", nil // not in the snapshot, so not in an in-process resume
 	i.compactions = 0
 	unregister(i)
+	holdPausedSlot(i)
 	snapshot, ok = i.snapshotLocked()
 	// The flight stays in progress until unlock finishes delivery and deferred reporting.
 	return snapshot, ok
