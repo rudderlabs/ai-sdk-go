@@ -112,7 +112,6 @@ func TestReviewClientHelperNamesAreDeclaredTools(t *testing.T) {
 	}
 }
 
-
 func TestReviewLimitRows(t *testing.T) {
 	for _, tc := range []struct{ capture, want string }{
 		{`{"event":"ai_limit_reached","properties":{"source":"client"}}`, "ai_limit_reached (browser)"},

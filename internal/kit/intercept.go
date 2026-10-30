@@ -213,8 +213,8 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		return resp, err
 	}
 	if resp.StatusCode >= 400 {
-		c.EndedAt = time.Now()
 		raw := peekBody(resp)
+		c.EndedAt = time.Now() // after the body read, as for successful responses
 		var decoded map[string]any
 		_ = json.Unmarshal(raw, &decoded)
 		t := ""
@@ -289,7 +289,7 @@ func HTTPErrorType(status int, body map[string]any) string {
 		e = body
 	}
 	code, message := Str(e["code"]), strings.ToLower(Str(e["message"]))
-	if (status == 400 || status == 422 || status == 0 || status >= 500 && status != 504) && ContextLimit(code, message) {
+	if (status == 400 || status == 422 || status == 0) && ContextLimit(code, message) {
 		return "context_limit"
 	}
 	if t := rudderstackai.ErrorTypeForStatus(status); t != "" {

@@ -880,3 +880,27 @@ func TestFailedCallIncludesRequestRead(t *testing.T) {
 		t.Fatalf("latency %d omits request reading", got)
 	}
 }
+
+func TestFailedCallLatencyIncludesErrorBodyRead(t *testing.T) {
+	h := newHarness(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		w.(http.Flusher).Flush()
+		time.Sleep(80 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"error":{"message":"busy"}}`)
+	})
+	ctx, i := interaction(h.rec)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.srv.URL+"/v1/chat/completions", strings.NewReader(chatRequest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readAll(t, resp)
+	i.End(rudderstackai.EndOptions{})
+	if got := h.rec.props(t, "ai_llm_response_received")["latency_ms"].(int64); got < 80 {
+		t.Fatalf("latency %d omits the error body read", got)
+	}
+}

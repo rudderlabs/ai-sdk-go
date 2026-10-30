@@ -235,3 +235,14 @@ func TestToolResultMarshalerCanReenter(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestDuplicateReportKeepsOnlyExplicitCredits(t *testing.T) {
+	r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) { return Ptr(0.0), nil }))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "r1", UsageUnknown: true})
+	i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "r1", AgentName: "planner"})
+	i.End(EndOptions{})
+	if p := r.props(t, "ai_response_received"); p["total_credits"] != nil {
+		t.Fatalf("credits from a discarded duplicate: %v", p["total_credits"])
+	}
+}
