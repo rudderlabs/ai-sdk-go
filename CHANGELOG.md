@@ -10,6 +10,22 @@
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
 - SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events.
 
+## [0.4.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.3.0...v0.4.0) (2026-10-30)
+
+
+### Features
+
+* add one-shot interactions and v0.4 client events ([#30](https://github.com/rudderlabs/ai-sdk-go/issues/30)) ([f1e7308](https://github.com/rudderlabs/ai-sdk-go/commit/f1e7308cfdb8788dd89d6675a5079878e7cf3527))
+* add per-event sampling with sample_rate ([#32](https://github.com/rudderlabs/ai-sdk-go/issues/32)) ([b775943](https://github.com/rudderlabs/ai-sdk-go/commit/b7759438f43f2419d9b1e193e95bd95d07b9a3e0))
+* add v0.4 server fields from the customer audit ([#31](https://github.com/rudderlabs/ai-sdk-go/issues/31)) ([b5d1544](https://github.com/rudderlabs/ai-sdk-go/commit/b5d1544ba1505bc9cbd0181aaa986399ae5fabb4))
+* **spec:** release AI events spec v0.4.0 ([#34](https://github.com/rudderlabs/ai-sdk-go/issues/34)) ([d0e49b3](https://github.com/rudderlabs/ai-sdk-go/commit/d0e49b38e1697563c32050a74754d59da5ec3fab))
+* support runs that pause and resume more than once ([#33](https://github.com/rudderlabs/ai-sdk-go/issues/33)) ([6501ff4](https://github.com/rudderlabs/ai-sdk-go/commit/6501ff471cd8b9515d74d74cb5c5b748180e9388))
+
+
+### Miscellaneous
+
+* move the PR title check to check-pr-title v2.0.3 ([#28](https://github.com/rudderlabs/ai-sdk-go/issues/28)) ([f760b15](https://github.com/rudderlabs/ai-sdk-go/commit/f760b151791ee6f1a7b9062b1243fda19678f960))
+
 ## [0.3.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.2.0...v0.3.0) (2026-10-27)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderbedrock/v0.2.1...rudderbedrock/v0.3.0) (2026-10-30)
+
+
+### Features
+
+* add v0.4 server fields from the customer audit ([#31](https://github.com/rudderlabs/ai-sdk-go/issues/31)) ([b5d1544](https://github.com/rudderlabs/ai-sdk-go/commit/b5d1544ba1505bc9cbd0181aaa986399ae5fabb4))
+
 ## [0.2.1](https://github.com/rudderlabs/ai-sdk-go/compare/rudderbedrock/v0.2.0...rudderbedrock/v0.2.1) (2026-10-27)
 
 
