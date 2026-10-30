@@ -282,6 +282,10 @@ func TestClassifyError(t *testing.T) {
 		{&smithy.GenericAPIError{Code: "throttlingException"}, "rate_limit", true},
 		{&smithy.GenericAPIError{Code: "AccessDeniedException"}, "auth_error", true},
 		{&smithy.GenericAPIError{Code: "ValidationException"}, "invalid_request", true},
+		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 403}}, Err: &smithy.GenericAPIError{Code: "ValidationException", Message: "prompt is too long"}}, "auth_error", true},
+		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 429}}, Err: &smithy.GenericAPIError{Code: "ValidationException", Message: "prompt is too long"}}, "rate_limit", true},
+		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 500}}, Err: &smithy.GenericAPIError{Code: "ValidationException", Message: "prompt is too long"}}, "api_error", true},
+		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 400}}, Err: &smithy.GenericAPIError{Code: "ValidationException", Message: "prompt is too long"}}, "context_limit", true},
 		{&smithy.GenericAPIError{Code: "Other"}, "", false},
 		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 429}}, Err: errors.New("x")}, "rate_limit", true},
 		{&smithyhttp.ResponseError{Response: &smithyhttp.Response{Response: &http.Response{StatusCode: 503}}, Err: errors.New("x")}, "", false},
@@ -557,5 +561,12 @@ func TestPlainMessages(t *testing.T) {
 	}
 	if blockKey(nil) != "" || blockKey(aws.Int32(3)) != "3" {
 		t.Error("blockKey")
+	}
+}
+
+func TestContextLimitClassifier(t *testing.T) {
+	err := &smithy.GenericAPIError{Code: "ValidationException", Message: "Input is too long for requested model."}
+	if got := rudderstackai.ErrorTypeOf(err); got != "context_limit" {
+		t.Fatalf("typed classifier: %s", got)
 	}
 }

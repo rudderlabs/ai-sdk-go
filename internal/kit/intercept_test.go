@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
@@ -853,3 +854,53 @@ type funcHandler struct {
 func (f *funcHandler) OnEvent(e string, d []byte) { f.onEvent(e, d) }
 func (f *funcHandler) Finish(End, string)         {}
 func (f *funcHandler) Complete() bool             { return false }
+
+type slowRequestBody struct{ io.Reader }
+
+func (b slowRequestBody) Read(p []byte) (int, error) {
+	time.Sleep(20 * time.Millisecond)
+	return b.Reader.Read(p)
+}
+func (b slowRequestBody) Close() error { return nil }
+
+func TestFailedCallIncludesRequestRead(t *testing.T) {
+	h := newHarness(t, jsonHandler(500, `{"error":{"message":"busy"}}`))
+	ctx, i := interaction(h.rec)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.srv.URL+"/v1/chat/completions", slowRequestBody{strings.NewReader(chatRequest)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readAll(t, resp)
+	i.End(rudderstackai.EndOptions{})
+	if got := h.rec.props(t, "ai_llm_response_received")["latency_ms"].(int64); got < 20 {
+		t.Fatalf("latency %d omits request reading", got)
+	}
+}
+
+func TestFailedCallLatencyIncludesErrorBodyRead(t *testing.T) {
+	h := newHarness(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		w.(http.Flusher).Flush()
+		time.Sleep(80 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"error":{"message":"busy"}}`)
+	})
+	ctx, i := interaction(h.rec)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.srv.URL+"/v1/chat/completions", strings.NewReader(chatRequest))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := h.client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readAll(t, resp)
+	i.End(rudderstackai.EndOptions{})
+	if got := h.rec.props(t, "ai_llm_response_received")["latency_ms"].(int64); got < 80 {
+		t.Fatalf("latency %d omits the error body read", got)
+	}
+}

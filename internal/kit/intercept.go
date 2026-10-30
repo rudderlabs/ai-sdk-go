@@ -20,7 +20,9 @@ import (
 
 // Call is one intercepted model request.
 type Call struct {
-	Interaction *rudderstackai.Interaction
+	Details      rudderstackai.CallDetails
+	FirstTokenAt time.Time
+	Interaction  *rudderstackai.Interaction
 	// Ephemeral: the integration opened the interaction for this call and ends it.
 	Ephemeral   bool
 	Provider    string
@@ -28,6 +30,7 @@ type Call struct {
 	// Model is the requested model.
 	Model     string
 	StartedAt time.Time
+	EndedAt   time.Time
 	// Request is the decoded request body.
 	Request map[string]any
 	// HTTPRequest is the request as sent.
@@ -72,6 +75,7 @@ type Prepared struct {
 
 // Spec describes one provider API for [Intercept].
 type Spec struct {
+	Details     rudderstackai.CallDetails
 	Provider    string
 	Integration string
 	Analytics   analytics.Client
@@ -131,18 +135,21 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	if ctx.Value(trackedKey{s.Integration}) != nil || Untracked(ctx) || req.Method != http.MethodPost {
 		return next(req)
 	}
+	started := time.Now()
 	body, raw := readBody(req)
 	if s.Untracked != nil && s.Untracked(req, body) {
 		return next(req)
 	}
 	stream := s.IsStream != nil && s.IsStream(req, body)
-	started := time.Now()
 	n, numbered := retryNumber(req)
 	var key attemptKey
 	var prev *attempt
 	if numbered {
 		key = keyFor(ctx, s, req, raw)
 		prev = resume(key, n)
+	}
+	if prev != nil {
+		started = prev.call.StartedAt
 	}
 	var i *rudderstackai.Interaction
 	var ephemeral bool
@@ -157,7 +164,8 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	}
 	req = req.WithContext(context.WithValue(ctx, trackedKey{s.Integration}, true))
 	model, _ := body["model"].(string)
-	c := &Call{Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
+	details := rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, s.Details))
+	c := &Call{Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
 	safe(func() {
 		if s.OnRequest != nil {
 			s.OnRequest(c)
@@ -192,6 +200,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		}
 	}
 	if err != nil {
+		c.EndedAt = time.Now()
 		t := ErrorTypeOfTransport(err)
 		safe(func() { NoteCallError(i, err, t) })
 		// A connection error carries no body to tell a retry by: inside an interaction it waits
@@ -205,6 +214,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	}
 	if resp.StatusCode >= 400 {
 		raw := peekBody(resp)
+		c.EndedAt = time.Now() // after the body read, as for successful responses
 		var decoded map[string]any
 		_ = json.Unmarshal(raw, &decoded)
 		t := ""
@@ -250,7 +260,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 
 func (s *Spec) failed(c *Call, errorType string) {
 	safe(func() {
-		c.Interaction.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
+		c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
 		if c.Ephemeral {
 			EndEphemeral(c.Interaction, errorType)
 		}
@@ -274,6 +284,14 @@ var rateLimitCodes = map[string]bool{"insufficient_quota": true, "rate_limit_exc
 // HTTPErrorType maps a failed HTTP response: the status, else a rate-limit error code, else
 // api_error.
 func HTTPErrorType(status int, body map[string]any) string {
+	e := Map(body["error"])
+	if e == nil {
+		e = body
+	}
+	code, message := Str(e["code"]), strings.ToLower(Str(e["message"]))
+	if (status == 400 || status == 422 || status == 0) && ContextLimit(code, message) {
+		return "context_limit"
+	}
 	if t := rudderstackai.ErrorTypeForStatus(status); t != "" {
 		return t
 	}
@@ -496,4 +514,29 @@ func (b *sseBody) Close() error {
 		safe(func() { b.h.Finish(Cancelled, "") })
 	})
 	return b.src.Close()
+}
+
+// RecordCall adds observed boundaries and app metadata before recording a call.
+func (c *Call) RecordCall(call rudderstackai.LLMCall) bool {
+	call.StartedAt = c.StartedAt
+	call.EndedAt = c.EndedAt
+	call.FirstTokenAt = c.FirstTokenAt
+	call.CallPurpose = c.Details.CallPurpose
+	call.FallbackUsed, call.BYOK = c.Details.FallbackUsed, c.Details.BYOK
+	return c.Interaction.RecordCall(call)
+}
+
+// ContextLimit reports whether a rejected request exceeded the model's context window.
+func ContextLimit(code, message string) bool {
+	switch strings.ToLower(code) {
+	case "context_length_exceeded", "context_window_exceeded", "prompt_too_long":
+		return true
+	}
+	message = strings.ToLower(message)
+	for _, part := range []string{"maximum context length", "context window", "prompt is too long", "input is too long", "exceeds the maximum number of tokens"} {
+		if strings.Contains(message, part) {
+			return true
+		}
+	}
+	return false
 }

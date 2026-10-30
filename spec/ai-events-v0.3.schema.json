@@ -2,216 +2,1065 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rudderstack.com/schemas/ai-events/0.3.0",
   "title": "RudderStack AI Product Analytics Events v0.3.0 (draft)",
-  "description": "Event properties for ai_user_prompt_created, ai_response_received, ai_user_action, the optional per-call ai_llm_response_received, the opt-in ai_interaction_classified and ai_interaction_scored, customer-named declared tool events (declared_tool_event, mcp_declared_tool_event), and the MCP server events (mcp_client_seen, mcp_tool_called, mcp_elicitation_completed, mcp_capability_requested, mcp_resource_read, mcp_prompt_used, mcp_event_subscription_changed, mcp_event_delivered). Validate the `properties` object of each track call against the matching definition. Custom properties are allowed. The spec version is not a property: SDKs send it as context.wrapperLibrary.specVersion.",
+  "description": "Event properties for ai_user_prompt_created, ai_response_received, ai_user_action, the optional per-call ai_llm_response_received, the opt-in ai_interaction_classified and ai_interaction_scored, the app-sent ai_limit_reached, customer-named declared tool events (declared_tool_event, mcp_declared_tool_event), and the MCP server events (mcp_client_seen, mcp_tool_called, mcp_elicitation_completed, mcp_capability_requested, mcp_resource_read, mcp_prompt_used, mcp_event_subscription_changed, mcp_event_delivered). Validate the `properties` object of each track call against the matching definition. Custom properties are allowed. The spec version is not a property: SDKs send it as context.wrapperLibrary.specVersion.",
   "$defs": {
-    "surface": { "enum": ["web", "mobile", "slack", "teams", "email", "chatgpt_app", "claude_app", "ide", "api", "other"], "description": "Where the user met the AI. Set by the app; the SDK cannot tell." },
-    "source": { "enum": ["client", "server"], "description": "Which side sent the event; absent means server. Dashboards count answers with source absent or server." },
-    "service_tier": { "enum": ["batch", "flex", "standard", "fast", "other"], "description": "The tier that served the calls, as the provider reports it. fast covers premium tiers (OpenAI priority or fast, Anthropic fast mode); other covers e.g. reserved capacity." },
+    "surface": {
+      "enum": [
+        "web",
+        "mobile",
+        "slack",
+        "teams",
+        "email",
+        "chatgpt_app",
+        "claude_app",
+        "ide",
+        "api",
+        "other"
+      ],
+      "description": "Where the user met the AI. Set by the app; the SDK cannot tell."
+    },
+    "source": {
+      "enum": [
+        "client",
+        "server"
+      ],
+      "description": "Which side sent the event; absent means server. Dashboards count answers with source absent or server."
+    },
+    "service_tier": {
+      "enum": [
+        "batch",
+        "flex",
+        "standard",
+        "fast",
+        "other"
+      ],
+      "description": "The tier that served the calls, as the provider reports it. fast covers premium tiers (OpenAI priority or fast, Anthropic fast mode); other covers e.g. reserved capacity."
+    },
     "id_fields": {
       "type": "object",
-      "required": ["interaction_id"],
+      "required": [
+        "interaction_id"
+      ],
       "properties": {
-        "conversation_id": {"type": "string", "minLength": 1, "description": "Since v0.4. The thread or run scope. For an explicit one-shot interaction without a thread, use interaction_id. Server SDKs opt in; existing chat defaults still mint an ID."},
-        "interaction_id": { "type": "string", "minLength": 1 },
-        "feature": { "type": "string" },
-        "surface": { "$ref": "#/$defs/surface" },
-        "account_id": { "type": "string", "minLength": 1, "description": "Customer, workspace or tenant the work is for." },
-        "on_behalf_of": { "type": "string", "minLength": 1, "description": "The human who requested or owns the work. Not the actor: userId stays unset for system runs." },
-        "trigger_source": { "type": "string", "minLength": 1, "examples": ["schedule", "webhook", "slack", "queue", "agent", "api", "user", "mcp_event"], "description": "Why the run started. Other values are allowed. mcp_event: an MCP Events update started it; trigger_event_id carries the update's ID." },
-        "trigger_event_id": { "type": "string", "minLength": 1, "description": "The ID of the update that started the run. With trigger_source mcp_event, the event_id from mcp_event_delivered." },
-        "task_name": { "type": "string", "minLength": 1, "description": "The job or task being run, e.g. alert-triage." },
-        "parent_interaction_id": { "type": "string", "minLength": 1, "description": "The interaction that started this one (agent hand-offs, sub-tasks)." }
+        "conversation_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. The thread or run scope. For an explicit one-shot interaction without a thread, use interaction_id. Server SDKs opt in; existing chat defaults still mint an ID."
+        },
+        "interaction_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "feature": {
+          "type": "string"
+        },
+        "surface": {
+          "$ref": "#/$defs/surface"
+        },
+        "account_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Customer, workspace or tenant the work is for."
+        },
+        "on_behalf_of": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The human who requested or owns the work. Not the actor: userId stays unset for system runs."
+        },
+        "trigger_source": {
+          "type": "string",
+          "minLength": 1,
+          "examples": [
+            "schedule",
+            "webhook",
+            "slack",
+            "queue",
+            "agent",
+            "api",
+            "user",
+            "mcp_event"
+          ],
+          "description": "Why the run started. Other values are allowed. mcp_event: an MCP Events update started it; trigger_event_id carries the update's ID."
+        },
+        "trigger_event_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The ID of the update that started the run. With trigger_source mcp_event, the event_id from mcp_event_delivered."
+        },
+        "task_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The job or task being run, e.g. alert-triage."
+        },
+        "parent_interaction_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The interaction that started this one (agent hand-offs, sub-tasks)."
+        },
+        "agent_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Version of the agent or AI feature that answered (prompt, config or code release), as the app names it."
+        },
+        "variant": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Experiment arm or rollout variant the interaction ran under, e.g. control."
+        }
       }
     },
     "ids": {
-      "allOf": [{ "$ref": "#/$defs/id_fields" }],
-      "required": ["conversation_id", "interaction_id"]
+      "allOf": [
+        {
+          "$ref": "#/$defs/id_fields"
+        }
+      ],
+      "required": [
+        "conversation_id",
+        "interaction_id"
+      ]
     },
     "ai_user_prompt_created": {
       "description": "conversation_id is required except on a client copy (source: client), which omits it on the first message of a thread the server has not created yet.",
       "allOf": [
-        { "$ref": "#/$defs/id_fields" },
-        { "if": { "required": ["source"], "properties": { "source": { "const": "client" } } }, "else": { "required": ["conversation_id"] } }
+        {
+          "$ref": "#/$defs/id_fields"
+        },
+        {
+          "if": {
+            "required": [
+              "source"
+            ],
+            "properties": {
+              "source": {
+                "const": "client"
+              }
+            }
+          },
+          "else": {
+            "required": [
+              "conversation_id"
+            ]
+          }
+        }
       ],
       "properties": {
-        "source": { "$ref": "#/$defs/source" },
-        "input_method": { "type": "string", "examples": ["text", "voice", "button"] },
-        "attachment_count": { "type": "integer", "minimum": 0, "description": "Files the user attached to the prompt." },
-        "attachment_types": { "type": "array", "uniqueItems": true, "items": { "enum": ["image", "audio", "video", "pdf", "file"] }, "description": "Kinds attached, each listed once; file is any other document. Never file names or content." },
-        "intent": { "type": "string", "description": "Set by the app when known at prompt time, e.g. refund_request." },
-        "prompt_text": { "type": "string", "description": "Opt-in. Treat as personal data." },
-        "prompt_source": { "enum": ["composer", "starter_suggestion", "follow_up_action", "retry"], "description": "Client copy only: where the prompt came from." },
-        "suggestion_id": { "type": "string", "minLength": 1, "description": "Client copy only: the starter suggestion used, with prompt_source starter_suggestion." },
-        "prompt_length": { "type": "integer", "minimum": 0, "description": "Client copy only: characters, measured before any truncation." },
-        "agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. Client copy only: the agent or persona the user picked to answer."},
-        "mode": {"type": "string", "minLength": 1, "description": "Since v0.4. Client copy only: the mode the user picked, e.g. ask or agent."},
-        "context_item_count": {"type": "integer", "minimum": 0, "description": "Since v0.4. Client copy only: context the user attached that is not a file (a dashboard, a query, a selection)."},
-        "context_item_types": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "description": "Since v0.4. Client copy only: app-defined kinds of context attached, each listed once. Never names or content."}
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "input_method": {
+          "type": "string",
+          "examples": [
+            "text",
+            "voice",
+            "button"
+          ]
+        },
+        "attachment_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Files the user attached to the prompt."
+        },
+        "attachment_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "image",
+              "audio",
+              "video",
+              "pdf",
+              "file"
+            ]
+          },
+          "description": "Kinds attached, each listed once; file is any other document. Never file names or content."
+        },
+        "intent": {
+          "type": "string",
+          "description": "Set by the app when known at prompt time, e.g. refund_request."
+        },
+        "prompt_text": {
+          "type": "string",
+          "description": "Opt-in. Treat as personal data."
+        },
+        "prompt_source": {
+          "enum": [
+            "composer",
+            "starter_suggestion",
+            "follow_up_action",
+            "retry"
+          ],
+          "description": "Client copy only: where the prompt came from."
+        },
+        "suggestion_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Client copy only: the starter suggestion used, with prompt_source starter_suggestion."
+        },
+        "prompt_length": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Client copy only: characters, measured before any truncation."
+        },
+        "agent_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Client copy only: the agent or persona the user picked to answer."
+        },
+        "mode": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. Client copy only: the mode the user picked, e.g. ask or agent."
+        },
+        "context_item_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Since v0.4. Client copy only: context the user attached that is not a file (a dashboard, a query, a selection)."
+        },
+        "context_item_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Since v0.4. Client copy only: app-defined kinds of context attached, each listed once. Never names or content."
+        }
       }
     },
     "usage_entry": {
       "type": "object",
-      "required": ["model", "call_count", "input_tokens", "output_tokens", "total_tokens"],
+      "required": [
+        "model",
+        "call_count",
+        "input_tokens",
+        "output_tokens",
+        "total_tokens"
+      ],
       "properties": {
-        "agent_name": { "type": "string" },
-        "provider": { "type": ["string", "null"] },
-        "model": { "type": ["string", "null"] },
-        "requested_model": { "type": "string", "minLength": 1, "description": "Model the application requested, present only when a router or fallback served another model." },
-        "call_count": { "type": "integer", "minimum": 1 },
-        "input_tokens": { "type": "integer", "minimum": 0, "description": "Includes cached and cache-write tokens." },
-        "output_tokens": { "type": "integer", "minimum": 0 },
-        "reasoning_tokens": { "type": "integer", "minimum": 0, "description": "Provider-reported reasoning or thinking tokens. A subset of output_tokens; absent when unavailable." },
-        "total_tokens": { "type": "integer", "minimum": 0, "description": "input_tokens + output_tokens." },
-        "cached_input_tokens": { "type": "integer", "minimum": 0 },
-        "cache_write_tokens": { "type": "integer", "minimum": 0 },
-        "cache_write_1h_tokens": { "type": "integer", "minimum": 0, "description": "Subset of cache_write_tokens written with a 1-hour lifetime, which costs more (Anthropic ephemeral_1h_input_tokens)." },
-        "service_tier": { "$ref": "#/$defs/service_tier" },
-        "server_tool_call_count": { "type": "integer", "minimum": 0, "description": "Calls to provider-hosted tools, such as web search, which bill per call." },
-        "server_tool_cost_usd": { "type": "number", "minimum": 0, "description": "Fees of the provider-hosted tool calls; included in cost_usd." },
-        "error_count": { "type": "integer", "minimum": 0, "description": "Failed model calls in this entry, including retries." },
-        "cost_usd": { "type": "number", "minimum": 0, "description": "Sum of the entry's priced calls, applying service tier and long-context pricing. Present only when every successful call in the entry was priced; failed and cancelled calls add no cost." }
+        "agent_name": {
+          "type": "string"
+        },
+        "call_purpose": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. App-set purpose of the calls (e.g. planning, summarize, classify); entries are grouped by it."
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requested_model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model the application requested, present only when a router or fallback served another model."
+        },
+        "call_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Includes cached and cache-write tokens."
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reasoning_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Provider-reported reasoning or thinking tokens. A subset of output_tokens; absent when unavailable."
+        },
+        "total_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "input_tokens + output_tokens."
+        },
+        "cached_input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_write_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_write_1h_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Subset of cache_write_tokens written with a 1-hour lifetime, which costs more (Anthropic ephemeral_1h_input_tokens)."
+        },
+        "service_tier": {
+          "$ref": "#/$defs/service_tier"
+        },
+        "server_tool_call_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calls to provider-hosted tools, such as web search, which bill per call."
+        },
+        "server_tool_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Fees of the provider-hosted tool calls; included in cost_usd."
+        },
+        "error_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Failed model calls in this entry, including retries."
+        },
+        "cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sum of the entry's priced calls, applying service tier and long-context pricing. Present only when every successful call in the entry was priced; failed and cancelled calls add no cost."
+        },
+        "credits": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Since v0.4. Sum of the entry's calls in the app's own credits, from the app's credit pricing. Present only when every successful call in the entry has credits."
+        }
       }
     },
     "tool_entry": {
       "type": "object",
-      "required": ["tool_name", "call_count"],
+      "required": [
+        "tool_name",
+        "call_count"
+      ],
       "additionalProperties": false,
       "properties": {
-        "agent_name": { "type": "string", "minLength": 1 },
-        "tool_name": { "type": "string", "minLength": 1, "description": "Tool name only, never inputs or outputs. \"unknown\" for calls reported without a name. MCP prefixes are split into mcp_server." },
-        "mcp_server": { "type": "string", "minLength": 1 },
-        "parent_tool": { "type": "string", "minLength": 1, "description": "Inclusive parent tool for nested/sub-agent calls, when known." },
-        "call_count": { "type": "integer", "minimum": 1 },
-        "error_count": { "type": "integer", "minimum": 0, "description": "Calls known to have failed. Present only when the outcome of at least one call of the tool is known; calls with an unknown outcome are not counted." },
-        "error_types": { "type": "object", "additionalProperties": false, "properties": { "rate_limit": { "type": "integer", "minimum": 1 }, "timeout": { "type": "integer", "minimum": 1 }, "cancelled": { "type": "integer", "minimum": 1 }, "denied": { "type": "integer", "minimum": 1 }, "auth_error": { "type": "integer", "minimum": 1 }, "invalid_request": { "type": "integer", "minimum": 1 }, "connection_error": { "type": "integer", "minimum": 1 }, "api_error": { "type": "integer", "minimum": 1 } }, "description": "Failed calls by fixed category; never exception message text." },
-        "duration_ms": { "type": "number", "minimum": 0, "description": "Sum of measured execution durations, including partial measurement; never estimated." },
-        "measured_count": { "type": "integer", "minimum": 1, "description": "Calls whose duration contributed to duration_ms." },
-        "max_duration_ms": { "type": "number", "minimum": 0, "description": "Largest measured duration in the entry." }
+        "agent_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Tool name only, never inputs or outputs. \"unknown\" for calls reported without a name. MCP prefixes are split into mcp_server."
+        },
+        "mcp_server": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_tool": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Inclusive parent tool for nested/sub-agent calls, when known."
+        },
+        "call_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "error_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calls known to have failed. Present only when the outcome of at least one call of the tool is known; calls with an unknown outcome are not counted."
+        },
+        "error_types": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "rate_limit": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "timeout": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "cancelled": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "denied": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "auth_error": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "invalid_request": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "connection_error": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "api_error": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "description": "Failed calls by fixed category; never exception message text."
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sum of measured execution durations, including partial measurement; never estimated."
+        },
+        "measured_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Calls whose duration contributed to duration_ms."
+        },
+        "max_duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Largest measured duration in the entry."
+        }
       }
     },
     "ai_response_received": {
-      "allOf": [{ "$ref": "#/$defs/ids" }],
-      "required": ["response_status"],
-      "dependentSchemas": { "pause_reason": { "properties": { "response_status": { "const": "paused" } } }, "end_reason": { "properties": { "response_status": { "const": "incomplete" } } } },
+      "allOf": [
+        {
+          "$ref": "#/$defs/ids"
+        }
+      ],
+      "required": [
+        "response_status"
+      ],
+      "dependentSchemas": {
+        "pause_reason": {
+          "properties": {
+            "response_status": {
+              "const": "paused"
+            }
+          }
+        },
+        "end_reason": {
+          "properties": {
+            "response_status": {
+              "const": "incomplete"
+            }
+          }
+        },
+        "block_reason": {
+          "properties": {
+            "response_status": {
+              "const": "blocked"
+            }
+          }
+        }
+      },
       "properties": {
-        "source": { "$ref": "#/$defs/source" },
-        "response_status": { "enum": ["success", "error", "timeout", "cancelled", "paused", "incomplete"], "description": "paused: the run stopped to wait for something outside it (pause_reason); the resumed run reports the same interaction_id without a new prompt event. incomplete: the run stopped at a cap (max turns, max output tokens, a cost budget, a time limit); error_type names the cap." },
-        "pause_reason": { "enum": ["approval", "human_input", "deferred_tool", "auth_required", "other"], "description": "With response_status paused: what the run waits for." },
-        "end_reason": { "enum": ["shutdown", "ttl_expired"], "description": "Set only when the SDK ended the interaction itself, always with response_status incomplete: shutdown (shutdown() ended it while still open) or ttl_expired (it stayed open longer than the SDK's interaction TTL). Calls recorded before keep their usage." },
-        "trigger": { "enum": ["user", "system"] },
-        "client_disconnected": { "type": "boolean", "description": "Server only. true when the SDK observed the request close or the stream abort before the answer finished. Not a response_status value." },
-        "primary_model": { "type": "string" },
-        "primary_provider": { "type": "string", "description": "OTel gen_ai.provider.name values." },
-        "latency_ms": { "type": "integer", "minimum": 0 },
-        "time_to_first_token_ms": { "type": "integer", "minimum": 0 },
-        "llm_call_count": { "type": "integer", "minimum": 0 },
-        "tool_call_count": { "type": "integer", "minimum": 0, "description": "Every tool the model invoked, provider-hosted tools included." },
-        "total_input_tokens": { "type": "integer", "minimum": 0 },
-        "total_output_tokens": { "type": "integer", "minimum": 0 },
-        "total_reasoning_tokens": { "type": "integer", "minimum": 0, "description": "Sum of provider-reported reasoning tokens, each a subset of output tokens. Absent when unavailable." },
-        "total_tokens": { "type": "integer", "minimum": 0 },
-        "total_cached_input_tokens": { "type": "integer", "minimum": 0 },
-        "total_cache_write_tokens": { "type": "integer", "minimum": 0 },
-        "total_cost_usd": { "type": "number", "minimum": 0, "description": "Sum of the priced calls: each call's provider-, gateway- or framework-reported cost, else its registered price, applying service tier and long-context pricing and including server-tool fees. Present only when every successful call was priced; failed and cancelled calls add no cost. Never a placeholder 0." },
-        "finish_reason": { "type": "string" },
-        "error_type": { "type": "string", "examples": ["rate_limit", "timeout", "cancelled", "auth_error", "invalid_request", "connection_error", "api_error", "app_error", "max_turns", "max_budget_usd", "during_execution", "max_structured_output_retries", "no_result", "length", "content_filter", "guardrail_trip"], "description": "On failure or incomplete. Common to every integration: rate_limit (any HTTP 429, including insufficient_quota), timeout (HTTP 408 or 504, or a timed-out request), cancelled, auth_error, invalid_request, connection_error, api_error (the provider or its API failed), app_error (the turn failed in the app's own code, with no model call failing: an error the SDK cannot tie to a provider). Integration-specific: max_turns and max_budget_usd (incomplete), during_execution, max_structured_output_retries, no_result (Claude Agent SDK), length (output-token limit; incomplete), content_filter (error), guardrail_trip (OpenAI Agents SDK guardrail tripwire). A retry or framework wrapper error maps to the error behind it." },
-        "intent": { "type": "string", "description": "Set by the app, e.g. refund_request." },
-        "outcome": { "type": "string", "examples": ["resolved", "partial", "unresolved", "escalated", "unclear"], "description": "Set by the app. Uses the outcome list (resolved, partial, unresolved, escalated, unclear) unless the app configures its own." },
-        "usage_breakdown": { "type": "array", "items": { "$ref": "#/$defs/usage_entry" }, "description": "One entry per agent, provider, model and service tier." },
-        "tool_breakdown": { "type": "array", "items": { "$ref": "#/$defs/tool_entry" }, "description": "Opt-in. One entry per agent/MCP server/tool/parent combination; call_count sums to tool_call_count. Nested durations are inclusive." },
-        "response_text": { "type": "string", "description": "Opt-in. Treat as personal data." },
-        "trace_id": { "type": "string", "description": "Link to the same interaction in a tracing tool (Langfuse, LangSmith, OTel)." },
-        "client_error_kind": { "enum": ["offline", "interrupted", "http_4xx", "http_5xx", "agent_error", "unknown"], "description": "Client copy only, on error: the browser's view; the server's is error_type." },
-        "time_to_first_render_ms": { "type": "integer", "minimum": 0, "description": "Client copy only: from submit until the user saw anything." }
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "response_status": {
+          "enum": [
+            "success",
+            "error",
+            "timeout",
+            "cancelled",
+            "paused",
+            "incomplete",
+            "blocked"
+          ],
+          "description": "Since v0.4. paused: the run stopped to wait for something outside it (pause_reason); the resumed run reports the same interaction_id without a new prompt event. incomplete: the run stopped at a cap (max turns, max output tokens, a cost budget, a time limit); error_type names the cap. blocked: the app declined to answer on purpose (block_reason); not a failure."
+        },
+        "block_reason": {
+          "enum": [
+            "guardrail",
+            "policy",
+            "unsupported",
+            "skipped",
+            "other"
+          ],
+          "description": "Since v0.4. With response_status blocked: why. guardrail: a safety or moderation check stopped it. policy: a business rule (plan, permission, region). unsupported: the request is outside what the AI does. skipped: the app chose not to answer (e.g. a duplicate or empty prompt)."
+        },
+        "pause_reason": {
+          "enum": [
+            "approval",
+            "human_input",
+            "deferred_tool",
+            "auth_required",
+            "other"
+          ],
+          "description": "With response_status paused: what the run waits for."
+        },
+        "end_reason": {
+          "enum": [
+            "shutdown",
+            "ttl_expired"
+          ],
+          "description": "Set only when the SDK ended the interaction itself, always with response_status incomplete: shutdown (shutdown() ended it while still open) or ttl_expired (it stayed open longer than the SDK's interaction TTL). Calls recorded before keep their usage."
+        },
+        "trigger": {
+          "enum": [
+            "user",
+            "system"
+          ]
+        },
+        "client_disconnected": {
+          "type": "boolean",
+          "description": "Server only. true when the SDK observed the request close or the stream abort before the answer finished. Not a response_status value."
+        },
+        "primary_model": {
+          "type": "string"
+        },
+        "primary_provider": {
+          "type": "string",
+          "description": "OTel gen_ai.provider.name values."
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "time_to_first_token_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "llm_call_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tool_call_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Every tool the model invoked, provider-hosted tools included."
+        },
+        "total_input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_reasoning_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Sum of provider-reported reasoning tokens, each a subset of output tokens. Absent when unavailable."
+        },
+        "total_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_cached_input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_cache_write_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Sum of the priced calls: each call's provider-, gateway- or framework-reported cost, else its registered price, applying service tier and long-context pricing and including server-tool fees. Present only when every successful call was priced; failed and cancelled calls add no cost. Never a placeholder 0."
+        },
+        "total_credits": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Since v0.4. Sum of the calls in the app's own credits, from the app's credit pricing. Present only when every successful call has credits; failed calls add only app-set credits; cancelled calls add none."
+        },
+        "compaction_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Since v0.4. Times the agent compacted (summarised or truncated) its context during the answer. Absent when it never did."
+        },
+        "finish_reason": {
+          "type": "string"
+        },
+        "error_type": {
+          "type": "string",
+          "examples": [
+            "rate_limit",
+            "timeout",
+            "cancelled",
+            "auth_error",
+            "invalid_request",
+            "context_limit",
+            "connection_error",
+            "api_error",
+            "app_error",
+            "max_turns",
+            "max_budget_usd",
+            "during_execution",
+            "max_structured_output_retries",
+            "no_result",
+            "length",
+            "content_filter",
+            "guardrail_trip"
+          ],
+          "description": "Since v0.4. On failure or incomplete. Common to every integration: rate_limit (any HTTP 429, including insufficient_quota), timeout (HTTP 408 or 504, or a timed-out request), cancelled, auth_error, invalid_request, context_limit (the request did not fit the model's context window), connection_error, api_error (the provider or its API failed), app_error (the turn failed in the app's own code, with no model call failing: an error the SDK cannot tie to a provider). Integration-specific: max_turns and max_budget_usd (incomplete), during_execution, max_structured_output_retries, no_result (Claude Agent SDK), length (output-token limit; incomplete), content_filter (error), guardrail_trip (OpenAI Agents SDK guardrail tripwire). A retry or framework wrapper error maps to the error behind it."
+        },
+        "intent": {
+          "type": "string",
+          "description": "Set by the app, e.g. refund_request."
+        },
+        "outcome": {
+          "type": "string",
+          "examples": [
+            "resolved",
+            "partial",
+            "unresolved",
+            "escalated",
+            "unsupported",
+            "unclear"
+          ],
+          "description": "Since v0.4. Set by the app. Uses the outcome list (resolved, partial, unresolved, escalated, unsupported, unclear) unless the app configures its own. A hand-off to a person is escalated, with the hand-off tool's declared tool event."
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "description": "Since v0.4. Set by the app: how confident the agent was in its answer."
+        },
+        "usage_breakdown": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/usage_entry"
+          },
+          "description": "Since v0.4. One entry per agent, call purpose, provider, model and service tier."
+        },
+        "tool_breakdown": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/tool_entry"
+          },
+          "description": "Opt-in. One entry per agent/MCP server/tool/parent combination; call_count sums to tool_call_count. Nested durations are inclusive."
+        },
+        "response_text": {
+          "type": "string",
+          "description": "Opt-in. Treat as personal data."
+        },
+        "trace_id": {
+          "type": "string",
+          "description": "Link to the same interaction in a tracing tool (Langfuse, LangSmith, OTel)."
+        },
+        "client_error_kind": {
+          "enum": [
+            "offline",
+            "interrupted",
+            "http_4xx",
+            "http_5xx",
+            "agent_error",
+            "unknown"
+          ],
+          "description": "Client copy only, on error: the browser's view; the server's is error_type."
+        },
+        "time_to_first_render_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Client copy only: from submit until the user saw anything."
+        }
       }
     },
     "ai_llm_response_received": {
-      "description": "Optional, one per model call. Off by default in the SDKs. Totals belong on ai_response_received; do not sum these alongside it.",
-      "allOf": [{ "$ref": "#/$defs/ids" }],
-      "required": ["model", "input_tokens", "output_tokens"],
+      "description": "Since v0.4. Optional, one per model call. Off by default in the SDKs. Totals belong on ai_response_received; do not sum these alongside it.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/ids"
+        }
+      ],
+      "required": [
+        "model",
+        "input_tokens",
+        "output_tokens"
+      ],
       "properties": {
-        "agent_name": { "type": "string" },
-        "provider": { "type": ["string", "null"] },
-        "model": { "type": ["string", "null"] },
-        "requested_model": { "type": "string", "minLength": 1, "description": "Model the application requested, present only when a router or fallback served another model." },
-        "input_tokens": { "type": "integer", "minimum": 0 },
-        "output_tokens": { "type": "integer", "minimum": 0 },
-        "reasoning_tokens": { "type": "integer", "minimum": 0, "description": "Provider-reported reasoning or thinking tokens. A subset of output_tokens; absent when unavailable." },
-        "total_tokens": { "type": "integer", "minimum": 0 },
-        "cached_input_tokens": { "type": "integer", "minimum": 0 },
-        "cache_write_tokens": { "type": "integer", "minimum": 0 },
-        "cache_write_1h_tokens": { "type": "integer", "minimum": 0, "description": "Subset of cache_write_tokens written with a 1-hour lifetime." },
-        "service_tier": { "$ref": "#/$defs/service_tier" },
-        "server_tool_call_count": { "type": "integer", "minimum": 0, "description": "Calls to provider-hosted tools, such as web search, which bill per call." },
-        "server_tool_cost_usd": { "type": "number", "minimum": 0, "description": "Fees of the provider-hosted tool calls; included in cost_usd." },
-        "cost_usd": { "type": "number", "minimum": 0, "description": "The provider's or gateway's reported cost, else the registered price, applying service tier and long-context pricing. Absent when the cost is unknown (unpriced, failed or cancelled call)." },
-        "response_id": { "type": "string", "description": "Provider response ID, for debugging only." },
-        "finish_reason": { "type": "string" },
-        "error_type": { "type": "string" }
+        "agent_name": {
+          "type": "string"
+        },
+        "provider": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requested_model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Model the application requested, present only when a router or fallback served another model."
+        },
+        "input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reasoning_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Provider-reported reasoning or thinking tokens. A subset of output_tokens; absent when unavailable."
+        },
+        "total_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cached_input_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_write_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cache_write_1h_tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Subset of cache_write_tokens written with a 1-hour lifetime."
+        },
+        "service_tier": {
+          "$ref": "#/$defs/service_tier"
+        },
+        "server_tool_call_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Calls to provider-hosted tools, such as web search, which bill per call."
+        },
+        "server_tool_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Fees of the provider-hosted tool calls; included in cost_usd."
+        },
+        "cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "The provider's or gateway's reported cost, else the registered price, applying service tier and long-context pricing. Absent when the cost is unknown (unpriced, failed or cancelled call)."
+        },
+        "credits": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Since v0.4. The call in the app's own credits, from the app's credit pricing. Absent when the app gave none."
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Since v0.4. From sending the request to its last byte, when the SDK saw both."
+        },
+        "time_to_first_token_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Since v0.4. From sending the request to its first streamed output, for streamed calls."
+        },
+        "call_purpose": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. App-set purpose of the call, e.g. planning, summarize, classify."
+        },
+        "fallback_used": {
+          "type": "boolean",
+          "description": "Since v0.4. App-set: the call went to a fallback model or provider after the preferred one failed or was skipped."
+        },
+        "byok": {
+          "type": "boolean",
+          "description": "Since v0.4. App-set: the call ran on the end customer's own provider key."
+        },
+        "response_id": {
+          "type": "string",
+          "description": "Provider response ID, for debugging only."
+        },
+        "finish_reason": {
+          "type": "string"
+        },
+        "error_type": {
+          "type": "string"
+        }
       }
     },
     "ai_interaction_classified": {
       "description": "Opt-in. One per interaction that succeeded, sent after its ai_response_received: labels from the customer's own model client (classifier: model) or classify function (custom). Never sent when classification fails.",
-      "allOf": [{ "$ref": "#/$defs/ids" }],
-      "required": ["intent", "outcome", "classifier"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/ids"
+        }
+      ],
+      "required": [
+        "intent",
+        "outcome",
+        "classifier"
+      ],
       "properties": {
-        "trigger": { "enum": ["user", "system"] },
-        "intent": { "type": "string", "minLength": 1, "description": "One of the configured intents, or other. Same name as the app-set intent on the prompt and answer events, so queries can coalesce (app-set wins)." },
-        "outcome": { "type": "string", "minLength": 1, "description": "One of the configured outcomes (default resolved, partial, unresolved, escalated, unclear); anything else is sent as unclear." },
-        "intent_summary": { "type": "string", "minLength": 1, "maxLength": 280, "description": "Opt-in. One sentence, at most 25 words, on what the user tried to do; masked, and withheld when it still matches a sensitive-data pattern. Treat as personal data." },
-        "classifier": { "enum": ["model", "custom"] },
-        "classifier_model": { "type": "string", "minLength": 1 },
-        "classifier_duration_ms": { "type": "integer", "minimum": 0 },
-        "classifier_cost_usd": { "type": "number", "minimum": 0, "description": "Present only when priced. Never added to the interaction's total_cost_usd." }
+        "trigger": {
+          "enum": [
+            "user",
+            "system"
+          ]
+        },
+        "intent": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One of the configured intents, or other. Same name as the app-set intent on the prompt and answer events, so queries can coalesce (app-set wins)."
+        },
+        "outcome": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One of the configured outcomes (default resolved, partial, unresolved, escalated, unclear); anything else is sent as unclear."
+        },
+        "intent_summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280,
+          "description": "Opt-in. One sentence, at most 25 words, on what the user tried to do; masked, and withheld when it still matches a sensitive-data pattern. Treat as personal data."
+        },
+        "classifier": {
+          "enum": [
+            "model",
+            "custom"
+          ]
+        },
+        "classifier_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classifier_duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "classifier_cost_usd": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Present only when priced. Never added to the interaction's total_cost_usd."
+        }
       }
     },
     "ai_interaction_scored": {
       "description": "Opt-in. One per score of an interaction, from a configured evaluator (LLM judge, code check) or sent by the app for scores from elsewhere (e.g. a human reviewer). Mirrors the OTel gen_ai.evaluation.result event. At least one of score_value and score_label.",
-      "allOf": [{ "$ref": "#/$defs/ids" }],
-      "required": ["evaluation_name", "evaluator"],
-      "anyOf": [{ "required": ["score_value"] }, { "required": ["score_label"] }],
+      "allOf": [
+        {
+          "$ref": "#/$defs/ids"
+        }
+      ],
+      "required": [
+        "evaluation_name",
+        "evaluator"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "score_value"
+          ]
+        },
+        {
+          "required": [
+            "score_label"
+          ]
+        }
+      ],
       "properties": {
-        "trigger": { "enum": ["user", "system"] },
-        "evaluation_name": { "type": "string", "minLength": 1, "description": "What was scored, e.g. groundedness. OTel gen_ai.evaluation.name." },
-        "score_value": { "type": "number", "description": "The numeric score. OTel gen_ai.evaluation.score.value." },
-        "score_label": { "type": "string", "minLength": 1, "description": "The label, e.g. pass. OTel gen_ai.evaluation.score.label." },
-        "evaluator": { "enum": ["model", "code", "human"], "description": "model: an LLM judge. code: a deterministic check. human: a person reviewed it." },
-        "sampled": { "type": "boolean", "description": "true when the interaction was picked by sampling rather than scored every time." },
-        "explanation": { "type": "string", "minLength": 1, "maxLength": 280, "description": "Opt-in. Why the score was given (OTel gen_ai.evaluation.explanation). Sent only with content capture on, masked and capped. Treat as personal data." }
+        "trigger": {
+          "enum": [
+            "user",
+            "system"
+          ]
+        },
+        "evaluation_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What was scored, e.g. groundedness. OTel gen_ai.evaluation.name."
+        },
+        "score_value": {
+          "type": "number",
+          "description": "The numeric score. OTel gen_ai.evaluation.score.value."
+        },
+        "score_label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The label, e.g. pass. OTel gen_ai.evaluation.score.label."
+        },
+        "evaluator": {
+          "enum": [
+            "model",
+            "code",
+            "human"
+          ],
+          "description": "model: an LLM judge. code: a deterministic check. human: a person reviewed it."
+        },
+        "sampled": {
+          "type": "boolean",
+          "description": "true when the interaction was picked by sampling rather than scored every time."
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280,
+          "description": "Opt-in. Why the score was given (OTel gen_ai.evaluation.explanation). Sent only with content capture on, masked and capped. Treat as personal data."
+        }
       }
     },
     "declared_tool_event": {
       "description": "A customer-named event declared for one tool (configure eventRules.tools), one per tool call. Since v0.4. A web or mobile client app sends its own, with source: client, for tools it runs itself. The event name is the customer's and never starts with ai_ or mcp_. Custom properties come only from the rule's properties(); tool arguments and results are never copied otherwise.",
-      "allOf": [{ "$ref": "#/$defs/ids" }],
-      "required": ["tool_name", "tool_status"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/ids"
+        }
+      ],
+      "required": [
+        "tool_name",
+        "tool_status"
+      ],
       "properties": {
-        "trigger": { "enum": ["user", "system"] },
-        "agent_name": { "type": "string", "minLength": 1 },
-        "tool_name": { "type": "string", "minLength": 1, "description": "The tool's name." },
-        "tool_call_id": { "type": "string", "minLength": 1, "description": "The provider's tool-call ID, when known. Each call is sent at most once per interaction." },
-        "tool_status": { "enum": ["success", "error", "unknown"], "description": "unknown when the integration never saw the call's outcome." },
-        "tool_duration_ms": { "type": "number", "minimum": 0, "description": "Measured execution time, sent only when measured; never 0 for an unknown outcome." }
+        "trigger": {
+          "enum": [
+            "user",
+            "system"
+          ]
+        },
+        "agent_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The tool's name."
+        },
+        "tool_call_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The provider's tool-call ID, when known. Each call is sent at most once per interaction."
+        },
+        "tool_status": {
+          "enum": [
+            "success",
+            "error",
+            "denied",
+            "unknown"
+          ],
+          "description": "Since v0.4. denied: the call was refused before it ran (a permission check, a user declining it); unknown when the integration never saw the call's outcome."
+        },
+        "tool_duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Measured execution time, sent only when measured; never 0 for an unknown outcome."
+        },
+        "mcp_server": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Since v0.4. The MCP server the tool belongs to, for a call the app made as an MCP client."
+        },
+        "result_size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Since v0.4. UTF-8 size of the result the SDK saw (a string as is, anything else as compact JSON), never its content."
+        }
       }
     },
     "ai_user_action": {
-      "allOf": [{ "$ref": "#/$defs/ids" }],
-      "required": ["action_type"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/ids"
+        }
+      ],
+      "required": [
+        "action_type"
+      ],
       "properties": {
-        "source": { "$ref": "#/$defs/source" },
-        "action_type": {"enum": ["feedback_given", "feedback_retracted", "feedback_dismissed", "copied_response", "shared", "exported", "reported", "regenerated", "accepted", "rejected", "edited", "reverted", "clicked_through"], "description": "Since v0.4. Adds feedback_dismissed, exported (action_details.destination) and reverted (undoing an accepted suggestion). Suggestion lifecycle actions apply to actionable AI output only. feedback_retracted clears the interaction's feedback: the latest feedback_given or feedback_retracted per interaction_id is its final state. accepted, rejected, edited: the user kept an AI suggestion or artifact unchanged, discarded it, or kept it after changing it. clicked_through (client copy): the user opened something from the answer; see card_kind and target_type."},
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "action_type": {
+          "enum": [
+            "feedback_given",
+            "feedback_retracted",
+            "feedback_dismissed",
+            "copied_response",
+            "shared",
+            "exported",
+            "reported",
+            "regenerated",
+            "accepted",
+            "rejected",
+            "edited",
+            "reverted",
+            "clicked_through"
+          ],
+          "description": "Since v0.4. Adds feedback_dismissed, exported (action_details.destination) and reverted (undoing an accepted suggestion). Suggestion lifecycle actions apply to actionable AI output only. feedback_retracted clears the interaction's feedback: the latest feedback_given or feedback_retracted per interaction_id is its final state. accepted, rejected, edited: the user kept an AI suggestion or artifact unchanged, discarded it, or kept it after changing it. clicked_through (client copy): the user opened something from the answer; see card_kind and target_type."
+        },
         "action_details": {
           "type": "object",
           "properties": {
-            "feedback_type": { "type": "string", "examples": ["thumbs", "rating"] },
-            "feedback_value": { "description": "The feedback given; on feedback_retracted, the value being retracted, for context." },
-            "feedback_text": { "type": "string", "description": "Opt-in." },
-            "feedback_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Since v0.4. The app's preset choices the user picked."},
-            "feedback_scope": {"enum": ["interaction", "conversation", "feature"], "description": "Since v0.4. What the feedback is about; absent means interaction. Conversation or feature feedback still carries both IDs: interaction_id is minted for the feedback, and conversation_id is the interaction_id when there is no conversation."},
-            "items_total": {"type": "integer", "minimum": 0, "description": "Since v0.4. On accepted, edited, rejected, reverted: the parts the output had."},
-            "items_accepted": {"type": "integer", "minimum": 0, "description": "Since v0.4. On accepted, edited, rejected, reverted: the parts the user kept."},
-            "destination": {"type": "string", "pattern": "^[a-z][a-z0-9_]*", "maxLength": 64, "not": {"pattern": "[^a-z0-9_]"}, "examples": ["download", "dashboard", "agent", "ide"], "description": "Since v0.4. On exported: where the output went, as a snake_case label (1-64 ASCII characters; starts with a lowercase letter, followed by lowercase letters, digits or underscores)."},
-            "card_kind": { "type": "string", "minLength": 1, "description": "On clicked_through: which card or component, e.g. a source card, a chart or an MCP Apps widget." },
-            "target_type": { "type": "string", "minLength": 1, "examples": ["resource", "doc"], "description": "On clicked_through: the kind of object opened. Never a URL." }
+            "feedback_type": {
+              "type": "string",
+              "examples": [
+                "thumbs",
+                "rating"
+              ]
+            },
+            "feedback_value": {
+              "description": "The feedback given; on feedback_retracted, the value being retracted, for context."
+            },
+            "feedback_text": {
+              "type": "string",
+              "description": "Opt-in."
+            },
+            "feedback_reasons": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Since v0.4. The app's preset choices the user picked."
+            },
+            "feedback_scope": {
+              "enum": [
+                "interaction",
+                "conversation",
+                "feature"
+              ],
+              "description": "Since v0.4. What the feedback is about; absent means interaction. Conversation or feature feedback still carries both IDs: interaction_id is minted for the feedback, and conversation_id is the interaction_id when there is no conversation."
+            },
+            "items_total": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Since v0.4. On accepted, edited, rejected, reverted: the parts the output had."
+            },
+            "items_accepted": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Since v0.4. On accepted, edited, rejected, reverted: the parts the user kept."
+            },
+            "destination": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*",
+              "maxLength": 64,
+              "not": {
+                "pattern": "[^a-z0-9_]"
+              },
+              "examples": [
+                "download",
+                "dashboard",
+                "agent",
+                "ide"
+              ],
+              "description": "Since v0.4. On exported: where the output went, as a snake_case label (1-64 ASCII characters; starts with a lowercase letter, followed by lowercase letters, digits or underscores)."
+            },
+            "card_kind": {
+              "type": "string",
+              "minLength": 1,
+              "description": "On clicked_through: which card or component, e.g. a source card, a chart or an MCP Apps widget."
+            },
+            "target_type": {
+              "type": "string",
+              "minLength": 1,
+              "examples": [
+                "resource",
+                "doc"
+              ],
+              "description": "On clicked_through: the kind of object opened. Never a URL."
+            }
           }
         }
       }
@@ -220,153 +1069,595 @@
       "type": "object",
       "description": "Fields any MCP server event may carry. interaction_id and trace_id come from the request's _meta (com.rudderstack/interaction_id; W3C traceparent, else com.rudderstack/trace_id) as opaque, length-capped strings; without them the server mints interaction_id and sends no trace_id.",
       "properties": {
-        "mcp_session_id": { "type": "string", "minLength": 1, "description": "From the Mcp-Session-Id header (2025-06-18) or a host-provided session key in _meta; absent otherwise." },
-        "server_name": { "type": "string", "minLength": 1, "description": "This server." },
-        "server_version": { "type": "string", "minLength": 1 },
-        "account_id": { "type": "string", "minLength": 1, "description": "Workspace." },
-        "client_name": { "type": "string", "minLength": 1, "description": "From clientInfo: the request's _meta on 2026-07-28, the initialize request on 2025-06-18." },
-        "client_version": { "type": "string", "minLength": 1 },
-        "protocol_version": { "type": "string", "minLength": 1, "description": "The request's MCP protocol version (2026-07-28), or the negotiated one (2025-06-18)." },
-        "interaction_id": { "type": "string", "minLength": 1 },
-        "trace_id": { "type": "string", "minLength": 1 }
+        "mcp_session_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "From the Mcp-Session-Id header (2025-06-18) or a host-provided session key in _meta; absent otherwise."
+        },
+        "server_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "This server."
+        },
+        "server_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "account_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Workspace."
+        },
+        "client_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "From clientInfo: the request's _meta on 2026-07-28, the initialize request on 2025-06-18."
+        },
+        "client_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol_version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The request's MCP protocol version (2026-07-28), or the negotiated one (2025-06-18)."
+        },
+        "interaction_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
-    "mcp_error_type": { "enum": ["rate_limit", "timeout", "cancelled", "denied", "auth_error", "invalid_request", "connection_error", "api_error"], "description": "The tool_breakdown error_types set." },
+    "mcp_error_type": {
+      "enum": [
+        "rate_limit",
+        "timeout",
+        "cancelled",
+        "denied",
+        "auth_error",
+        "invalid_request",
+        "connection_error",
+        "api_error"
+      ],
+      "description": "The tool_breakdown error_types set."
+    },
     "request_context": {
       "type": "object",
       "description": "The optional object the MCP server integration adds to each tool's input schema (skipped when the tool already has an argument with that name) and strips before the handler runs. Its fields are recorded on mcp_tool_called. intent and user_sentiment are on by default; call_reason only with content capture on.",
       "properties": {
-        "intent": { "type": "string", "minLength": 1, "description": "Chosen by the agent from the server's closed intent list, or other. Same name and meaning as intent on the chat events." },
-        "user_sentiment": { "enum": ["negative", "neutral", "positive"], "description": "The agent's read of the user's mood in the latest turn." },
-        "call_reason": { "type": "string", "minLength": 1, "description": "Opt-in. One short sentence from the agent on why it made this call; masked and capped." }
+        "intent": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Chosen by the agent from the server's closed intent list, or other. Same name and meaning as intent on the chat events."
+        },
+        "user_sentiment": {
+          "enum": [
+            "negative",
+            "neutral",
+            "positive"
+          ],
+          "description": "The agent's read of the user's mood in the latest turn."
+        },
+        "call_reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opt-in. One short sentence from the agent on why it made this call; masked and capped."
+        }
       }
     },
     "mcp_client_seen": {
       "description": "The first request from a (client_name, oauth_client_id, userId) in a window (default 24 hours). userId is the OAuth subject.",
-      "allOf": [{ "$ref": "#/$defs/mcp_fields" }],
-      "required": ["server_name"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "server_name"
+      ],
       "properties": {
-        "client_title": { "type": "string", "minLength": 1 },
-        "client_capabilities": { "type": "array", "items": { "type": "string" }, "description": "Declared features, e.g. elicitation, sorted by Unicode code point. sampling and roots are legacy values." },
-        "transport": { "enum": ["stdio", "streamable_http", "sse"] },
-        "auth_method": { "type": "string", "examples": ["oauth", "api_key", "none"] },
-        "oauth_client_id": { "type": "string", "minLength": 1, "description": "The registered app behind the token." },
-        "token_scopes": { "type": "array", "items": { "type": "string" }, "description": "Granted scopes." },
-        "country": { "type": "string", "minLength": 1, "description": "Coarse, derived from the request IP, which is never sent." }
+        "client_title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "client_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Declared features, e.g. elicitation, sorted by Unicode code point. sampling and roots are legacy values."
+        },
+        "transport": {
+          "enum": [
+            "stdio",
+            "streamable_http",
+            "sse"
+          ]
+        },
+        "auth_method": {
+          "type": "string",
+          "examples": [
+            "oauth",
+            "api_key",
+            "none"
+          ]
+        },
+        "oauth_client_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The registered app behind the token."
+        },
+        "token_scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Granted scopes."
+        },
+        "country": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Coarse, derived from the request IP, which is never sent."
+        }
       }
     },
     "mcp_tool_called": {
       "description": "A tools/call request completed or failed. Never tool arguments or results.",
-      "allOf": [{ "$ref": "#/$defs/mcp_fields" }],
-      "required": ["request_id", "tool_name", "tool_status"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "request_id",
+        "tool_name",
+        "tool_status"
+      ],
       "properties": {
-        "request_id": { "type": "string", "minLength": 1, "description": "The JSON-RPC request ID." },
-        "tool_name": { "type": "string", "minLength": 1, "description": "Name only." },
-        "tool_status": { "enum": ["success", "error"] },
-        "error_type": { "$ref": "#/$defs/mcp_error_type" },
-        "is_error_result": { "type": "boolean", "description": "The tool returned a result flagged isError, as opposed to a protocol error." },
-        "duration_ms": { "type": "number", "minimum": 0, "description": "Server-side execution time." },
-        "time_to_cancel_ms": { "type": "number", "minimum": 0, "description": "When the client cancelled the call (notifications/cancelled), how long it had run; error_type is cancelled." },
-        "argument_keys": { "type": "array", "items": { "type": "string" }, "description": "Names of the arguments the agent supplied, sorted by Unicode code point. Never the values." },
-        "invalid_arguments": { "type": "array", "items": { "type": "string" }, "description": "Names of the arguments that failed schema validation. Never the values." },
-        "retry_count": { "type": "integer", "minimum": 0, "description": "Earlier calls with the same tool and arguments in the same mcp_session_id, else interaction_id, compared by hash in memory." },
-        "call_index": { "type": "integer", "minimum": 0, "description": "Position of this call within its mcp_session_id, else its interaction_id." },
-        "ms_since_previous_call": { "type": "number", "minimum": 0, "description": "Gap since the previous request in the same scope as call_index." },
-        "progress_requested": { "type": "boolean", "description": "The client sent a progressToken." },
-        "result_size_bytes": { "type": "integer", "minimum": 0, "description": "Size of the result, never its content." },
-        "result_tokens_estimate": { "type": "integer", "minimum": 0, "description": "Rough tokens the result adds to the agent's context (size / 4)." },
-        "result_content_types": { "type": "array", "items": { "enum": ["text", "image", "audio", "resource_link", "resource", "structured"] } },
-        "result_paginated": { "type": "boolean", "description": "The result carried a cursor for more." },
-        "intent": { "$ref": "#/$defs/request_context/properties/intent" },
-        "user_sentiment": { "$ref": "#/$defs/request_context/properties/user_sentiment" },
-        "call_reason": { "$ref": "#/$defs/request_context/properties/call_reason" }
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The JSON-RPC request ID."
+        },
+        "tool_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name only."
+        },
+        "tool_status": {
+          "enum": [
+            "success",
+            "error"
+          ]
+        },
+        "error_type": {
+          "$ref": "#/$defs/mcp_error_type"
+        },
+        "is_error_result": {
+          "type": "boolean",
+          "description": "The tool returned a result flagged isError, as opposed to a protocol error."
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Server-side execution time."
+        },
+        "time_to_cancel_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "When the client cancelled the call (notifications/cancelled), how long it had run; error_type is cancelled."
+        },
+        "argument_keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Names of the arguments the agent supplied, sorted by Unicode code point. Never the values."
+        },
+        "invalid_arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Names of the arguments that failed schema validation. Never the values."
+        },
+        "retry_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Earlier calls with the same tool and arguments in the same mcp_session_id, else interaction_id, compared by hash in memory."
+        },
+        "call_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Position of this call within its mcp_session_id, else its interaction_id."
+        },
+        "ms_since_previous_call": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Gap since the previous request in the same scope as call_index."
+        },
+        "progress_requested": {
+          "type": "boolean",
+          "description": "The client sent a progressToken."
+        },
+        "result_size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Size of the result, never its content."
+        },
+        "result_tokens_estimate": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Rough tokens the result adds to the agent's context (size / 4)."
+        },
+        "result_content_types": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "text",
+              "image",
+              "audio",
+              "resource_link",
+              "resource",
+              "structured"
+            ]
+          }
+        },
+        "result_paginated": {
+          "type": "boolean",
+          "description": "The result carried a cursor for more."
+        },
+        "intent": {
+          "$ref": "#/$defs/request_context/properties/intent"
+        },
+        "user_sentiment": {
+          "$ref": "#/$defs/request_context/properties/user_sentiment"
+        },
+        "call_reason": {
+          "$ref": "#/$defs/request_context/properties/call_reason"
+        }
       }
     },
     "mcp_elicitation_completed": {
       "description": "The server asked the user for input through the client (elicitation/create on 2025-06-18; an input_required result on 2026-07-28) and the client responded or the request failed. Never the question or the answer.",
-      "allOf": [{ "$ref": "#/$defs/mcp_fields" }],
-      "required": ["elicitation_action"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "elicitation_action"
+      ],
       "properties": {
-        "elicitation_action": { "enum": ["accept", "decline", "cancel"], "description": "As returned by the client." },
-        "tool_name": { "type": "string", "minLength": 1, "description": "The tool that asked." },
-        "request_id": { "type": "string", "minLength": 1, "description": "The tool call's request ID; on 2026-07-28, the original request's." },
-        "duration_ms": { "type": "number", "minimum": 0, "description": "Time the user took to respond." },
-        "error_type": { "$ref": "#/$defs/mcp_error_type" }
+        "elicitation_action": {
+          "enum": [
+            "accept",
+            "decline",
+            "cancel"
+          ],
+          "description": "As returned by the client."
+        },
+        "tool_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The tool that asked."
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The tool call's request ID; on 2026-07-28, the original request's."
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Time the user took to respond."
+        },
+        "error_type": {
+          "$ref": "#/$defs/mcp_error_type"
+        }
       }
     },
     "mcp_capability_requested": {
       "description": "Opt-in. The agent called the injected request_capability tool because no existing tool can do what the user needs.",
-      "allOf": [{ "$ref": "#/$defs/mcp_fields" }],
-      "required": ["capability"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "capability"
+      ],
       "properties": {
-        "capability": { "type": "string", "minLength": 1, "description": "One of the server owner's known gaps (e.g. bulk_export), or other." },
-        "capability_detail": { "type": "string", "minLength": 1, "description": "Opt-in, for other only: a short description of the need; masked, capped, and withheld when it still matches a sensitive pattern." }
+        "capability": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One of the server owner's known gaps (e.g. bulk_export), or other."
+        },
+        "capability_detail": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opt-in, for other only: a short description of the need; masked, capped, and withheld when it still matches a sensitive pattern."
+        }
       }
     },
     "mcp_resource_read": {
       "description": "A resources/read request completed or failed. Same shape as mcp_tool_called, with resource_name in place of tool_name.",
-      "allOf": [{ "$ref": "#/$defs/mcp_fields" }],
-      "required": ["request_id", "resource_name", "tool_status"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "request_id",
+        "resource_name",
+        "tool_status"
+      ],
       "properties": {
-        "request_id": { "type": "string", "minLength": 1, "description": "The JSON-RPC request ID." },
-        "resource_name": { "type": "string", "minLength": 1, "description": "The resource template or name, never a URI carrying IDs." },
-        "tool_status": { "enum": ["success", "error"] },
-        "error_type": { "$ref": "#/$defs/mcp_error_type" },
-        "duration_ms": { "type": "number", "minimum": 0 },
-        "result_size_bytes": { "type": "integer", "minimum": 0 }
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The JSON-RPC request ID."
+        },
+        "resource_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The resource template or name, never a URI carrying IDs."
+        },
+        "tool_status": {
+          "enum": [
+            "success",
+            "error"
+          ]
+        },
+        "error_type": {
+          "$ref": "#/$defs/mcp_error_type"
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "result_size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "mcp_prompt_used": {
       "description": "A prompts/get request completed or failed. Same shape as mcp_tool_called, with prompt_name in place of tool_name.",
-      "allOf": [{ "$ref": "#/$defs/mcp_fields" }],
-      "required": ["request_id", "prompt_name", "tool_status"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "request_id",
+        "prompt_name",
+        "tool_status"
+      ],
       "properties": {
-        "request_id": { "type": "string", "minLength": 1, "description": "The JSON-RPC request ID." },
-        "prompt_name": { "type": "string", "minLength": 1 },
-        "tool_status": { "enum": ["success", "error"] },
-        "error_type": { "$ref": "#/$defs/mcp_error_type" },
-        "duration_ms": { "type": "number", "minimum": 0 },
-        "result_size_bytes": { "type": "integer", "minimum": 0 }
+        "request_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The JSON-RPC request ID."
+        },
+        "prompt_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_status": {
+          "enum": [
+            "success",
+            "error"
+          ]
+        },
+        "error_type": {
+          "$ref": "#/$defs/mcp_error_type"
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "result_size_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "mcp_event_subscription_changed": {
       "description": "Experimental, opt-in. An MCP Events subscription was created, refreshed or ended, or a subscribe call failed webhook verification.",
-      "allOf": [{ "$ref": "#/$defs/mcp_fields" }],
-      "required": ["subscription_action", "subscription_id", "event_name"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "subscription_action",
+        "subscription_id",
+        "event_name"
+      ],
       "properties": {
-        "subscription_action": { "enum": ["created", "refreshed", "unsubscribed", "revoked", "expired", "callback_failed"] },
-        "subscription_id": { "type": "string", "minLength": 1, "description": "The server's subscription ID; joins deliveries." },
-        "event_name": { "type": "string", "minLength": 1, "description": "The subscribed update, e.g. comment.created." },
-        "argument_keys": { "type": "array", "items": { "type": "string" }, "description": "Filter argument names, sorted by Unicode code point. Never the values." },
-        "delivery_mode": { "type": "string", "examples": ["webhook"] },
-        "ttl_ms": { "type": "integer", "minimum": 0, "description": "Granted lifetime; absent when it never expires." },
-        "resumed_from_cursor": { "type": "boolean" },
-        "history_truncated": { "type": "boolean" },
-        "failure_reason": { "type": "string", "examples": ["challenge_failed", "timeout"], "description": "For callback_failed." }
+        "subscription_action": {
+          "enum": [
+            "created",
+            "refreshed",
+            "unsubscribed",
+            "revoked",
+            "expired",
+            "callback_failed"
+          ]
+        },
+        "subscription_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The server's subscription ID; joins deliveries."
+        },
+        "event_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The subscribed update, e.g. comment.created."
+        },
+        "argument_keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Filter argument names, sorted by Unicode code point. Never the values."
+        },
+        "delivery_mode": {
+          "type": "string",
+          "examples": [
+            "webhook"
+          ]
+        },
+        "ttl_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Granted lifetime; absent when it never expires."
+        },
+        "resumed_from_cursor": {
+          "type": "boolean"
+        },
+        "history_truncated": {
+          "type": "boolean"
+        },
+        "failure_reason": {
+          "type": "string",
+          "examples": [
+            "challenge_failed",
+            "timeout"
+          ],
+          "description": "For callback_failed."
+        }
       }
     },
     "mcp_event_delivered": {
       "description": "Experimental, opt-in. The server finished delivering one MCP Events update to a subscriber: acknowledged, or given up after retries.",
-      "allOf": [{ "$ref": "#/$defs/mcp_fields" }],
-      "required": ["subscription_id", "event_name", "event_id", "delivery_status"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "subscription_id",
+        "event_name",
+        "event_id",
+        "delivery_status"
+      ],
       "properties": {
-        "subscription_id": { "type": "string", "minLength": 1 },
-        "event_name": { "type": "string", "minLength": 1 },
-        "event_id": { "type": "string", "minLength": 1, "description": "The protocol event ID, kept across retries. A run it starts carries it as trigger_event_id." },
-        "delivery_status": { "enum": ["acknowledged", "rejected", "gave_up"] },
-        "http_status": { "type": "integer", "description": "The final response." },
-        "attempt_count": { "type": "integer", "minimum": 1, "description": "Deliveries tried, including retries." },
-        "delivery_latency_ms": { "type": "number", "minimum": 0, "description": "From when the update happened to acknowledgement." },
-        "payload_size_bytes": { "type": "integer", "minimum": 0, "description": "Body size. Never the payload." }
+        "subscription_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "event_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The protocol event ID, kept across retries. A run it starts carries it as trigger_event_id."
+        },
+        "delivery_status": {
+          "enum": [
+            "acknowledged",
+            "rejected",
+            "gave_up"
+          ]
+        },
+        "http_status": {
+          "type": "integer",
+          "description": "The final response."
+        },
+        "attempt_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Deliveries tried, including retries."
+        },
+        "delivery_latency_ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "From when the update happened to acknowledgement."
+        },
+        "payload_size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Body size. Never the payload."
+        }
       }
     },
     "mcp_declared_tool_event": {
       "description": "A customer-named event declared for one MCP tool (the same eventRules.tools rules), one per tool call. The name never starts with ai_ or mcp_. Custom properties come only from the rule's properties().",
-      "allOf": [{ "$ref": "#/$defs/mcp_fields" }],
-      "required": ["tool_name", "tool_status"],
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "tool_name",
+        "tool_status"
+      ],
       "properties": {
-        "tool_name": { "type": "string", "minLength": 1 },
-        "tool_status": { "enum": ["success", "error", "unknown"] }
+        "tool_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_status": {
+          "enum": [
+            "success",
+            "error",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "ai_limit_reached": {
+      "description": "Since v0.4. Sent by the app (server side) when a user or account hits a usage limit of the AI feature: credits, messages, tokens, a rate limit the app enforces. Not provider rate limits, which are error_type rate_limit. interaction_id is present when the limit stopped a specific interaction.",
+      "type": "object",
+      "required": [
+        "limit_type"
+      ],
+      "properties": {
+        "conversation_id": {
+          "$ref": "#/$defs/id_fields/properties/conversation_id"
+        },
+        "interaction_id": {
+          "$ref": "#/$defs/id_fields/properties/interaction_id"
+        },
+        "feature": {
+          "$ref": "#/$defs/id_fields/properties/feature"
+        },
+        "surface": {
+          "$ref": "#/$defs/surface"
+        },
+        "account_id": {
+          "$ref": "#/$defs/id_fields/properties/account_id"
+        },
+        "on_behalf_of": {
+          "$ref": "#/$defs/id_fields/properties/on_behalf_of"
+        },
+        "agent_version": {
+          "$ref": "#/$defs/id_fields/properties/agent_version"
+        },
+        "variant": {
+          "$ref": "#/$defs/id_fields/properties/variant"
+        },
+        "limit_type": {
+          "type": "string",
+          "minLength": 1,
+          "examples": [
+            "credits",
+            "messages",
+            "tokens",
+            "requests",
+            "cost",
+            "seats"
+          ],
+          "description": "Since v0.4. Which limit, as the app names it."
+        }
       }
     }
   }

@@ -111,3 +111,18 @@ func TestReviewClientHelperNamesAreDeclaredTools(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewLimitRows(t *testing.T) {
+	for _, tc := range []struct{ capture, want string }{
+		{`{"event":"ai_limit_reached","properties":{"source":"client"}}`, "ai_limit_reached (browser)"},
+		{`{"event":"ai_limit_reached","properties":{},"context":{"wrapperLibrary":{"name":"ai-sdk-go"}}}`, "ai_limit_reached"},
+	} {
+		v, err := parseJSON(tc.capture)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := rowKey(obj(v)); got != tc.want {
+			t.Fatalf("got %s, want %s", got, tc.want)
+		}
+	}
+}

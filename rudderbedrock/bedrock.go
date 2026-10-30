@@ -53,6 +53,7 @@ const (
 type Option func(*config)
 
 type config struct {
+	details   rudderstackai.CallDetails
 	analytics analytics.Client
 }
 
@@ -90,8 +91,14 @@ func WithTracking(opts ...Option) func(*bedrockruntime.Options) {
 
 func init() { kit.RegisterErrorClassifier(classifyError) }
 
-// classifyError maps AWS errors: the exception name first, then the HTTP status.
+// classifyError preserves HTTP auth, rate and timeout errors before mapping AWS exception names.
 func classifyError(err error) (string, bool) {
+	var resp *smithyhttp.ResponseError
+	if errors.As(err, &resp) {
+		if t := rudderstackai.ErrorTypeForStatus(resp.HTTPStatusCode()); t != "" && t != "invalid_request" {
+			return t, true
+		}
+	}
 	var api smithy.APIError
 	if errors.As(err, &api) {
 		n := strings.ToLower(api.ErrorCode())
@@ -101,10 +108,15 @@ func classifyError(err error) (string, bool) {
 		case strings.Contains(n, "accessdenied"):
 			return "auth_error", true
 		case strings.Contains(n, "validationexception"):
+			if kit.ContextLimit("", api.ErrorMessage()) {
+				if resp != nil {
+					return kit.HTTPErrorType(resp.HTTPStatusCode(), map[string]any{"message": api.ErrorMessage()}), true
+				}
+				return "context_limit", true
+			}
 			return "invalid_request", true
 		}
 	}
-	var resp *smithyhttp.ResponseError
 	if errors.As(err, &resp) {
 		if t := rudderstackai.ErrorTypeForStatus(resp.HTTPStatusCode()); t != "" {
 			return t, true
@@ -184,7 +196,7 @@ func recordToolResults(i *rudderstackai.Interaction, messages []types.Message) {
 				continue
 			}
 			failed := r.Value.Status == types.ToolResultStatusError
-			i.RecordToolResult(*r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolResultValue(r.Value.Content)})
+			kit.RecordToolResult(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolResultValue(r.Value.Content)}, len(r.Value.Content) > 0)
 		}
 	}
 }
@@ -266,7 +278,7 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	if i == nil {
 		return call(ctx)
 	}
-	c := &kit.Call{Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
+	c := &kit.Call{Details: rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, t.cfg.details)), Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
 	safe(func() {
 		recordToolResults(i, messages)
 		kit.KeepMessages(i, plainMessages(messages))
@@ -297,7 +309,7 @@ func failed(c *kit.Call, sc *streamCall, errorType string) {
 	if sc != nil && sc.end(kit.Errored, errorType) {
 		return
 	}
-	c.Interaction.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
+	c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
 	if c.Ephemeral {
 		kit.EndEphemeral(c.Interaction, errorType)
 	}
@@ -324,7 +336,7 @@ func recordResponse(c *kit.Call, out *bedrockruntime.ConverseOutput, responseID 
 		}
 		call.OutputText = text.String()
 	}
-	if c.Interaction.RecordCall(call) && len(tools) > 0 {
+	if c.RecordCall(call) && len(tools) > 0 {
 		c.Interaction.RecordToolCalls(tools...)
 	}
 	if c.Ephemeral {
@@ -504,3 +516,14 @@ func (streamWrapper) HandleDeserialize(ctx context.Context, in middleware.Deseri
 	safe(func() { sc.start(resp) })
 	return out, md, err
 }
+
+// WithCallPurpose labels the purpose of model calls through this integration.
+func WithCallPurpose(purpose string) Option {
+	return func(c *config) { c.details.CallPurpose = purpose }
+}
+
+// WithFallbackUsed records whether the app selected a fallback provider or model.
+func WithFallbackUsed(used bool) Option { return func(c *config) { c.details.FallbackUsed = &used } }
+
+// WithBYOK records whether the call used the end customer's own provider key.
+func WithBYOK(byok bool) Option { return func(c *config) { c.details.BYOK = &byok } }

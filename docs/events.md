@@ -419,3 +419,29 @@ Every event carries `context.wrapperLibrary` beside the `context.library` analyt
 `integration` is the integration that started or recorded the interaction's first model call (`openai`, `anthropic`, `google-genai`, `bedrock`), `manual` for `LLMCall.Integration` left empty, `TrackAction`, `TrackScore` and interactions without calls, or `mcp` for [MCP server events](mcp.md). If your own message context (`Context` of the options or `WithValues`) has a `wrapperLibrary`, it is nested inside the SDK's as `wrapperLibrary.wrapperLibrary`. Other keys of your context are sent as they are.
 
 Client events for web and mobile SDKs, including additions since v0.4: [client-events.md](client-events.md).
+
+## Server fields added since v0.4
+
+These additions retain specVersion `0.3.0` until the final stacked layer.
+`InteractionOptions`, `TaskOptions`, `ContextValues`, `TrackActionOptions`, and `TrackScoreOptions`
+accept `AgentVersion` and `Variant`. Use `EndOptions{Status: StatusBlocked, BlockReason: BlockPolicy}`
+for intentional declines, `SetConfidence(ConfidenceHigh)` for app confidence, and
+`RecordCompaction()` for context compactions. A human handoff is outcome `escalated` plus its declared
+tool event. The default outcomes include `unsupported`.
+
+`WithCredits` accepts `func(CreditCall) (*float64, error)`. It prices successful calls with known usage
+after USD pricing; return nil for unknown credits. `LLMCall.Credits` overrides the hook. Totals and
+usage entries omit credits when any successful call has no credit price; cancelled calls add none.
+`TrackLimitReached(ctx, TrackLimitReachedOptions{LimitType: "credits", Feature: "chat"})` records an
+app-enforced usage limit. Provider rate limits remain model errors.
+
+Every provider integration offers `WithCallPurpose`, `WithFallbackUsed`, and `WithBYOK`.
+`WithCallDetails` can scope metadata to calls made with a context. Manual `LLMCall` records accept
+these fields and `StartedAt`, `EndedAt`, and `FirstTokenAt`. Observed boundaries produce per-call
+`latency_ms` and streaming `time_to_first_token_ms`; unknown boundaries stay absent.
+Usage entries are grouped by call purpose as well as agent, provider, model, and service tier.
+
+Declared tool events include `mcp_server` and the UTF-8 `result_size_bytes` of observed results.
+Results are passed to rules and measured; their content is never copied into events. A tool result
+with `Error: Ptr(true), ErrorType: "denied"` emits `tool_status: denied`. Context overflow maps to
+`error_type: context_limit`.

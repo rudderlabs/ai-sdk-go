@@ -625,3 +625,9 @@ func TestClassifierClient(t *testing.T) {
 		t.Error("want the error")
 	}
 }
+
+func TestContextLimitMessageClassifier(t *testing.T) {
+	if got := rudderstackai.ErrorTypeOf(&openai.Error{StatusCode: 400, Message: "maximum context length exceeded"}); got != "context_limit" {
+		t.Fatalf("typed classifier: %s", got)
+	}
+}

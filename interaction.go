@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"math"
 	"net/http"
 	"slices"
@@ -48,6 +47,9 @@ type InteractionOptions struct {
 	// OnBehalfOf is the human who requested or owns the work; not the actor. Falls back to the
 	// context.
 	OnBehalfOf string
+	// AgentVersion names the app release or configuration; Variant names its experiment arm.
+	AgentVersion string
+	Variant      string
 	// TriggerSource is why the run started: "schedule", "webhook", "slack", "queue", "agent"...
 	TriggerSource string
 	// TaskName is the job or task being run, for example "alert-triage".
@@ -99,6 +101,13 @@ type InteractionOptions struct {
 
 // LLMCall is one model call (or several aggregated ones) reported into an interaction.
 type LLMCall struct {
+	// Credits overrides the configured credit pricing hook. Nil means unknown.
+	Credits *float64
+	// CallPurpose, FallbackUsed and BYOK are app-set call details.
+	CallPurpose        string
+	FallbackUsed, BYOK *bool
+	// StartedAt, EndedAt and FirstTokenAt describe observed call boundaries. EndedAt defaults to now.
+	StartedAt, EndedAt, FirstTokenAt time.Time
 	// Provider as an OpenTelemetry gen_ai.provider.name value (openai, anthropic, aws.bedrock).
 	Provider string
 	// Model that served the call (or the requested model when the provider reports none).
@@ -157,7 +166,7 @@ func (i *Interaction) capLocked() {
 func (i *Interaction) foldCallLocked(r *recordedCall) {
 	var dst *recordedCall
 	for _, c := range i.overflow {
-		if c.agentName == r.agentName && c.provider == r.provider && c.model == r.model && c.requestedModel == r.requestedModel && c.serviceTier == r.serviceTier {
+		if c.agentName == r.agentName && c.callPurpose == r.callPurpose && c.provider == r.provider && c.model == r.model && c.requestedModel == r.requestedModel && c.serviceTier == r.serviceTier {
 			dst = c
 			break
 		}
@@ -166,6 +175,12 @@ func (i *Interaction) foldCallLocked(r *recordedCall) {
 		first := *r // a copy: lastCall and lastOK may point at r
 		i.overflow = append(i.overflow, &first)
 		return
+	}
+	if (dst.credits == nil && dst.errorType == "") || (r.credits == nil && r.errorType == "") {
+		dst.uncredited = true
+	}
+	if r.credits != nil {
+		dst.credits = Ptr(round8(derefFloat(dst.credits) + *r.credits))
 	}
 	dst.callCount += r.callCount
 	dst.errorCount += r.errorCount
@@ -246,7 +261,8 @@ type ToolResult struct {
 	Error     *bool
 	ErrorType string
 	Duration  *time.Duration
-	Result    any
+	// Result is the observed output. Nil means absent; json.RawMessage("null") represents explicit JSON null.
+	Result any
 }
 
 // EndOptions configures [Interaction.End].
@@ -256,6 +272,8 @@ type EndOptions struct {
 	ErrorType string
 	// PauseReason is what a paused run waits for. Defaults to PauseOther.
 	PauseReason PauseReason
+	// BlockReason explains a StatusBlocked answer; defaults to BlockOther.
+	BlockReason BlockReason
 	// ClientDisconnected: the client went away before the answer finished.
 	ClientDisconnected bool
 	// ResponseText is the answer. Sent as response_text only with content capture on.
@@ -269,6 +287,11 @@ type EndOptions struct {
 }
 
 type recordedCall struct {
+	credits                                          *float64
+	callPurpose                                      string
+	fallbackUsed, byok                               *bool
+	latency, ttft                                    *time.Duration
+	uncredited                                       bool
 	provider, model, requestedModel, agentName       string
 	callCount, errorCount                            int
 	inputTokens, outputTokens                        int
@@ -310,6 +333,9 @@ type outcomeHint struct {
 // context; it sends ai_user_prompt_created and exactly one ai_response_received. Safe for
 // concurrent use.
 type Interaction struct {
+	agentVersion, variant                                                  string
+	confidence                                                             Confidence
+	compactions                                                            int
 	id, conversationID, userID, anonymousID, feature                       string
 	surface                                                                Surface
 	trigger                                                                Trigger
@@ -483,6 +509,8 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		trigger:           trigger,
 		accountID:         first(o.AccountID, cv.accountID),
 		onBehalfOf:        first(o.OnBehalfOf, cv.onBehalfOf),
+		agentVersion:      first(o.AgentVersion, cv.agentVersion),
+		variant:           first(o.Variant, cv.variant),
 		triggerSource:     o.TriggerSource,
 		taskName:          o.TaskName,
 		triggerEventID:    o.TriggerEventID,
@@ -583,7 +611,7 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 	}
 	ctx = WithValues(ctx, ContextValues{
 		UserID: o.UserID, AnonymousID: o.AnonymousID, ConversationID: o.ConversationID, Feature: o.Feature,
-		Surface: o.Surface, AccountID: o.AccountID, OnBehalfOf: o.OnBehalfOf, Analytics: o.Analytics,
+		Surface: o.Surface, AccountID: o.AccountID, OnBehalfOf: o.OnBehalfOf, AgentVersion: o.AgentVersion, Variant: o.Variant, Analytics: o.Analytics,
 		Context: o.Context, Request: o.Request, Cookies: o.Cookies, CookieValues: o.CookieValues,
 	})
 	if o.IdentityFromCookies != nil {
@@ -695,6 +723,10 @@ func (i *Interaction) RecordCall(call LLMCall) (recorded bool) {
 
 func (i *Interaction) recordCall(call LLMCall) bool {
 	c := cfg()
+	// Freeze the provider boundary before pricing or waiting for the interaction lock.
+	if !call.StartedAt.IsZero() && call.EndedAt.IsZero() {
+		call.EndedAt = time.Now()
+	}
 	call.Provider = routedProvider(call.Provider, call.Model)
 	call.RequestedModel = routedModel(call.RequestedModel, call.Model)
 	i.mu.Lock()
@@ -709,15 +741,6 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	if call.ErrorType == "" {
 		i.keepAnswerLocked(call.OutputText)
-	}
-	if call.ResponseID != "" {
-		key := call.Provider + "\x00" + call.ResponseID
-		if earlier, ok := i.seen[key]; ok {
-			if call.AgentName != "" && earlier.agentName == "" {
-				earlier.agentName = call.AgentName
-			}
-			return false
-		}
 	}
 	input, output := nonNegative(call.InputTokens), nonNegative(call.OutputTokens)
 	var reasoning *int
@@ -753,7 +776,55 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	} else if call.ErrorType != "" {
 		errorCount = callCount
 	}
+	credits := creditsOf(call.Credits)
+	if call.ErrorType == "cancelled" {
+		credits = nil
+	}
+	if credits == nil && c.credits != nil && call.ErrorType == "" && !call.UsageUnknown {
+		// App callbacks may inspect, update or end this interaction.
+		i.mu.Unlock()
+		credits = priceCredits(c.credits, CreditCall{
+			Provider: call.Provider, Model: call.Model, InputTokens: input, OutputTokens: output,
+			ReasoningTokens: reasoning, CachedInputTokens: nonNegative(call.CachedInputTokens), CacheWriteTokens: cacheWrite,
+			ServiceTier: tier, CostUSD: cost, CallCount: callCount, AgentName: call.AgentName,
+			CallPurpose: call.CallPurpose, FallbackUsed: call.FallbackUsed, BYOK: call.BYOK,
+		})
+		i.mu.Lock()
+		if i.ended {
+			return false
+		}
+	}
+	if call.ResponseID != "" {
+		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok {
+			fillString(&earlier.agentName, call.AgentName)
+			fillString(&earlier.callPurpose, call.CallPurpose)
+			if call.BYOK != nil {
+				earlier.byok = call.BYOK
+			}
+			if call.FallbackUsed != nil {
+				earlier.fallbackUsed = call.FallbackUsed
+			}
+			// Hook-derived credits priced the duplicate's discarded usage, so only explicit ones merge.
+			if call.Credits != nil && call.ErrorType != "cancelled" && earlier.errorType != "cancelled" {
+				earlier.credits = creditsOf(call.Credits)
+			}
+			return false
+		}
+	}
+	var latency, ttft *time.Duration
+	if !call.StartedAt.IsZero() {
+		ended := call.EndedAt
+		if ended.IsZero() {
+			ended = time.Now()
+		}
+		latency = Ptr(max(ended.Sub(call.StartedAt), 0))
+		if !call.FirstTokenAt.IsZero() && !call.FirstTokenAt.Before(call.StartedAt) && !call.FirstTokenAt.After(ended) {
+			ttft = Ptr(call.FirstTokenAt.Sub(call.StartedAt))
+		}
+	}
 	r := &recordedCall{
+		credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
+		latency: latency, ttft: ttft,
 		provider: call.Provider, model: call.Model, requestedModel: call.RequestedModel, agentName: call.AgentName,
 		callCount: callCount, errorCount: min(errorCount, callCount),
 		inputTokens: input, outputTokens: output, reasoningTokens: reasoning,
@@ -818,7 +889,7 @@ func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
 			if tool.args == nil {
 				tool.args = call.Args
 			}
-			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result})
+			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result}, call.Result != nil)
 			fire = append(fire, tool)
 		}
 		i.mu.Unlock()
@@ -843,6 +914,10 @@ func (i *Interaction) RecordToolCallCount(n int) {
 // RecordToolResult reports how a tool call recorded under id went. Results for IDs this
 // interaction never recorded (earlier turns) are ignored.
 func (i *Interaction) RecordToolResult(id string, result ToolResult) {
+	i.recordToolResult(id, result, result.Result != nil)
+}
+
+func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult bool) {
 	safely(func() {
 		if id == "" {
 			return
@@ -850,7 +925,7 @@ func (i *Interaction) RecordToolResult(id string, result ToolResult) {
 		i.mu.Lock()
 		tool := i.toolsByID[id]
 		if tool != nil {
-			mergeToolResult(tool, result)
+			mergeToolResult(tool, result, hasResult)
 		}
 		i.mu.Unlock()
 		if tool != nil {
@@ -879,7 +954,7 @@ func normalizeTool(name, server string) (string, string) {
 }
 
 // mergeToolResult: a failure from any source sticks; the first measured duration and output win.
-func mergeToolResult(tool *recordedTool, r ToolResult) {
+func mergeToolResult(tool *recordedTool, r ToolResult, hasResult bool) {
 	if r.Error != nil {
 		failed := (tool.err != nil && *tool.err) || *r.Error
 		tool.err = &failed
@@ -888,7 +963,7 @@ func mergeToolResult(tool *recordedTool, r ToolResult) {
 			tool.errorType = normalizeToolErrorType(r.ErrorType)
 		}
 	}
-	if r.Result != nil && !tool.hasResult {
+	if hasResult && !tool.hasResult {
 		tool.result, tool.hasResult, tool.settled = r.Result, true, true
 	}
 	if tool.duration == nil && r.Duration != nil && *r.Duration >= 0 {
@@ -897,6 +972,7 @@ func mergeToolResult(tool *recordedTool, r ToolResult) {
 	}
 }
 
+// New optional server fields are merged over app extras only when the SDK sets them.
 // Properties owned by the SDK: extra properties with these names are ignored.
 var reservedProperties = set(
 	"spec_version", "conversation_id", "interaction_id", "feature", "response_status", "trigger",
@@ -967,21 +1043,42 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 			}
 		}
 	}
-	keys := slices.Collect(maps.Keys(custom))
+	var resultSize *int
+	if t.hasResult {
+		if text, ok := t.result.(string); ok {
+			resultSize = Ptr(len(text))
+		} else if encoded, err := compactJSON(t.result); err == nil {
+			resultSize = Ptr(len(encoded))
+		}
+	}
 	i.mu.Lock()
 	defer i.unlock()
-	p := custom
-	for k, v := range i.baseLocked() {
-		p[k] = v
-	}
+	p := i.baseLocked()
 	p["trigger"] = string(i.trigger)
 	put(p, "agent_name", t.agentName)
 	p["tool_name"] = t.name
 	put(p, "tool_call_id", t.id)
-	p["tool_status"] = toolStatus(t.err)
+	if t.err != nil && *t.err && t.errorType == "denied" {
+		p["tool_status"] = "denied"
+	} else {
+		p["tool_status"] = toolStatus(t.err)
+	}
+	put(p, "mcp_server", t.mcpServer)
+	if resultSize != nil {
+		p["result_size_bytes"] = *resultSize
+	}
+
 	// An unknown outcome never reports a 0 duration.
 	if t.duration != nil && (t.err != nil || *t.duration != 0) {
 		p["tool_duration_ms"] = roundMS(*t.duration)
+	}
+	// SDK overrides are no longer custom properties and must survive size trimming.
+	keys := make([]string, 0, len(custom))
+	for k, v := range custom {
+		if _, sdkOwned := p[k]; !sdkOwned {
+			p[k] = v
+			keys = append(keys, k)
+		}
 	}
 	p = fitToolEventProperties(rule.Event, p, keys)
 	i.sendLocked(rule.Event, func() map[string]any { return p })
@@ -1049,6 +1146,8 @@ func (i *Interaction) baseLocked() map[string]any {
 	put(p, "surface", string(i.surface))
 	put(p, "account_id", i.accountID)
 	put(p, "on_behalf_of", i.onBehalfOf)
+	put(p, "agent_version", i.agentVersion)
+	put(p, "variant", i.variant)
 	put(p, "trigger_source", i.triggerSource)
 	put(p, "task_name", i.taskName)
 	put(p, "trigger_event_id", i.triggerEventID)
@@ -1089,6 +1188,22 @@ func (i *Interaction) callEventLocked(c *recordedCall) map[string]any {
 	}
 	if c.costUSD != nil {
 		p["cost_usd"] = *c.costUSD
+	}
+	if c.credits != nil {
+		p["credits"] = *c.credits
+	}
+	put(p, "call_purpose", c.callPurpose)
+	if c.fallbackUsed != nil {
+		p["fallback_used"] = *c.fallbackUsed
+	}
+	if c.byok != nil {
+		p["byok"] = *c.byok
+	}
+	if c.latency != nil {
+		p["latency_ms"] = roundMS(*c.latency)
+	}
+	if c.ttft != nil {
+		p["time_to_first_token_ms"] = roundMS(*c.ttft)
 	}
 	put(p, "response_id", c.responseID)
 	put(p, "finish_reason", c.finishReason)
@@ -1266,6 +1381,14 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK 
 		}
 		p["pause_reason"] = string(cmp.Or(pauseReason, PauseOther))
 	}
+	if status == StatusBlocked {
+		reason := o.BlockReason
+		if reason != "" && !blockReasons[reason] {
+			warnOnce("invalid-block-reason", fmt.Sprintf("invalid block reason %q", reason), 0)
+			reason = ""
+		}
+		p["block_reason"] = string(cmp.Or(reason, BlockOther))
+	}
 	p["trigger"] = string(i.trigger)
 	if i.clientDisconnected {
 		p["client_disconnected"] = true
@@ -1320,11 +1443,18 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK 
 	if lastOK != nil {
 		put(p, "finish_reason", lastOK.finishReason)
 	}
-	if status != StatusSuccess {
+	if status != StatusSuccess && status != StatusBlocked {
 		put(p, "error_type", errorType)
 	}
 	put(p, "intent", i.intent)
 	put(p, "outcome", i.outcome)
+	put(p, "confidence", string(i.confidence))
+	if i.compactions > 0 {
+		p["compaction_count"] = i.compactions
+	}
+	if credits, ok := creditedTotal(calls); ok {
+		p["total_credits"] = credits
+	}
 	if b := usageBreakdown(calls); len(b) > 0 {
 		p["usage_breakdown"] = b
 	}
@@ -1370,7 +1500,7 @@ func usageBreakdown(calls []*recordedCall) []map[string]any {
 	var order []string
 	groups := map[string]*group{}
 	for _, c := range calls {
-		key, _ := json.Marshal([]string{c.agentName, c.provider, c.model, c.requestedModel, c.serviceTier})
+		key, _ := json.Marshal([]string{c.agentName, c.callPurpose, c.provider, c.model, c.requestedModel, c.serviceTier})
 		g := groups[string(key)]
 		if g == nil {
 			g = &group{first: c}
@@ -1395,6 +1525,7 @@ func usageBreakdown(calls []*recordedCall) []map[string]any {
 		g := groups[k]
 		e := map[string]any{}
 		put(e, "agent_name", g.first.agentName)
+		put(e, "call_purpose", g.first.callPurpose)
 		e["provider"] = nullable(g.first.provider)
 		e["model"] = nullable(g.first.model)
 		put(e, "requested_model", g.first.requestedModel)
@@ -1431,6 +1562,9 @@ func usageBreakdown(calls []*recordedCall) []map[string]any {
 		e["error_count"] = g.errors
 		if cost, ok := pricedTotal(g.calls); ok {
 			e["cost_usd"] = cost
+		}
+		if credits, ok := creditedTotal(g.calls); ok {
+			e["credits"] = credits
 		}
 		out = append(out, e)
 	}
@@ -1666,4 +1800,43 @@ func (i *Interaction) onBeforeEnd(fn func()) {
 	if !i.ended {
 		i.beforeEnd = append(i.beforeEnd, fn)
 	}
+}
+
+// SetConfidence sets the app's confidence; invalid levels are ignored with a warning.
+func (i *Interaction) SetConfidence(level Confidence) {
+	if level != "" && !confidences[level] {
+		warnOnce("invalid-confidence", fmt.Sprintf("invalid confidence %q", level), 0)
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.confidence = level
+}
+
+// RecordCompaction counts context compactions; with no argument it records one.
+func (i *Interaction) RecordCompaction(count ...int) {
+	n := 1
+	if len(count) > 0 {
+		n = nonNegative(count[0])
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if !i.ended {
+		i.compactions += n
+	}
+}
+
+func creditedTotal(calls []*recordedCall) (float64, bool) {
+	known := false
+	total := 0.0
+	for _, call := range calls {
+		if call.uncredited || (call.errorType == "" && call.credits == nil) {
+			return 0, false
+		}
+		if call.credits != nil {
+			known = true
+			total += *call.credits
+		}
+	}
+	return round8(total), known
 }

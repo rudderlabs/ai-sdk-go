@@ -119,6 +119,9 @@ type TrackScoreOptions struct {
 	Trigger    Trigger
 	AccountID  string
 	OnBehalfOf string
+	// AgentVersion names the app release or configuration; Variant names its experiment arm.
+	AgentVersion string
+	Variant      string
 	// Analytics is the client for this event. Falls back to the context, then the global client.
 	Analytics analytics.Client
 	// Context is extra message context for this event.
@@ -152,6 +155,8 @@ func TrackScore(ctx context.Context, o TrackScoreOptions) {
 		put(p, "surface", string(first2(surfaceOf(o.Surface), surfaceOf(cv.surface))))
 		put(p, "account_id", first(o.AccountID, cv.accountID))
 		put(p, "on_behalf_of", first(o.OnBehalfOf, cv.onBehalfOf))
+		put(p, "agent_version", first(o.AgentVersion, cv.agentVersion))
+		put(p, "variant", first(o.Variant, cv.variant))
 		if o.Trigger == TriggerUser || o.Trigger == TriggerSystem {
 			p["trigger"] = string(o.Trigger)
 		}

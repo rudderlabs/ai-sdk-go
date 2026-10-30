@@ -1,4 +1,4 @@
-# AI events spec v0.3 properties for the RudderStack data catalog (rudder-cli, rudder/v1).
+# AI events spec v0.4 properties for the RudderStack data catalog (rudder-cli, rudder/v1).
 # Shared byte for byte by @rudderstack/ai (Node.js) and rudderstack-ai (Python).
 version: rudder/v1
 kind: properties
@@ -61,6 +61,18 @@ spec:
       name: parent_interaction_id
       type: string
       description: The interaction that started this one (agent hand-offs, sub-tasks).
+    - id: agent_version
+      name: agent_version
+      type: string
+      description: Version of the agent or AI feature that answered (prompt, config or code release), as the app names it.
+      config:
+        min_length: 1
+    - id: variant
+      name: variant
+      type: string
+      description: Experiment arm or rollout variant the interaction ran under, for example control.
+      config:
+        min_length: 1
     - id: intent
       name: intent
       type: string
@@ -68,7 +80,13 @@ spec:
     - id: outcome
       name: outcome
       type: string
-      description: Result set by the app, for example resolved, partial, unresolved, escalated or unclear.
+      description: Result set by the app, for example resolved, partial, unresolved, escalated, unsupported or unclear.
+    - id: confidence
+      name: confidence
+      type: string
+      description: Set by the app, how confident the agent was in its answer.
+      config:
+        enum: [low, medium, high]
     - id: trace_id
       name: trace_id
       type: string
@@ -141,7 +159,13 @@ spec:
       type: string
       description: Final status of the answer.
       config:
-        enum: [success, error, timeout, cancelled, paused, incomplete]
+        enum: [success, error, timeout, cancelled, paused, incomplete, blocked]
+    - id: block_reason
+      name: block_reason
+      type: string
+      description: With response_status blocked, why the app declined to answer.
+      config:
+        enum: [guardrail, policy, unsupported, skipped, other]
     - id: pause_reason
       name: pause_reason
       type: string
@@ -349,11 +373,43 @@ spec:
       description: Cost of a call or usage_breakdown entry in USD (decimal), as the provider or gateway reported it, else from the registered price. Absent when unknown.
       config:
         minimum: 0
+    - id: total_credits
+      name: total_credits
+      type: number
+      description: Cost of the answer in the app's own credits, from its credit pricing. Sent only when every successful call has credits.
+      config:
+        minimum: 0
+    - id: credits
+      name: credits
+      type: number
+      description: Credits of a call or usage_breakdown entry, from the app's credit pricing. Absent when unknown.
+      config:
+        minimum: 0
+    - id: call_purpose
+      name: call_purpose
+      type: string
+      description: App-set purpose of a model call, for example planning, summarize or classify.
+      config:
+        min_length: 1
+    - id: fallback_used
+      name: fallback_used
+      type: boolean
+      description: App-set. The call went to a fallback model or provider.
+    - id: byok
+      name: byok
+      type: boolean
+      description: App-set. The call ran on the end customer's own provider key.
+    - id: compaction_count
+      name: compaction_count
+      type: integer
+      description: Times the agent compacted its context during the answer. Absent when it never did.
+      config:
+        minimum: 1
     - id: usage_breakdown
       name: usage_breakdown
       type: array
       item_types: [object]
-      description: Usage per agent, provider and model.
+      description: Usage per agent, call purpose, provider and model.
     - id: tool_breakdown
       name: tool_breakdown
       type: array
@@ -471,15 +527,22 @@ spec:
     - id: tool_status
       name: tool_status
       type: string
-      description: How the tool call went; unknown when the integration never saw its outcome.
+      description: How the tool call went; denied when it was refused before it ran, unknown when the integration never saw its outcome.
       config:
-        enum: [success, error, unknown]
+        enum: [success, error, denied, unknown]
     - id: tool_duration_ms
       name: tool_duration_ms
       type: number
       description: Measured tool execution time. Absent unless measured; never 0 for unknown.
       config:
         minimum: 0
+
+    - id: limit_type
+      name: limit_type
+      type: string
+      description: Which usage limit of the AI feature was hit, as the app names it, for example credits or messages.
+      config:
+        min_length: 1
 
     # User actions
     - id: action_type

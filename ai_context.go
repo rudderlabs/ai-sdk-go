@@ -19,6 +19,9 @@ type ContextValues struct {
 	AccountID string
 	// OnBehalfOf is the human who requested or owns the work (on_behalf_of); not the actor.
 	OnBehalfOf string
+	// AgentVersion names the app release or configuration; Variant names its experiment arm.
+	AgentVersion string
+	Variant      string
 	// Surface is where the user met the AI.
 	Surface Surface
 	// Analytics is the RudderStack client for events made under this context.
@@ -36,6 +39,7 @@ type ContextValues struct {
 
 // contextValues is the merged, validated form of ContextValues.
 type contextValues struct {
+	agentVersion, variant                                               string
 	userID, anonymousID, conversationID, feature, accountID, onBehalfOf string
 	surface                                                             Surface
 	analytics                                                           analytics.Client
@@ -85,6 +89,8 @@ func WithValues(ctx context.Context, v ContextValues) context.Context {
 	inherit(&merged.feature, v.Feature)
 	inherit(&merged.accountID, v.AccountID)
 	inherit(&merged.onBehalfOf, v.OnBehalfOf)
+	inherit(&merged.agentVersion, v.AgentVersion)
+	inherit(&merged.variant, v.Variant)
 	if v.Surface != "" {
 		merged.surface = v.Surface
 	}

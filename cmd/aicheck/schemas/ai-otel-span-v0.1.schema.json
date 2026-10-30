@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rudderstack.com/schemas/ai-otel-span-v0.1.schema.json",
+  "title": "RudderStack AI tracing: ai_otel_span track event (v0.1)",
+  "description": "One OpenTelemetry span carried inside a RudderStack track event. `otlp` is a complete OTLP/JSON ExportTraceServiceRequest holding exactly one span, so a destination can forward it verbatim to any OTLP /v1/traces endpoint. The top-level properties are a denormalised summary for warehouse queries.",
+  "type": "object",
+  "required": ["type", "event", "properties", "context", "messageId", "timestamp"],
+  "anyOf": [
+    { "required": ["userId"], "properties": { "userId": { "type": "string" } } },
+    { "required": ["anonymousId"], "properties": { "anonymousId": { "type": "string" } } }
+  ],
+  "properties": {
+    "type": { "const": "track" },
+    "event": { "const": "ai_otel_span" },
+    "userId": {
+      "description": "Null allowed: rudder-sdk-python always sends the key.",
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "anonymousId": { "type": ["string", "null"], "minLength": 1 },
+    "messageId": {
+      "description": "Deterministic `<trace_id>-<span_id>` so retries de-duplicate.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}-[0-9a-f]{16}$"
+    },
+    "timestamp": { "description": "Span end time, ISO 8601.", "type": "string" },
+    "context": {
+      "type": "object",
+      "required": ["wrapperLibrary"],
+      "properties": {
+        "wrapperLibrary": {
+          "type": "object",
+          "required": ["name", "version", "integration"],
+          "properties": {
+            "name": { "enum": ["@rudderstack/ai", "rudderstack-ai"] },
+            "version": { "type": "string" },
+            "integration": { "enum": ["tracing", "tracing/vercel-ai-sdk"] },
+            "wrapperLibrary": { "type": "object" }
+          }
+        }
+      }
+    },
+    "properties": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "trace_id",
+        "span_id",
+        "parent_span_id",
+        "span_name",
+        "span_kind",
+        "start_time",
+        "end_time",
+        "duration_ms",
+        "status_code",
+        "otlp"
+      ],
+      "properties": {
+        "schema_version": { "const": "0.1" },
+        "trace_id": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+        "span_id": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+        "parent_span_id": { "type": ["string", "null"], "pattern": "^[0-9a-f]{16}$" },
+        "span_name": { "type": "string" },
+        "span_kind": { "enum": ["internal", "server", "client", "producer", "consumer"] },
+        "start_time": { "type": "string", "description": "ISO 8601" },
+        "end_time": { "type": "string", "description": "ISO 8601" },
+        "duration_ms": { "type": "number", "minimum": 0 },
+        "status_code": { "enum": ["unset", "ok", "error"] },
+        "status_message": { "type": "string" },
+        "session_id": {
+          "type": "string",
+          "description": "From the `session.id` attribute when present."
+        },
+        "interaction_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "From the `rudderstack.interaction_id` attribute, set when the span started inside an AI interaction: the `interaction_id` of that interaction's AI events (a UUID unless the app supplied its own id)."
+        },
+        "conversation_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "From the `gen_ai.conversation.id` attribute when present (set from the AI context or interaction when the instrumentation did not set it)."
+        },
+        "gen_ai": {
+          "description": "Summary of OpenTelemetry GenAI semantic-convention attributes, present only on GenAI spans. Every field is optional.",
+          "type": "object",
+          "properties": {
+            "provider_name": { "type": "string" },
+            "operation_name": { "type": "string" },
+            "request_model": { "type": "string" },
+            "response_model": { "type": "string" },
+            "input_tokens": { "type": "integer", "minimum": 0 },
+            "output_tokens": { "type": "integer", "minimum": 0 },
+            "finish_reasons": { "type": "array", "items": { "type": "string" } },
+            "conversation_id": { "type": "string" }
+          }
+        },
+        "truncated": {
+          "description": "True when attribute values were shortened to fit RudderStack's event size limit.",
+          "type": "boolean"
+        },
+        "otlp": {
+          "type": "object",
+          "required": ["resourceSpans"],
+          "properties": {
+            "resourceSpans": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["resource", "scopeSpans"],
+                "properties": {
+                  "resource": { "type": "object" },
+                  "scopeSpans": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": ["scope", "spans"],
+                      "properties": {
+                        "scope": { "type": "object" },
+                        "spans": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 1,
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "traceId",
+                              "spanId",
+                              "name",
+                              "kind",
+                              "startTimeUnixNano",
+                              "endTimeUnixNano"
+                            ],
+                            "properties": {
+                              "traceId": { "type": "string" },
+                              "spanId": { "type": "string" },
+                              "parentSpanId": { "type": "string" },
+                              "name": { "type": "string" },
+                              "kind": { "type": "integer" },
+                              "startTimeUnixNano": { "type": "string" },
+                              "endTimeUnixNano": { "type": "string" },
+                              "attributes": { "type": "array" },
+                              "events": { "type": "array" },
+                              "links": { "type": "array" },
+                              "status": { "type": "object" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

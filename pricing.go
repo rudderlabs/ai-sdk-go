@@ -333,3 +333,46 @@ func ReportedCost(v any) (float64, bool) {
 	}
 	return c, true
 }
+
+// CreditCall is a successful call passed to the app's credit pricing hook after USD pricing.
+type CreditCall struct {
+	Provider, Model                     string
+	InputTokens, OutputTokens           int
+	ReasoningTokens                     *int
+	CachedInputTokens, CacheWriteTokens int
+	ServiceTier                         string
+	CostUSD                             *float64
+	CallCount                           int
+	AgentName, CallPurpose              string
+	FallbackUsed, BYOK                  *bool
+}
+
+// CreditsFunc returns app credits, or nil when the call has no credit price.
+// Errors and panics are contained and reported as user_callback.
+type CreditsFunc func(CreditCall) (*float64, error)
+
+func creditsOf(v *float64) *float64 {
+	if v != nil && validRate(*v) {
+		return Ptr(*v)
+	}
+	return nil
+}
+
+func priceCredits(fn CreditsFunc, call CreditCall) (amount *float64) {
+	defer func() {
+		if r := recover(); r != nil {
+			report(KindUserCallback, "credits", recovered(r))
+			amount = nil
+		}
+	}()
+	v, err := fn(call)
+	if err != nil {
+		report(KindUserCallback, "credits", err)
+		return nil
+	}
+	if v != nil && !validRate(*v) {
+		report(KindUserCallback, "credits", errors.New("rudderstackai: credits must be finite and non-negative"))
+		return nil
+	}
+	return creditsOf(v)
+}

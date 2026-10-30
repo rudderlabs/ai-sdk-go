@@ -1,0 +1,91 @@
+{
+  "fixture_version": 1,
+  "description": "Provider context-limit signals and HTTP precedence shared by every SDK.",
+  "cases": [
+    {
+      "name": "maximum context length exceeded",
+      "status": 400,
+      "message": "maximum context length exceeded",
+      "expected": "context_limit"
+    },
+    {
+      "name": "The context window is exceeded",
+      "status": 400,
+      "message": "The context window is exceeded",
+      "expected": "context_limit"
+    },
+    {
+      "name": "prompt is too long",
+      "status": 400,
+      "message": "prompt is too long",
+      "expected": "context_limit"
+    },
+    {
+      "name": "input is too long",
+      "status": 400,
+      "message": "input is too long",
+      "expected": "context_limit"
+    },
+    {
+      "name": "exceeds the maximum number of tokens",
+      "status": 400,
+      "message": "exceeds the maximum number of tokens",
+      "expected": "context_limit"
+    },
+    {
+      "name": "context_length_exceeded",
+      "status": 422,
+      "code": "context_length_exceeded",
+      "message": "request rejected",
+      "expected": "context_limit"
+    },
+    {
+      "name": "context_window_exceeded",
+      "status": 422,
+      "code": "context_window_exceeded",
+      "message": "request rejected",
+      "expected": "context_limit"
+    },
+    {
+      "name": "prompt_too_long",
+      "status": 422,
+      "code": "prompt_too_long",
+      "message": "request rejected",
+      "expected": "context_limit"
+    },
+    {
+      "name": "403",
+      "status": 403,
+      "code": "context_length_exceeded",
+      "message": "prompt is too long",
+      "expected": "auth_error"
+    },
+    {
+      "name": "429",
+      "status": 429,
+      "code": "context_length_exceeded",
+      "message": "prompt is too long",
+      "expected": "rate_limit"
+    },
+    {
+      "name": "504",
+      "status": 504,
+      "code": "context_length_exceeded",
+      "message": "prompt is too long",
+      "expected": "timeout"
+    },
+    {
+      "name": "500",
+      "status": 500,
+      "code": "context_length_exceeded",
+      "message": "prompt is too long",
+      "expected": "api_error"
+    },
+    {
+      "name": "other invalid request",
+      "status": 400,
+      "message": "invalid temperature",
+      "expected": "invalid_request"
+    }
+  ]
+}

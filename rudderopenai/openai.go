@@ -27,12 +27,14 @@ import (
 	"github.com/openai/openai-go/v3/packages/ssestream"
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
+	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/kit"
 )
 
 const integration = "openai"
 
 type config struct {
+	details   rudderstackai.CallDetails
 	provider  string
 	analytics analytics.Client
 	// streamUsage: nil asks with a fallback, true always asks, false never does.
@@ -147,7 +149,7 @@ func init() {
 	kit.RegisterErrorClassifier(func(err error) (string, bool) {
 		var apiErr *openai.Error
 		if errors.As(err, &apiErr) {
-			return kit.HTTPErrorType(apiErr.StatusCode, map[string]any{"error": map[string]any{"code": apiErr.Code, "type": apiErr.Type}}), true
+			return kit.HTTPErrorType(apiErr.StatusCode, map[string]any{"error": map[string]any{"code": apiErr.Code, "type": apiErr.Type, "message": apiErr.Message}}), true
 		}
 		var streamErr *ssestream.StreamError
 		if errors.As(err, &streamErr) {
@@ -160,3 +162,14 @@ func init() {
 		return "", false
 	})
 }
+
+// WithCallPurpose labels the purpose of model calls through this integration.
+func WithCallPurpose(purpose string) Option {
+	return func(c *config) { c.details.CallPurpose = purpose }
+}
+
+// WithFallbackUsed records whether the app selected a fallback provider or model.
+func WithFallbackUsed(used bool) Option { return func(c *config) { c.details.FallbackUsed = &used } }
+
+// WithBYOK records whether the call used the end customer's own provider key.
+func WithBYOK(byok bool) Option { return func(c *config) { c.details.BYOK = &byok } }

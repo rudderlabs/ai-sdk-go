@@ -58,6 +58,7 @@ const codeExecution = "code_execution"
 type Option func(*options)
 
 type options struct {
+	details   rudderstackai.CallDetails
 	provider  string
 	analytics analytics.Client
 }
@@ -113,7 +114,7 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		provider = providerOf(req)
 	}
 	model := modelOf(req.URL.Path)
-	spec := &kit.Spec{
+	spec := &kit.Spec{Details: t.o.details,
 		Provider:    provider,
 		Integration: integration,
 		Analytics:   t.o.analytics,
@@ -265,7 +266,7 @@ func recordResponse(c *kit.Call, body map[string]any) {
 	if u != nil {
 		call.InputTokens, call.OutputTokens, call.ReasoningTokens, call.CachedInputTokens = u.input, u.output, u.reasoning, u.cached
 	}
-	if !c.Interaction.RecordCall(call) {
+	if !c.RecordCall(call) {
 		return
 	}
 	var tools []rudderstackai.ToolCall
@@ -292,13 +293,15 @@ func recordFunctionResponses(i *rudderstackai.Interaction, contents any) {
 		response := kit.Map(fr["response"])
 		failed := response["error"] != nil
 		var result any = response
+		output, hasOutput := response["output"]
 		switch {
 		case failed:
 			result = response["error"]
-		case response["output"] != nil:
-			result = response["output"]
+		case hasOutput:
+			result = output
 		}
-		i.RecordToolResult(kit.Str(fr["id"]), rudderstackai.ToolResult{Error: &failed, Result: result})
+		_, hasResult := fr["response"]
+		kit.RecordToolResult(i, kit.Str(fr["id"]), rudderstackai.ToolResult{Error: &failed, Result: result}, hasResult)
 	}
 }
 
@@ -339,7 +342,7 @@ var rpcErrorTypes = map[string]string{
 }
 
 func errorType(status int, body map[string]any) string {
-	if t := rudderstackai.ErrorTypeForStatus(status); t != "" {
+	if t := kit.HTTPErrorType(status, body); t != "api_error" {
 		return t
 	}
 	return rpcErrorTypes[kit.Str(kit.Map(body["error"])["status"])]
@@ -356,7 +359,7 @@ func classifyError(err error) (string, bool) {
 	default:
 		return "", false
 	}
-	if t := rudderstackai.ErrorTypeForStatus(e.Code); t != "" {
+	if t := kit.HTTPErrorType(e.Code, map[string]any{"message": e.Message}); t != "api_error" {
 		return t, true
 	}
 	if t := rpcErrorTypes[e.Status]; t != "" {
@@ -511,3 +514,14 @@ func hasKey(m map[string]any, k string) bool {
 	_, ok := m[k]
 	return ok
 }
+
+// WithCallPurpose labels the purpose of model calls through this integration.
+func WithCallPurpose(purpose string) Option {
+	return func(c *options) { c.details.CallPurpose = purpose }
+}
+
+// WithFallbackUsed records whether the app selected a fallback model or provider.
+func WithFallbackUsed(used bool) Option { return func(c *options) { c.details.FallbackUsed = &used } }
+
+// WithBYOK records whether calls use the end customer's provider key.
+func WithBYOK(byok bool) Option { return func(c *options) { c.details.BYOK = &byok } }
