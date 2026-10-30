@@ -1,5 +1,5 @@
 {
-  "description": "Since v0.4. Usage accepted after pause capture is pending in the next segment and survives JSON restoration without replaying call events. Only usage and tool metadata are portable.",
+  "description": "Since v0.4. Usage accepted after pause capture is pending in the next segment and survives JSON restoration without replaying call events. Only usage and tool metadata are portable. report_count, successful_call_sequence and pending_compactions restore outside usage totals; overflow tools stay in the overflow list; rule_outcome replaces deferred when/properties evaluation.",
   "snapshot": {
     "interaction_id": "pending-run",
     "conversation_id": "pending-conversation",
@@ -18,6 +18,9 @@
         "late"
       ]
     ],
+    "report_count": 2,
+    "successful_call_sequence": 2,
+    "pending_compactions": 1,
     "pending_calls": [
       {
         "provider": "openai",
@@ -49,13 +52,31 @@
         "error": false,
         "duration_ms": 3.5,
         "settled": true,
-        "fired": false
+        "fired": false,
+        "rule_outcome": {
+          "suppressed": false,
+          "properties": {
+            "result_kind": "list"
+          },
+          "result_size_bytes": 42
+        }
+      },
+      {
+        "tool_name": "overflow-tool",
+        "raw_name": "overflow-tool",
+        "tool_call_id": "overflow-tool",
+        "call_count": 1,
+        "error": false,
+        "duration_ms": 1,
+        "settled": true,
+        "fired": false,
+        "overflow": true
       }
     ]
   },
   "expected": {
     "llm_call_count": 3,
-    "tool_call_count": 2,
+    "tool_call_count": 3,
     "total_input_tokens": 9,
     "total_output_tokens": 4,
     "total_tokens": 13,
@@ -63,6 +84,7 @@
     "total_cached_input_tokens": 2,
     "total_cache_write_tokens": 1,
     "total_cost_usd": 0.02,
-    "finish_reason": "stop"
+    "finish_reason": "stop",
+    "compaction_count": 1
   }
 }

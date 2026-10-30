@@ -183,7 +183,10 @@ func TestFinalizerSuppliedPauseRemainsResumable(t *testing.T) {
 func TestRestoreSharedPendingUsageWithoutReplayingCallEvents(t *testing.T) {
 	for _, unpriced := range []bool{false, true} {
 		t.Run(fmt.Sprint(unpriced), func(t *testing.T) {
-			r := setupAI(t, WithLLMCallEvents(true), WithToolBreakdown(true))
+			r := setupAI(t, WithLLMCallEvents(true), WithToolBreakdown(true), WithEventRules(EventRules{Tools: map[string]ToolEventRule{
+				"late-tool":     {Event: "late_declared", When: func(map[string]any, any) bool { t.Fatal("restored rule reran"); return false }, Properties: func(map[string]any, any) map[string]any { t.Fatal("restored properties reran"); return nil }},
+				"overflow-tool": {Event: "overflow_declared"},
+			}}))
 			b, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
 			if err != nil {
 				t.Fatal(err)
@@ -217,6 +220,12 @@ func TestRestoreSharedPendingUsageWithoutReplayingCallEvents(t *testing.T) {
 				if mustJSON(got[key]) != mustJSON(want) {
 					t.Errorf("%s: got %v, want %v", key, got[key], want)
 				}
+			}
+			if got["tool_call_count"] != 3 || got["compaction_count"] != 1 || len(r.named("overflow_declared")) != 0 || len(r.named("late_declared")) != 1 {
+				t.Fatal(got, r.names())
+			}
+			if p := r.props(t, "late_declared"); p["result_kind"] != "list" || p["result_size_bytes"] != 42 {
+				t.Fatal(p)
 			}
 			if len(r.named("ai_llm_response_received")) != 0 {
 				t.Fatal("restoration replayed calls")
@@ -692,7 +701,7 @@ func TestPauseReturnsASnapshot(t *testing.T) {
 	delete(got, "paused_at")
 	want := map[string]any{
 		"interaction_id": in.ID(), "conversation_id": "c", "user_id": "u", "feature": "f", "trigger": "user",
-		"account_id": "acme", "intent": "refund", "trace_id": "t", "pause_count": float64(1), "total_paused_ms": float64(0),
+		"account_id": "acme", "intent": "refund", "trace_id": "t", "pause_count": float64(1), "total_paused_ms": float64(0), "report_count": float64(1), "successful_call_sequence": float64(1),
 	}
 	if mustJSON(got) != mustJSON(want) {
 		t.Fatalf("snapshot:\n got %s\nwant %s", mustJSON(got), mustJSON(want))

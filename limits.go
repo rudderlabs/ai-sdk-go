@@ -72,6 +72,10 @@ var open = struct {
 
 // register opens i; false when MaxOpenInteractions is reached.
 func register(i *Interaction) bool {
+	if i.resumed {
+		reopen(i)
+		return true
+	}
 	if !opened(i, cfg().limits.MaxOpenInteractions) {
 		limitReached("MaxOpenInteractions")
 		return false
@@ -174,4 +178,10 @@ func resetOpenForTest() {
 	// A new list: interactions of earlier tests that end later are not on it.
 	open.list = list.New()
 	open.lastSweep = time.Time{}
+}
+
+func ttlSelected(i *Interaction) bool {
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	return i.elem == nil
 }
