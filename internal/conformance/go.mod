@@ -3,27 +3,27 @@ module github.com/rudderlabs/ai-sdk-go/internal/conformance
 go 1.26.10
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.82.0
-	github.com/aws/aws-sdk-go-v2 v1.47.3
-	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.4
-	github.com/openai/openai-go/v3 v3.78.0
+	github.com/anthropics/anthropic-sdk-go v1.84.0
+	github.com/aws/aws-sdk-go-v2 v1.47.4
+	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.63.7
+	github.com/openai/openai-go/v3 v3.85.1
 	github.com/rudderlabs/ai-sdk-go v0.3.0
 	github.com/rudderlabs/ai-sdk-go/rudderanthropic v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderbedrock v0.1.0
 	github.com/rudderlabs/ai-sdk-go/ruddergenai v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderopenai v0.1.0
 	github.com/rudderlabs/analytics-go/v4 v4.4.0
-	google.golang.org/genai v1.75.0
+	google.golang.org/genai v1.76.0
 )
 
 require (
 	cloud.google.com/go v0.116.0 // indirect
 	cloud.google.com/go/auth v0.20.0 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.22 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.6 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.6 // indirect
-	github.com/aws/smithy-go v1.28.5 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.24 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.7 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.7 // indirect
+	github.com/aws/smithy-go v1.28.6 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
