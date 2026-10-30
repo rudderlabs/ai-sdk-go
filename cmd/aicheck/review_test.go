@@ -101,3 +101,13 @@ func TestReviewConversationForbiddenFields(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewClientHelperNamesAreDeclaredTools(t *testing.T) {
+	for _, name := range []string{"common", "with_conversation", "with_interaction"} {
+		capture := `{"type":"track","event":"` + name + `","userId":"u1","properties":{"source":"client","conversation_id":"c1","interaction_id":"11111111-1111-4111-8111-111111111111","tool_name":"` + name + `","arguments":{"q":1}}}`
+		code, out := reviewCheck(t, capture)
+		if code != 1 || !strings.Contains(out, "tool_status") || !strings.Contains(out, "must not") {
+			t.Errorf("%s: exit %d: %s", name, code, out)
+		}
+	}
+}
