@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -72,5 +73,27 @@ func TestFixtures(t *testing.T) {
 				t.Errorf("stdout:\n%s\nwant:\n%s", stdout.String(), *c.Stdout)
 			}
 		})
+	}
+}
+
+func TestDocumentsEveryStandardUserAction(t *testing.T) {
+	root := repoRoot(t)
+	b, err := os.ReadFile(filepath.Join(root, "spec", "ai-events-v0.3.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(b, &schema); err != nil {
+		t.Fatal(err)
+	}
+	actions := schema["$defs"].(map[string]any)["ai_user_action"].(map[string]any)["properties"].(map[string]any)["action_type"].(map[string]any)["enum"].([]any)
+	docs, err := os.ReadFile(filepath.Join(root, "docs", "events.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range actions {
+		if !strings.Contains(string(docs), "`"+action.(string)+"`") {
+			t.Errorf("undocumented action: %s", action)
+		}
 	}
 }

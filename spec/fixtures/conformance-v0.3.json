@@ -37102,6 +37102,2513 @@
           }
         }
       ]
+    },
+    {
+      "name": "one_shot_conversation_is_interaction",
+      "description": "Since v0.4. An explicit one-shot interaction with no thread uses interaction_id as the required conversation_id on prompt and answer. The chat default still mints a separate conversation ID.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "feature": "description_writer",
+            "input_method": "button",
+            "one_shot": true
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$int1",
+            "interaction_id": "$int1",
+            "feature": "description_writer",
+            "input_method": "button"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$int1",
+            "interaction_id": "$int1",
+            "feature": "description_writer",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$int1",
+            "interaction_id": "$int1",
+            "feature": "description_writer",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "one_shot_custom_interaction_id",
+      "description": "Since v0.4. Explicit and context conversation IDs take precedence over one-shot; the existing chat default mints a separate conversation ID.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "feature": "description_writer",
+            "input_method": "button",
+            "one_shot": true,
+            "interaction_id": "turn_one"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "turn_one",
+            "interaction_id": "turn_one",
+            "feature": "description_writer",
+            "input_method": "button"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "turn_one",
+            "interaction_id": "turn_one",
+            "feature": "description_writer",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "turn_one",
+            "interaction_id": "turn_one",
+            "feature": "description_writer",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "one_shot_explicit_conversation_wins",
+      "description": "Since v0.4. Explicit and context conversation IDs take precedence over one-shot; the existing chat default mints a separate conversation ID.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "context",
+          "values": {
+            "conversation_id": "thread_context"
+          },
+          "steps": [
+            {
+              "op": "interaction",
+              "options": {
+                "user_id": "user_42",
+                "feature": "description_writer",
+                "input_method": "button",
+                "one_shot": true,
+                "conversation_id": "thread_explicit"
+              },
+              "steps": [
+                {
+                  "op": "call",
+                  "api": "openai.chat",
+                  "params": {
+                    "model": "gpt-4.1-mini",
+                    "messages": [
+                      {
+                        "role": "user",
+                        "content": "Where is my refund?"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "op": "record_tool_call",
+                  "count": 1
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "thread_explicit",
+            "interaction_id": "$int1",
+            "feature": "description_writer",
+            "input_method": "button"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "thread_explicit",
+            "interaction_id": "$int1",
+            "feature": "description_writer",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "thread_explicit",
+            "interaction_id": "$int1",
+            "feature": "description_writer",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "one_shot_context_conversation_wins",
+      "description": "Since v0.4. Explicit and context conversation IDs take precedence over one-shot; the existing chat default mints a separate conversation ID.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "context",
+          "values": {
+            "conversation_id": "thread_context"
+          },
+          "steps": [
+            {
+              "op": "interaction",
+              "options": {
+                "user_id": "user_42",
+                "feature": "description_writer",
+                "input_method": "button",
+                "one_shot": true
+              },
+              "steps": [
+                {
+                  "op": "call",
+                  "api": "openai.chat",
+                  "params": {
+                    "model": "gpt-4.1-mini",
+                    "messages": [
+                      {
+                        "role": "user",
+                        "content": "Where is my refund?"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "op": "record_tool_call",
+                  "count": 1
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "thread_context",
+            "interaction_id": "$int1",
+            "feature": "description_writer",
+            "input_method": "button"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "thread_context",
+            "interaction_id": "$int1",
+            "feature": "description_writer",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "thread_context",
+            "interaction_id": "$int1",
+            "feature": "description_writer",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat_default_keeps_separate_conversation",
+      "description": "Since v0.4. Explicit and context conversation IDs take precedence over one-shot; the existing chat default mints a separate conversation ID.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "feature": "description_writer",
+            "input_method": "button",
+            "interaction_id": "turn_chat"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "turn_chat",
+            "feature": "description_writer",
+            "input_method": "button"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "turn_chat",
+            "feature": "description_writer",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "turn_chat",
+            "feature": "description_writer",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_action_types_and_details",
+      "description": "Since v0.4. Server feedback APIs accept feedback dismissal, exports and suggestion reversion with feedback and item details.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "feedback_dismissed",
+            "interaction_id": "int_given",
+            "conversation_id": "conv_track_action_with_conv",
+            "user_id": "user_1",
+            "action_details": {
+              "feedback_scope": "conversation",
+              "feedback_reasons": [
+                "accurate"
+              ]
+            }
+          }
+        },
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "exported",
+            "interaction_id": "int_given",
+            "conversation_id": "conv_track_action_with_conv",
+            "user_id": "user_1",
+            "action_details": {
+              "destination": "ide"
+            }
+          }
+        },
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "reverted",
+            "interaction_id": "int_given",
+            "conversation_id": "conv_track_action_with_conv",
+            "user_id": "user_1",
+            "action_details": {
+              "items_total": 4,
+              "items_accepted": 0
+            }
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_track_action_with_conv",
+            "interaction_id": "int_given",
+            "action_type": "feedback_dismissed",
+            "action_details": {
+              "feedback_scope": "conversation",
+              "feedback_reasons": [
+                "accurate"
+              ]
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_track_action_with_conv",
+            "interaction_id": "int_given",
+            "action_type": "exported",
+            "action_details": {
+              "destination": "ide"
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_track_action_with_conv",
+            "interaction_id": "int_given",
+            "action_type": "reverted",
+            "action_details": {
+              "items_total": 4,
+              "items_accepted": 0
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "one_shot_nested_interactions_restore_parent",
+      "description": "Since v0.4. Nested interactions have separate conversations. A nested task inherits its parent conversation and ID link. Calls after each nested scope return to the parent, and subsequent standalone chat and one-shot interactions have fresh conversations.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-2",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-3",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-4",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-5",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-6",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "interaction_id": "outer_one_shot",
+            "one_shot": true
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            },
+            {
+              "op": "interaction",
+              "options": {
+                "user_id": "user_42",
+                "interaction_id": "inner_chat",
+                "one_shot": false
+              },
+              "steps": [
+                {
+                  "op": "call",
+                  "api": "openai.chat",
+                  "params": {
+                    "model": "gpt-4.1-mini",
+                    "messages": [
+                      {
+                        "role": "user",
+                        "content": "Where is my refund?"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "op": "record_tool_call",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "op": "task",
+              "task_name": "nested_digest",
+              "options": {
+                "one_shot": true
+              },
+              "steps": [
+                {
+                  "op": "call",
+                  "api": "openai.chat",
+                  "params": {
+                    "model": "gpt-4.1-mini",
+                    "messages": [
+                      {
+                        "role": "user",
+                        "content": "Where is my refund?"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "op": "record_tool_call",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "interaction_id": "next_chat",
+            "one_shot": false
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "interaction_id": "next_one_shot",
+            "one_shot": true
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "outer_one_shot",
+            "interaction_id": "outer_one_shot"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "outer_one_shot",
+            "interaction_id": "outer_one_shot",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "inner_chat"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "inner_chat",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-2",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "inner_chat",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "anonymousId": "ai_system",
+          "properties": {
+            "conversation_id": "outer_one_shot",
+            "interaction_id": "$int1",
+            "trigger_source": "agent",
+            "task_name": "nested_digest",
+            "parent_interaction_id": "outer_one_shot",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-3",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "anonymousId": "ai_system",
+          "properties": {
+            "conversation_id": "outer_one_shot",
+            "interaction_id": "$int1",
+            "trigger_source": "agent",
+            "task_name": "nested_digest",
+            "parent_interaction_id": "outer_one_shot",
+            "response_status": "success",
+            "trigger": "system",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "outer_one_shot",
+            "interaction_id": "outer_one_shot",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-4",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "outer_one_shot",
+            "interaction_id": "outer_one_shot",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 2,
+            "tool_call_count": 2,
+            "total_input_tokens": 50,
+            "total_output_tokens": 24,
+            "total_tokens": 74,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 2,
+                "input_tokens": 50,
+                "output_tokens": 24,
+                "total_tokens": 74,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv2",
+            "interaction_id": "next_chat"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv2",
+            "interaction_id": "next_chat",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-5",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv2",
+            "interaction_id": "next_chat",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "next_one_shot",
+            "interaction_id": "next_one_shot"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "next_one_shot",
+            "interaction_id": "next_one_shot",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-6",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "next_one_shot",
+            "interaction_id": "next_one_shot",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "one_shot_nested_under_chat",
+      "description": "Since v0.4. A nested one-shot interaction uses its own conversation ID. Calls after the child return to the parent chat conversation.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-2",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-3",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "interaction_id": "outer_chat",
+            "one_shot": false
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            },
+            {
+              "op": "interaction",
+              "options": {
+                "user_id": "user_42",
+                "interaction_id": "inner_one_shot",
+                "one_shot": true
+              },
+              "steps": [
+                {
+                  "op": "call",
+                  "api": "openai.chat",
+                  "params": {
+                    "model": "gpt-4.1-mini",
+                    "messages": [
+                      {
+                        "role": "user",
+                        "content": "Where is my refund?"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "op": "record_tool_call",
+                  "count": 1
+                }
+              ]
+            },
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "outer_chat"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "outer_chat",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "inner_one_shot",
+            "interaction_id": "inner_one_shot"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "inner_one_shot",
+            "interaction_id": "inner_one_shot",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-2",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "inner_one_shot",
+            "interaction_id": "inner_one_shot",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "outer_chat",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-3",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$conv1",
+            "interaction_id": "outer_chat",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 2,
+            "tool_call_count": 2,
+            "total_input_tokens": 50,
+            "total_output_tokens": 24,
+            "total_tokens": 74,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 2,
+                "input_tokens": 50,
+                "output_tokens": 24,
+                "total_tokens": 74,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "one_shot_reused_conversation",
+      "description": "Since v0.4. The first one-shot conversation can be reused by later chat and one-shot interactions. Prompts, calls, answers and actions retain their own interaction IDs.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-2",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          },
+          {
+            "json": {
+              "id": "chatcmpl-3",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "interaction_id": "one_shot_origin",
+            "one_shot": true
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "follow_up_chat",
+            "one_shot": false
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_42",
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "follow_up_one_shot",
+            "one_shot": true
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            },
+            {
+              "op": "track_action",
+              "options": {
+                "interaction_id": "$last",
+                "action_type": "exported",
+                "action_details": {
+                  "destination": "download"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "one_shot_origin"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "one_shot_origin",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "one_shot_origin",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "follow_up_chat"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "follow_up_chat",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-2",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "follow_up_chat",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "follow_up_one_shot"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "follow_up_one_shot",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-3",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "follow_up_one_shot",
+            "action_type": "exported",
+            "action_details": {
+              "destination": "download"
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "one_shot_origin",
+            "interaction_id": "follow_up_one_shot",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "one_shot_task_emits_call",
+      "description": "Since v0.4. A one-shot task with a wrapped provider call and tool usage emits system-triggered events with matching conversation and interaction IDs.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "task",
+          "task_name": "digest",
+          "options": {
+            "user_id": "user_42",
+            "one_shot": true
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "record_tool_call",
+              "count": 1
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$int1",
+            "interaction_id": "$int1",
+            "task_name": "digest",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_42",
+          "properties": {
+            "conversation_id": "$int1",
+            "interaction_id": "$int1",
+            "task_name": "digest",
+            "response_status": "success",
+            "trigger": "system",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
     }
   ]
 }

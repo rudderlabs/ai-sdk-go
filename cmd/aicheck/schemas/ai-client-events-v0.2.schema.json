@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rudderstack.com/schemas/ai-client-events/0.2.0",
-  "title": "RudderStack AI client events v0.2.0 (draft, follows AI events spec v0.3)",
+  "title": "RudderStack AI client events v0.2.0 (draft, follows AI events spec v0.3; includes additions since v0.4)",
+  "description": "Event properties for the events a client app sends with a RudderStack web or mobile SDK (JavaScript, iOS, Android, React Native, Flutter): client copies of server events and engagement events with no server counterpart. Every one carries source: client. Since v0.4. When a feature has no thread (a one-shot interaction), set the required conversation_id to interaction_id. Existing captures may omit it only on the first client prompt of a chat thread the server has not yet created. declared_tool_event validates a customer-named tool event the client sends for a tool it ran itself.",
   "$defs": {
     "common": {
       "type": "object",
@@ -24,11 +25,16 @@
     },
     "ai_assistant_opened": {
       "allOf": [{ "$ref": "#/$defs/common" }],
-      "properties": { "entry_point": { "type": "string", "examples": ["launcher", "shortcut", "deep_link", "auto"] } }
+      "properties": {
+        "entry_point": {"type": "string", "examples": ["launcher", "shortcut", "deep_link", "auto"], "description": "Since v0.4. How the assistant was opened in the web or mobile app."}
+      }
     },
     "ai_assistant_closed": {
       "allOf": [{ "$ref": "#/$defs/common" }],
-      "properties": { "open_duration_ms": { "type": "integer", "minimum": 0 } }
+      "properties": {
+        "open_duration_ms": { "type": "integer", "minimum": 0 },
+        "close_method": {"type": "string", "examples": ["close_button", "escape", "outside_click", "navigation"], "description": "Since v0.4. How the assistant was closed in the web or mobile app."}
+      }
     },
     "ai_conversation_started": { "allOf": [{ "$ref": "#/$defs/common" }] },
     "ai_conversation_switched": {
@@ -41,18 +47,66 @@
       "not": { "anyOf": [{ "required": ["title"] }, { "required": ["name"] }] }
     },
     "ai_conversation_deleted": { "allOf": [{ "$ref": "#/$defs/with_conversation" }] },
+    "ai_conversation_pinned": {"allOf": [{"$ref": "#/$defs/with_conversation"}], "description": "Since v0.4. The user pinned a conversation.", "not": { "anyOf": [{ "required": ["title"] }, { "required": ["name"] }] }},
+    "ai_conversation_shared": {
+      "description": "Since v0.4. The user shared a conversation. Never send the share URL.",
+      "allOf": [{ "$ref": "#/$defs/with_conversation" }],
+      "not": { "anyOf": [{ "required": ["url"] }, { "required": ["share_url"] }, { "required": ["share_link"] }, { "required": ["title"] }, { "required": ["name"] }] }
+    },
+    "ai_agent_selected": {
+      "description": "Since v0.4. The user picked the agent, mode or persona that answers next. Names join agent_name in the server's usage_breakdown.",
+      "allOf": [{ "$ref": "#/$defs/common" }],
+      "anyOf": [{ "required": ["agent_name"] }, { "required": ["mode"] }],
+      "properties": {
+        "agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. The agent or persona the user selected."},
+        "from_agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. Previously selected agent or persona."},
+        "mode": {"type": "string", "minLength": 1, "description": "Since v0.4. The mode the user selected."},
+        "from_mode": {"type": "string", "minLength": 1, "description": "Since v0.4. Previously selected mode."}
+      }
+    },
+    "ai_suggestion_shown": {
+      "description": "Since v0.4. AI output the user can act on appeared, inline in the app or in the assistant: a fix, an autofill, action items, a proposed investigation, starter prompts. The denominator of acceptance rate. A normal chat answer sends nothing for rendering.",
+      "allOf": [{ "$ref": "#/$defs/with_interaction" }],
+      "required": ["suggestion_kind"],
+      "properties": {
+        "suggestion_kind": {"type": "string", "minLength": 1, "examples": ["fix", "autofill", "action_items", "investigation", "starter"], "description": "Since v0.4. The kind of actionable AI output shown."},
+        "item_count": {"type": "integer", "minimum": 0, "description": "Since v0.4. Parts the suggestion has, for output with several."}
+      }
+    },
+    "ai_feedback_requested": {
+      "description": "Since v0.4. The app asked for feedback (a rating prompt, a survey). The denominator of feedback response rate.",
+      "allOf": [{ "$ref": "#/$defs/with_interaction" }],
+      "properties": {
+        "trigger": { "type": "string", "minLength": 1, "examples": ["after_answer", "after_n_answers", "on_close", "manual"], "description": "Since v0.4. What made the app ask. This client trigger describes a feedback request." }
+      }
+    },
+    "ai_limit_reached": {
+      "description": "Since v0.4. The user hit a usage wall in the app. Upgrade clicks stay the app's own events.",
+      "allOf": [{ "$ref": "#/$defs/common" }],
+      "required": ["limit_type"],
+      "properties": {
+        "limit_type": {"enum": ["rate", "quota", "credits", "plan"], "description": "Since v0.4. The usage wall encountered by the user."},
+        "interaction_id": { "type": "string", "minLength": 1 }
+      }
+    },
     "ai_user_action": {
       "allOf": [{ "$ref": "#/$defs/with_interaction" }],
       "required": ["action_type"],
       "properties": {
         "action_type": {
-          "enum": ["feedback_given", "feedback_retracted", "copied_response", "shared", "reported", "regenerated", "accepted", "rejected", "edited", "clicked_through"]
+          "description": "Since v0.4. Adds feedback_dismissed, exported and reverted; suggestion actions apply only to actionable output.",
+          "enum": ["feedback_given", "feedback_retracted", "feedback_dismissed", "copied_response", "shared", "exported", "reported", "regenerated", "accepted", "rejected", "edited", "reverted", "clicked_through"]
         },
         "action_details": {
           "type": "object",
           "properties": {
             "feedback_type": { "type": "string" },
             "feedback_text": { "type": "string" },
+            "feedback_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Since v0.4. The app's preset choices the user picked."},
+            "feedback_scope": {"enum": ["interaction", "conversation", "feature"], "description": "Since v0.4. What the feedback is about; absent means interaction."},
+            "items_total": {"type": "integer", "minimum": 0, "description": "Since v0.4. Number of actionable suggestion items offered."},
+            "items_accepted": {"type": "integer", "minimum": 0, "description": "Since v0.4. Number of actionable suggestion items kept."},
+            "destination": {"type": "string", "pattern": "^[a-z][a-z0-9_]*", "maxLength": 64, "not": {"pattern": "[^a-z0-9_]"}, "examples": ["download", "dashboard", "agent", "ide"], "description": "Since v0.4. On exported: where the output went, as a snake_case label (1-64 ASCII characters; starts with a lowercase letter, followed by lowercase letters, digits or underscores)."},
             "card_kind": { "type": "string" },
             "target_type": { "type": "string", "not": { "pattern": "[/?=]" } }
           },
@@ -68,7 +122,12 @@
         "prompt_text": { "type": "string" },
         "prompt_source": { "enum": ["composer", "starter_suggestion", "follow_up_action", "retry"] },
         "suggestion_id": { "type": "string", "minLength": 1 },
-        "prompt_length": { "type": "integer", "minimum": 0 }
+        "prompt_length": { "type": "integer", "minimum": 0 },
+        "input_method": {"type": "string", "examples": ["text", "voice", "button"], "description": "Since v0.4. How the prompt was entered, such as text, voice or button."},
+        "agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. The agent or persona the user selected."},
+        "mode": {"type": "string", "minLength": 1, "description": "Since v0.4. The mode the user selected."},
+        "context_item_count": {"type": "integer", "minimum": 0, "description": "Since v0.4. Context the user attached that is not a file (a dashboard, a query, a selection)."},
+        "context_item_types": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "description": "Since v0.4. App-defined kinds, each listed once. Never names or content."}
       }
     },
     "ai_response_received": {
@@ -86,6 +145,24 @@
           { "required": ["tool_call_count"] }, { "required": ["usage_breakdown"] }, { "required": ["tool_breakdown"] },
           { "required": ["finish_reason"] }, { "required": ["trace_id"] }, { "required": ["client_disconnected"] },
           { "required": ["total_input_tokens"] }, { "required": ["total_output_tokens"] }, { "required": ["error_type"] }
+        ]
+      }
+    },
+    "declared_tool_event": {
+      "description": "Since v0.4. A customer-named tool event for a tool the client ran itself, where the server never sees the outcome. The name never starts with ai_ or mcp_. Tool arguments and results are never sent.",
+      "allOf": [{ "$ref": "#/$defs/with_interaction" }],
+      "required": ["tool_name", "tool_status"],
+      "properties": {
+        "tool_name": {"type": "string", "minLength": 1, "description": "Since v0.4. Name of the tool executed by the client."},
+        "tool_call_id": {"type": "string", "minLength": 1, "description": "Since v0.4. Identifier of the client tool call."},
+        "tool_status": {"enum": ["success", "error", "unknown"], "description": "Since v0.4. Outcome of the client tool execution."},
+        "tool_duration_ms": {"type": "number", "minimum": 0, "description": "Since v0.4. Measured client tool execution duration in milliseconds."},
+        "agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. The agent or persona the user selected."}
+      },
+      "not": {
+        "anyOf": [
+          { "required": ["arguments"] }, { "required": ["args"] }, { "required": ["params"] },
+          { "required": ["result"] }, { "required": ["results"] }
         ]
       }
     }

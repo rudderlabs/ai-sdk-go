@@ -1,0 +1,1 @@
+{"type": "track", "userId": "u1", "event": "run_query", "properties": {"source": "client", "conversation_id": "c1", "tool_name": "run_query"}}

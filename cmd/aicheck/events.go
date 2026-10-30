@@ -24,8 +24,11 @@ var (
 	clientCopies    = set("ai_user_prompt_created", "ai_response_received", "ai_user_action")
 	failureStatuses = []string{"cancelled", "error", "incomplete", "timeout"} // what an app-caught failure may report
 	clientOnly      = set("ai_assistant_opened", "ai_assistant_closed", "ai_conversation_started",
-		"ai_conversation_switched", "ai_conversation_renamed", "ai_conversation_deleted")
-	mcpEvents = set("mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
+		"ai_conversation_switched", "ai_conversation_renamed", "ai_conversation_deleted", "ai_conversation_pinned",
+		"ai_conversation_shared", "ai_agent_selected", "ai_suggestion_shown", "ai_feedback_requested", "ai_limit_reached")
+	// feedback about a whole conversation or feature: its interaction_id is minted for it, no answer has it
+	scopedFeedback = []string{"conversation", "feature"}
+	mcpEvents      = set("mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
 		"mcp_resource_read", "mcp_prompt_used", "mcp_event_subscription_changed", "mcp_event_delivered")
 	// a standalone score carries a feature only when given; ai_otel_span (tracing) carries none by default
 	optionalFeature      = set("ai_interaction_scored", "ai_otel_span")
@@ -126,6 +129,13 @@ func present(o *Object, want map[string]bool) []string {
 	return out
 }
 
+// clientTool recognizes joined tools even when their name is also expected legacy traffic.
+func clientTool(name string, props, wrapper *Object, expectedLegacy []string) bool {
+	toolField := props.Has("tool_name") || props.Has("tool_status")
+	joined := props.Has("conversation_id") && props.Has("interaction_id")
+	return !reserved(name) && toolField && (joined || (wrapper.Len() == 0 && !slices.Contains(expectedLegacy, name)))
+}
+
 type side struct{ event, side string }
 
 func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, error) {
@@ -153,8 +163,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 	actions := map[string]map[string]*counter{}                    // interaction -> side -> action_type counts
 	var runs, toolCalls []*Object
 
-	// browser AI event names: only these count as AI traffic when they carry source: client
-	isClientName := func(name string) bool { return strings.HasPrefix(name, "ai_") && sch.client.defs.Has(name) }
+	// Client schema events count as browser AI traffic; its helper definitions are not event names, so a
+	// customer tool named like one is validated as a declared tool.
+	clientHelpers := set("common", "with_conversation", "with_interaction", "declared_tool_event")
+	isClientName := func(name string) bool { return sch.client.defs.Has(name) && !clientHelpers[name] }
+	browserEvents := 0
 	for i, m := range events {
 		name, props := m.Get("event").(string), obj(m.Get("properties"))
 		user := m.Get("userId")
@@ -167,7 +180,12 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 		context := obj(m.Get("context"))
 		w := obj(context.Get("wrapperLibrary"))
-		isClient := props.Get("source") == "client" && isClientName(name) // a legacy event may use source too
+		// AI join IDs identify client tools even when their customer name is also legacy.
+		isClient := props.Get("source") == "client" &&
+			(isClientName(name) || clientTool(name, props, w, opts.expectLegacy))
+		if isClient {
+			browserEvents++
+		}
 		where := fmt.Sprintf("#%d %s", i, name)
 		// Provenance: only the AI SDKs' wrapperLibrary marks an AI send; another adapter's tag is still legacy,
 		// unless the event uses an AI name not listed in --expect-legacy (then it fails the SDK-name check).
@@ -183,11 +201,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			continue
 		}
 		names.add(name)
-		isMCP := mcpEvents[name] || w.Get("integration") == "mcp"
+		isMCP := mcpEvents[name] || (!isClient && w.Get("integration") == "mcp")
 		// a raw tracing span may carry a custom eventName; past the legacy branch, any other event with a
 		// customer name was sent by an AI SDK as a declared tool event
-		isSpan := name == "ai_otel_span" || (in(w.Get("integration"), tracing) && !knownEvents[name])
-		isDeclared := !reserved(name) && !isSpan
+		isSpan := name == "ai_otel_span" || (!isClient && in(w.Get("integration"), tracing) && !knownEvents[name])
+		isDeclared := !reserved(name) && !isSpan && (!isClient || !isClientName(name))
 		if !truthy(user) && !truthy(anon) { // the browser SDK sends anonymousId on every event
 			fail("%s: no userId or anonymousId", where)
 		}
@@ -198,7 +216,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			fail("%s: client-only event without source: client", where)
 		}
 		if isClient { // client names come from the client schema's $defs
-			errs, err := sch.errors(sch.client, name, props)
+			clientDefinition := name
+			if !isClientName(name) {
+				clientDefinition = "declared_tool_event"
+			}
+			errs, err := sch.errors(sch.client, clientDefinition, props)
 			if err != nil {
 				return 0, err
 			}
@@ -214,7 +236,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 		}
 		if specEvents[name] || mcpEvents[name] || isDeclared { // client copies: spec and client schema
-			if props.Get("source") == "client" && !clientCopies[name] {
+			if props.Get("source") == "client" && !clientCopies[name] && !isClient {
 				fail("%s: source: client on an event the browser never sends", where)
 			}
 			errs, err := sch.errors(sch.spec, definition, props)
@@ -239,7 +261,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			!in(props.Get("feature"), opts.feature) {
 			fail("%s: feature %s not in %s", where, repr(props.Get("feature")), reprList(opts.feature))
 		}
-		system := props.Get("trigger") == "system"
+		system := name != "ai_feedback_requested" && props.Get("trigger") == "system"
 		optionalSurface := name == "ai_user_action" && !isClient && !props.Has("surface") // trackAction
 		if len(opts.surface) > 0 && !system && !optionalSurface && (isClient || clientCopies[name]) &&
 			!in(props.Get("surface"), opts.surface) {
@@ -332,9 +354,13 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			}
 			// a paused run resumes under the same interaction_id: count only final answers
 			paused := name == "ai_response_received" && props.Get("response_status") == "paused"
-			if paused {
+			scoped := name == "ai_user_action" && in(props.Get("action_type"), []string{"feedback_given", "feedback_retracted", "feedback_dismissed"}) && in(obj(props.Get("action_details")).Get("feedback_scope"), scopedFeedback)
+			switch {
+			case paused:
 				c[side{name + " (paused)", s}]++
-			} else {
+			case scoped:
+				c[side{name + " (scoped)", s}]++
+			default:
 				c[side{name, s}]++
 			}
 			if conversation, ok := key(props.Get("conversation_id")); ok {
@@ -534,7 +560,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		if declared[iid] > 0 && serverAnswer+clientAnswer+serverPaused+clientPaused == 0 {
 			var names []string
 			for k := range c {
-				if !specEvents[k.event] {
+				if !reserved(k.event) {
 					names = append(names, k.event)
 				}
 			}
@@ -615,14 +641,10 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		}
 	}
 	// browser AI events carry no wrapperLibrary: trackAi must follow the switch too
-	sdkEvents, browserEvents := 0, 0
+	sdkEvents := 0
 	for _, m := range events {
 		if in(obj(obj(m.Get("context")).Get("wrapperLibrary")).Get("name"), sdkNames) {
 			sdkEvents++
-		}
-		name := m.Get("event").(string)
-		if obj(m.Get("properties")).Get("source") == "client" && isClientName(name) {
-			browserEvents++
 		}
 	}
 	if opts.noAIEvents && sdkEvents > 0 {

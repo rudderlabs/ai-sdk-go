@@ -89,7 +89,7 @@ This sends `ai_user_prompt_created`, `ai_response_received` (models, tokens, lat
 
 Every integration records the model, tokens (input always includes cached and cache-write tokens), cost inputs, finish reason, errors and tool calls; streamed calls are recorded when the stream ends. Rules that apply to all of them:
 
-- One interaction per user turn, not per conversation or process. Pass your chat or thread ID as `ConversationID` so turns group into a conversation. Resending the history each turn is fine: each turn reports only its own calls.
+- One interaction per user turn, not per conversation or process. Pass your chat or thread ID as `ConversationID` so turns group into a conversation. A one-shot feature with no thread (a Generate button, a suggested fix) sets `OneShot: true`: without an explicit or context conversation ID, `conversation_id` is the interaction's ID. The default still mints a separate conversation ID. Resending the history each turn is fine: each turn reports only its own calls.
 - Read streams inside the `RunInteraction` function: a stream still open when the interaction ends is recorded as a cancelled call.
 - The last call decides the status: a failed final call fails the answer even if your code handled the error; a failed call followed by a successful retry is a success.
 - Provider SDK retries (openai-go, anthropic-sdk-go) count as one call, priced once, as in Node.js and Python ([Retries](docs/integrations.md#retries)).
@@ -205,7 +205,7 @@ Call `WrapMCPServer` once, before serving; it takes its own options (`Configure`
 
 ### Feedback
 
-`TrackAction(ctx, TrackActionOptions{...})` sends `ai_user_action`, typically from your feedback endpoint ([quick start](#quick-start)). Action types: `feedback_given`, `feedback_retracted`, `copied_response`, `shared`, `reported`, `regenerated`, `accepted`, `rejected`, `edited`, `clicked_through`. `InteractionID` and `ConversationID` are required (else the event is dropped with a warning); `feedback_text` in `ActionDetails` is sent only with content capture on. When the browser sends its own copy, `WithServerFeedback(false)` turns the server copy off.
+`TrackAction(ctx, TrackActionOptions{...})` sends `ai_user_action`, typically from your feedback endpoint ([quick start](#quick-start)). Action types: `feedback_given`, `feedback_retracted`, `feedback_dismissed`, `copied_response`, `shared`, `exported`, `reported`, `regenerated`, `accepted`, `rejected`, `edited`, `reverted`, `clicked_through`. `InteractionID` and `ConversationID` are required (else the event is dropped with a warning); `feedback_text` in `ActionDetails` is sent only with content capture on. For a one-shot interaction, pass its ID as both. When the client app (web or mobile) sends its own copy, `WithServerFeedback(false)` turns the server copy off.
 
 ### Scores
 
@@ -308,7 +308,7 @@ Every event's properties stay within 30,000 serialized bytes (RudderStack reject
 | `WithEventRules(rules)`          | none    | Declared tool events                                                                          |
 | `WithClassifier(*opts)`          | none    | Intent classification; nil turns it off                                                       |
 | `WithEvaluator(fn)`              | none    | Your scoring function, run after each successful answer; nil turns it off                     |
-| `WithServerFeedback(on)`         | on      | Off: `TrackAction` sends nothing (the browser sends `ai_user_action`)                         |
+| `WithServerFeedback(on)`         | on      | Off: `TrackAction` sends nothing (the client app sends `ai_user_action`)                      |
 | `WithTraceIDFrom(fn)`            | none    | Where `trace_id` comes from, for example `rudderotel.TraceID`                                 |
 
 Integration options: `WithProvider` and `WithAnalytics` on every integration but Bedrock (`WithAnalytics` only), and `rudderopenai.WithStreamUsage(bool)` (streamed Chat Completions ask for usage, with a resend when a host rejects it; true always asks, false never). `EstimateCost(provider, model, input, output, cached, cacheWrite, opts ...CostOptions)` prices one call from the registered table, with `CostOptions{CacheWrite1hTokens, ServiceTier, ServerToolCalls}`. Per-interaction options, client precedence, cost rules, warehouse column types and the API reference: [docs/configuration.md](docs/configuration.md).
@@ -340,7 +340,7 @@ aicheck ai-off.jsonl --no-ai-events --expect-legacy chatTurnCompleted
 aicheck what-changes ai-off.jsonl events.jsonl  # redacted before/after diff for the PR
 ```
 
-The check validates every event against the spec this version emits (and browser copies against the browser-event schema), and checks that legacy events keep sending (`--expect-legacy`) or stop when their switch is off (`--absent`, counted by provenance: events without an AI SDK's `context.wrapperLibrary`, so an AI event with the same name does not count), that no AI event is sent with the AI switch off (`--no-ai-events`), client/server joins in both directions (`--expect-joins`, feedback copies per action type included, honouring `--client-opt-out client_prompt|client_response|client_feedback|server_feedback`, `--feedback-endpoint` and `--client-surface` for surfaces with a browser client), that app-caught failures are not reported as success (`--failed-interaction <id>`), plus identity (`--user-id`, `--expect-session`, and `--mcp-user-id` or `--mcp-anonymous` for MCP servers), content capture and MCP flags (`aicheck --help`). Exit code 0 passes, 1 fails, 2 is bad usage or an unreadable file. The Node.js (`npx @rudderstack/ai check`) and Python (`python -m rudderstack.ai.check`) SDKs ship the same check, with the same output.
+The check validates every event against the spec this version emits (and client copies against the client-event schema), and checks that legacy events keep sending (`--expect-legacy`) or stop when their switch is off (`--absent`, counted by provenance: events without an AI SDK's `context.wrapperLibrary`, so an AI event with the same name does not count), that no AI event is sent with the AI switch off (`--no-ai-events`), client/server joins in both directions (`--expect-joins`, feedback copies per action type included, honouring `--client-opt-out client_prompt|client_response|client_feedback|server_feedback`, `--feedback-endpoint` and `--client-surface` for surfaces with a browser client), that app-caught failures are not reported as success (`--failed-interaction <id>`), plus identity (`--user-id`, `--expect-session`, and `--mcp-user-id` or `--mcp-anonymous` for MCP servers), content capture and MCP flags (`aicheck --help`). Exit code 0 passes, 1 fails, 2 is bad usage or an unreadable file. The Node.js (`npx @rudderstack/ai check`) and Python (`python -m rudderstack.ai.check`) SDKs ship the same check, with the same output.
 
 ## Troubleshooting
 

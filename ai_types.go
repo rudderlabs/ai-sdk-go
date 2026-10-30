@@ -77,13 +77,17 @@ const (
 	ActionRejected          ActionType = "rejected"
 	ActionEdited            ActionType = "edited"
 	ActionClickedThrough    ActionType = "clicked_through"
+	// Since v0.4: feedback dismissal, exports and suggestion reversion.
+	ActionFeedbackDismissed ActionType = "feedback_dismissed"
+	ActionExported          ActionType = "exported"
+	ActionReverted          ActionType = "reverted"
 )
 
 var (
 	responseStatuses = set(StatusSuccess, StatusError, StatusTimeout, StatusCancelled, StatusPaused, StatusIncomplete)
 	pauseReasons     = set(PauseApproval, PauseHumanInput, PauseDeferredTool, PauseAuthRequired, PauseOther)
 	surfaces         = set(SurfaceWeb, SurfaceMobile, SurfaceSlack, SurfaceTeams, SurfaceEmail, SurfaceChatGPTApp, SurfaceClaudeApp, SurfaceIDE, SurfaceAPI, SurfaceOther)
-	actionTypes      = set(ActionFeedbackGiven, ActionFeedbackRetracted, ActionCopiedResponse, ActionShared, ActionReported, ActionRegenerated, ActionAccepted, ActionRejected, ActionEdited, ActionClickedThrough)
+	actionTypes      = set(ActionFeedbackDismissed, ActionExported, ActionReverted, ActionFeedbackGiven, ActionFeedbackRetracted, ActionCopiedResponse, ActionShared, ActionReported, ActionRegenerated, ActionAccepted, ActionRejected, ActionEdited, ActionClickedThrough)
 	serviceTiers     = set("batch", "flex", "standard", "fast", "other")
 	attachmentKinds  = set("image", "audio", "video", "pdf", "file")
 )

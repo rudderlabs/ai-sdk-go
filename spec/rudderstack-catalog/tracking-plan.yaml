@@ -37,6 +37,10 @@ spec:
         - property: '#property:prompt_source'
         - property: '#property:suggestion_id'
         - property: '#property:prompt_length'
+        - property: '#property:agent_name'
+        - property: '#property:mode'
+        - property: '#property:context_item_count'
+        - property: '#property:context_item_types'
 
     - type: event_rule
       id: ai_response_received_rule
@@ -233,6 +237,11 @@ spec:
             - property: '#property:feedback_type'
             - property: '#property:feedback_value'
             - property: '#property:feedback_text'
+            - property: '#property:feedback_reasons'
+            - property: '#property:feedback_scope'
+            - property: '#property:items_total'
+            - property: '#property:items_accepted'
+            - property: '#property:destination'
             - property: '#property:card_kind'
             - property: '#property:target_type'
 

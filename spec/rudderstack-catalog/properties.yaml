@@ -104,6 +104,21 @@ spec:
       description: Client copy only. Prompt characters, measured before any truncation.
       config:
         minimum: 0
+    - id: mode
+      name: mode
+      type: string
+      description: Since v0.4. Client copy only. The mode the user picked, for example ask or agent.
+    - id: context_item_count
+      name: context_item_count
+      type: integer
+      description: Since v0.4. Client copy only. Context the user attached that is not a file (a dashboard, a query, a selection).
+      config:
+        minimum: 0
+    - id: context_item_types
+      name: context_item_types
+      type: array
+      item_types: [string]
+      description: Since v0.4. Client copy only. App-defined kinds of context attached, each listed once. Never names or content.
     - id: prompt_text
       name: prompt_text
       type: string
@@ -472,7 +487,7 @@ spec:
       type: string
       description: What the user did with the answer.
       config:
-        enum: [feedback_given, feedback_retracted, copied_response, shared, reported, regenerated, accepted, rejected, edited, clicked_through]
+        enum: [feedback_given, feedback_retracted, feedback_dismissed, copied_response, shared, exported, reported, regenerated, accepted, rejected, edited, reverted, clicked_through]
     - id: action_details
       name: action_details
       type: object
@@ -489,6 +504,36 @@ spec:
       name: feedback_text
       type: string
       description: Opt-in free-text feedback. Treat as personal data.
+    - id: feedback_reasons
+      name: feedback_reasons
+      type: array
+      item_types: [string]
+      description: Since v0.4. The app's preset feedback choices the user picked.
+    - id: feedback_scope
+      name: feedback_scope
+      type: string
+      description: Since v0.4. What the feedback is about; absent means interaction.
+      config:
+        enum: [interaction, conversation, feature]
+    - id: items_total
+      name: items_total
+      type: integer
+      description: Since v0.4. On accepted, edited, rejected or reverted, the parts the output had.
+      config:
+        minimum: 0
+    - id: items_accepted
+      name: items_accepted
+      type: integer
+      description: Since v0.4. On accepted, edited, rejected or reverted, the parts the user kept.
+      config:
+        minimum: 0
+    - id: destination
+      name: destination
+      type: string
+      description: Since v0.4. On exported, where the output went, as a snake_case label of 1-64 ASCII characters, starting with a lowercase letter, followed by lowercase letters, digits or underscores. Examples are download, dashboard, agent and ide.
+      config:
+        pattern: ^[a-z][a-z0-9_]*$
+        max_length: 64
     - id: card_kind
       name: card_kind
       type: string

@@ -27,7 +27,7 @@ Properties on every interaction event (prompt, answer, per-call, declared tool, 
 
 | Property                | Source                                                                                              |
 | ----------------------- | --------------------------------------------------------------------------------------------------- |
-| `conversation_id`       | `InteractionOptions.ConversationID`, else the context's, else a minted UUID v4                      |
+| `conversation_id`       | `InteractionOptions.ConversationID`, else the context's, else the `interaction_id` with `OneShot: true`, else a minted UUID v4       |
 | `interaction_id`        | `InteractionOptions.InteractionID`, else a UUID v4                                                  |
 | `feature`               | `Feature` of the options, else the context's                                                        |
 | `surface`               | `Surface` of the options, else the context's; a value outside the `Surface` constants is dropped with a warning |
@@ -376,10 +376,11 @@ What the user did with an answer, sent by `TrackAction`, typically from a feedba
 }
 ```
 
-- `action_type`: `feedback_given`, `feedback_retracted`, `copied_response`, `shared`, `reported`, `regenerated`, `accepted`, `rejected`, `edited` or `clicked_through` (the `Action*` constants). Another value is sent with a warning.
+- `action_type`: `feedback_given`, `feedback_retracted`, `feedback_dismissed`, `copied_response`, `shared`, `exported`, `reported`, `regenerated`, `accepted`, `rejected`, `edited`, `reverted` or `clicked_through` (the `Action*` constants). Another value is sent with a warning.
+- `exported` uses `action_details.destination`, a snake_case label such as `download`, `dashboard`, `agent` or `ide` (1-64 ASCII characters: a lowercase letter first, then lowercase letters, digits or underscores).
 - `action_details`: your map, with `feedback_type`, `feedback_text`, `card_kind` and `target_type` dropped (with a warning) when not strings; `card_kind` and `target_type` also when empty. `feedback_text` is sent only with content capture on, masked.
 - Send `feedback_retracted` with the same `feedback_type` when a user takes feedback back: the latest event per `interaction_id` is the final state.
-- `InteractionID` and `ConversationID` (falling back to the context) are required; without them the event is dropped with a warning. `WithServerFeedback(false)` turns `TrackAction` off when the browser sends its own copy (`source: "client"`).
+- `InteractionID` and `ConversationID` (falling back to the context) are required; without them the event is dropped with a warning. For a one-shot interaction, pass its ID as both. `WithServerFeedback(false)` turns `TrackAction` off when the client app (web or mobile) sends its own copy (`source: "client"`).
 
 ## Error types
 
@@ -416,3 +417,5 @@ Every event carries `context.wrapperLibrary` beside the `context.library` analyt
 ```
 
 `integration` is the integration that started or recorded the interaction's first model call (`openai`, `anthropic`, `google-genai`, `bedrock`), `manual` for `LLMCall.Integration` left empty, `TrackAction`, `TrackScore` and interactions without calls, or `mcp` for [MCP server events](mcp.md). If your own message context (`Context` of the options or `WithValues`) has a `wrapperLibrary`, it is nested inside the SDK's as `wrapperLibrary.wrapperLibrary`. Other keys of your context are sent as they are.
+
+Client events for web and mobile SDKs, including additions since v0.4: [client-events.md](client-events.md).

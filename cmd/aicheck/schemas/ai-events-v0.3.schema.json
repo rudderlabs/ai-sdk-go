@@ -11,7 +11,7 @@
       "type": "object",
       "required": ["interaction_id"],
       "properties": {
-        "conversation_id": { "type": "string", "minLength": 1 },
+        "conversation_id": {"type": "string", "minLength": 1, "description": "Since v0.4. The thread or run scope. For an explicit one-shot interaction without a thread, use interaction_id. Server SDKs opt in; existing chat defaults still mint an ID."},
         "interaction_id": { "type": "string", "minLength": 1 },
         "feature": { "type": "string" },
         "surface": { "$ref": "#/$defs/surface" },
@@ -42,7 +42,11 @@
         "prompt_text": { "type": "string", "description": "Opt-in. Treat as personal data." },
         "prompt_source": { "enum": ["composer", "starter_suggestion", "follow_up_action", "retry"], "description": "Client copy only: where the prompt came from." },
         "suggestion_id": { "type": "string", "minLength": 1, "description": "Client copy only: the starter suggestion used, with prompt_source starter_suggestion." },
-        "prompt_length": { "type": "integer", "minimum": 0, "description": "Client copy only: characters, measured before any truncation." }
+        "prompt_length": { "type": "integer", "minimum": 0, "description": "Client copy only: characters, measured before any truncation." },
+        "agent_name": {"type": "string", "minLength": 1, "description": "Since v0.4. Client copy only: the agent or persona the user picked to answer."},
+        "mode": {"type": "string", "minLength": 1, "description": "Since v0.4. Client copy only: the mode the user picked, e.g. ask or agent."},
+        "context_item_count": {"type": "integer", "minimum": 0, "description": "Since v0.4. Client copy only: context the user attached that is not a file (a dashboard, a query, a selection)."},
+        "context_item_types": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}, "description": "Since v0.4. Client copy only: app-defined kinds of context attached, each listed once. Never names or content."}
       }
     },
     "usage_entry": {
@@ -177,7 +181,7 @@
       }
     },
     "declared_tool_event": {
-      "description": "A customer-named event declared for one tool (configure eventRules.tools), one per tool call. The event name is the customer's and never starts with ai_ or mcp_. Custom properties come only from the rule's properties(); tool arguments and results are never copied otherwise.",
+      "description": "A customer-named event declared for one tool (configure eventRules.tools), one per tool call. Since v0.4. A web or mobile client app sends its own, with source: client, for tools it runs itself. The event name is the customer's and never starts with ai_ or mcp_. Custom properties come only from the rule's properties(); tool arguments and results are never copied otherwise.",
       "allOf": [{ "$ref": "#/$defs/ids" }],
       "required": ["tool_name", "tool_status"],
       "properties": {
@@ -194,13 +198,18 @@
       "required": ["action_type"],
       "properties": {
         "source": { "$ref": "#/$defs/source" },
-        "action_type": { "enum": ["feedback_given", "feedback_retracted", "copied_response", "shared", "reported", "regenerated", "accepted", "rejected", "edited", "clicked_through"], "description": "feedback_retracted clears the interaction's feedback: the latest feedback_given or feedback_retracted per interaction_id is its final state. accepted, rejected, edited: the user kept an AI suggestion or artifact unchanged, discarded it, or kept it after changing it. clicked_through (client copy): the user opened something from the answer; see card_kind and target_type." },
+        "action_type": {"enum": ["feedback_given", "feedback_retracted", "feedback_dismissed", "copied_response", "shared", "exported", "reported", "regenerated", "accepted", "rejected", "edited", "reverted", "clicked_through"], "description": "Since v0.4. Adds feedback_dismissed, exported (action_details.destination) and reverted (undoing an accepted suggestion). Suggestion lifecycle actions apply to actionable AI output only. feedback_retracted clears the interaction's feedback: the latest feedback_given or feedback_retracted per interaction_id is its final state. accepted, rejected, edited: the user kept an AI suggestion or artifact unchanged, discarded it, or kept it after changing it. clicked_through (client copy): the user opened something from the answer; see card_kind and target_type."},
         "action_details": {
           "type": "object",
           "properties": {
             "feedback_type": { "type": "string", "examples": ["thumbs", "rating"] },
             "feedback_value": { "description": "The feedback given; on feedback_retracted, the value being retracted, for context." },
             "feedback_text": { "type": "string", "description": "Opt-in." },
+            "feedback_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Since v0.4. The app's preset choices the user picked."},
+            "feedback_scope": {"enum": ["interaction", "conversation", "feature"], "description": "Since v0.4. What the feedback is about; absent means interaction. Conversation or feature feedback still carries both IDs: interaction_id is minted for the feedback, and conversation_id is the interaction_id when there is no conversation."},
+            "items_total": {"type": "integer", "minimum": 0, "description": "Since v0.4. On accepted, edited, rejected, reverted: the parts the output had."},
+            "items_accepted": {"type": "integer", "minimum": 0, "description": "Since v0.4. On accepted, edited, rejected, reverted: the parts the user kept."},
+            "destination": {"type": "string", "pattern": "^[a-z][a-z0-9_]*", "maxLength": 64, "not": {"pattern": "[^a-z0-9_]"}, "examples": ["download", "dashboard", "agent", "ide"], "description": "Since v0.4. On exported: where the output went, as a snake_case label (1-64 ASCII characters; starts with a lowercase letter, followed by lowercase letters, digits or underscores)."},
             "card_kind": { "type": "string", "minLength": 1, "description": "On clicked_through: which card or component, e.g. a source card, a chart or an MCP Apps widget." },
             "target_type": { "type": "string", "minLength": 1, "examples": ["resource", "doc"], "description": "On clicked_through: the kind of object opened. Never a URL." }
           }

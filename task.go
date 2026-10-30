@@ -21,10 +21,12 @@ type TaskOptions struct {
 	AnonymousID string
 	// ConversationID defaults to the parent interaction's; otherwise one is minted.
 	ConversationID string
-	InteractionID  string
-	Feature        string
-	Surface        Surface
-	TraceID        string
+	// OneShot uses the interaction ID when there is no conversation. Since v0.4; default false.
+	OneShot       bool
+	InteractionID string
+	Feature       string
+	Surface       Surface
+	TraceID       string
 	// AccountID is the customer, workspace or tenant the work is for.
 	AccountID string
 	// OnBehalfOf is the human the work is for. The task's actor is always the system.
@@ -101,7 +103,7 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 	}
 	var task *Interaction
 	err := RunInteraction(ctx, InteractionOptions{
-		UserID: o.UserID, AnonymousID: o.AnonymousID, ConversationID: conversation, InteractionID: o.InteractionID, Feature: o.Feature,
+		UserID: o.UserID, AnonymousID: o.AnonymousID, ConversationID: conversation, InteractionID: o.InteractionID, OneShot: o.OneShot, Feature: o.Feature,
 		Surface: o.Surface, TraceID: o.TraceID, AccountID: o.AccountID, OnBehalfOf: o.OnBehalfOf,
 		TriggerSource: triggerSource, TriggerEventID: o.TriggerEventID, TaskName: taskName,
 		ParentInteractionID: parent, Analytics: o.Analytics, CaptureContent: o.CaptureContent,
