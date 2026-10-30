@@ -1601,3 +1601,78 @@ func TestRunTaskFlushWaitsForEndQueuedBehindPause(t *testing.T) {
 		t.Fatalf("final error response missing at return: %v", r.names())
 	}
 }
+
+// A pausing run must not expose a free slot while its redactor and callbacks run.
+func TestPausingRunHoldsItsSlotDuringFinalization(t *testing.T) {
+	var i *Interaction
+	var admitted *bool
+	r := setupAI(t, WithCaptureContent(true), WithLimits(Limits{MaxOpenInteractions: 1}),
+		WithRedactHook(func(text string) (string, error) {
+			if admitted == nil {
+				_, other := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+				ok := !other.Ended()
+				admitted = &ok
+				other.End(EndOptions{})
+			}
+			return text, nil
+		}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	i.RecordCall(pauseCall)
+	if _, ok := i.Pause(PauseOptions{ResponseText: "waiting"}); !ok {
+		t.Fatal("pause failed", r.names())
+	}
+	if admitted == nil || *admitted {
+		t.Fatal("another run was admitted while the pausing run finalized")
+	}
+	if openCount() != 0 {
+		t.Fatalf("pausing run is on the open list: %d", openCount())
+	}
+	i.End(EndOptions{})
+}
+
+type statusBlockingClient struct {
+	*recorder
+	block   map[string]chan struct{} // response_status -> closed when delivery of it may finish
+	entered map[string]chan struct{}
+}
+
+func (c *statusBlockingClient) Enqueue(message analytics.Message) error {
+	err := c.recorder.Enqueue(message)
+	if event, ok := message.(analytics.Track); ok && event.Event == "ai_response_received" {
+		status, _ := event.Properties["response_status"].(string)
+		if gate := c.block[status]; gate != nil {
+			close(c.entered[status])
+			<-gate
+		}
+	}
+	return err
+}
+
+// The completion signal stays discoverable while a queued final end is still being delivered.
+func TestWaitBackgroundWaitsWhileQueuedEndIsDelivered(t *testing.T) {
+	r := setupAI(t)
+	client := &statusBlockingClient{recorder: r,
+		block:   map[string]chan struct{}{"paused": make(chan struct{}), "error": make(chan struct{})},
+		entered: map[string]chan struct{}{"paused": make(chan struct{}), "error": make(chan struct{})}}
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true, Analytics: client})
+	i.RecordCall(pauseCall)
+	go i.Pause(PauseOptions{})
+	<-client.entered["paused"]
+	i.End(EndOptions{Status: StatusError, afterPause: true}) // queued behind the pause
+	close(client.block["paused"])
+	<-client.entered["error"] // the queued final end is being delivered
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if i.waitBackground(ctx) {
+		t.Fatal("waitBackground reported done while the final response was still being delivered")
+	}
+	close(client.block["error"])
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel2()
+	if !i.waitBackground(ctx2) {
+		t.Fatal("waitBackground never completed")
+	}
+	if got := r.named("ai_response_received"); len(got) != 2 {
+		t.Fatalf("final response missing: %v", r.names())
+	}
+}

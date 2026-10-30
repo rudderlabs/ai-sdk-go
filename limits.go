@@ -107,10 +107,15 @@ func unregister(i *Interaction) {
 	delete(open.paused, i.id)
 }
 
-// holdPausedSlot keeps a paused run counted toward MaxOpenInteractions, off the TTL list.
+// holdPausedSlot keeps a paused run counted toward MaxOpenInteractions, off the TTL list. The
+// move is atomic, so the run never frees its slot in between.
 func holdPausedSlot(i *Interaction) {
 	open.mu.Lock()
 	defer open.mu.Unlock()
+	if i.elem != nil {
+		open.list.Remove(i.elem)
+		i.elem = nil
+	}
 	open.paused[i.id] = struct{}{}
 }
 

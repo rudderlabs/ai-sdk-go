@@ -451,7 +451,8 @@ type Interaction struct {
 	pauseGuard             atomic.Bool   // checked before mu, including callback reentry
 	pendingMu              sync.Mutex    // orders pauseGuard release against pendingEnd
 	pendingEnd             *EndOptions   // wrapper end that arrived mid-pause; sent when the pause finishes
-	pendingDone            chan struct{} // closed once pendingEnd is sent; RunTask's flush waits on it
+	pendingDone            chan struct{} // closed once pendingEnd is delivered; RunTask's flush waits on it
+	pendingRunning         int           // queued ends being delivered; pendingDone stays until zero
 	pauseCount             int
 	pausedTotal            time.Duration
 	adapterAnalytics       analytics.Client
@@ -1526,7 +1527,8 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	i.pauseCount++
 	hooks := i.beforeEnd
 	i.beforeEnd = nil
-	unregister(i)
+	// Move to the paused slot now, so callbacks below never see a free slot.
+	holdPausedSlot(i)
 	i.mu.Unlock()
 	defer func() {
 		// Includes writes accepted while unlocked delivery was in progress.
@@ -1577,8 +1579,6 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
 	i.prompt, i.answer, i.messages = "", "", nil // not in the snapshot, so not in an in-process resume
 	i.compactions = 0
-	unregister(i)
-	holdPausedSlot(i)
 	snapshot, ok = i.snapshotLocked()
 	// The flight stays in progress until unlock finishes delivery and deferred reporting.
 	return snapshot, ok
@@ -1975,15 +1975,26 @@ func (i *Interaction) End(o EndOptions) {
 func (i *Interaction) releasePause() {
 	i.pendingMu.Lock()
 	i.pauseGuard.Store(false)
-	pending, done := i.pendingEnd, i.pendingDone
-	i.pendingEnd, i.pendingDone = nil, nil
-	i.pendingMu.Unlock()
+	pending := i.pendingEnd
+	i.pendingEnd = nil
 	if pending != nil {
-		i.end(*pending)
+		i.pendingRunning++
 	}
-	if done != nil {
-		close(done)
+	i.pendingMu.Unlock()
+	if pending == nil {
+		return
 	}
+	// pendingDone stays discoverable until the end is delivered, unless another pause requeued one.
+	defer func() {
+		i.pendingMu.Lock()
+		defer i.pendingMu.Unlock()
+		i.pendingRunning--
+		if i.pendingRunning == 0 && i.pendingEnd == nil && i.pendingDone != nil {
+			close(i.pendingDone)
+			i.pendingDone = nil
+		}
+	}()
+	i.end(*pending)
 }
 
 // queueEndLocked holds a wrapper end until the in-flight pause finishes; pendingMu is held.
