@@ -41,6 +41,7 @@ err := rudderstackai.Configure(
 | `WithAnalytics(client)`                 | none    | Default RudderStack client. Nil clears it.                                                                                    |
 | `WithCaptureContent(on)`                | off     | Send `prompt_text`, `response_text`, `action_details.feedback_text` and score `explanation`, [masked](#privacy-and-masking). |
 | `WithLLMCallEvents(on)`                 | off     | Also send one [`ai_llm_response_received`](events.md#ai_llm_response_received) per model call.                                |
+| `WithTaskStartedEvents(on)`             | off     | Also send [`ai_task_started`](events.md#ai_task_started) when a `RunTask` run starts (not when it resumes).                   |
 | `WithToolBreakdown(on)`                 | off     | Add [`tool_breakdown`](events.md#tool_breakdown) to `ai_response_received`.                                                   |
 | `WithIdentityFromCookies(on)`           | on      | Read identity from RudderStack JavaScript SDK [cookies](#identity-and-cookies).                                               |
 | `WithRedaction(on)`                     | on      | Built-in [masking](#privacy-and-masking) of captured text. Off sends text as given and skips the hook.                       |
@@ -82,6 +83,7 @@ For `StartInteraction` and `RunInteraction`. Every field is optional.
 | `InputMethod`, `AttachmentCount`, `AttachmentTypes` | Prompt event fields                                                                                 |
 | `PromptText`                                | Sent as `prompt_text` only with content capture on; given to the classifier and evaluator                   |
 | `NoPromptEvent`                             | Skip `ai_user_prompt_created`                                                                               |
+| `Resume`                                    | `*PausedInteraction` from [`Pause`](#pauses-and-resumes): continue that run; its IDs, identity and background fields win over the other options, and no prompt event is sent |
 
 `RunInteraction(ctx, o, fn)` also puts the options' identity, conversation, feature, surface, account, client and context into the context `fn` receives (as `WithValues` would), so `TrackAction`, `TrackScore` and nested tasks inside it inherit them.
 
@@ -98,7 +100,9 @@ For `StartInteraction` and `RunInteraction`. Every field is optional.
 | `RecordToolCalls(...ToolCall)`  | Report tool calls; a call already recorded under the same `ID` is merged, not counted again              |
 | `RecordToolCallCount(n)`        | Count `n` tool calls without IDs or names                                                                 |
 | `RecordToolResult(id, ToolResult)` | Settle a recorded tool call: error, error type, duration, output                                       |
-| `End(EndOptions)`               | Send `ai_response_received` once; later calls do nothing                                                  |
+| `Pause(PauseOptions)`           | Send a `paused` `ai_response_received` for this segment and return the snapshot to resume from ([Pauses and resumes](#pauses-and-resumes)) |
+| `Resume()`, `Paused()`          | Resume a paused run in this process; whether it is paused                                                 |
+| `End(EndOptions)`               | Send the segment response; a paused end can resume, a final end is idempotent                                                  |
 
 Field reference for `LLMCall`, `ToolCall` and `ToolResult`: [integrations.md](integrations.md#manual).
 
@@ -122,7 +126,32 @@ Field reference for `LLMCall`, `ToolCall` and `ToolResult`: [integrations.md](in
 - No prompt event. `Classify` is off unless set.
 - `Flush` (`*bool`): when the task ends, wait for its classification and score and flush its client, as [`Flush`](#flush-and-shutdown) does. Default on, except for a task chained to the interaction in its context.
 - `FlushTimeout` (`time.Duration`): bounds that wait and flush together. Zero: 2 seconds.
+- `Resume` (`*PausedInteraction`): continue a paused run from its snapshot, without `ai_task_started` ([Pauses and resumes](#pauses-and-resumes)).
 - Other fields (`InteractionID`, `TraceID`, `TriggerEventID`, `CaptureContent`, `ToolBreakdown`) are as on `InteractionOptions`. An error returned by `fn` fails the answer and is returned unchanged.
+
+## Pauses and resumes
+
+A run that waits for something outside it (an approval, a person's answer) pauses: `Pause` sends `ai_response_received` with `response_status: paused`, `pause_reason` and that segment's totals, and the next segment's totals start from zero. When the run ends, its final `ai_response_received` adds `pause_count` and `total_paused_ms`. Every event keeps the same `interaction_id`.
+
+```go
+err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{TriggerSource: "queue", Resume: saved},
+	func(ctx context.Context, task *rudderstackai.Interaction) error {
+		if _, err := claude.Messages.New(ctx, params); err != nil {
+			return err
+		}
+		if needsApproval {
+			paused, _ := task.Pause(rudderstackai.PauseOptions{Reason: rudderstackai.PauseApproval})
+			return db.SaveRun(job.ID, paused) // JSON; load it into saved on the next run
+		}
+		return nil
+	})
+```
+
+- In process, `Resume()` continues the run; a model or tool call recorded while paused resumes it too.
+- Across processes (a worker restart, a wait of days), store the `PausedInteraction` (JSON, keys as the event properties) with your own run state and pass it as `InteractionOptions.Resume` or `TaskOptions.Resume`. The snapshot carries the IDs, identity, background fields, agent version, variant, confidence, intent, outcome, trace ID, integration, pause count and paused time, and when the pause started; the time until the resume counts as paused, by the wall clock. Calls before the pause are already sent; usage accepted during pause delivery is kept for the next segment, including credits and per-call fields.
+- `RunInteraction` and `RunTask` leave a paused run paused when `fn` returns nil (an error still ends it). A paused run is off the open list: `Limits.InteractionTTL` and `Shutdown` never end it, and an abandoned one ends with its last `paused` event.
+- `PauseOptions`: `Reason` (default `PauseOther`), `ResponseText` (sent as `response_text` only with content capture on), `ExtraProperties`. Pausing again before a resume sends nothing and returns the same snapshot; after `End`, `ok` is false.
+- `End` while paused ends the run: the wait counts as paused time, and the final segment has no calls.
 
 ## Context values
 
@@ -321,6 +350,7 @@ err := rudderstackai.Configure(rudderstackai.WithSampleRates(map[string]float64{
 - **What is kept.** An event with a rate below 1 is sent for that share of interactions. The draw is a hash of `interaction_id` (the same in the Go, Node.js and Python SDKs), so every sampled event of one interaction is kept or dropped together, and an interaction kept at a lower rate is also kept at every higher one. An event without an `interaction_id` (`mcp_client_seen`) is drawn at random.
 - **The stamp.** A kept event carries `sample_rate` (`0.1`); weight each row by `1 / sample_rate` to estimate totals. Events without a rate below 1 carry none.
 - **The default.** Events you do not list are all sent. Leave `ai_response_received` out: cost totals, answer counts and the client/server gap need every answer, and its `llm_call_count`, `tool_call_count` and token totals still count the calls whose own events were sampled out. You can list it; then every metric built on it is an estimate.
+- **Pauses and resumes.** Every paused and final answer is sent by default. When you sample `ai_response_received`, each segment uses the same interaction ID draw and kept segments carry the configured `sample_rate`, including after JSON snapshot restore. Configure the same rates in every worker that resumes the run.
 - **Scope.** It applies to every event the SDK sends, product, declared tool and MCP server events alike (MCP servers follow `Configure`, not `Options`, for this).
 
 Sampling runs before the event reaches your analytics-go client, so it works with any client version. A `BeforeEnqueue` hook on the client (where your analytics-go version has one) still sees every event the SDK sends, `sample_rate` included, and stays the place for app-wide drop and edit rules. A hook that drops some of the sampled events itself makes `sample_rate` overstate what arrived: sample in `WithSampleRates`, not in the hook.
@@ -371,7 +401,7 @@ RudderStack warehouse destinations create a column with the type of the first va
 
 | Package                                          | Exports                                                                                                                                                                                                 |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `WithValues`, `Middleware`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `FlushTimeout`, `Shutdown`, `Flusher`, `ContextFlusher`, `ErrorInfo`, the `Kind*` constants, `Limits`, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `CostOptions`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
+| `github.com/rudderlabs/ai-sdk-go` (`rudderstackai`) | `Configure` and the `With*` options, `StartInteraction`, `RunInteraction`, `Interaction`, `RunTask`, `PauseOptions`, `PausedInteraction`, `WithValues`, `Middleware`, `FromContext`, `TrackAction`, `TrackScore`, `Flush`, `FlushTimeout`, `Shutdown`, `Flusher`, `ContextFlusher`, `ErrorInfo`, the `Kind*` constants, `Limits`, `RegisterPrice`, `ClearPrices`, `EstimateCost`, `CostOptions`, `ReportedCost`, `ErrorTypeOf`, `ErrorTypeForStatus`, `ClassifierPrompt`, `DefaultOutcomes`, `Ptr`, `Version`, `LibraryName`, `SpecVersion`, the `Integration*`, `Status*`, `Pause*`, `Surface*`, `Action*`, `Evaluator*` and `Trigger*` constants; MCP: `WrapMCPServer`, `Elicit`, `TrackMCPEventSubscription`, `WrapMCPEventSender` |
 | `.../rudderopenai`                               | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `WithStreamUsage`, `ClassifierClient`                                                                                                    |
 | `.../rudderanthropic`                            | `WithTracking`, `Middleware`, `WithProvider`, `WithAnalytics`, `ClassifierClient`                                                                                                                       |
 | `.../ruddergenai`                                | `HTTPClient`, `Transport`, `WithProvider`, `WithAnalytics`                                                                                                                                              |

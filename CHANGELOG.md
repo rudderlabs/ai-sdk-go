@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- SDK-5991: support repeated pauses and persisted resumes on top of the client, server-field and sampling stack. Preserve sampling decisions, server scope, confidence and pending call credits across JSON restore; count compactions per response segment.
+- SDK-5992: add per-event sampling with `WithSampleRates`, a stable interaction ID draw and `sample_rate` on kept events.
+- SDK-5990: add server fields, credit pricing, declined answers, denied tools, confidence, versions, per-call detail, compactions and app-sent limit events.
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
 - SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events. Schema filenames and spec version remain unchanged.
 

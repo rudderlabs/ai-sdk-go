@@ -185,6 +185,18 @@ spec:
       description: Set only when the SDK ended the interaction itself (response_status incomplete), shutdown or ttl_expired.
       config:
         enum: [shutdown, ttl_expired]
+    - id: pause_count
+      name: pause_count
+      type: integer
+      description: Since v0.4. Only on the final answer of a run that paused. How many times it paused.
+      config:
+        minimum: 1
+    - id: total_paused_ms
+      name: total_paused_ms
+      type: integer
+      description: Since v0.4. With pause_count. Time the run spent paused, between each pause and its resume.
+      config:
+        minimum: 0
     - id: client_disconnected
       name: client_disconnected
       type: boolean

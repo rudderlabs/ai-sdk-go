@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -59,6 +61,11 @@ type InteractionOptions struct {
 	TriggerEventID string
 	// ParentInteractionID is the interaction that started this one: agent hand-offs, sub-tasks.
 	ParentInteractionID string
+	// Resume continues a paused run from the snapshot [Interaction.Pause] returned, in this or
+	// another process: its IDs, identity and background fields win over these options, no prompt
+	// event or ai_task_started is sent, and its pause count and paused time carry on to the final
+	// answer.
+	Resume *PausedInteraction
 	// Analytics is the RudderStack client for this interaction. Wins over the context and the
 	// global client.
 	Analytics analytics.Client
@@ -153,11 +160,11 @@ type LLMCall struct {
 	OutputText string
 }
 
-// capLocked reports, once per interaction, that MaxCallsPerInteraction was reached.
+// capLocked queues a notice, once per interaction; unlock reports it after publishing usage.
 func (i *Interaction) capLocked() {
 	if !i.capped {
 		i.capped = true
-		limitReached("MaxCallsPerInteraction")
+		i.capPending = true
 	}
 }
 
@@ -284,6 +291,86 @@ type EndOptions struct {
 
 	// endReason is set when the SDK ends the interaction itself (end_reason).
 	endReason string
+	// afterPause makes a wrapper-owned terminal end wait for an in-flight pause instead of being dropped.
+	afterPause bool
+}
+
+// PauseOptions configures [Interaction.Pause].
+type PauseOptions struct {
+	// Reason is what the run waits for (pause_reason). Defaults to PauseOther.
+	Reason PauseReason
+	// ResponseText is what the run said before it paused, such as the question. Sent as
+	// response_text only with content capture on.
+	ResponseText string
+	// ExtraProperties are custom properties for this ai_response_received. SDK-owned names are
+	// ignored.
+	ExtraProperties map[string]any
+}
+
+// PausedInteraction is a paused run, as JSON: store it with the run's own state and pass it as
+// [InteractionOptions.Resume] or [TaskOptions.Resume] to continue the same interaction later, in
+// any process. Keys match the event properties.
+type PausedInteraction struct {
+	invalidSnapshot bool
+	InteractionID   string  `json:"interaction_id"`
+	ConversationID  string  `json:"conversation_id"`
+	Trigger         Trigger `json:"trigger"`
+	// PauseCount is the pauses so far, this one included.
+	PauseCount int `json:"pause_count"`
+	// TotalPausedMS is the time spent paused before this pause.
+	TotalPausedMS int64 `json:"total_paused_ms"`
+	// PausedAt is when this pause started (Unix milliseconds).
+	PausedAt            int64      `json:"paused_at"`
+	UserID              string     `json:"user_id,omitempty"`
+	AnonymousID         string     `json:"anonymous_id,omitempty"`
+	Feature             string     `json:"feature,omitempty"`
+	Surface             Surface    `json:"surface,omitempty"`
+	AccountID           string     `json:"account_id,omitempty"`
+	OnBehalfOf          string     `json:"on_behalf_of,omitempty"`
+	AgentVersion        string     `json:"agent_version,omitempty"`
+	Variant             string     `json:"variant,omitempty"`
+	Confidence          Confidence `json:"confidence,omitempty"`
+	CompactionCount     int        `json:"compaction_count,omitempty"`
+	TriggerSource       string     `json:"trigger_source,omitempty"`
+	TaskName            string     `json:"task_name,omitempty"`
+	TriggerEventID      string     `json:"trigger_event_id,omitempty"`
+	ParentInteractionID string     `json:"parent_interaction_id,omitempty"`
+	Intent              string     `json:"intent,omitempty"`
+	TraceID             string     `json:"trace_id,omitempty"`
+	Outcome             string     `json:"outcome,omitempty"`
+	Integration         string     `json:"integration,omitempty"`
+	// SeenResponseIDs retains provider/response ID pairs already counted. Since v0.4.
+	SeenResponseIDs [][2]string `json:"seen_response_ids,omitempty"`
+	// PendingCalls and PendingTools carry usage accepted after the paused segment closed. Since v0.4.
+	PendingCalls []map[string]any `json:"pending_calls,omitempty"`
+	PendingTools []map[string]any `json:"pending_tools,omitempty"`
+	// ReportCount orders reports independently of aggregate call totals.
+	ReportCount *int `json:"report_count,omitempty"`
+	// SuccessfulCallSequence is the report number of the latest successful call.
+	SuccessfulCallSequence *int `json:"successful_call_sequence,omitempty"`
+	// PendingCompactions carries compactions recorded after the paused response captured totals.
+	PendingCompactions *int `json:"pending_compactions,omitempty"`
+}
+
+// resumeFrom applies a Resume snapshot's fields to o; false (with a warning) when it is not one.
+func resumeFrom(o *InteractionOptions) bool {
+	r := o.Resume
+	if r == nil {
+		return false
+	}
+	if r.InteractionID == "" || r.ConversationID == "" ||
+		(r.Trigger != TriggerUser && r.Trigger != TriggerSystem) ||
+		!validPendingSnapshot(r) || r.PauseCount < 1 || int64(r.PauseCount) > 9007199254740991 ||
+		r.TotalPausedMS < 0 || r.TotalPausedMS > 9007199254740991 || r.PausedAt < 0 || r.PausedAt > 9007199254740991 {
+		warnOnce("invalid-resume", "Resume: not a paused interaction snapshot; starting a new interaction", 0)
+		return false
+	}
+	o.InteractionID, o.ConversationID, o.Trigger = r.InteractionID, r.ConversationID, r.Trigger
+	o.UserID, o.AnonymousID, o.Feature, o.Surface = r.UserID, r.AnonymousID, r.Feature, r.Surface
+	o.AccountID, o.OnBehalfOf, o.TriggerSource, o.TaskName = r.AccountID, r.OnBehalfOf, r.TriggerSource, r.TaskName
+	o.AgentVersion, o.Variant = r.AgentVersion, r.Variant
+	o.TriggerEventID, o.ParentInteractionID, o.Intent, o.TraceID = r.TriggerEventID, r.ParentInteractionID, r.Intent, r.TraceID
+	return true
 }
 
 type recordedCall struct {
@@ -314,6 +401,7 @@ type recordedTool struct {
 	duration                                            *time.Duration
 	args, result                                        any
 	hasResult, settled, fired                           bool
+	ruleOutcome                                         *toolRuleOutcome
 }
 
 type pendingEvent struct {
@@ -333,7 +421,7 @@ type outcomeHint struct {
 
 // Interaction is one user prompt and the one answer it gets, however many model calls, tools or
 // agents that takes. Integrations report each call into the interaction carried by the request
-// context; it sends ai_user_prompt_created and exactly one ai_response_received. Safe for
+// context; it sends ai_user_prompt_created, a response for each pause and one final response. Safe for
 // concurrent use.
 type Interaction struct {
 	agentVersion, variant                                                  string
@@ -346,39 +434,56 @@ type Interaction struct {
 	captureContent, toolBreakdown, classify                                bool
 	explicitAnalytics                                                      analytics.Client
 	msgContext                                                             map[string]any
-	started                                                                time.Time
+	// resumed: continued from a Resume snapshot.
+	resumed bool
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
 	untracked bool
 	// opened and elem place it among the open interactions (guarded by open.mu).
 	opened time.Time
 	elem   *list.Element
 
-	mu                 sync.Mutex
-	adapterAnalytics   analytics.Client
-	intent, outcome    string
-	traceID            string
-	integration        string
-	ended              bool
-	firstToken         time.Duration
-	calls              []*recordedCall
-	callCount          int
-	lastCall, lastOK   *recordedCall
-	seen               map[string]*recordedCall
-	tools              []*recordedTool
-	overflow           []*recordedCall // calls past MaxCallsPerInteraction, one per usage group
-	toolOverflow       []*recordedTool // tool calls past it, one per tool_breakdown identity
-	capped             bool
-	toolsByID          map[string]*recordedTool
-	hint               *outcomeHint
-	clientDisconnected bool
-	disconnected       func() bool
-	pending            []pendingEvent
-	outbox             []outgoing
-	settled            bool
-	beforeEnd          []func()
-	prompt, answer     string
-	messages           any
-	background         chan struct{}
+	mu sync.Mutex
+	// started is the start of the current segment: the run, or its latest resume.
+	started time.Time
+	// pausedAt is when the current pause started; zero while running.
+	pausedAt               time.Time
+	pausing                bool
+	pauseGuard             atomic.Bool   // checked before mu, including callback reentry
+	pendingMu              sync.Mutex    // orders pauseGuard release against pendingEnd
+	pendingEnd             *EndOptions   // wrapper end that arrived mid-pause; sent when the pause finishes
+	pendingDone            chan struct{} // closed once pendingEnd is delivered; RunTask's flush waits on it
+	pendingRunning         int           // queued ends being delivered; pendingDone stays until zero
+	pauseCount             int
+	pausedTotal            time.Duration
+	adapterAnalytics       analytics.Client
+	intent, outcome        string
+	traceID                string
+	restored               bool // from a snapshot: the request context never supplies the trace ID
+	integration            string
+	ended                  bool
+	firstToken             time.Duration
+	calls                  []*recordedCall
+	callCount              int
+	successfulCallSequence int
+	lastCall, lastOK       *recordedCall
+	seen                   map[string]*recordedCall
+	tools                  []*recordedTool
+	overflow               []*recordedCall // calls past MaxCallsPerInteraction, one per usage group
+	toolOverflow           []*recordedTool // tool calls past it, one per tool_breakdown identity
+	capped                 bool
+	capPending             bool
+	buildErrors            []error
+	toolsByID              map[string]*recordedTool
+	hint                   *outcomeHint
+	clientDisconnected     bool
+	disconnected           func() bool
+	pending                []pendingEvent
+	outbox                 []outgoing
+	settled                bool
+	beforeEnd              []func()
+	prompt, answer         string
+	messages               any
+	background             chan struct{}
 	// callErrors are errors wrapped calls failed with, newest last, so the app returning one
 	// keeps its call's error_type.
 	callErrors []callError
@@ -463,6 +568,8 @@ func boolOr(v *bool, fallback bool) bool {
 }
 
 func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
+	snapshot := o.Resume
+	resumed := resumeFrom(&o)
 	c := cfg()
 	cv := valuesFrom(ctx)
 	if cv == nil {
@@ -472,10 +579,14 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 	if header == "" {
 		header = requestCookies(o.Request)
 	}
-	id := resolveIdentity(identityInputs{
+	in := identityInputs{
 		userID: o.UserID, anonymousID: o.AnonymousID,
 		cookies: rudderstackCookies(header, o.CookieValues), fromCookies: o.IdentityFromCookies,
-	}, cv, c)
+	}
+	if resumed {
+		in.fromCookies = Ptr(false) // the snapshot's identity wins, and this request's session is not its
+	}
+	id := resolveIdentity(in, cv, c)
 	trigger := o.Trigger
 	if trigger != TriggerSystem {
 		trigger = TriggerUser
@@ -531,6 +642,32 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		toolsByID:         map[string]*recordedTool{},
 		firstToken:        -1,
 		disconnected:      cv.disconnected,
+		resumed:           resumed,
+	}
+	if resumed {
+		i.userID, i.anonymousID = snapshot.UserID, snapshot.AnonymousID
+		i.feature, i.surface = snapshot.Feature, surfaceOf(snapshot.Surface)
+		i.accountID, i.onBehalfOf = snapshot.AccountID, snapshot.OnBehalfOf
+		i.agentVersion, i.variant = snapshot.AgentVersion, snapshot.Variant
+		i.confidence, i.compactions = snapshot.Confidence, nonNegative(snapshot.CompactionCount)
+		if snapshot.PendingCompactions != nil {
+			i.compactions = *snapshot.PendingCompactions
+		}
+		i.outcome, i.integration = snapshot.Outcome, snapshot.Integration
+		i.restored = true
+		i.pauseCount = max(snapshot.PauseCount, 0)
+		for _, pair := range snapshot.SeenResponseIDs {
+			if _, exists := i.seen[pair[0]+"\x00"+pair[1]]; exists {
+				continue
+			}
+			if len(i.seen) >= cfg().limits.MaxCallsPerInteraction {
+				break
+			}
+			i.seen[pair[0]+"\x00"+pair[1]] = nil
+		}
+		i.restorePending(snapshot)
+		i.pausedTotal = time.Duration(max(snapshot.TotalPausedMS, 0))*time.Millisecond +
+			max(now.Sub(time.UnixMilli(snapshot.PausedAt)), 0)
 	}
 	i.fillTraceID(ctx)
 	return i
@@ -545,11 +682,20 @@ func first2(a, b Surface) Surface {
 
 // fillTraceID takes the trace ID [WithTraceIDFrom] finds in the context, unless one is set.
 func (i *Interaction) fillTraceID(ctx context.Context) {
-	if i.traceID != "" || ctx == nil {
+	i.mu.Lock()
+	needed := i.traceID == "" && !i.ended && !i.restored && ctx != nil
+	i.mu.Unlock()
+	if !needed {
 		return
 	}
 	if from := cfg().traceIDFrom; from != nil {
-		callback("WithTraceIDFrom", func() error { i.traceID = from(ctx); return nil })
+		var traceID string
+		callback("WithTraceIDFrom", func() error { traceID = from(ctx); return nil })
+		i.mu.Lock()
+		if i.traceID == "" && !i.ended {
+			i.traceID = traceID
+		}
+		i.mu.Unlock()
 	}
 }
 
@@ -591,7 +737,7 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 		i.prompt = o.PromptText
 	}
 	i.mu.Unlock()
-	if !o.NoPromptEvent && i.trigger == TriggerUser {
+	if !o.NoPromptEvent && i.trigger == TriggerUser && !i.resumed {
 		i.emitPrompt(o)
 	}
 	return context.WithValue(ctx, keyInteraction, i), i
@@ -623,6 +769,16 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 		ctx = context.WithValue(ctx, keyValues, &cv)
 	}
 	ctx, i := StartInteraction(ctx, o)
+	if i.resumed {
+		cv := *valuesFrom(ctx)
+		cv.userID, cv.anonymousID, cv.conversationID = i.userID, i.anonymousID, i.conversationID
+		cv.feature, cv.surface = i.feature, i.surface
+		cv.accountID, cv.onBehalfOf = i.accountID, i.onBehalfOf
+		cv.agentVersion, cv.variant = i.agentVersion, i.variant
+		cv.cookies, cv.disconnected = nil, nil
+		cv.identityFromCookies = Ptr(false)
+		ctx = context.WithValue(ctx, keyValues, &cv)
+	}
 	completed := false
 	defer func() {
 		if completed {
@@ -633,7 +789,7 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 		if e, ok := r.(error); ok {
 			t = i.answerErrorType(e)
 		}
-		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t})
+		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t, afterPause: true})
 		// nil: runtime.Goexit (t.FailNow), which must keep unwinding rather than become a panic.
 		if r != nil {
 			panic(r)
@@ -643,10 +799,13 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 	completed = true
 	if err != nil {
 		t := i.answerErrorType(err)
-		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t})
+		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t, afterPause: true})
 		return err
 	}
-	i.End(EndOptions{})
+	// A paused run stays open for its resume.
+	if !i.Paused() {
+		i.End(EndOptions{})
+	}
 	return nil
 }
 
@@ -742,8 +901,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	if i.integration == "" {
 		i.integration = call.Integration
 	}
-	if call.ErrorType == "" {
-		i.keepAnswerLocked(call.OutputText)
+	if call.ResponseID != "" {
+		if earlier, seen := i.seen[call.Provider+"\x00"+call.ResponseID]; seen && earlier == nil {
+			return false
+		}
 	}
 	input, output := nonNegative(call.InputTokens), nonNegative(call.OutputTokens)
 	var reasoning *int
@@ -780,6 +941,11 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		errorCount = callCount
 	}
 	credits := creditsOf(call.Credits)
+	if call.Credits == nil && call.ResponseID != "" {
+		if earlier := i.seen[call.Provider+"\x00"+call.ResponseID]; earlier != nil {
+			credits = earlier.credits
+		}
+	}
 	if call.ErrorType == "cancelled" {
 		credits = nil
 	}
@@ -799,6 +965,12 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	if call.ResponseID != "" {
 		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok {
+			if earlier == nil {
+				return false
+			}
+			if call.ErrorType == "" {
+				i.keepAnswerLocked(call.OutputText)
+			}
 			fillString(&earlier.agentName, call.AgentName)
 			fillString(&earlier.callPurpose, call.CallPurpose)
 			if call.BYOK != nil {
@@ -813,6 +985,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			}
 			return false
 		}
+	}
+	i.resumeLocked()
+	if call.ErrorType == "" {
+		i.keepAnswerLocked(call.OutputText)
 	}
 	var latency, ttft *time.Duration
 	if !call.StartedAt.IsZero() {
@@ -840,11 +1016,12 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	i.lastCall = r
 	if r.errorType == "" {
 		i.lastOK = r
+		i.successfulCallSequence = i.callCount
 	}
 	if len(i.calls) < cfg().limits.MaxCallsPerInteraction {
 		i.calls = append(i.calls, r)
 		if call.ResponseID != "" {
-			i.seen[call.Provider+"\x00"+call.ResponseID] = r
+			i.admitSeenLocked(call.Provider+"\x00"+call.ResponseID, r)
 		}
 	} else {
 		i.capLocked()
@@ -862,9 +1039,13 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 // RecordToolCalls reports tool calls the model made. A call already recorded under the same
 // provider ID is not counted again, but its name and outcome fill in.
 func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
+	if len(calls) == 0 {
+		return
+	}
 	safely(func() {
 		var fire []*recordedTool
 		i.mu.Lock()
+		i.resumeLocked()
 		for _, call := range calls {
 			name, server := normalizeTool(call.Name, call.MCPServer)
 			var tool *recordedTool
@@ -895,7 +1076,7 @@ func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
 			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result}, call.Result != nil)
 			fire = append(fire, tool)
 		}
-		i.mu.Unlock()
+		i.unlock()
 		i.fireToolEvents(fire, false)
 	})
 }
@@ -906,12 +1087,13 @@ func (i *Interaction) RecordToolCallCount(n int) {
 		return
 	}
 	i.mu.Lock()
+	i.resumeLocked()
 	if len(i.tools) < cfg().limits.MaxCallsPerInteraction {
 		i.tools = append(i.tools, &recordedTool{calls: n})
 	} else {
 		i.foldToolLocked(&recordedTool{calls: n})
 	}
-	i.mu.Unlock()
+	i.unlock()
 }
 
 // RecordToolResult reports how a tool call recorded under id went. Results for IDs this
@@ -986,7 +1168,19 @@ var reservedProperties = set(
 	"response_text", "prompt_text", "input_method", "trace_id", "account_id", "on_behalf_of",
 	"trigger_source", "task_name", "parent_interaction_id", "trigger_event_id", "source", "surface",
 	"pause_reason", "client_disconnected", "attachment_count", "attachment_types", "end_reason",
+	"pause_count", "total_paused_ms",
 )
+
+// customProperties are the extra properties without SDK-owned names.
+func customProperties(extra map[string]any) map[string]any {
+	props := map[string]any{}
+	for k, v := range extra {
+		if !reservedProperties[k] {
+			props[k] = v
+		}
+	}
+	return props
+}
 
 var toolEventReserved = func() map[string]bool {
 	m := set("sample_rate", "agent_name", "tool_name", "tool_call_id", "tool_status", "tool_duration_ms")
@@ -1010,7 +1204,7 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 	var jobs []job
 	i.mu.Lock()
 	for _, t := range tools {
-		if i.ended || t.fired || t.name == "" || (!t.settled && !final) {
+		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || t.fired || t.name == "" || (!t.settled && !final) {
 			continue
 		}
 		rule, ok := rules[first(t.rawName, t.name)]
@@ -1026,13 +1220,19 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 	}
 }
 
-func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
+type toolRuleOutcome struct {
+	suppressed bool
+	properties map[string]any
+	resultSize int
+}
+
+func evaluateToolRule(rule ToolEventRule, t recordedTool) *toolRuleOutcome {
 	args, _ := t.args.(map[string]any)
 	if rule.When != nil {
 		send := false
 		callback("ToolEventRule.When", func() error { send = rule.When(args, t.result); return nil })
 		if !send {
-			return
+			return &toolRuleOutcome{suppressed: true, properties: map[string]any{}, resultSize: -1}
 		}
 	}
 	custom := map[string]any{}
@@ -1046,16 +1246,61 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 			}
 		}
 	}
-	var resultSize *int
+	// Encode outside the lock: an application MarshalJSON may re-enter the interaction.
+	resultSize := -1
 	if t.hasResult {
 		if text, ok := t.result.(string); ok {
-			resultSize = Ptr(len(text))
-		} else if encoded, err := compactJSON(t.result); err == nil {
-			resultSize = Ptr(len(encoded))
+			resultSize = len(text)
+		} else if encoded, ok := encodeNow(t.result); ok {
+			resultSize = len(encoded.(json.RawMessage))
+		} else {
+			report(KindUserCallback, "MarshalJSON", errUnencodable)
 		}
 	}
+	return &toolRuleOutcome{properties: jsonSafeMap(custom), resultSize: resultSize}
+}
+
+// Freeze deferred rules after paused-event delivery. Callbacks and encoding run outside mu.
+// done runs under mu once nothing is left to prepare, so no tool slips in before the snapshot.
+func (i *Interaction) preparePendingRules(done func()) {
+	for {
+		i.mu.Lock()
+		var selected *recordedTool
+		var rule ToolEventRule
+		for _, t := range i.tools {
+			r, ok := cfg().toolRules[first(t.rawName, t.name)]
+			if !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
+				selected, rule = t, r
+				break
+			}
+		}
+		if selected == nil {
+			done()
+			i.mu.Unlock()
+			return
+		}
+		tool := *selected
+		// Reserve it against reentrant preparation; final outcome is installed after evaluation.
+		selected.ruleOutcome = &toolRuleOutcome{suppressed: true, properties: map[string]any{}, resultSize: -1}
+		i.mu.Unlock()
+		outcome := evaluateToolRule(rule, tool)
+		i.mu.Lock()
+		selected.ruleOutcome = outcome
+		selected.args, selected.result, selected.hasResult = nil, nil, false
+		i.mu.Unlock()
+	}
+}
+
+func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
+	outcome := t.ruleOutcome
+	if outcome == nil {
+		outcome = evaluateToolRule(rule, t)
+	}
+	if outcome.suppressed {
+		return
+	}
+	custom, resultSize := outcome.properties, outcome.resultSize
 	i.mu.Lock()
-	defer i.unlock()
 	p := i.baseLocked()
 	p["trigger"] = string(i.trigger)
 	put(p, "agent_name", t.agentName)
@@ -1067,8 +1312,8 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 		p["tool_status"] = toolStatus(t.err)
 	}
 	put(p, "mcp_server", t.mcpServer)
-	if resultSize != nil {
-		p["result_size_bytes"] = *resultSize
+	if resultSize >= 0 {
+		p["result_size_bytes"] = resultSize
 	}
 
 	// An unknown outcome never reports a 0 duration.
@@ -1084,7 +1329,10 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 		}
 	}
 	rates := cfg().sampleRates
-	p = fitToolEventProperties(rule.Event, p, keys, rates)
+	i.mu.Unlock()
+	p = fitToolEventProperties(rule.Event, jsonSafeMap(p), keys, rates)
+	i.mu.Lock()
+	defer i.unlock()
 	i.sendLockedRates(rule.Event, func() map[string]any { return p }, rates, true)
 }
 
@@ -1144,6 +1392,10 @@ func (i *Interaction) flushLocked() {
 func (i *Interaction) unlock() {
 	out := i.outbox
 	i.outbox = nil
+	capped := i.capPending
+	i.capPending = false
+	errors := i.buildErrors
+	i.buildErrors = nil
 	i.mu.Unlock()
 	for _, e := range out {
 		if e.pinned {
@@ -1152,6 +1404,23 @@ func (i *Interaction) unlock() {
 		}
 		emitAI(e.client, e.event, i.userID, i.anonymousID, e.props, i.msgContext, e.integration, e.at)
 	}
+	if capped {
+		limitReached("MaxCallsPerInteraction")
+	}
+	for _, err := range errors {
+		report(KindInternal, "interaction.build", err)
+	}
+}
+
+// buildSafelyLocked contains a builder panic but leaves reporting to unlock. Even an
+// internal failure must never call the application's error handler with i.mu held.
+func (i *Interaction) buildSafelyLocked(fn func()) {
+	defer func() {
+		if value := recover(); value != nil {
+			i.buildErrors = append(i.buildErrors, recovered(value))
+		}
+	}()
+	fn()
 }
 
 func (i *Interaction) baseLocked() map[string]any {
@@ -1228,15 +1497,559 @@ func (i *Interaction) callEventLocked(c *recordedCall) map[string]any {
 // A last call's finish_reason that ends the answer, as its error_type.
 var finishErrors = map[string]string{"length": "length", "max_tokens": "length", "content_filter": "content_filter"}
 
-// End sends ai_response_received once. Later calls do nothing.
+// Pause pauses the run while it waits for something outside it (an approval, a person's answer):
+// it sends ai_response_received with response_status paused and this segment's totals, then starts
+// the next segment's totals from zero, so summing the segments counts each call once. It returns
+// the snapshot to [Interaction.Resume] from, or to pass as [InteractionOptions.Resume] in another
+// process; ok is false once the interaction ended or while pause finalization is in progress.
+// Callers, including callbacks, can retry after finalization; Pause never waits on another pause.
+// A paused run is never ended by the TTL or [Shutdown], but it keeps counting toward
+// [Limits.MaxOpenInteractions] until it ends; resuming a run that counts always succeeds.
+// [RunInteraction] and [RunTask] leave it paused when fn returns nil. Pausing again before a resume sends nothing.
+func (i *Interaction) Pause(o PauseOptions) (paused PausedInteraction, ok bool) {
+	safely(func() { paused, ok = i.pause(o) })
+	return paused, ok
+}
+
+func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool) {
+	// Reentry must return even if the caller already holds mu. Delivery and deferred
+	// error reporting remain part of this flight until all of its defers finish.
+	if !i.pauseGuard.CompareAndSwap(false, true) {
+		return PausedInteraction{}, false
+	}
+	defer i.releasePause()
+	i.mu.Lock()
+	if i.ended || !i.pausedAt.IsZero() {
+		defer i.mu.Unlock()
+		return i.snapshotLocked()
+	}
+	i.pausing = true
+	i.pauseCount++
+	hooks := i.beforeEnd
+	i.beforeEnd = nil
+	// Move to the paused slot now, so callbacks below never see a free slot.
+	holdPausedSlot(i)
+	i.mu.Unlock()
+	defer func() {
+		// Includes writes accepted while unlocked delivery was in progress.
+		i.preparePendingRules(func() {
+			snapshot, ok = i.snapshotLocked()
+			i.pausing = false
+		})
+	}()
+	i.checkDisconnected()
+	for _, fn := range hooks {
+		safely(fn)
+	}
+	var responseText string
+	var responseOK bool
+	if o.ResponseText != "" && i.captureContent {
+		responseText, responseOK = redactText(o.ResponseText)
+	}
+	i.mu.Lock()
+	// Drain tools added by redaction or tool callbacks before capturing totals.
+	// Calls whose outcome never arrived are sent now, as unknown.
+	for drained := 0; drained < len(i.tools); {
+		tools := slices.Clone(i.tools[drained:])
+		drained = len(i.tools)
+		i.mu.Unlock()
+		i.fireToolEvents(tools, true)
+		i.mu.Lock()
+	}
+	defer i.unlock()
+	if i.ended {
+		snapshot, ok = i.snapshotLocked()
+		return snapshot, ok
+	}
+	var props map[string]any
+	i.buildSafelyLocked(func() {
+		props = customProperties(o.ExtraProperties)
+		maps.Copy(props, i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false))
+	})
+	// Finalization belongs to segment latency, not the subsequent paused interval.
+	i.pausedAt = time.Now()
+	if props != nil {
+		i.sendLocked("ai_response_received", func() map[string]any { return props })
+	}
+	i.calls, i.overflow, i.lastCall, i.lastOK = nil, nil, nil, nil
+	for key := range i.seen {
+		i.seen[key] = nil
+	}
+	i.tools, i.toolOverflow, i.toolsByID = nil, nil, map[string]*recordedTool{}
+	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
+	i.prompt, i.answer, i.messages = "", "", nil // not in the snapshot, so not in an in-process resume
+	i.compactions = 0
+	snapshot, ok = i.snapshotLocked()
+	// The flight stays in progress until unlock finishes delivery and deferred reporting.
+	return snapshot, ok
+}
+
+// admitSeenLocked remembers a response ID of the current segment. At the limit it evicts the
+// smallest completed-segment key (nil value), so earlier segments never crowd out new IDs.
+func (i *Interaction) admitSeenLocked(key string, r *recordedCall) {
+	if len(i.seen) >= cfg().limits.MaxCallsPerInteraction {
+		evict, found := "", false
+		for k, v := range i.seen {
+			if v == nil && (!found || compareUTF16(k, evict) < 0) {
+				evict, found = k, true
+			}
+		}
+		if !found {
+			return
+		}
+		delete(i.seen, evict)
+	}
+	i.seen[key] = r
+}
+
+// checkDisconnected runs the request callback without holding the interaction lock.
+func (i *Interaction) checkDisconnected() {
+	i.mu.Lock()
+	fn, known := i.disconnected, i.clientDisconnected
+	i.mu.Unlock()
+	if known || fn == nil {
+		return
+	}
+	var disconnected bool
+	safely(func() { disconnected = fn() })
+	if disconnected {
+		i.mu.Lock()
+		i.clientDisconnected = true
+		i.mu.Unlock()
+	}
+}
+
+// Resume resumes a paused run in this process: the next segment starts now. A model or tool call
+// recorded while paused resumes it too. It does nothing unless the run is paused.
+func (i *Interaction) Resume() {
+	if i.pauseGuard.Load() {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.resumeLocked()
+}
+
+func (i *Interaction) resumeLocked() {
+	if i.pausedAt.IsZero() || i.ended || i.pausing {
+		return
+	}
+	i.pausedTotal += max(time.Since(i.pausedAt), 0)
+	i.pausedAt = time.Time{}
+	i.started = time.Now()
+	reopen(i)
+}
+
+// Paused reports whether the run is paused and not resumed or ended yet.
+func (i *Interaction) Paused() bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return i.pausing || !i.pausedAt.IsZero()
+}
+
+// snapshotLocked is the paused run's snapshot; not ok unless it is paused.
+func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
+	if i.ended || i.pausedAt.IsZero() {
+		return PausedInteraction{}, false
+	}
+	snapshot := PausedInteraction{
+		InteractionID: i.id, ConversationID: i.conversationID, Trigger: i.trigger,
+		PauseCount: i.pauseCount, TotalPausedMS: roundMS(i.pausedTotal), PausedAt: i.pausedAt.UnixMilli(),
+		UserID: i.userID, AnonymousID: i.anonymousID, Feature: i.feature, Surface: i.surface,
+		AccountID: i.accountID, OnBehalfOf: i.onBehalfOf, TriggerSource: i.triggerSource, TaskName: i.taskName,
+		AgentVersion: i.agentVersion, Variant: i.variant, Confidence: i.confidence,
+		TriggerEventID: i.triggerEventID, ParentInteractionID: i.parent, Intent: i.intent, TraceID: i.traceID,
+		Outcome: i.outcome, Integration: i.integration,
+	}
+	if i.callCount > 0 {
+		snapshot.ReportCount = Ptr(i.callCount)
+	}
+	if i.successfulCallSequence > 0 {
+		snapshot.SuccessfulCallSequence = Ptr(i.successfulCallSequence)
+	}
+	if i.compactions > 0 {
+		snapshot.PendingCompactions = Ptr(i.compactions)
+	}
+	for key := range i.seen {
+		provider, responseID, _ := strings.Cut(key, "\x00")
+		snapshot.SeenResponseIDs = append(snapshot.SeenResponseIDs, [2]string{provider, responseID})
+	}
+	slices.SortFunc(snapshot.SeenResponseIDs, func(a, b [2]string) int {
+		if n := compareUTF16(a[0], b[0]); n != 0 {
+			return n
+		}
+		return compareUTF16(a[1], b[1])
+	})
+	calls := append(slices.Clone(i.calls), i.overflow...)
+	for _, c := range calls {
+		p := pendingCall(c)
+		if c == i.lastCall {
+			p["last"] = true
+		}
+		if c == i.lastOK {
+			p["last_ok"] = true
+		}
+		snapshot.PendingCalls = append(snapshot.PendingCalls, p)
+	}
+	for _, role := range []struct {
+		c   *recordedCall
+		key string
+	}{{i.lastCall, "last"}, {i.lastOK, "last_ok"}} {
+		if role.c != nil && !slices.Contains(calls, role.c) {
+			p := pendingCall(role.c)
+			p["history_only"], p[role.key] = true, true
+			snapshot.PendingCalls = append(snapshot.PendingCalls, p)
+		}
+	}
+	for _, t := range i.tools {
+		snapshot.PendingTools = append(snapshot.PendingTools, pendingTool(t))
+	}
+	for _, t := range i.toolOverflow {
+		p := pendingTool(t)
+		p["overflow"] = true
+		snapshot.PendingTools = append(snapshot.PendingTools, p)
+	}
+	return snapshot, true
+}
+
+// Snapshot records contain only usage and tool metadata; no content or callback objects.
+func pendingNumber(p map[string]any, key string) float64 {
+	var n float64
+	switch v := p[key].(type) {
+	case int:
+		n = float64(v)
+	case int64:
+		n = float64(v)
+	case float64:
+		n = v
+	case json.Number: // a snapshot decoded with Decoder.UseNumber
+		n, _ = v.Float64()
+	}
+	if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 9007199254740991 {
+		return 0
+	}
+	return n
+}
+func pendingText(p map[string]any, key string) string { s, _ := p[key].(string); return s }
+func pendingBool(p map[string]any, key string) bool   { b, _ := p[key].(bool); return b }
+
+func pendingCall(c *recordedCall) map[string]any {
+	p := map[string]any{}
+	if c.credits != nil {
+		p["credits"] = *c.credits
+	}
+	if c.uncredited {
+		p["uncredited"] = true
+	}
+	put(p, "call_purpose", c.callPurpose)
+	if c.fallbackUsed != nil {
+		p["fallback_used"] = *c.fallbackUsed
+	}
+	if c.byok != nil {
+		p["byok"] = *c.byok
+	}
+	if c.latency != nil {
+		p["latency_ms"] = float64(*c.latency) / float64(time.Millisecond)
+	}
+	if c.ttft != nil {
+		p["time_to_first_token_ms"] = float64(*c.ttft) / float64(time.Millisecond)
+	}
+	if c.unpriced {
+		p["unpriced"] = true
+	}
+	if c.feesUnknown {
+		p["fees_unknown"] = true
+	}
+	if c.provider != "" {
+		p["provider"] = c.provider
+	}
+	if c.model != "" {
+		p["model"] = c.model
+	}
+	if c.requestedModel != "" {
+		p["requested_model"] = c.requestedModel
+	}
+	if c.agentName != "" {
+		p["agent_name"] = c.agentName
+	}
+	p["call_count"] = c.callCount
+	p["error_count"] = c.errorCount
+	p["input_tokens"] = c.inputTokens
+	p["output_tokens"] = c.outputTokens
+	if c.reasoningTokens != nil {
+		p["reasoning_tokens"] = *c.reasoningTokens
+	}
+	p["cached_input_tokens"] = c.cachedInputTokens
+	p["cache_write_tokens"] = c.cacheWriteTokens
+	p["cache_write_1h_tokens"] = c.cacheWrite1
+	if c.costUSD != nil {
+		p["cost_usd"] = *c.costUSD
+	}
+	if c.finishReason != "" {
+		p["finish_reason"] = c.finishReason
+	}
+	if c.errorType != "" {
+		p["error_type"] = c.errorType
+	}
+	if c.responseID != "" {
+		p["response_id"] = c.responseID
+	}
+	if c.serviceTier != "" {
+		p["service_tier"] = c.serviceTier
+	}
+	p["server_tool_call_count"] = c.serverToolCallCount
+	if c.serverToolCostUSD != nil {
+		p["server_tool_cost_usd"] = *c.serverToolCostUSD
+	}
+	return p
+}
+
+func pendingTool(c *recordedTool) map[string]any {
+	p := map[string]any{}
+	if c.name != "" {
+		p["tool_name"] = c.name
+	}
+	if c.rawName != "" {
+		p["raw_name"] = c.rawName
+	}
+	if c.id != "" {
+		p["tool_call_id"] = c.id
+	}
+	if c.agentName != "" {
+		p["agent_name"] = c.agentName
+	}
+	if c.mcpServer != "" {
+		p["mcp_server"] = c.mcpServer
+	}
+	if c.parentTool != "" {
+		p["parent_tool"] = c.parentTool
+	}
+	p["call_count"] = c.calls
+	if c.err != nil {
+		p["error"] = *c.err
+	}
+	if c.errorType != "" {
+		p["error_type"] = c.errorType
+	}
+	if c.duration != nil {
+		p["duration_ms"] = float64(*c.duration) / float64(time.Millisecond)
+	}
+	if c.ruleOutcome != nil {
+		outcome := map[string]any{"suppressed": c.ruleOutcome.suppressed, "properties": maps.Clone(c.ruleOutcome.properties)}
+		if c.ruleOutcome.resultSize >= 0 {
+			outcome["result_size_bytes"] = c.ruleOutcome.resultSize
+		}
+		p["rule_outcome"] = outcome
+	}
+	p["settled"] = c.settled
+	p["fired"] = c.fired
+	return p
+}
+
+func (i *Interaction) restorePending(snapshot *PausedInteraction) {
+	for _, p := range snapshot.PendingCalls {
+		c := &recordedCall{}
+		if p["credits"] != nil {
+			c.credits = Ptr(pendingNumber(p, "credits"))
+		}
+		c.uncredited = pendingBool(p, "uncredited")
+		c.callPurpose = pendingText(p, "call_purpose")
+		if v, ok := p["fallback_used"].(bool); ok {
+			c.fallbackUsed = Ptr(v)
+		}
+		if v, ok := p["byok"].(bool); ok {
+			c.byok = Ptr(v)
+		}
+		if p["latency_ms"] != nil {
+			c.latency = Ptr(time.Duration(pendingNumber(p, "latency_ms") * float64(time.Millisecond)))
+		}
+		if p["time_to_first_token_ms"] != nil {
+			c.ttft = Ptr(time.Duration(pendingNumber(p, "time_to_first_token_ms") * float64(time.Millisecond)))
+		}
+		c.unpriced = pendingBool(p, "unpriced")
+		c.feesUnknown = pendingBool(p, "fees_unknown")
+		c.provider = pendingText(p, "provider")
+		c.model = pendingText(p, "model")
+		c.requestedModel = pendingText(p, "requested_model")
+		c.agentName = pendingText(p, "agent_name")
+		c.callCount = int(pendingNumber(p, "call_count"))
+		c.errorCount = int(pendingNumber(p, "error_count"))
+		c.inputTokens = int(pendingNumber(p, "input_tokens"))
+		c.outputTokens = int(pendingNumber(p, "output_tokens"))
+		if p["reasoning_tokens"] != nil {
+			c.reasoningTokens = Ptr(int(pendingNumber(p, "reasoning_tokens")))
+		}
+		c.cachedInputTokens = int(pendingNumber(p, "cached_input_tokens"))
+		c.cacheWriteTokens = int(pendingNumber(p, "cache_write_tokens"))
+		c.cacheWrite1 = int(pendingNumber(p, "cache_write_1h_tokens"))
+		if p["cost_usd"] != nil {
+			c.costUSD = Ptr(pendingNumber(p, "cost_usd"))
+		}
+		c.finishReason = pendingText(p, "finish_reason")
+		c.errorType = pendingText(p, "error_type")
+		c.responseID = pendingText(p, "response_id")
+		c.serviceTier = pendingText(p, "service_tier")
+		c.serverToolCallCount = int(pendingNumber(p, "server_tool_call_count"))
+		if p["server_tool_cost_usd"] != nil {
+			c.serverToolCostUSD = Ptr(pendingNumber(p, "server_tool_cost_usd"))
+		}
+		c.callCount = max(c.callCount, 1)
+		if !pendingBool(p, "history_only") {
+			if key := c.provider + "\x00" + c.responseID; c.responseID != "" {
+				if _, seen := i.seen[key]; seen {
+					i.seen[key] = c
+				}
+			}
+			i.calls = append(i.calls, c)
+			i.callCount += c.callCount
+		}
+		if pendingBool(p, "last") {
+			i.lastCall = c
+		}
+		if pendingBool(p, "last_ok") {
+			i.lastOK = c
+		}
+	}
+	if snapshot.ReportCount != nil {
+		i.callCount = *snapshot.ReportCount
+	}
+	if snapshot.SuccessfulCallSequence != nil {
+		i.successfulCallSequence = *snapshot.SuccessfulCallSequence
+	} else if i.lastOK != nil {
+		i.successfulCallSequence = i.callCount
+	}
+	for _, p := range snapshot.PendingTools {
+		c := &recordedTool{}
+		c.name = pendingText(p, "tool_name")
+		c.rawName = pendingText(p, "raw_name")
+		c.id = pendingText(p, "tool_call_id")
+		c.agentName = pendingText(p, "agent_name")
+		c.mcpServer = pendingText(p, "mcp_server")
+		c.parentTool = pendingText(p, "parent_tool")
+		c.calls = int(pendingNumber(p, "call_count"))
+		if v, ok := p["error"].(bool); ok {
+			c.err = Ptr(v)
+		}
+		c.errorType = pendingText(p, "error_type")
+		if p["duration_ms"] != nil {
+			c.duration = Ptr(time.Duration(pendingNumber(p, "duration_ms") * float64(time.Millisecond)))
+		}
+		c.settled = pendingBool(p, "settled")
+		c.fired = pendingBool(p, "fired")
+		c.calls = max(c.calls, 1)
+		if outcome, ok := p["rule_outcome"].(map[string]any); ok {
+			c.ruleOutcome = &toolRuleOutcome{suppressed: pendingBool(outcome, "suppressed"), properties: maps.Clone(outcome["properties"].(map[string]any)), resultSize: -1}
+			if _, ok := outcome["result_size_bytes"]; ok {
+				c.ruleOutcome.resultSize = int(pendingNumber(outcome, "result_size_bytes"))
+			}
+		}
+		if pendingBool(p, "overflow") {
+			i.toolOverflow = append(i.toolOverflow, c)
+			continue
+		}
+		i.tools = append(i.tools, c)
+		if c.id != "" {
+			i.toolsByID[c.id] = c
+		}
+	}
+}
+
+// taskStarted sends ai_task_started when it is switched on and the run did not resume.
+func (i *Interaction) taskStarted() {
+	if !cfg().emitTaskStarted || i.resumed {
+		return
+	}
+	i.mu.Lock()
+	defer i.unlock()
+	if !i.ended {
+		i.sendLocked("ai_task_started", i.baseLocked)
+	}
+}
+
+// End sends the segment response. A paused end can resume; a final end is idempotent.
 func (i *Interaction) End(o EndOptions) {
 	safely(func() { i.end(o) })
 }
 
+// releasePause ends the pause flight, then sends the wrapper end that arrived during it.
+func (i *Interaction) releasePause() {
+	i.pendingMu.Lock()
+	i.pauseGuard.Store(false)
+	pending := i.pendingEnd
+	i.pendingEnd = nil
+	if pending != nil {
+		i.pendingRunning++
+	}
+	i.pendingMu.Unlock()
+	if pending == nil {
+		return
+	}
+	// pendingDone stays discoverable until the end is delivered, unless another pause requeued one.
+	defer func() {
+		i.pendingMu.Lock()
+		defer i.pendingMu.Unlock()
+		i.pendingRunning--
+		if i.pendingRunning == 0 && i.pendingEnd == nil && i.pendingDone != nil {
+			close(i.pendingDone)
+			i.pendingDone = nil
+		}
+	}()
+	i.end(*pending)
+}
+
+// queueEndLocked holds a wrapper end until the in-flight pause finishes; pendingMu is held.
+func (i *Interaction) queueEndLocked(o EndOptions) {
+	i.pendingEnd = &o
+	if i.pendingDone == nil {
+		i.pendingDone = make(chan struct{})
+	}
+}
+
+// endBlockedLocked releases mu after end found the run busy or settled. A wrapper-owned end that
+// met a pause started since the first guard waits for that pause instead of being dropped.
+func (i *Interaction) endBlockedLocked(o EndOptions) {
+	wait := o.afterPause && i.pausing && !i.ended
+	i.mu.Unlock()
+	if !wait {
+		return
+	}
+	i.pendingMu.Lock()
+	if i.pauseGuard.Load() {
+		i.queueEndLocked(o)
+		i.pendingMu.Unlock()
+		return
+	}
+	i.pendingMu.Unlock()
+	// The pause finished in between: evaluate the end again.
+	i.end(o)
+}
+
 func (i *Interaction) end(o EndOptions) {
+	if i.pauseGuard.Load() {
+		if o.afterPause {
+			i.pendingMu.Lock()
+			if i.pauseGuard.Load() {
+				i.queueEndLocked(o)
+				i.pendingMu.Unlock()
+				return
+			}
+			i.pendingMu.Unlock()
+		} else {
+			return
+		}
+	}
 	i.mu.Lock()
-	if i.ended {
+	if i.ended || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) || (o.endReason == endReasonTTL && !ttlSelected(i)) {
+		i.endBlockedLocked(o)
+		return
+	}
+	pausingHint := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
+	if o.endReason == "" && (o.Status == StatusPaused || pausingHint) {
+		if o.ClientDisconnected {
+			i.clientDisconnected = true
+		}
 		i.mu.Unlock()
+		i.pause(PauseOptions{Reason: o.PauseReason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
 		return
 	}
 	hooks := i.beforeEnd
@@ -1251,40 +2064,45 @@ func (i *Interaction) end(o EndOptions) {
 	// Calls whose outcome never arrived are sent now, as unknown.
 	i.fireToolEvents(tools, true)
 
-	// Masked before the lock: masking is the slowest step of the end.
-	var responseText string
-	var responseOK bool
-	if o.ResponseText != "" && i.captureContent {
-		responseText, responseOK = redactText(o.ResponseText)
-	}
 	if o.Status != "" && !responseStatuses[o.Status] {
 		warnOnce("invalid-status", fmt.Sprintf("End: invalid status %q; using the status derived from the calls", o.Status), 0)
 		o.Status = ""
 	}
 	i.mu.Lock()
-	if i.ended {
-		i.mu.Unlock()
+	if i.ended || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) || (o.endReason == endReasonTTL && !ttlSelected(i)) {
+		i.endBlockedLocked(o)
 		return
 	}
 	if o.ClientDisconnected {
 		i.clientDisconnected = true
 	}
-	if !i.clientDisconnected && i.disconnected != nil {
-		safely(func() { i.clientDisconnected = i.disconnected() })
+	hintedPause := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
+	if o.endReason == "" && (o.Status == StatusPaused || hintedPause) {
+		i.mu.Unlock()
+		i.pause(PauseOptions{Reason: o.PauseReason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
+		return
 	}
 	i.ended = true
 	i.settled = true
+	// Ended while paused: the wait counts as paused time and the final segment starts now.
+	if !i.pausedAt.IsZero() {
+		i.pausedTotal += max(time.Since(i.pausedAt), 0)
+		i.pausedAt = time.Time{}
+		i.started = time.Now()
+	}
+	i.mu.Unlock()
+	i.checkDisconnected()
+	// Mask once after the paused branch, outside the lock.
+	var responseText string
+	var responseOK bool
+	if o.ResponseText != "" && i.captureContent {
+		responseText, responseOK = redactText(o.ResponseText)
+	}
+	i.mu.Lock()
 	var props map[string]any
-	safely(func() {
-		props = map[string]any{}
-		for k, v := range o.ExtraProperties {
-			if !reservedProperties[k] {
-				props[k] = v
-			}
-		}
-		for k, v := range i.buildLocked(o, responseText, responseOK) {
-			props[k] = v
-		}
+	i.buildSafelyLocked(func() {
+		props = customProperties(o.ExtraProperties)
+		maps.Copy(props, i.buildLocked(o, responseText, responseOK, true))
 	})
 	if props != nil {
 		i.sendLocked("ai_response_received", func() map[string]any { return props })
@@ -1345,6 +2163,17 @@ func (i *Interaction) sendBackground(event string, extra map[string]any) {
 // waitBackground waits for this interaction's classification and scores until ctx ends; false
 // when they did not finish.
 func (i *Interaction) waitBackground(ctx context.Context) bool {
+	i.pendingMu.Lock()
+	queued := i.pendingDone
+	i.pendingMu.Unlock()
+	if queued != nil {
+		// A final end queued behind a concurrent pause is sent by that pause's goroutine.
+		select {
+		case <-queued:
+		case <-ctx.Done():
+			return false
+		}
+	}
 	i.mu.Lock()
 	ch := i.background
 	i.mu.Unlock()
@@ -1359,7 +2188,7 @@ func (i *Interaction) waitBackground(ctx context.Context) bool {
 	}
 }
 
-func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK bool) map[string]any {
+func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK, final bool) map[string]any {
 	calls := append(slices.Clone(i.calls), i.overflow...)
 	last, lastOK := i.lastCall, i.lastOK
 	status, errorType, pauseReason := o.Status, o.ErrorType, o.PauseReason
@@ -1480,6 +2309,10 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK 
 	}
 	put(p, "trace_id", i.traceID)
 	put(p, "end_reason", o.endReason)
+	if final && i.pauseCount > 0 {
+		p["pause_count"] = i.pauseCount
+		p["total_paused_ms"] = roundMS(i.pausedTotal)
+	}
 	return p
 }
 
@@ -1686,7 +2519,7 @@ func utf16Units(rs []rune) []uint16 {
 // ----------------------------------------------------------------- integration hooks
 
 func (i *Interaction) keepsTextLocked() bool {
-	if i.ended {
+	if i.ended || i.pausing || !i.pausedAt.IsZero() {
 		return false
 	}
 	c := cfg()
@@ -1715,14 +2548,23 @@ func (i *Interaction) adoptAnalytics(c analytics.Client) {
 // callStarted: a model call of this interaction starts; the held prompt event goes out now.
 func (i *Interaction) callStarted(ctx context.Context, integration string) {
 	i.mu.Lock()
+	if i.ended {
+		i.mu.Unlock()
+		return
+	}
+	i.resumeLocked()
+	if i.integration == "" {
+		i.integration = integration
+	}
+	i.mu.Unlock()
+	i.fillTraceID(ctx)
+	i.mu.Lock()
 	defer i.unlock()
 	if i.ended {
 		return
 	}
-	if i.integration == "" {
-		i.integration = integration
-	}
-	i.fillTraceID(ctx)
+	// The trace callback can pause the run; the call has started, so it continues.
+	i.resumeLocked()
 	i.settled = true
 	i.flushLocked()
 }
@@ -1791,6 +2633,9 @@ func (i *Interaction) keepsText() bool {
 func (i *Interaction) firstTokenAt(at time.Time) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	if i.ended || i.pausing || !i.pausedAt.IsZero() {
+		return
+	}
 	d := at.Sub(i.started)
 	if d < 0 {
 		return

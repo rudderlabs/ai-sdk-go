@@ -19,7 +19,7 @@ const specVersion = "0.3.0"
 
 var (
 	sdkNames   = []string{"@rudderstack/ai", "ai-sdk-go", "rudderstack-ai"} // context.wrapperLibrary.name: Node.js, Go, Python
-	specEvents = set("ai_user_prompt_created", "ai_response_received", "ai_user_action",
+	specEvents = set("ai_user_prompt_created", "ai_response_received", "ai_task_started", "ai_user_action",
 		"ai_interaction_classified", "ai_interaction_scored", "ai_llm_response_received", "ai_limit_reached")
 	clientCopies    = set("ai_user_prompt_created", "ai_response_received", "ai_user_action")
 	failureStatuses = []string{"cancelled", "error", "incomplete", "timeout"} // what an app-caught failure may report
@@ -491,7 +491,11 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if s == "client" {
 				limit = shown
 			}
-			if n := c[side{"ai_response_received", s}]; n > limit {
+			n := c[side{"ai_response_received", s}]
+			if s == "client" {
+				n += c[side{"ai_response_received (paused)", s}]
+			}
+			if n > limit {
 				atMost := ""
 				if limit > 1 {
 					atMost = "at most "
@@ -520,10 +524,10 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			if serverPrompt > 0 && clientPrompt == 0 && !optedOut("client_prompt") {
 				gap("interaction " + iid + ": server prompt with no client copy (browser copy not sent, or a different ID)")
 			}
-			if serverAnswer+serverPaused > 0 && clientAnswer == 0 && !optedOut("client_response") {
+			if serverAnswer+serverPaused > 0 && clientAnswer+clientPaused == 0 && !optedOut("client_response") {
 				gap("interaction " + iid + ": server answer with no client copy (not shown, client left, or client event lost)")
 			}
-			if clientAnswer > 0 && serverAnswer+serverPaused == 0 { // the browser sends a success copy for an approval pause
+			if clientAnswer+clientPaused > 0 && serverAnswer+serverPaused == 0 { // the browser sends a success copy for an approval pause
 				gap("interaction " + iid + ": client answer with no server answer (request never reached the SDK, or a different ID)")
 			}
 			for _, action := range serverActions(iid) {
@@ -542,7 +546,7 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 		if optedOut("client_prompt") && clientPrompt > 0 {
 			fail("interaction %s: client prompt copy sent, but the plan opts it out", iid)
 		}
-		if optedOut("client_response") && clientAnswer > 0 {
+		if optedOut("client_response") && clientAnswer+clientPaused > 0 {
 			fail("interaction %s: client answer copy sent, but the plan opts it out", iid)
 		}
 		if optedOut("client_feedback") && slices.ContainsFunc(serverActions(iid), func(a string) bool { return actionCount(iid, "client", a) > 0 }) {

@@ -166,3 +166,41 @@ func TestReviewSampleRateCatalog(t *testing.T) {
 		t.Fatal(section)
 	}
 }
+
+func TestReviewPausedOnlyJoins(t *testing.T) {
+	var out, stderr bytes.Buffer
+	code := run([]string{"testdata/review_paused_only.jsonl", "--expect-joins"}, &out, &stderr)
+	if code != 0 {
+		t.Fatal(code, out.String(), stderr.String())
+	}
+	out.Reset()
+	stderr.Reset()
+	code = run([]string{"testdata/review_paused_only.jsonl", "--client-opt-out", "client_response"}, &out, &stderr)
+	if code != 1 || !strings.Contains(out.String(), "client answer copy sent, but the plan opts it out") {
+		t.Fatal(code, out.String(), stderr.String())
+	}
+}
+func TestReviewPausedClientDuplicate(t *testing.T) {
+	var out, stderr bytes.Buffer
+	code := run([]string{"testdata/review_paused_duplicate_client.jsonl", "--expect-joins"}, &out, &stderr)
+	if code != 1 || !strings.Contains(out.String(), "2 client ai_response_received") {
+		t.Fatal(code, out.String(), stderr.String())
+	}
+}
+
+func TestReviewTaskCatalogFields(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(repoRoot(t), "spec/rudderstack-catalog/tracking-plan.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, section, ok := strings.Cut(string(b), "      id: ai_task_started_rule")
+	if !ok {
+		t.Fatal("missing task rule")
+	}
+	section, _, _ = strings.Cut(section, "    - type: event_rule")
+	for _, field := range []string{"sample_rate", "agent_version", "variant"} {
+		if !strings.Contains(section, "'#property:"+field+"'") {
+			t.Errorf("missing %s", field)
+		}
+	}
+}

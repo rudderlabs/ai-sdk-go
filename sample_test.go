@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
@@ -130,6 +131,91 @@ func TestResponseReceivedUnsampledByDefault(t *testing.T) {
 	}
 	if n := len(r.named("ai_user_prompt_created")); n != 1 {
 		t.Fatalf("prompts %d", n)
+	}
+}
+
+func TestSamplingAcrossPauseAndJSONRestore(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		for _, id := range []string{keptID, droppedID} {
+			for _, sampleAnswers := range []bool{false, true} {
+				t.Run(fmt.Sprintf("restore=%t/%s/answers=%t", restore, id, sampleAnswers), func(t *testing.T) {
+					rates := map[string]float64{"ai_llm_response_received": 0.5}
+					if sampleAnswers {
+						rates["ai_response_received"] = 0.5
+					}
+					r := setupAI(t, WithLLMCallEvents(true), WithSampleRates(rates))
+					_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", InteractionID: id})
+					for segment := range 3 {
+						i.RecordCall(pauseCall)
+						if segment == 2 {
+							i.End(EndOptions{})
+							break
+						}
+						snapshot, ok := i.Pause(PauseOptions{Reason: PauseApproval})
+						if !ok || snapshot.InteractionID != id {
+							t.Fatal("pause lost interaction ID", snapshot)
+						}
+						if restore {
+							var stored PausedInteraction
+							if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+								t.Fatal(err)
+							}
+							_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+						} else {
+							i.Resume()
+						}
+					}
+					for _, event := range []string{"ai_llm_response_received", "ai_response_received"} {
+						sampled := event == "ai_llm_response_received" || sampleAnswers
+						want := 3
+						if sampled && id == droppedID {
+							want = 0
+						}
+						events := r.named(event)
+						if len(events) != want {
+							t.Fatalf("%s: got %d events, want %d", event, len(events), want)
+						}
+						for n, e := range events {
+							rate, stamped := e.Properties["sample_rate"]
+							if e.Properties["interaction_id"] != id || stamped != sampled || (sampled && rate != 0.5) {
+								t.Fatal("sampling changed across segments", e.Properties)
+							}
+							if event == "ai_response_received" {
+								status := "paused"
+								if n == 2 {
+									status = "success"
+								}
+								if e.Properties["response_status"] != status || e.Properties["total_tokens"] != 12 {
+									t.Fatal("segment totals changed", e.Properties)
+								}
+							}
+						}
+					}
+					if len(r.named("ai_user_prompt_created")) != 1 {
+						t.Fatal("resume emitted another prompt")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestSampleTaskStartedSchema(t *testing.T) {
+	r := setupAI(t, WithTaskStartedEvents(true), WithSampleRates(map[string]float64{"ai_task_started": 0.5}))
+	for _, id := range []string{keptID, droppedID} {
+		if err := RunTask(context.Background(), "job", TaskOptions{InteractionID: id}, func(_ context.Context, i *Interaction) error {
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := r.props(t, "ai_task_started")
+	if p["interaction_id"] != keptID || p["sample_rate"] != 0.5 {
+		t.Fatal(p)
+	}
+	invalid := map[string]any{"interaction_id": keptID, "conversation_id": "c", "task_name": "job", "sample_rate": 1.1}
+	if err := validateEvent("ai_task_started", invalid); err == nil {
+		t.Fatal("task start accepted invalid sample_rate")
 	}
 }
 

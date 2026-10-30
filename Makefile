@@ -28,7 +28,7 @@ vulncheck:
 tidy:
 	for m in $(MODULES); do (cd $$m && GOWORK=off $(GO) mod tidy) || exit 1; done
 
-EXAMPLES = mcp-server mcp-server-mcpgo mcp-stateless-http mcp-auth openai anthropic google-genai bedrock-converse background-agent manual
+EXAMPLES = mcp-server mcp-server-mcpgo mcp-stateless-http mcp-auth openai anthropic google-genai bedrock-converse background-agent approval-loop manual
 
 example:
 	for e in $(EXAMPLES); do $(GO) run ./examples/$$e --check || exit 1; done

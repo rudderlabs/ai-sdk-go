@@ -533,9 +533,10 @@
             "error",
             "timeout",
             "cancelled",
-            "blocked"
+            "blocked",
+            "paused"
           ],
-          "description": "Since v0.4. blocked means the app intentionally declined to answer."
+          "description": "Since v0.4. blocked means the app intentionally declined to answer. Since v0.4. A rendered pause and the resumed final answer share interaction_id; each rendered segment sends one client copy. pause_count and total_paused_ms belong to the server answer."
         },
         "client_error_kind": {
           "enum": [
@@ -560,6 +561,16 @@
             "other"
           ],
           "description": "Since v0.4. With response_status blocked: why. guardrail: a safety or moderation check stopped it. policy: a business rule (plan, permission, region). unsupported: the request is outside what the AI does. skipped: the app chose not to answer (e.g. a duplicate or empty prompt)."
+        },
+        "pause_reason": {
+          "enum": [
+            "approval",
+            "human_input",
+            "deferred_tool",
+            "auth_required",
+            "other"
+          ],
+          "description": "Since v0.4. With response_status paused: what the run waits for."
         }
       },
       "not": {
@@ -626,6 +637,16 @@
           },
           {
             "required": [
+              "pause_count"
+            ]
+          },
+          {
+            "required": [
+              "total_paused_ms"
+            ]
+          },
+          {
+            "required": [
               "total_input_tokens"
             ]
           },
@@ -640,6 +661,15 @@
             ]
           }
         ]
+      },
+      "dependentSchemas": {
+        "pause_reason": {
+          "properties": {
+            "response_status": {
+              "const": "paused"
+            }
+          }
+        }
       }
     },
     "declared_tool_event": {

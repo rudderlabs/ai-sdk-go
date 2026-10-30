@@ -2,6 +2,12 @@
 
 Changes to [`ai-events-v0.3.schema.json`](ai-events-v0.3.schema.json), shared byte for byte by the Node.js, Python and Go SDKs.
 
+## Unreleased — pause/resume (SDK-5991)
+
+- Runs emit one `ai_response_received` per paused or final segment under the same interaction ID. Paused segments carry `pause_reason`; final segments carry `pause_count` and `total_paused_ms`.
+- JSON snapshots preserve run scope, response-ID deduplication and pending usage across worker restarts. Sampling uses the same interaction draw for every segment.
+- Optional `ai_task_started` reports new background runs once, including runs without a final answer; resumed runs do not send it again.
+
 ## Unreleased — sampling (SDK-5992)
 
 - Add optional `sample_rate` on sampled server events, including `ai_limit_reached`, and declare it in the tracking plan. The shared sampling fixture fixes the interaction hash and keep/drop decision across SDKs.

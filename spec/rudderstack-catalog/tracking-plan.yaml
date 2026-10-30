@@ -70,6 +70,8 @@ spec:
         - property: '#property:pause_reason'
         - property: '#property:end_reason'
         - property: '#property:block_reason'
+        - property: '#property:pause_count'
+        - property: '#property:total_paused_ms'
         - property: '#property:trigger'
         - property: '#property:client_disconnected'
         - property: '#property:primary_model'
@@ -136,6 +138,27 @@ spec:
             - property: '#property:duration_ms'
             - property: '#property:measured_count'
             - property: '#property:max_duration_ms'
+
+    - type: event_rule
+      id: ai_task_started_rule
+      event: '#event:ai_task_started'
+      properties:
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:sample_rate'
+        - property: '#property:task_name'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:account_id'
+        - property: '#property:on_behalf_of'
+        - property: '#property:trigger_source'
+        - property: '#property:trigger_event_id'
+        - property: '#property:parent_interaction_id'
+        - property: '#property:agent_version'
+        - property: '#property:variant'
 
     - type: event_rule
       id: ai_llm_response_received_rule

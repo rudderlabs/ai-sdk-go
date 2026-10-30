@@ -13,6 +13,7 @@ Each example is a `main` package in this module (Go 1.26.10 or later) that uses 
 | [`google-genai`](google-genai)             | `ruddergenai`: `generateContent` calling a tool, then the streamed answer, with `tool_breakdown` |
 | [`bedrock-converse`](bedrock-converse)     | `rudderbedrock`: `Converse` calling a tool, then `ConverseStream`, priced through an inference profile |
 | [`background-agent`](background-agent)     | `RunTask` on a schedule (`account_id`, `on_behalf_of`), a chained sub-task (`parent_interaction_id`), `TrackScore` |
+| [`approval-loop`](approval-loop)           | `RunTask` that pauses twice for approval and resumes from a stored `PausedInteraction` in a later worker; `ai_task_started` |
 | [`manual`](manual)                         | No integration: `StartInteraction`, `RecordCall`, `RecordToolCalls`, `RecordToolResult`, `End`, a declared tool event, per-call events, a custom classifier |
 
 The checks need no provider key. Without flags, a provider example runs once against the real provider: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), or `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`. Live runs need `RUDDERSTACK_WRITE_KEY` and `RUDDERSTACK_DATA_PLANE_URL` (a RudderStack source's write key and your data plane URL); a provider run without them sends its events to a local data plane and prints them.

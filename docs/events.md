@@ -8,6 +8,8 @@ Every event's `properties`, AI, MCP and declared tool events alike, stay within 
 - [ai_user_prompt_created](#ai_user_prompt_created)
 - [ai_response_received](#ai_response_received)
 - [Status](#status)
+- [Pauses](#pauses)
+- [ai_task_started](#ai_task_started)
 - [Totals and usage_breakdown](#totals-and-usage_breakdown)
 - [Cost](#cost)
 - [tool_breakdown](#tool_breakdown)
@@ -23,7 +25,7 @@ Every event's `properties`, AI, MCP and declared tool events alike, stay within 
 
 Every event is an analytics-go `Track` with `userId` or `anonymousId`; an event with neither is sent with `anonymousId: "ai_system"`. Identity, `context.sessionId` and the RudderStack client are resolved as described in [configuration.md](configuration.md#identity-and-cookies).
 
-Properties on every interaction event (prompt, answer, per-call, declared tool, classified, scored):
+Properties on every interaction event (prompt, answer, per-call, declared tool, classified, scored, task started):
 
 | Property                | Source                                                                                              |
 | ----------------------- | --------------------------------------------------------------------------------------------------- |
@@ -118,13 +120,14 @@ One per interaction, sent by `Interaction.End` (or when `RunInteraction` / `RunT
 | Property                 | Derivation                                                                                                   |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | `response_status`        | See [Status](#status)                                                                                        |
-| `pause_reason`           | Only with status `paused`: `EndOptions.PauseReason`, default `other`                                         |
+| `pause_reason`           | Only with status `paused`: `PauseOptions.Reason` or `EndOptions.PauseReason`, default `other`                |
+| `pause_count`, `total_paused_ms` | Only on the final answer of a run that paused: how many times, and for how long in all; see [Pauses](#pauses) |
 | `end_reason`             | Only when the SDK ended the interaction itself, with status `incomplete`: `ttl_expired` (open longer than `Limits.InteractionTTL`) or `shutdown` (still open at `Shutdown`). Calls recorded before keep their usage. |
 | `trigger`                | `user` or `system`                                                                                           |
 | `client_disconnected`    | `true` only when `EndOptions.ClientDisconnected` was set                                                     |
 | `primary_model`, `primary_provider` | The last successful call's, else the last call's                                                  |
-| `latency_ms`             | From `StartInteraction` to `End`, rounded                                                                    |
-| `time_to_first_token_ms` | From `StartInteraction` to the first streamed token any integration saw; absent without a stream            |
+| `latency_ms`             | From `StartInteraction` (or the latest resume) to `End` or `Pause`, rounded                                   |
+| `time_to_first_token_ms` | From the same start to the first streamed token any integration saw; absent without a stream                |
 | `llm_call_count`         | Sum of `CallCount` (1 per call) over recorded calls, failed ones included                                    |
 | `tool_call_count`        | Tool calls the model made, de-duplicated by tool call ID, including provider-hosted tools                   |
 | `total_*_tokens`, `total_cost_usd` | See [Totals](#totals-and-usage_breakdown) and [Cost](#cost)                                         |
@@ -166,7 +169,37 @@ A background task's answer adds its system-actor fields:
 3. A successful last call whose `FinishReason` is `length` or `max_tokens` makes the answer `incomplete` with `error_type: length`; `content_filter` makes it `error` with `error_type: content_filter`. A refusal (`finish_reason: refusal`) stays `success`.
 4. Otherwise `success`, also for an interaction without calls.
 
-`cancelled` always carries `error_type: cancelled` unless another one was given. `paused` and `incomplete` with a cap such as `max_turns` are set only through `EndOptions`: no Go integration produces them on its own.
+`cancelled` always carries `error_type: cancelled` unless another one was given. `paused` is set through `Interaction.Pause` (or `EndOptions`), and `incomplete` with a cap such as `max_turns` only through `EndOptions`: no Go integration produces them on its own.
+
+## Pauses
+
+A run can pause more than once. Each `Interaction.Pause` sends one `ai_response_received` with `response_status: paused`, its `pause_reason`, and the totals, `usage_breakdown` and `tool_breakdown` of the calls since the start or the last resume, so summing every `ai_response_received` of an interaction counts each call once. The run then resumes (in process, or from its stored snapshot in another one) under the same `interaction_id`, without a new prompt event, and ends with one answer of another status that adds:
+
+```json
+{ "response_status": "success", "pause_count": 2, "total_paused_ms": 86400412 }
+```
+
+`total_paused_ms` is the time between each pause and its resume. `latency_ms` and the totals of every event cover only its own segment. A run that pauses and never resumes has no final answer: its last event is `paused`. Configuration: [Pauses and resumes](configuration.md#pauses-and-resumes).
+
+## ai_task_started
+
+Off by default (`WithTaskStartedEvents(true)`). One per `RunTask` run, sent when it starts, before its model calls; never when a paused run resumes. A started run without an `ai_response_received` is still in flight or was abandoned.
+
+```json
+{
+  "event": "ai_task_started",
+  "anonymousId": "ai_system",
+  "properties": {
+    "conversation_id": "alert-triage:job_812",
+    "interaction_id": "3b9e5d0a-7c2f-4e18-9a6b-2c4d6e8f0a1b",
+    "task_name": "alert-triage",
+    "trigger_source": "schedule",
+    "account_id": "workspace_acme"
+  }
+}
+```
+
+It carries the task's [common fields](#common-fields) (`parent_interaction_id` when chained) and no `trigger`. Its `context.wrapperLibrary.integration` is `manual`: no model call has run yet.
 
 ## Totals and usage_breakdown
 

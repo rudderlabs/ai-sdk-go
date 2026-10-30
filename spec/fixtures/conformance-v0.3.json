@@ -42696,6 +42696,2021 @@
           }
         }
       ]
+    },
+    {
+      "name": "v04_pause_twice_in_process",
+      "description": "An interaction that pauses twice and resumes in the same process: each pause sends ai_response_received (paused, same interaction_id) with that segment's totals only; the final segment carries pause_count and total_paused_ms.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_pause",
+            "feature": "approvals"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 100,
+              "output_tokens": 20
+            },
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "id": "call_1",
+                  "name": "refund"
+                }
+              ]
+            },
+            {
+              "op": "pause",
+              "reason": "approval"
+            },
+            {
+              "op": "resume"
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 50,
+              "output_tokens": 10
+            },
+            {
+              "op": "pause",
+              "reason": "human_input"
+            },
+            {
+              "op": "resume"
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 30,
+              "output_tokens": 5
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause",
+            "interaction_id": "$int1",
+            "feature": "approvals"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause",
+            "interaction_id": "$int1",
+            "feature": "approvals",
+            "response_status": "paused",
+            "pause_reason": "approval",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_tokens": 120,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause",
+            "interaction_id": "$int1",
+            "feature": "approvals",
+            "response_status": "paused",
+            "pause_reason": "human_input",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 50,
+            "total_output_tokens": 10,
+            "total_tokens": 60,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 50,
+                "output_tokens": 10,
+                "total_tokens": 60,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause",
+            "interaction_id": "$int1",
+            "feature": "approvals",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 5,
+            "total_tokens": 35,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 5,
+                "total_tokens": 35,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "pause_count": 2,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_pause_implicit_resume",
+      "description": "A model call recorded while paused resumes the interaction; the pause reason defaults to other.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_implicit"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 100,
+              "output_tokens": 20
+            },
+            {
+              "op": "pause"
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 40,
+              "output_tokens": 8
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_implicit",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_implicit",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_tokens": 120,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_implicit",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 40,
+            "total_output_tokens": 8,
+            "total_tokens": 48,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 40,
+                "output_tokens": 8,
+                "total_tokens": 48,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "pause_count": 1,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_pause_noops_and_end_while_paused",
+      "description": "Pausing an interaction that is already paused sends nothing; end() while paused ends it (a cancelled final segment with no calls has no token totals); pause() after the end sends nothing.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_noops"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 100,
+              "output_tokens": 20
+            },
+            {
+              "op": "pause",
+              "reason": "approval"
+            },
+            {
+              "op": "pause",
+              "reason": "approval"
+            },
+            {
+              "op": "end",
+              "status": "cancelled"
+            },
+            {
+              "op": "pause",
+              "reason": "approval"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_noops",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_noops",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "approval",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_tokens": 120,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_noops",
+            "interaction_id": "$int1",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "error_type": "cancelled",
+            "pause_count": 1,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_interaction_resume_cross_process",
+      "description": "A paused interaction resumed from its saved snapshot (as another process would): identity and IDs come from the snapshot, no second prompt event, and the final segment counts the pause.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_resume",
+            "feature": "approvals"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 100,
+              "output_tokens": 20
+            },
+            {
+              "op": "pause",
+              "reason": "human_input",
+              "save_as": "paused_1"
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "resume": "paused_1"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 60,
+              "output_tokens": 12
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_resume",
+            "interaction_id": "$int1",
+            "feature": "approvals"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_resume",
+            "interaction_id": "$int1",
+            "feature": "approvals",
+            "response_status": "paused",
+            "pause_reason": "human_input",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_tokens": 120,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_resume",
+            "interaction_id": "$int1",
+            "feature": "approvals",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 60,
+            "total_output_tokens": 12,
+            "total_tokens": 72,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 60,
+                "output_tokens": 12,
+                "total_tokens": 72,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "pause_count": 1,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_task_pauses_twice_across_processes",
+      "description": "A background task that pauses twice, each time resumed from its saved snapshot. ai_task_started (switched on) is sent once, when the run starts, never on a resume; the task's exit leaves a paused run open.",
+      "config": {
+        "emit_task_started": true
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "task",
+          "task_name": "approval-loop",
+          "options": {
+            "conversation_id": "conv_v04_task",
+            "trigger_source": "queue"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 100,
+              "output_tokens": 20
+            },
+            {
+              "op": "pause",
+              "reason": "approval",
+              "save_as": "s1"
+            }
+          ]
+        },
+        {
+          "op": "task",
+          "task_name": "approval-loop",
+          "options": {
+            "resume": "s1"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 50,
+              "output_tokens": 10
+            },
+            {
+              "op": "pause",
+              "reason": "approval",
+              "save_as": "s2"
+            }
+          ]
+        },
+        {
+          "op": "task",
+          "task_name": "approval-loop",
+          "options": {
+            "resume": "s2"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 30,
+              "output_tokens": 5
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_task_started",
+          "anonymousId": "ai_system",
+          "properties": {
+            "conversation_id": "conv_v04_task",
+            "interaction_id": "$int1",
+            "trigger_source": "queue",
+            "task_name": "approval-loop"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "anonymousId": "ai_system",
+          "properties": {
+            "conversation_id": "conv_v04_task",
+            "interaction_id": "$int1",
+            "trigger_source": "queue",
+            "task_name": "approval-loop",
+            "response_status": "paused",
+            "pause_reason": "approval",
+            "trigger": "system",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_tokens": 120,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "anonymousId": "ai_system",
+          "properties": {
+            "conversation_id": "conv_v04_task",
+            "interaction_id": "$int1",
+            "trigger_source": "queue",
+            "task_name": "approval-loop",
+            "response_status": "paused",
+            "pause_reason": "approval",
+            "trigger": "system",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 50,
+            "total_output_tokens": 10,
+            "total_tokens": 60,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 50,
+                "output_tokens": 10,
+                "total_tokens": 60,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "anonymousId": "ai_system",
+          "properties": {
+            "conversation_id": "conv_v04_task",
+            "interaction_id": "$int1",
+            "trigger_source": "queue",
+            "task_name": "approval-loop",
+            "response_status": "success",
+            "trigger": "system",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 5,
+            "total_tokens": 35,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 5,
+                "total_tokens": 35,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "pause_count": 2,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_task_started_chained",
+      "description": "With emit_task_started on, a task chained inside an interaction sends ai_task_started first, with its parent and trigger_source agent; interactions send none.",
+      "config": {
+        "emit_task_started": true
+      },
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_started"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 100,
+              "output_tokens": 20
+            },
+            {
+              "op": "task",
+              "task_name": "research",
+              "options": {},
+              "steps": [
+                {
+                  "op": "record_call",
+                  "provider": "openai",
+                  "model": "gpt-4.1-mini",
+                  "input_tokens": 10,
+                  "output_tokens": 2
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_started",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_task_started",
+          "anonymousId": "ai_system",
+          "properties": {
+            "conversation_id": "conv_v04_started",
+            "interaction_id": "$int2",
+            "trigger_source": "agent",
+            "task_name": "research",
+            "parent_interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "anonymousId": "ai_system",
+          "properties": {
+            "conversation_id": "conv_v04_started",
+            "interaction_id": "$int2",
+            "trigger_source": "agent",
+            "task_name": "research",
+            "parent_interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "system",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_started",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_tokens": 120,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_end_paused_twice_in_process",
+      "description": "The existing end API with status paused closes only its segment; the interaction resumes twice and ends with segment totals and pause counters.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_pause",
+            "feature": "approvals"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 100,
+              "output_tokens": 20
+            },
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "id": "call_1",
+                  "name": "refund"
+                }
+              ]
+            },
+            {
+              "op": "end",
+              "status": "paused",
+              "pause_reason": "approval"
+            },
+            {
+              "op": "resume"
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 50,
+              "output_tokens": 10
+            },
+            {
+              "op": "end",
+              "status": "paused",
+              "pause_reason": "human_input"
+            },
+            {
+              "op": "resume"
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 30,
+              "output_tokens": 5
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause",
+            "interaction_id": "$int1",
+            "feature": "approvals"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause",
+            "interaction_id": "$int1",
+            "feature": "approvals",
+            "response_status": "paused",
+            "pause_reason": "approval",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_tokens": 120,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause",
+            "interaction_id": "$int1",
+            "feature": "approvals",
+            "response_status": "paused",
+            "pause_reason": "human_input",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 50,
+            "total_output_tokens": 10,
+            "total_tokens": 60,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 50,
+                "output_tokens": 10,
+                "total_tokens": 60,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause",
+            "interaction_id": "$int1",
+            "feature": "approvals",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 5,
+            "total_tokens": 35,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 5,
+                "total_tokens": 35,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "pause_count": 2,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_pause_dedup_in_process",
+      "description": "Since v0.4. Provider response IDs remain deduplicated through multiple pauses, including JSON snapshot handoff. New response IDs still count.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_pause_dedup_in_process"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "pause"
+            },
+            {
+              "op": "resume"
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "pause"
+            },
+            {
+              "op": "resume"
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "fresh",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_dedup_in_process",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_dedup_in_process",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_dedup_in_process",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_dedup_in_process",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ],
+            "pause_count": 2,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_pause_dedup_json",
+      "description": "Since v0.4. Provider response IDs remain deduplicated through multiple pauses, including JSON snapshot handoff. New response IDs still count.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_pause_dedup_json"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "pause",
+              "save_as": "first"
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "resume": "first"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "pause",
+              "save_as": "second"
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "resume": "second"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "fresh",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_dedup_json",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_dedup_json",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_dedup_json",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_dedup_json",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ],
+            "pause_count": 2,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_pause_buffered_json",
+      "description": "Since v0.4. Pause finalizes buffered adapter usage before handing off a JSON snapshot; the resumed empty segment adds no calls.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_pause_buffered_json"
+          },
+          "steps": [
+            {
+              "op": "buffer_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "pause",
+              "save_as": "buffered"
+            }
+          ]
+        },
+        {
+          "op": "interaction",
+          "options": {
+            "resume": "buffered"
+          },
+          "steps": []
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_buffered_json",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_buffered_json",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_pause_buffered_json",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "pause_count": 1,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_paused_end_disconnected",
+      "description": "Since v0.4. An explicit paused end applies client_disconnected before emitting its segment.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_paused_end_disconnected"
+          },
+          "steps": [
+            {
+              "op": "end",
+              "status": "paused",
+              "client_disconnected": true
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_paused_end_disconnected",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_paused_end_disconnected",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "client_disconnected": true,
+            "latency_ms": "<number>",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_paused_end_buffer_reentry",
+      "description": "Since v0.4. An adapter finalizer reenters end during a paused end; exactly one paused segment counts its buffered usage.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_paused_end_buffer_reentry"
+          },
+          "steps": [
+            {
+              "op": "buffer_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01,
+              "reenter_end": true
+            },
+            {
+              "op": "end",
+              "status": "paused"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_paused_end_buffer_reentry",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_paused_end_buffer_reentry",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_bound_completion_after_pause",
+      "description": "Since v0.4. Normal bound stream completion leaves a paused interaction resumable. Go has no bound stream API.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_bound_completion_after_pause"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "bind_paused"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_bound_completion_after_pause",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_bound_completion_after_pause",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "v04_shutdown_selection_then_pause",
+      "description": "Since v0.4. A pause after shutdown selects an interaction suppresses its stale finalization.",
+      "config": {},
+      "replies": {},
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_v04_shutdown_selection_then_pause"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "response_id": "same",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "cost_usd": 0.01
+            },
+            {
+              "op": "pause_on_shutdown_selection"
+            },
+            {
+              "op": "shutdown"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_shutdown_selection_then_pause",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_v04_shutdown_selection_then_pause",
+            "interaction_id": "$int1",
+            "response_status": "paused",
+            "pause_reason": "other",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.01,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0,
+                "cost_usd": 0.01
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.3.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
     }
   ]
 }

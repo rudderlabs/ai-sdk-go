@@ -42,7 +42,10 @@ type TaskOptions struct {
 	// interaction in the context (sub-agents chain automatically).
 	ParentInteractionID string
 	// NoParent opts out of chaining to the interaction in the context.
-	NoParent       bool
+	NoParent bool
+	// Resume continues a paused run from its snapshot ([InteractionOptions.Resume]); no
+	// ai_task_started is sent.
+	Resume         *PausedInteraction
 	Analytics      analytics.Client
 	CaptureContent *bool
 	ToolBreakdown  *bool
@@ -111,9 +114,10 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 		TriggerSource: triggerSource, TriggerEventID: o.TriggerEventID, TaskName: taskName,
 		ParentInteractionID: parent, Analytics: o.Analytics, CaptureContent: o.CaptureContent,
 		ToolBreakdown: o.ToolBreakdown, Classify: o.Classify, Context: o.Context,
-		Trigger: TriggerSystem, NoPromptEvent: true, IdentityFromCookies: Ptr(false),
+		Trigger: TriggerSystem, NoPromptEvent: true, IdentityFromCookies: Ptr(false), Resume: o.Resume,
 	}, func(ctx context.Context, i *Interaction) error {
 		task = i
+		i.taskStarted()
 		return fn(ctx, i)
 	})
 	if flush && task != nil {

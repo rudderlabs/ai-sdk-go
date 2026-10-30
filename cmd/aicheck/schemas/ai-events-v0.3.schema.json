@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rudderstack.com/schemas/ai-events/0.3.0",
   "title": "RudderStack AI Product Analytics Events v0.3.0 (draft)",
-  "description": "Event properties for ai_user_prompt_created, ai_response_received, ai_user_action, the optional per-call ai_llm_response_received, the opt-in ai_interaction_classified and ai_interaction_scored, the app-sent ai_limit_reached, customer-named declared tool events (declared_tool_event, mcp_declared_tool_event), and the MCP server events (mcp_client_seen, mcp_tool_called, mcp_elicitation_completed, mcp_capability_requested, mcp_resource_read, mcp_prompt_used, mcp_event_subscription_changed, mcp_event_delivered). Validate the `properties` object of each track call against the matching definition. Custom properties are allowed. The spec version is not a property: SDKs send it as context.wrapperLibrary.specVersion.",
+  "description": "Event properties for ai_user_prompt_created, ai_response_received, ai_user_action, the optional per-call ai_llm_response_received, the optional ai_task_started, the opt-in ai_interaction_classified and ai_interaction_scored, the app-sent ai_limit_reached, customer-named declared tool events (declared_tool_event, mcp_declared_tool_event), and the MCP server events (mcp_client_seen, mcp_tool_called, mcp_elicitation_completed, mcp_capability_requested, mcp_resource_read, mcp_prompt_used, mcp_event_subscription_changed, mcp_event_delivered). Validate the `properties` object of each track call against the matching definition. Custom properties are allowed. The spec version is not a property: SDKs send it as context.wrapperLibrary.specVersion.",
   "$defs": {
     "surface": {
       "enum": [
@@ -453,6 +453,23 @@
               "const": "blocked"
             }
           }
+        },
+        "pause_count": {
+          "required": [
+            "total_paused_ms"
+          ],
+          "properties": {
+            "response_status": {
+              "not": {
+                "const": "paused"
+              }
+            }
+          }
+        },
+        "total_paused_ms": {
+          "required": [
+            "pause_count"
+          ]
         }
       },
       "properties": {
@@ -469,7 +486,7 @@
             "incomplete",
             "blocked"
           ],
-          "description": "Since v0.4. paused: the run stopped to wait for something outside it (pause_reason); the resumed run reports the same interaction_id without a new prompt event. incomplete: the run stopped at a cap (max turns, max output tokens, a cost budget, a time limit); error_type names the cap. blocked: the app declined to answer on purpose (block_reason); not a failure."
+          "description": "Since v0.4. paused: the run stopped to wait for something outside it (pause_reason); the resumed run reports the same interaction_id without a new prompt event. incomplete: the run stopped at a cap (max turns, max output tokens, a cost budget, a time limit); error_type names the cap. blocked: the app declined to answer on purpose (block_reason); not a failure. Since v0.4, each response covers one segment. paused: the run stopped to wait for something outside it (pause_reason). A run can pause more than once: each pause sends one ai_response_received with this status, and the resumed run reports the same interaction_id without a new prompt event, until a final answer with another status (pause_count). Every one of these events carries only its own segment's totals, so summing them counts each call once. incomplete: the run stopped at a cap (max turns, max output tokens, a cost budget, a time limit); error_type names the cap."
         },
         "block_reason": {
           "enum": [
@@ -659,6 +676,16 @@
           "type": "integer",
           "minimum": 0,
           "description": "Client copy only: from submit until the user saw anything."
+        },
+        "pause_count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Since v0.4. Only on the final answer of a run that paused: how many times it paused (one ai_response_received with response_status paused each)."
+        },
+        "total_paused_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Since v0.4. With pause_count: the time the run spent paused, between each pause and its resume. Not part of latency_ms, which covers only the final segment."
         }
       }
     },
@@ -1674,6 +1701,17 @@
       "exclusiveMinimum": 0,
       "maximum": 1,
       "description": "Since v0.4. The rate, above 0 and below 1, this event type was sampled at when it was sent (configure sample rates); absent means it was not sampled. Weight a row by 1 / sample_rate to estimate totals. The draw is keyed on interaction_id, so the sampled events of one interaction are kept or dropped together; spec/fixtures/sampling-v0.1.json fixes the draw across SDKs."
+    },
+    "ai_task_started": {
+      "description": "Since v0.4. Optional, off by default in the SDKs: one per background run (task) when it starts, never when a paused run resumes. A started run without an ai_response_received is still in flight or was abandoned.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/ids"
+        }
+      ],
+      "required": [
+        "task_name"
+      ]
     }
   }
 }

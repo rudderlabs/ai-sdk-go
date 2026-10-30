@@ -1,0 +1,325 @@
+{
+  "synthetic": true,
+  "description": "Since v0.4. Three streamed Anthropic answers for the shared approval-loop example, with distinct response IDs for its three model calls. Synthetic, based on the existing documented Anthropic streaming cassette.",
+  "sources": [
+    "https://docs.anthropic.com/en/docs/build-with-claude/streaming",
+    "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching"
+  ],
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "events": [
+          {
+            "event": "message_start",
+            "payload": {
+              "type": "message_start",
+              "message": {
+                "id": "msg_approval_1",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-haiku-4-5-20251001",
+                "content": [],
+                "stop_reason": null,
+                "stop_sequence": null,
+                "usage": {
+                  "input_tokens": 22,
+                  "cache_creation_input_tokens": 120,
+                  "cache_read_input_tokens": 1024,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 120,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 1,
+                  "service_tier": "standard"
+                }
+              }
+            }
+          },
+          {
+            "event": "content_block_start",
+            "payload": {
+              "type": "content_block_start",
+              "index": 0,
+              "content_block": {
+                "type": "text",
+                "text": ""
+              }
+            }
+          },
+          {
+            "event": "ping",
+            "payload": {
+              "type": "ping"
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": "Yes, you can change it"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": " until the order ships."
+              }
+            }
+          },
+          {
+            "event": "content_block_stop",
+            "payload": {
+              "type": "content_block_stop",
+              "index": 0
+            }
+          },
+          {
+            "event": "message_delta",
+            "payload": {
+              "type": "message_delta",
+              "delta": {
+                "stop_reason": "end_turn",
+                "stop_sequence": null
+              },
+              "usage": {
+                "output_tokens": 14
+              }
+            }
+          },
+          {
+            "event": "message_stop",
+            "payload": {
+              "type": "message_stop"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "events": [
+          {
+            "event": "message_start",
+            "payload": {
+              "type": "message_start",
+              "message": {
+                "id": "msg_approval_2",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-haiku-4-5-20251001",
+                "content": [],
+                "stop_reason": null,
+                "stop_sequence": null,
+                "usage": {
+                  "input_tokens": 22,
+                  "cache_creation_input_tokens": 120,
+                  "cache_read_input_tokens": 1024,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 120,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 1,
+                  "service_tier": "standard"
+                }
+              }
+            }
+          },
+          {
+            "event": "content_block_start",
+            "payload": {
+              "type": "content_block_start",
+              "index": 0,
+              "content_block": {
+                "type": "text",
+                "text": ""
+              }
+            }
+          },
+          {
+            "event": "ping",
+            "payload": {
+              "type": "ping"
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": "Yes, you can change it"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": " until the order ships."
+              }
+            }
+          },
+          {
+            "event": "content_block_stop",
+            "payload": {
+              "type": "content_block_stop",
+              "index": 0
+            }
+          },
+          {
+            "event": "message_delta",
+            "payload": {
+              "type": "message_delta",
+              "delta": {
+                "stop_reason": "end_turn",
+                "stop_sequence": null
+              },
+              "usage": {
+                "output_tokens": 14
+              }
+            }
+          },
+          {
+            "event": "message_stop",
+            "payload": {
+              "type": "message_stop"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/messages"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "events": [
+          {
+            "event": "message_start",
+            "payload": {
+              "type": "message_start",
+              "message": {
+                "id": "msg_approval_3",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-haiku-4-5-20251001",
+                "content": [],
+                "stop_reason": null,
+                "stop_sequence": null,
+                "usage": {
+                  "input_tokens": 22,
+                  "cache_creation_input_tokens": 120,
+                  "cache_read_input_tokens": 1024,
+                  "cache_creation": {
+                    "ephemeral_5m_input_tokens": 120,
+                    "ephemeral_1h_input_tokens": 0
+                  },
+                  "output_tokens": 1,
+                  "service_tier": "standard"
+                }
+              }
+            }
+          },
+          {
+            "event": "content_block_start",
+            "payload": {
+              "type": "content_block_start",
+              "index": 0,
+              "content_block": {
+                "type": "text",
+                "text": ""
+              }
+            }
+          },
+          {
+            "event": "ping",
+            "payload": {
+              "type": "ping"
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": "Yes, you can change it"
+              }
+            }
+          },
+          {
+            "event": "content_block_delta",
+            "payload": {
+              "type": "content_block_delta",
+              "index": 0,
+              "delta": {
+                "type": "text_delta",
+                "text": " until the order ships."
+              }
+            }
+          },
+          {
+            "event": "content_block_stop",
+            "payload": {
+              "type": "content_block_stop",
+              "index": 0
+            }
+          },
+          {
+            "event": "message_delta",
+            "payload": {
+              "type": "message_delta",
+              "delta": {
+                "stop_reason": "end_turn",
+                "stop_sequence": null
+              },
+              "usage": {
+                "output_tokens": 14
+              }
+            }
+          },
+          {
+            "event": "message_stop",
+            "payload": {
+              "type": "message_stop"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
