@@ -166,11 +166,64 @@
         }
       ]
     },
-    "ai_conversation_pinned": {"allOf": [{"$ref": "#/$defs/with_conversation"}], "description": "Since v0.4. The user pinned a conversation.", "not": { "anyOf": [{ "required": ["title"] }, { "required": ["name"] }] }},
+    "ai_conversation_pinned": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_conversation"
+        }
+      ],
+      "description": "Since v0.4. The user pinned a conversation.",
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "title"
+            ]
+          },
+          {
+            "required": [
+              "name"
+            ]
+          }
+        ]
+      }
+    },
     "ai_conversation_shared": {
       "description": "Since v0.4. The user shared a conversation. Never send the share URL.",
-      "allOf": [{ "$ref": "#/$defs/with_conversation" }],
-      "not": { "anyOf": [{ "required": ["url"] }, { "required": ["share_url"] }, { "required": ["share_link"] }, { "required": ["title"] }, { "required": ["name"] }] }
+      "allOf": [
+        {
+          "$ref": "#/$defs/with_conversation"
+        }
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "url"
+            ]
+          },
+          {
+            "required": [
+              "share_url"
+            ]
+          },
+          {
+            "required": [
+              "share_link"
+            ]
+          },
+          {
+            "required": [
+              "title"
+            ]
+          },
+          {
+            "required": [
+              "name"
+            ]
+          }
+        ]
+      }
     },
     "ai_agent_selected": {
       "description": "Since v0.4. The user picked the agent, mode or persona that answers next. Names join agent_name in the server's usage_breakdown.",
