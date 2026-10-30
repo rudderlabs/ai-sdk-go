@@ -1255,7 +1255,8 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool) *toolRuleOutcome {
 }
 
 // Freeze deferred rules after paused-event delivery. Callbacks and encoding run outside mu.
-func (i *Interaction) preparePendingRules() {
+// done runs under mu once nothing is left to prepare, so no tool slips in before the snapshot.
+func (i *Interaction) preparePendingRules(done func()) {
 	for {
 		i.mu.Lock()
 		var selected *recordedTool
@@ -1268,6 +1269,7 @@ func (i *Interaction) preparePendingRules() {
 			}
 		}
 		if selected == nil {
+			done()
 			i.mu.Unlock()
 			return
 		}
@@ -1522,12 +1524,11 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	unregister(i)
 	i.mu.Unlock()
 	defer func() {
-		i.preparePendingRules()
-		i.mu.Lock()
-		// Include writes accepted while unlocked delivery was in progress.
-		snapshot, ok = i.snapshotLocked()
-		i.pausing = false
-		i.mu.Unlock()
+		// Includes writes accepted while unlocked delivery was in progress.
+		i.preparePendingRules(func() {
+			snapshot, ok = i.snapshotLocked()
+			i.pausing = false
+		})
 	}()
 	i.checkDisconnected()
 	for _, fn := range hooks {
@@ -2482,6 +2483,8 @@ func (i *Interaction) callStarted(ctx context.Context, integration string) {
 	if i.ended {
 		return
 	}
+	// The trace callback can pause the run; the call has started, so it continues.
+	i.resumeLocked()
 	i.settled = true
 	i.flushLocked()
 }

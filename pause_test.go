@@ -1461,7 +1461,7 @@ func TestPendingEventOnlyRuleKeepsResultSize(t *testing.T) {
 	i.pausing, i.pausedAt = true, time.Now() // paused-response delivery in progress
 	i.mu.Unlock()
 	i.RecordToolCalls(ToolCall{Name: "late", Result: "abcdef"})
-	i.preparePendingRules()
+	i.preparePendingRules(func() {})
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if len(i.tools) != 1 || i.tools[0].ruleOutcome == nil || i.tools[0].ruleOutcome.resultSize != 6 {
@@ -1489,5 +1489,20 @@ func TestResumeRejectsMissingOrNullPauseTiming(t *testing.T) {
 			}
 			i.End(EndOptions{})
 		}
+	}
+}
+
+func TestTraceCallbackPauseDoesNotLeaveStartedCallPaused(t *testing.T) {
+	setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	if err := Configure(WithTraceIDFrom(func(context.Context) string {
+		i.Pause(PauseOptions{})
+		return "t"
+	})); err != nil {
+		t.Fatal(err)
+	}
+	i.callStarted(context.Background(), IntegrationOpenAI)
+	if i.Paused() {
+		t.Fatal("interaction stayed paused after its model call started")
 	}
 }
