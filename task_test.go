@@ -2,11 +2,101 @@ package rudderstackai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
 )
+
+func TestRunTaskRestoresLastFailedCallCategory(t *testing.T) {
+	for _, pending := range []bool{false, true} {
+		for _, category := range []string{"timeout", "context_limit"} {
+			t.Run(fmt.Sprintf("pending=%t/%s", pending, category), func(t *testing.T) {
+				r := setupAI(t, WithLimits(Limits{MaxCallsPerInteraction: 1}))
+				client := &pauseReentrantClient{recorder: r, reenter: func() {}}
+				var snapshot PausedInteraction
+				err := RunTask(context.Background(), "job", TaskOptions{Analytics: client, Flush: Ptr(false)}, func(_ context.Context, i *Interaction) error {
+					record := func() {
+						// Revisit the first overflow group after a failure in the second.
+						// Its stored error_type is older than the latest failed call.
+						for _, call := range []LLMCall{
+							{Provider: "openai", Model: "retained"},
+							{Provider: "openai", Model: "group-a", ErrorType: "rate_limit"},
+							{Provider: "openai", Model: "group-b", ErrorType: "api_error"},
+							{Provider: "openai", Model: "group-a", ErrorType: category},
+							{Provider: "openai", Model: "group-b", ErrorType: "auth_error"},
+							{Provider: "openai", Model: "group-a", ErrorType: category},
+							{Provider: "openai", Model: "group-b"},
+						} {
+							if !i.RecordCall(call) {
+								t.Fatal("call was rejected")
+							}
+						}
+					}
+					if pending {
+						client.reenter = record
+					} else {
+						record()
+					}
+					var ok bool
+					snapshot, ok = i.Pause(PauseOptions{})
+					if !ok {
+						t.Fatal("pause failed")
+					}
+					return nil
+				})
+				if err != nil || snapshot.LastFailedCallType != category || (len(snapshot.PendingCalls) > 0) != pending {
+					t.Fatalf("error %v, snapshot %+v", err, snapshot)
+				}
+				var stored PausedInteraction
+				if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+					t.Fatal(err)
+				}
+				want := errors.New("application aborted")
+				err = RunTask(context.Background(), "ignored", TaskOptions{Resume: &stored, Flush: Ptr(false)}, func(_ context.Context, i *Interaction) error {
+					if i.ID() != snapshot.InteractionID {
+						t.Fatal("snapshot was not resumed")
+					}
+					return want
+				})
+				if p := lastResponse(t, r); err != want || p["error_type"] != category || p["response_status"] != string(statusForErrorType(category)) {
+					t.Fatalf("error %v, response %v", err, p)
+				}
+			})
+		}
+	}
+}
+
+func TestRunTaskResumesSnapshotWithoutFailedCallCategory(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{Trigger: TriggerSystem, TaskName: "job"})
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("pause failed")
+	}
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(mustJSON(snapshot)), &fields); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := fields["last_failed_call_type"]; present {
+		t.Fatal("empty failure category was not omitted")
+	}
+	var stored PausedInteraction
+	if err := json.Unmarshal([]byte(mustJSON(fields)), &stored); err != nil {
+		t.Fatal(err)
+	}
+	want := errors.New("application failed")
+	err := RunTask(context.Background(), "job", TaskOptions{Resume: &stored, Flush: Ptr(false)}, func(_ context.Context, resumed *Interaction) error {
+		if resumed.ID() != i.ID() {
+			t.Fatal("old snapshot was not resumed")
+		}
+		return want
+	})
+	if p := lastResponse(t, r); err != want || p["error_type"] != "app_error" || p["response_status"] != "error" {
+		t.Fatalf("error %v, response %v", err, p)
+	}
+}
 
 func TestRunTaskPrefersLastFailedCallCategory(t *testing.T) {
 	for _, category := range []string{"rate_limit", "timeout", "api_error", "context_limit", "auth_error", "invalid_request", "connection_error", "cancelled"} {

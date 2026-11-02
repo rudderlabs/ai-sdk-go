@@ -343,6 +343,8 @@ type PausedInteraction struct {
 	Integration         string     `json:"integration,omitempty"`
 	// SeenResponseIDs retains provider/response ID pairs already counted. Since v0.4.
 	SeenResponseIDs [][2]string `json:"seen_response_ids,omitempty"`
+	// LastFailedCallType retains the latest failed model call's category for resumed RunTask errors.
+	LastFailedCallType string `json:"last_failed_call_type,omitempty"`
 	// PendingCalls and PendingTools carry usage accepted after the paused segment closed. Since v0.4.
 	PendingCalls []map[string]any `json:"pending_calls,omitempty"`
 	PendingTools []map[string]any `json:"pending_tools,omitempty"`
@@ -1666,7 +1668,7 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		AccountID: i.accountID, OnBehalfOf: i.onBehalfOf, TriggerSource: i.triggerSource, TaskName: i.taskName,
 		AgentVersion: i.agentVersion, Variant: i.variant, Confidence: i.confidence,
 		TriggerEventID: i.triggerEventID, ParentInteractionID: i.parent, Intent: i.intent, TraceID: i.traceID,
-		Outcome: i.outcome, Integration: i.integration,
+		Outcome: i.outcome, Integration: i.integration, LastFailedCallType: i.lastFailedCallType,
 	}
 	if i.callCount > 0 {
 		snapshot.ReportCount = Ptr(i.callCount)
@@ -1854,6 +1856,7 @@ func pendingTool(c *recordedTool) map[string]any {
 }
 
 func (i *Interaction) restorePending(snapshot *PausedInteraction) {
+	i.lastFailedCallType = snapshot.LastFailedCallType
 	for _, p := range snapshot.PendingCalls {
 		c := &recordedCall{}
 		if p["credits"] != nil {
