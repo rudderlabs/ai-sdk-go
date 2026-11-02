@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,138 @@ import (
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
 )
+
+type shutdownTransport struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (s *shutdownTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	close(s.started)
+	<-s.release
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("{}")), Header: make(http.Header)}, nil
+}
+
+func TestShutdownBoundsBlockingAnalyticsTransport(t *testing.T) {
+	transport := &shutdownTransport{started: make(chan struct{}), release: make(chan struct{})}
+	client, err := analytics.NewWithConfig("key", analytics.Config{Transport: transport, BatchSize: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := &seenErrors{}
+	setupAI(t, WithAnalytics(client), WithOnError(seen.hook))
+	t.Cleanup(func() {
+		close(transport.release)
+		shutdownState.Lock()
+		run := shutdownState.run
+		shutdownState.Unlock()
+		if run != nil {
+			select {
+			case <-run.done:
+			case <-time.After(5 * time.Second):
+				t.Error("client did not finish closing after releasing transport")
+			}
+		} else {
+			_ = client.Close()
+		}
+	})
+	answer(t, InteractionOptions{NoPromptEvent: true}, "answer")
+	select {
+	case <-transport.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("analytics send did not start")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if Shutdown(ctx) {
+		t.Fatal("blocked shutdown reported success")
+	}
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Fatalf("Shutdown exceeded its deadline: %v", d)
+	}
+	seen.mu.Lock()
+	defer seen.mu.Unlock()
+	if len(seen.infos) != 1 || seen.infos[0].Kind != KindFlushTimeout || !errors.Is(seen.errs[0], context.DeadlineExceeded) {
+		t.Fatalf("hook saw %v %v", seen.infos, seen.errs)
+	}
+}
+
+type closingClient struct {
+	sink
+	closes  atomic.Int32
+	started chan struct{}
+	release chan struct{}
+	err     error
+}
+
+func (c *closingClient) Close() error {
+	c.closes.Add(1)
+	if c.started != nil {
+		close(c.started)
+		<-c.release
+	}
+	return c.err
+}
+
+func TestShutdownBoundsCloseAfterSuccessfulFlush(t *testing.T) {
+	c := &closingClient{started: make(chan struct{}), release: make(chan struct{})}
+	seen := &seenErrors{}
+	setupAI(t, WithAnalytics(c), WithOnError(seen.hook))
+	t.Cleanup(func() {
+		close(c.release)
+		shutdownState.Lock()
+		run := shutdownState.run
+		shutdownState.Unlock()
+		<-run.done
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if Shutdown(ctx) || time.Since(start) > 500*time.Millisecond {
+		t.Fatal("Shutdown did not bound Close")
+	}
+	select {
+	case <-c.started:
+	default:
+		t.Fatal("Close did not start")
+	}
+	if c.flushes.Load() != 1 || c.closes.Load() != 1 {
+		t.Fatal("client was not flushed and closed once")
+	}
+	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "Shutdown"}) {
+		t.Fatalf("hook saw %v", got)
+	}
+}
+
+func TestShutdownClosesClientsOnceAndReportsCloseErrors(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprint(fail), func(t *testing.T) {
+			c := &closingClient{}
+			if fail {
+				c.err = errors.New("close failed")
+			}
+			seen := &seenErrors{}
+			setupAI(t, WithAnalytics(c), WithOnError(seen.hook))
+			answer(t, InteractionOptions{PromptText: "hello"}, "answer") // also remembers c
+			for range 2 {
+				if Shutdown(context.Background()) == fail {
+					t.Fatal("unexpected shutdown result")
+				}
+			}
+			if c.closes.Load() != 1 {
+				t.Fatalf("Close called %d times", c.closes.Load())
+			}
+			if fail {
+				if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushFailed, Where: "Shutdown"}) || seen.errs[0] != c.err {
+					t.Fatalf("hook saw %v %v", got, seen.errs)
+				}
+			} else if got := seen.all(); len(got) != 0 {
+				t.Fatalf("hook saw %v", got)
+			}
+		})
+	}
+}
 
 // ctxClient is an analytics-go client with Flush(ctx).
 type ctxClient struct {

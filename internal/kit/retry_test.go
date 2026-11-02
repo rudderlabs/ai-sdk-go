@@ -90,6 +90,33 @@ func TestHeldAttemptSettledByNextCallAndEnd(t *testing.T) {
 	want(t, h.rec.props(t, "ai_response_received"), map[string]any{"response_status": "error", "llm_call_count": 2})
 }
 
+func TestRunTaskGenericErrorAfterHeldProviderFailure(t *testing.T) {
+	for _, category := range []struct {
+		status   int
+		want     string
+		response string
+	}{{429, "rate_limit", "error"}, {504, "timeout", "timeout"}, {503, "api_error", "error"}} {
+		t.Run(category.want, func(t *testing.T) {
+			h := newHarness(t, jsonHandler(category.status, `{"error":{"message":"busy"}}`))
+			wantErr := errors.New("task aborted")
+			err := rudderstackai.RunTask(context.Background(), "job", rudderstackai.TaskOptions{Analytics: h.rec, Flush: rudderstackai.Ptr(false)}, func(ctx context.Context, _ *rudderstackai.Interaction) error {
+				resp, err := h.attemptPost(ctx, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				_ = resp.Body.Close() // left unread: recorded by the interaction's beforeEnd hook
+				return wantErr
+			})
+			if err != wantErr {
+				t.Fatalf("returned %v, want original sentinel", err)
+			}
+			want(t, h.rec.props(t, "ai_response_received"), map[string]any{
+				"error_type": category.want, "response_status": category.response, "llm_call_count": 1,
+			})
+		})
+	}
+}
+
 func TestHeldAttemptOutsideInteractionSettledOnCancel(t *testing.T) {
 	h := newHarness(t, failThenServe(1))
 	ctx, cancel := context.WithCancel(context.Background())

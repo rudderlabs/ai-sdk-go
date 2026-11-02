@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -68,7 +69,8 @@ type Flusher interface {
 
 // RunTask runs a background job (no UI: a schedule, webhook, queue or another agent) as one
 // system-triggered interaction named taskName. An error returned by fn fails the answer and is
-// returned unchanged.
+// returned unchanged. A generic app error uses the last failed model call's error category,
+// when there was one; otherwise it is app_error.
 //
 // The task's actor is the system: user and anonymous IDs are never inherited from the context,
 // and cookies are never read. Put the human the work is for in OnBehalfOf.
@@ -294,17 +296,82 @@ func FlushTimeout(timeout time.Duration) bool {
 // shuttingDown stops new background work (classification, evaluation) once Shutdown ran.
 var shuttingDown atomic.Bool
 
+type shutdownRun struct {
+	done chan struct{}
+	ok   bool // published by closing done
+}
+
+var shutdownState struct {
+	sync.Mutex
+	run *shutdownRun
+}
+
 // Shutdown prepares the process to exit: it stops queueing classifications and scores, ends
 // every open interaction as response_status "incomplete" with end_reason "shutdown", then runs
-// [Flush] within ctx and returns its result. It never closes a client: Close yours afterwards.
-// Calling it again is safe. Call it from your SIGTERM handling; the SDK installs no signal or exit
-// hooks.
+// [Flush] and closes every used or configured analytics client, within ctx (10 seconds when ctx
+// has no deadline). Close runs in goroutines: if ctx ends first, Shutdown returns false and
+// reports flush_timeout; the clients continue closing in the background. A Close error is
+// reported as flush_failed, unchanged. Calling it again waits for the same shutdown without
+// closing clients again. Call it from your SIGTERM handling; the SDK installs no signal or exit hooks.
 func Shutdown(ctx context.Context) bool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultFlushTimeout)
+		defer cancel()
+	}
 	shuttingDown.Store(true)
-	safely(func() {
-		for _, i := range takeOpen() {
-			i.End(EndOptions{Status: StatusIncomplete, endReason: endReasonShutdown})
+	shutdownState.Lock()
+	run := shutdownState.run
+	if run == nil {
+		run = &shutdownRun{done: make(chan struct{})}
+		shutdownState.run = run
+		shutdownState.Unlock()
+		// Keep Flush's collected errors synchronous, even when its deadline expires.
+		safely(func() {
+			for _, i := range takeOpen() {
+				i.End(EndOptions{Status: StatusIncomplete, endReason: endReasonShutdown})
+			}
+			run.ok = Flush(ctx)
+		})
+		used := rememberedClients()
+		if c := cfg().analytics; c != nil && !slices.ContainsFunc(used, func(other analytics.Client) bool { return sameClient(c, other) }) {
+			used = append(used, c)
 		}
-	})
-	return Flush(ctx)
+		go func() {
+			defer close(run.done)
+			var wg sync.WaitGroup
+			var failed atomic.Bool
+			for _, c := range used {
+				wg.Go(func() {
+					ok := false
+					safely(func() {
+						if err := c.Close(); err != nil {
+							report(KindFlushFailed, "Shutdown", err)
+							return
+						}
+						ok = true
+					})
+					if !ok {
+						failed.Store(true)
+					}
+				})
+			}
+			wg.Wait()
+			run.ok = run.ok && !failed.Load() && ctx.Err() == nil
+		}()
+	} else {
+		shutdownState.Unlock()
+	}
+	select {
+	case <-run.done:
+		if ctx.Err() == nil {
+			return run.ok
+		}
+	case <-ctx.Done():
+	}
+	report(KindFlushTimeout, "Shutdown", ctx.Err())
+	return false
 }

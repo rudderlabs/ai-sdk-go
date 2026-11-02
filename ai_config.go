@@ -290,6 +290,9 @@ func resetForTest() {
 	clients.mu.Unlock()
 	resetOpenForTest()
 	shuttingDown.Store(false)
+	shutdownState.Lock()
+	shutdownState.run = nil
+	shutdownState.Unlock()
 	reported.mu.Lock()
 	reported.last = map[string]time.Time{}
 	reported.mu.Unlock()

@@ -20,9 +20,9 @@ const (
 	// KindRedactionTimeout is a redaction pattern that ran out of time; the field was sent as
 	// "[redaction timed out]".
 	KindRedactionTimeout = "redaction_timeout"
-	// KindFlushTimeout is a [Flush], [Shutdown] or [RunTask] flush that hit its deadline.
+	// KindFlushTimeout is a [Flush], [Shutdown] or [RunTask] flush or close that hit its deadline.
 	KindFlushTimeout = "flush_timeout"
-	// KindFlushFailed is your RudderStack client's own Flush failing during a [Flush], [Shutdown]
+	// KindFlushFailed is your RudderStack client's own Flush or Close failing during a [Flush], [Shutdown]
 	// or [RunTask] flush; the error passed is your client's, unchanged.
 	KindFlushFailed = "flush_failed"
 	// KindClientOutdated is a RudderStack client too old for what the SDK asked of it.

@@ -3,9 +3,88 @@ package rudderstackai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
+
+func TestRunTaskPrefersLastFailedCallCategory(t *testing.T) {
+	for _, category := range []string{"rate_limit", "timeout", "api_error", "context_limit", "auth_error", "invalid_request", "connection_error", "cancelled"} {
+		t.Run(category, func(t *testing.T) {
+			r := setupAI(t)
+			want := errors.New("task aborted")
+			err := RunTask(context.Background(), "job", TaskOptions{Flush: Ptr(false)}, func(_ context.Context, i *Interaction) error {
+				i.RecordCall(LLMCall{Provider: "openai", Model: "m", ErrorType: "api_error"})
+				i.RecordCall(LLMCall{Provider: "openai", Model: "m", ErrorType: category})
+				i.RecordCall(LLMCall{Provider: "openai", Model: "m"})
+				return want
+			})
+			if err != want {
+				t.Fatalf("returned %v, want original error %v", err, want)
+			}
+			if p := r.response(t); p["error_type"] != category || p["response_status"] != string(statusForErrorType(category)) {
+				t.Fatal(p)
+			}
+		})
+	}
+}
+
+func TestRunTaskAppErrorWithoutFailedCall(t *testing.T) {
+	for _, success := range []bool{false, true} {
+		t.Run(fmt.Sprint(success), func(t *testing.T) {
+			r := setupAI(t)
+			want := errors.New("application failed")
+			err := RunTask(context.Background(), "job", TaskOptions{Flush: Ptr(false)}, func(_ context.Context, i *Interaction) error {
+				if success {
+					i.RecordCall(LLMCall{Provider: "openai", Model: "m"})
+				}
+				return want
+			})
+			if err != want {
+				t.Fatalf("returned %v, want original error %v", err, want)
+			}
+			if p := r.response(t); p["error_type"] != "app_error" || p["response_status"] != "error" {
+				t.Fatal(p)
+			}
+		})
+	}
+}
+
+func TestRunTaskWithoutNamePreservesProviderFailure(t *testing.T) {
+	r := setupAI(t)
+	want := errors.New("task aborted")
+	err := RunTask(context.Background(), "", TaskOptions{Flush: Ptr(false)}, func(_ context.Context, i *Interaction) error {
+		i.RecordCall(LLMCall{Provider: "openai", Model: "m", ErrorType: "rate_limit"})
+		return want
+	})
+	if err != want || r.response(t)["error_type"] != "rate_limit" {
+		t.Fatalf("error %v, response %v", err, r.response(t))
+	}
+}
+
+func TestRunTaskKeepsSpecificCallbackErrorCategory(t *testing.T) {
+	for _, matching := range []bool{false, true} {
+		t.Run(fmt.Sprint(matching), func(t *testing.T) {
+			r := setupAI(t)
+			cause := errors.New("provider failed")
+			want := error(context.DeadlineExceeded)
+			category := "timeout"
+			if matching {
+				want = fmt.Errorf("task: %w", cause)
+				category = "auth_error"
+			}
+			err := RunTask(context.Background(), "job", TaskOptions{Flush: Ptr(false)}, func(_ context.Context, i *Interaction) error {
+				i.RecordCall(LLMCall{Provider: "openai", Model: "m", ErrorType: "auth_error"})
+				i.noteCallError(cause, "auth_error")
+				i.RecordCall(LLMCall{Provider: "openai", Model: "m", ErrorType: "rate_limit"})
+				return want
+			})
+			if err != want || r.response(t)["error_type"] != category {
+				t.Fatalf("error %v, response %v", err, r.response(t))
+			}
+		})
+	}
+}
 
 func TestRunTaskChainsToTheContextInteraction(t *testing.T) {
 	r := setupAI(t)
