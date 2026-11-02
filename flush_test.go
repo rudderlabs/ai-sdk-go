@@ -58,6 +58,7 @@ func TestShutdownBoundsBlockingAnalyticsTransport(t *testing.T) {
 	if d := time.Since(start); d > 500*time.Millisecond {
 		t.Fatalf("Shutdown exceeded its deadline: %v", d)
 	}
+	seen.wait(t, 1)
 	seen.mu.Lock()
 	defer seen.mu.Unlock()
 	if len(seen.infos) != 1 || seen.infos[0].Kind != KindFlushTimeout || !errors.Is(seen.errs[0], context.DeadlineExceeded) {
@@ -124,6 +125,7 @@ func TestCloseClientBoundsBlockingAnalyticsTransport(t *testing.T) {
 		t.Fatal("Close finished before releasing transport")
 	default:
 	}
+	seen.wait(t, 1)
 	seen.mu.Lock()
 	defer seen.mu.Unlock()
 	if len(seen.infos) != 1 || seen.infos[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "CloseClient"}) || !errors.Is(seen.errs[0], context.DeadlineExceeded) {
@@ -173,6 +175,102 @@ func TestCloseClientNil(t *testing.T) {
 	cancel()
 	if !CloseClient(ctx, nil) {
 		t.Fatal("nil client reported failure")
+	}
+}
+
+func TestTimeoutHookCannotBlockDeadline(t *testing.T) {
+	for _, name := range []string{"CloseClient", "Flush", "FlushTimeout", "RunTask"} {
+		t.Run(name, func(t *testing.T) {
+			transport := &shutdownTransport{started: make(chan struct{}), release: make(chan struct{})}
+			client, err := analytics.NewWithConfig("key", analytics.Config{Transport: transport, BatchSize: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			c := &observedCloseClient{Client: client, done: make(chan struct{})}
+			entered, release, notified := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			seen := &seenErrors{}
+			setupAI(t, WithAnalytics(c), WithOnError(func(err error, info ErrorInfo) {
+				close(entered)
+				<-release
+				seen.hook(err, info)
+				close(notified)
+				panic("contained timeout hook panic")
+			}))
+			t.Cleanup(func() {
+				close(release)
+				close(transport.release)
+				if name != "CloseClient" {
+					go func() { _ = c.Close() }()
+				}
+				select {
+				case <-c.done:
+				case <-time.After(5 * time.Second):
+					t.Error("Close did not finish after releasing transport")
+				}
+				select {
+				case <-notified:
+				case <-time.After(5 * time.Second):
+					t.Error("timeout notification did not arrive")
+				}
+				seen.mu.Lock()
+				defer seen.mu.Unlock()
+				where := name
+				if name == "FlushTimeout" {
+					where = "Flush"
+				}
+				if seen.infos[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: where}) || !errors.Is(seen.errs[0], context.DeadlineExceeded) {
+					t.Errorf("hook saw %v %v", seen.infos, seen.errs)
+				}
+			})
+			if err := client.Enqueue(analytics.Track{UserId: "u", Event: "non_ai_event"}); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-transport.started:
+			case <-time.After(5 * time.Second):
+				t.Fatal("analytics send did not start")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+			result := make(chan bool, 1)
+			start := time.Now()
+			go func() {
+				switch name {
+				case "CloseClient":
+					result <- CloseClient(ctx, c)
+				case "Flush":
+					result <- Flush(ctx)
+				case "FlushTimeout":
+					result <- FlushTimeout(50 * time.Millisecond)
+				case "RunTask":
+					want := errors.New("task failed")
+					err := RunTask(context.Background(), "job", TaskOptions{Analytics: c, FlushTimeout: 50 * time.Millisecond}, func(context.Context, *Interaction) error { return want })
+					result <- err != want
+				}
+			}()
+			select {
+			case ok := <-result:
+				if ok || time.Since(start) < 30*time.Millisecond {
+					t.Fatal("unexpected result or returned before the deadline")
+				}
+			case <-time.After(500 * time.Millisecond):
+				t.Fatal("timeout hook blocked the deadline")
+			}
+			select {
+			case <-entered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("timeout hook did not start")
+			}
+			if len(seen.all()) != 0 {
+				t.Fatal("notification arrived before releasing the hook")
+			}
+			select {
+			case <-c.done:
+				t.Fatal("Close finished before releasing transport")
+			default:
+			}
+
+		})
 	}
 }
 
@@ -328,6 +426,7 @@ func TestFlushSharesOneDeadline(t *testing.T) {
 	if d := time.Since(start); d > time.Second {
 		t.Fatalf("Flush took %v", d)
 	}
+	seen.wait(t, 1)
 	if got := seen.all(); len(got) != 1 || got[0].Kind != KindFlushTimeout {
 		t.Fatalf("hook saw %+v", got)
 	}
@@ -392,6 +491,7 @@ func TestRunTaskFlushIsBounded(t *testing.T) {
 		t.Fatalf("task flush took %v (%d flushes)", d, stuck.ctxFlushes.Load())
 	}
 	// A flush that runs out of time is reported, as in Node; one that finishes is not.
+	seen.wait(t, 1)
 	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "RunTask"}) {
 		t.Fatalf("hook saw %+v", got)
 	}
@@ -491,6 +591,7 @@ func TestFlushTimeoutDoesNotHideAFlushError(t *testing.T) {
 			if run.fn(ctx) {
 				t.Fatal("reported success")
 			}
+			seen.wait(t, 2)
 			want := []ErrorInfo{{Kind: KindFlushTimeout, Where: "Flush"}, {Kind: KindFlushFailed, Where: "Flush"}}
 			if got := seen.all(); fmt.Sprint(got) != fmt.Sprint(want) || seen.errs[1] != failing.err {
 				t.Fatalf("hook saw %+v %v", got, seen.errs)
@@ -523,6 +624,7 @@ func TestFlushReportsAClientErrorAfterTheDeadline(t *testing.T) {
 	if Flush(ctx) {
 		t.Fatal("reported success past the deadline")
 	}
+	seen.wait(t, 1)
 	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "Flush"}) {
 		t.Fatalf("hook saw %+v before the late error", got)
 	}
@@ -596,7 +698,7 @@ func TestFlushReportsTheCollectedErrorBeforeALateOne(t *testing.T) {
 	if Flush(ctx) {
 		t.Fatal("reported success")
 	}
-	time.Sleep(50 * time.Millisecond) // nothing more arrives
+	seen.wait(t, 2)
 	want := []ErrorInfo{{Kind: KindFlushTimeout, Where: "Flush"}, {Kind: KindFlushFailed, Where: "Flush"}}
 	seen.mu.Lock()
 	defer seen.mu.Unlock()

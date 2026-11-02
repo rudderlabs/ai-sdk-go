@@ -134,12 +134,7 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 			drained, finish = flushClients(ctx, "RunTask", []analytics.Client{task.analytics()})
 			finished = drained && finished
 		})
-		if !finished {
-			report(KindFlushTimeout, "RunTask", ctx.Err())
-		}
-		if finish != nil {
-			finish()
-		}
+		finishFlush(ctx, "RunTask", finished, finish)
 	}
 	return err
 }
@@ -150,6 +145,22 @@ const (
 	// defaultFlushTimeout bounds Flush and Shutdown when ctx has no deadline.
 	defaultFlushTimeout = 10 * time.Second
 )
+
+// finishFlush keeps timeout notifications and any collected client error off the deadline path.
+// Both still go through report for rate limiting and panic containment.
+func finishFlush(ctx context.Context, where string, finished bool, finish func() bool) bool {
+	if !finished {
+		err := ctx.Err()
+		go func() {
+			report(KindFlushTimeout, where, err)
+			if finish != nil {
+				finish()
+			}
+		}()
+		return false
+	}
+	return finish == nil || finish()
+}
 
 // ContextFlusher is implemented by RudderStack clients that send their queue on demand within a
 // deadline: analytics-go v4.4.0 and later.
@@ -271,12 +282,7 @@ func Flush(ctx context.Context) (finished bool) {
 		drained, finish = flushClients(ctx, "Flush", clients)
 		finished = drained && finished
 	})
-	// both reported, whichever happened: a timeout does not hide an error a client returned before it
-	if !finished {
-		report(KindFlushTimeout, "Flush", ctx.Err())
-	}
-	ok := finish == nil || finish()
-	return finished && ok
+	return finishFlush(ctx, "Flush", finished, finish)
 }
 
 // FlushTimeout is Flush with a timeout (zero: 10 seconds).
@@ -342,6 +348,6 @@ func CloseClient(ctx context.Context, c analytics.Client) bool {
 		}
 	case <-ctx.Done():
 	}
-	report(KindFlushTimeout, "CloseClient", ctx.Err())
+	go report(KindFlushTimeout, "CloseClient", ctx.Err())
 	return false
 }

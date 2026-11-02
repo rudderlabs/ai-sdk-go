@@ -43,7 +43,8 @@ const onErrorEvery = time.Minute
 // WithOnError sets a hook that sees errors the SDK contained: it is called at most once per kind
 // a minute, and a panic in it is swallowed. Without it, each kind is logged once (as a slog
 // warning, with the error's type, never its text); RUDDERSTACK_AI_DEBUG logs every occurrence at
-// debug level. Nil removes it.
+// debug level. Timeout notifications from Flush, Shutdown, RunTask and CloseClient run
+// asynchronously so the hook cannot delay their deadline. Nil removes it.
 func WithOnError(hook func(err error, info ErrorInfo)) ConfigOption {
 	return func(c *config, _ *pending) error {
 		c.onError = hook
