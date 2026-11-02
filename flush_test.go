@@ -17,12 +17,13 @@ import (
 )
 
 type shutdownTransport struct {
-	started chan struct{}
-	release chan struct{}
+	started   chan struct{}
+	startOnce sync.Once
+	release   chan struct{}
 }
 
 func (s *shutdownTransport) RoundTrip(*http.Request) (*http.Response, error) {
-	close(s.started)
+	s.startOnce.Do(func() { close(s.started) })
 	<-s.release
 	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("{}")), Header: make(http.Header)}, nil
 }
