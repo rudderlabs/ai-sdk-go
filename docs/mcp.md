@@ -41,7 +41,7 @@ if err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 }
 ```
 
-Call it once, before serving: it adds a receiving middleware (`AddReceivingMiddleware`) and a sending middleware (`AddSendingMiddleware`), so it works with every transport the go-sdk offers. Wrapping the same server again replaces its options and keeps its state. `WrapMCPServer` returns an error for invalid options. Close the analytics client when the process stops (`defer client.Close()`), which sends queued events; `rudderstackai.Flush` also reaches the clients MCP servers use.
+Call it once, before serving: it adds a receiving middleware (`AddReceivingMiddleware`) and a sending middleware (`AddSendingMiddleware`), so it works with every transport the go-sdk offers. Wrapping the same server again replaces its options and keeps its state. `WrapMCPServer` returns an error for invalid options. When the process stops, call `rudderstackai.Shutdown(ctx)` then `rudderstackai.CloseClient(ctx, client)` for each analytics client you own. Shutdown ends open interactions and flushes without closing clients; `rudderstackai.Flush` also reaches the clients MCP servers use.
 
 ### mcp-go
 

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -296,82 +295,53 @@ func FlushTimeout(timeout time.Duration) bool {
 // shuttingDown stops new background work (classification, evaluation) once Shutdown ran.
 var shuttingDown atomic.Bool
 
-type shutdownRun struct {
-	done chan struct{}
-	ok   bool // published by closing done
-}
-
-var shutdownState struct {
-	sync.Mutex
-	run *shutdownRun
-}
-
 // Shutdown prepares the process to exit: it stops queueing classifications and scores, ends
 // every open interaction as response_status "incomplete" with end_reason "shutdown", then runs
-// [Flush] and closes every used or configured analytics client, within ctx (10 seconds when ctx
-// has no deadline). Close runs in goroutines: if ctx ends first, Shutdown returns false and
-// reports flush_timeout; the clients continue closing in the background. A Close error is
-// reported as flush_failed, unchanged. Calling it again waits for the same shutdown without
-// closing clients again. Call it from your SIGTERM handling; the SDK installs no signal or exit hooks.
+// [Flush] within ctx and returns its result. It never closes a client: Close yours afterwards.
+// Calling it again is safe. Call it from your SIGTERM handling; the SDK installs no signal or exit
+// hooks.
 func Shutdown(ctx context.Context) bool {
+	shuttingDown.Store(true)
+	safely(func() {
+		for _, i := range takeOpen() {
+			i.End(EndOptions{Status: StatusIncomplete, endReason: endReasonShutdown})
+		}
+	})
+	return Flush(ctx)
+}
+
+// CloseClient closes a client you own after [Shutdown]. Call it for each client you own;
+// Shutdown never closes clients. A nil client returns true. Close runs in a goroutine: CloseClient
+// returns true when it finishes without error, or false and reports flush_timeout when ctx ends
+// first, while Close continues in the background. A Close error is passed unchanged to
+// [WithOnError] as flush_failed, including errors returned after the deadline. Without a deadline,
+// it waits until Close finishes or ctx is canceled.
+func CloseClient(ctx context.Context, c analytics.Client) bool {
+	if c == nil {
+		return true
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, defaultFlushTimeout)
-		defer cancel()
-	}
-	shuttingDown.Store(true)
-	shutdownState.Lock()
-	run := shutdownState.run
-	if run == nil {
-		run = &shutdownRun{done: make(chan struct{})}
-		shutdownState.run = run
-		shutdownState.Unlock()
-		// Keep Flush's collected errors synchronous, even when its deadline expires.
+	done := make(chan struct{})
+	ok := false // published by closing done
+	go func() {
+		defer close(done)
 		safely(func() {
-			for _, i := range takeOpen() {
-				i.End(EndOptions{Status: StatusIncomplete, endReason: endReasonShutdown})
+			if err := c.Close(); err != nil {
+				report(KindFlushFailed, "CloseClient", err)
+				return
 			}
-			run.ok = Flush(ctx)
+			ok = true
 		})
-		used := rememberedClients()
-		if c := cfg().analytics; c != nil && !slices.ContainsFunc(used, func(other analytics.Client) bool { return sameClient(c, other) }) {
-			used = append(used, c)
-		}
-		go func() {
-			defer close(run.done)
-			var wg sync.WaitGroup
-			var failed atomic.Bool
-			for _, c := range used {
-				wg.Go(func() {
-					ok := false
-					safely(func() {
-						if err := c.Close(); err != nil {
-							report(KindFlushFailed, "Shutdown", err)
-							return
-						}
-						ok = true
-					})
-					if !ok {
-						failed.Store(true)
-					}
-				})
-			}
-			wg.Wait()
-			run.ok = run.ok && !failed.Load() && ctx.Err() == nil
-		}()
-	} else {
-		shutdownState.Unlock()
-	}
+	}()
 	select {
-	case <-run.done:
+	case <-done:
 		if ctx.Err() == nil {
-			return run.ok
+			return ok
 		}
 	case <-ctx.Done():
 	}
-	report(KindFlushTimeout, "Shutdown", ctx.Err())
+	report(KindFlushTimeout, "CloseClient", ctx.Err())
 	return false
 }

@@ -37,17 +37,10 @@ func TestShutdownBoundsBlockingAnalyticsTransport(t *testing.T) {
 	setupAI(t, WithAnalytics(client), WithOnError(seen.hook))
 	t.Cleanup(func() {
 		close(transport.release)
-		shutdownState.Lock()
-		run := shutdownState.run
-		shutdownState.Unlock()
-		if run != nil {
-			select {
-			case <-run.done:
-			case <-time.After(5 * time.Second):
-				t.Error("client did not finish closing after releasing transport")
-			}
-		} else {
-			_ = client.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if !CloseClient(ctx, client) {
+			t.Error("client did not finish closing after releasing transport")
 		}
 	})
 	answer(t, InteractionOptions{NoPromptEvent: true}, "answer")
@@ -72,54 +65,84 @@ func TestShutdownBoundsBlockingAnalyticsTransport(t *testing.T) {
 	}
 }
 
+// observedCloseClient lets tests wait for a Close that outlives its caller's deadline.
+type observedCloseClient struct {
+	analytics.Client
+	done chan struct{}
+}
+
+func (c *observedCloseClient) Flush(ctx context.Context) error {
+	return c.Client.(ContextFlusher).Flush(ctx)
+}
+
+func (c *observedCloseClient) Close() error {
+	defer close(c.done)
+	return c.Client.Close()
+}
+
+func TestCloseClientBoundsBlockingAnalyticsTransport(t *testing.T) {
+	transport := &shutdownTransport{started: make(chan struct{}), release: make(chan struct{})}
+	client, err := analytics.NewWithConfig("key", analytics.Config{Transport: transport, BatchSize: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &observedCloseClient{Client: client, done: make(chan struct{})}
+	seen := &seenErrors{}
+	setupAI(t, WithOnError(seen.hook))
+	closing := false
+	t.Cleanup(func() {
+		close(transport.release)
+		if !closing {
+			go func() { _ = c.Close() }()
+		}
+		select {
+		case <-c.done:
+		case <-time.After(5 * time.Second):
+			t.Error("client did not finish closing after releasing transport")
+		}
+	})
+	if err := client.Enqueue(analytics.Track{UserId: "u", Event: "non_ai_event"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-transport.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("analytics send did not start")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	closing = true
+	if CloseClient(ctx, c) {
+		t.Fatal("blocked Close reported success")
+	}
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Fatalf("CloseClient exceeded its deadline: %v", d)
+	}
+	select {
+	case <-c.done:
+		t.Fatal("Close finished before releasing transport")
+	default:
+	}
+	seen.mu.Lock()
+	defer seen.mu.Unlock()
+	if len(seen.infos) != 1 || seen.infos[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "CloseClient"}) || !errors.Is(seen.errs[0], context.DeadlineExceeded) {
+		t.Fatalf("hook saw %v %v", seen.infos, seen.errs)
+	}
+}
+
 type closingClient struct {
 	sink
-	closes  atomic.Int32
-	started chan struct{}
-	release chan struct{}
-	err     error
+	closes atomic.Int32
+	err    error
 }
 
 func (c *closingClient) Close() error {
 	c.closes.Add(1)
-	if c.started != nil {
-		close(c.started)
-		<-c.release
-	}
 	return c.err
 }
 
-func TestShutdownBoundsCloseAfterSuccessfulFlush(t *testing.T) {
-	c := &closingClient{started: make(chan struct{}), release: make(chan struct{})}
-	seen := &seenErrors{}
-	setupAI(t, WithAnalytics(c), WithOnError(seen.hook))
-	t.Cleanup(func() {
-		close(c.release)
-		shutdownState.Lock()
-		run := shutdownState.run
-		shutdownState.Unlock()
-		<-run.done
-	})
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-	defer cancel()
-	start := time.Now()
-	if Shutdown(ctx) || time.Since(start) > 500*time.Millisecond {
-		t.Fatal("Shutdown did not bound Close")
-	}
-	select {
-	case <-c.started:
-	default:
-		t.Fatal("Close did not start")
-	}
-	if c.flushes.Load() != 1 || c.closes.Load() != 1 {
-		t.Fatal("client was not flushed and closed once")
-	}
-	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "Shutdown"}) {
-		t.Fatalf("hook saw %v", got)
-	}
-}
-
-func TestShutdownClosesClientsOnceAndReportsCloseErrors(t *testing.T) {
+func TestCloseClientReportsCloseErrors(t *testing.T) {
 	for _, fail := range []bool{false, true} {
 		t.Run(fmt.Sprint(fail), func(t *testing.T) {
 			c := &closingClient{}
@@ -127,24 +150,66 @@ func TestShutdownClosesClientsOnceAndReportsCloseErrors(t *testing.T) {
 				c.err = errors.New("close failed")
 			}
 			seen := &seenErrors{}
-			setupAI(t, WithAnalytics(c), WithOnError(seen.hook))
-			answer(t, InteractionOptions{PromptText: "hello"}, "answer") // also remembers c
-			for range 2 {
-				if Shutdown(context.Background()) == fail {
-					t.Fatal("unexpected shutdown result")
-				}
+			setupAI(t, WithOnError(seen.hook))
+			if CloseClient(context.Background(), c) == fail {
+				t.Fatal("unexpected CloseClient result")
 			}
 			if c.closes.Load() != 1 {
 				t.Fatalf("Close called %d times", c.closes.Load())
 			}
 			if fail {
-				if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushFailed, Where: "Shutdown"}) || seen.errs[0] != c.err {
+				if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushFailed, Where: "CloseClient"}) || seen.errs[0] != c.err {
 					t.Fatalf("hook saw %v %v", got, seen.errs)
 				}
 			} else if got := seen.all(); len(got) != 0 {
 				t.Fatalf("hook saw %v", got)
 			}
 		})
+	}
+}
+
+func TestCloseClientNil(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if !CloseClient(ctx, nil) {
+		t.Fatal("nil client reported failure")
+	}
+}
+
+func TestShutdownLeavesConfiguredClientOpen(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "{}")
+	}))
+	t.Cleanup(srv.Close)
+	client, err := analytics.NewWithConfig("key", analytics.Config{DataPlaneUrl: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &observedCloseClient{Client: client, done: make(chan struct{})}
+	setupAI(t, WithAnalytics(c))
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if !CloseClient(ctx, c) {
+			t.Error("client did not finish closing")
+		}
+	})
+	answer(t, InteractionOptions{NoPromptEvent: true}, "answer") // also remembers c
+	for range 2 {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ok := Shutdown(ctx)
+		cancel()
+		if !ok {
+			t.Fatal("Shutdown failed")
+		}
+		select {
+		case <-c.done:
+			t.Fatal("Shutdown closed the client")
+		default:
+		}
+		if err := client.Enqueue(analytics.Track{UserId: "u", Event: "non_ai_event"}); err != nil {
+			t.Fatalf("client rejected Enqueue after Shutdown: %v", err)
+		}
 	}
 }
 
