@@ -76,8 +76,7 @@ func TestCatalogMatchesSchemas(t *testing.T) {
 			rules[id] = r.Properties
 		}
 	}
-	var expandType func(string) property
-	expandType = func(typ string) property {
+	expandType := func(typ string) property {
 		if strings.HasPrefix(typ, "#custom-type:") {
 			p, ok := custom[strings.TrimPrefix(typ, "#custom-type:")]
 			if !ok {
@@ -193,7 +192,7 @@ func TestCatalogMatchesSchemas(t *testing.T) {
 			}
 		}
 		for name, raw := range doc["$defs"].(map[string]any) {
-			if !(strings.HasPrefix(name, "ai_") || strings.HasPrefix(name, "mcp_") || name == "declared_tool_event") || name == "mcp_fields" || name == "mcp_error_type" {
+			if (!strings.HasPrefix(name, "ai_") && !strings.HasPrefix(name, "mcp_") && name != "declared_tool_event") || name == "mcp_fields" || name == "mcp_error_type" {
 				continue
 			}
 			refs, ok := rules[name]
