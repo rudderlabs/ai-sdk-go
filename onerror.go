@@ -44,7 +44,8 @@ const onErrorEvery = time.Minute
 // a minute, and a panic in it is swallowed. Without it, each kind is logged once (as a slog
 // warning, with the error's type, never its text); RUDDERSTACK_AI_DEBUG logs every occurrence at
 // debug level. Timeout notifications from Flush, Shutdown, RunTask and CloseClient run
-// asynchronously so the hook cannot delay their deadline. Nil removes it.
+// asynchronously so the hook cannot delay their deadline. CloseClient also reports Close errors
+// asynchronously so the hook cannot delay its return. Nil removes it.
 func WithOnError(hook func(err error, info ErrorInfo)) ConfigOption {
 	return func(c *config, _ *pending) error {
 		c.onError = hook

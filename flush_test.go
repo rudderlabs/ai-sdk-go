@@ -161,11 +161,74 @@ func TestCloseClientReportsCloseErrors(t *testing.T) {
 				t.Fatalf("Close called %d times", c.closes.Load())
 			}
 			if fail {
+				seen.wait(t, 1)
 				if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushFailed, Where: "CloseClient"}) || seen.errs[0] != c.err {
 					t.Fatalf("hook saw %v %v", got, seen.errs)
 				}
 			} else if got := seen.all(); len(got) != 0 {
 				t.Fatalf("hook saw %v", got)
+			}
+		})
+	}
+}
+
+func TestCloseClientFailureHookCannotBlockReturn(t *testing.T) {
+	for _, deadline := range []bool{false, true} {
+		t.Run(fmt.Sprintf("deadline=%t", deadline), func(t *testing.T) {
+			c := &closingClient{err: errors.New("close failed")}
+			entered, release, notified := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			seen := &seenErrors{}
+			setupAI(t, WithOnError(func(err error, info ErrorInfo) {
+				if info.Kind == KindFlushFailed {
+					close(entered)
+					<-release
+				}
+				seen.hook(err, info)
+				if info.Kind == KindFlushFailed {
+					close(notified)
+					panic("contained failure hook panic")
+				}
+			}))
+			t.Cleanup(func() {
+				close(release)
+				select {
+				case <-notified:
+				case <-time.After(5 * time.Second):
+					t.Error("failure notification did not arrive")
+					return
+				}
+				seen.mu.Lock()
+				defer seen.mu.Unlock()
+				if len(seen.infos) != 1 || seen.infos[0] != (ErrorInfo{Kind: KindFlushFailed, Where: "CloseClient"}) || seen.errs[0] != c.err {
+					t.Errorf("hook saw %v %v", seen.infos, seen.errs)
+				}
+			})
+			ctx := context.Background()
+			if deadline {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, time.Second)
+				defer cancel()
+			}
+			result := make(chan bool, 1)
+			go func() { result <- CloseClient(ctx, c) }()
+			select {
+			case <-entered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("failure hook did not start")
+			}
+			select {
+			case ok := <-result:
+				if ok {
+					t.Fatal("failed Close reported success")
+				}
+			case <-time.After(500 * time.Millisecond):
+				t.Fatal("failure hook blocked CloseClient's return")
+			}
+			if ctx.Err() != nil {
+				t.Fatalf("CloseClient waited for its deadline: %v", ctx.Err())
+			}
+			if got := seen.all(); len(got) != 0 {
+				t.Fatalf("notification arrived before releasing the hook: %v", got)
 			}
 		})
 	}

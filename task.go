@@ -320,8 +320,9 @@ func Shutdown(ctx context.Context) bool {
 // Shutdown never closes clients. A nil client returns true. Close runs in a goroutine: CloseClient
 // returns true when it finishes without error, or false and reports flush_timeout when ctx ends
 // first, while Close continues in the background. A Close error is passed unchanged to
-// [WithOnError] as flush_failed, including errors returned after the deadline. Without a deadline,
-// it waits until Close finishes or ctx is canceled.
+// [WithOnError] as flush_failed, including errors returned after the deadline. Notifications run
+// asynchronously and cannot delay the return. Without a deadline, it waits until Close finishes
+// or ctx is canceled.
 func CloseClient(ctx context.Context, c analytics.Client) bool {
 	if c == nil {
 		return true
@@ -332,14 +333,15 @@ func CloseClient(ctx context.Context, c analytics.Client) bool {
 	done := make(chan struct{})
 	ok := false // published by closing done
 	go func() {
-		defer close(done)
+		var err error
 		safely(func() {
-			if err := c.Close(); err != nil {
-				report(KindFlushFailed, "CloseClient", err)
-				return
-			}
-			ok = true
+			err = c.Close()
+			ok = err == nil
 		})
+		close(done) // publish Close's outcome before a failure hook can block
+		if err != nil {
+			report(KindFlushFailed, "CloseClient", err)
+		}
 	}()
 	select {
 	case <-done:
