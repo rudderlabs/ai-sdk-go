@@ -109,6 +109,7 @@ func TestCatalogMatchesSchemas(t *testing.T) {
 	}
 
 	want, wantItems := map[string]catalogShape{}, map[string]catalogShape{}
+	wantRequired, actualRequired := map[string]bool{}, map[string]bool{}
 	for _, path := range []string{"spec/ai-events-v0.4.schema.json", "spec/ai-client-events-v0.2.schema.json"} {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -123,14 +124,18 @@ func TestCatalogMatchesSchemas(t *testing.T) {
 			out := map[string]any{}
 			merge := func(part map[string]any) {
 				for k, v := range part {
-					if k == "properties" {
+					switch k {
+					case "properties":
 						if out[k] == nil {
 							out[k] = map[string]any{}
 						}
 						for name, p := range v.(map[string]any) {
 							out[k].(map[string]any)[name] = p
 						}
-					} else {
+					case "required":
+						previous, _ := out[k].([]any)
+						out[k] = append(previous, v.([]any)...)
+					default:
 						out[k] = v
 					}
 				}
@@ -162,6 +167,15 @@ func TestCatalogMatchesSchemas(t *testing.T) {
 				attached[props[strings.TrimPrefix(ref.Property, "#property:")].Name] = ref
 			}
 			fields, _ := s["properties"].(map[string]any)
+			required, _ := s["required"].([]any)
+			for name, ref := range attached {
+				key := loc + "." + name
+				isRequired := slices.Contains(required, any(name))
+				if previous, seen := wantRequired[key]; seen {
+					isRequired = previous && isRequired
+				}
+				wantRequired[key], actualRequired[key] = isRequired, ref.Required
+			}
 			for name, raw := range fields {
 				ref, ok := attached[name]
 				if !ok {
@@ -203,6 +217,12 @@ func TestCatalogMatchesSchemas(t *testing.T) {
 			walk(raw.(map[string]any), refs, name)
 		}
 	}
+	// One catalog attachment serves both schemas, so require only their intersection.
+	for loc, expected := range wantRequired {
+		if actualRequired[loc] != expected {
+			t.Errorf("%s required mismatch: want %t, got %t", loc, expected, actualRequired[loc])
+		}
+	}
 	compare := func(loc string, expected catalogShape, p property) {
 		base := expandType(p.Type)
 		if p.Type != "" {
@@ -236,6 +256,7 @@ func TestCatalogMatchesSchemas(t *testing.T) {
 
 type catalogRef struct {
 	Property   string       `yaml:"property"`
+	Required   bool         `yaml:"required"`
 	Properties []catalogRef `yaml:"properties"`
 }
 

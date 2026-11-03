@@ -58,7 +58,11 @@ The repository's test suite reads both JSON schemas and all catalog YAML files.
 It resolves local JSON pointers and `allOf`, recursively checks each event's
 property references (including array objects), and compares shared types/enums
 with their union across the schemas. It also checks array item types/enums and
-custom type references. This same traversal can be ported to vitest or pytest.
+custom type references. Required flags match the intersection of unconditional
+requirements across server and client copies, including nested fields and
+requirements inherited through `$ref` and `allOf`. Conditional requirements stay
+in the schemas, including the first client prompt exception. The Go, vitest and
+pytest tests use the same traversal.
 Conditional validation and numeric/string bounds remain in the JSON schemas.
 
 ## Warehouse column types

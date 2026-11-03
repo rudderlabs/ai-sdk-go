@@ -2,7 +2,7 @@
 # Custom properties are allowed, as in the schema. The tracking plan validates events; it does not set
 # warehouse column types (see README.md, "Warehouse column types").
 # Conditional requirements stay in the schemas. Shared event rules require only fields
-# required on both server and client copies; conversation_id is optional on server events.
+# required on both server and client copies; the first client prompt may omit conversation_id.
 version: rudder/v1
 kind: tracking-plan
 metadata:
@@ -52,6 +52,7 @@ spec:
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
+          required: true
         - property: '#property:interaction_id'
           required: true
         - property: '#property:feature'
@@ -107,6 +108,7 @@ spec:
       additional_properties: true
       properties:
         - property: '#property:conversation_id'
+          required: true
         - property: '#property:interaction_id'
           required: true
         - property: '#property:sample_rate'
@@ -128,6 +130,7 @@ spec:
       additional_properties: true
       properties:
         - property: '#property:conversation_id'
+          required: true
         - property: '#property:interaction_id'
           required: true
         - property: '#property:sample_rate'
@@ -176,6 +179,7 @@ spec:
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
+          required: true
         - property: '#property:interaction_id'
           required: true
         - property: '#property:feature'
@@ -207,6 +211,7 @@ spec:
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
+          required: true
         - property: '#property:interaction_id'
           required: true
         - property: '#property:feature'
@@ -254,6 +259,7 @@ spec:
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
+          required: true
         - property: '#property:interaction_id'
           required: true
         - property: '#property:feature'
@@ -487,6 +493,7 @@ spec:
       additional_properties: true
       properties:
         - property: '#property:conversation_id'
+          required: true
         - property: '#property:interaction_id'
           required: true
         - property: '#property:feature'
