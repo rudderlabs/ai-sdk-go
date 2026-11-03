@@ -293,6 +293,8 @@ type EndOptions struct {
 	endReason string
 	// afterPause makes a wrapper-owned terminal end wait for an in-flight pause instead of being dropped.
 	afterPause bool
+	// preferCallError lets a task callback's generic error use a settled provider failure.
+	preferCallError bool
 }
 
 // PauseOptions configures [Interaction.Pause].
@@ -341,6 +343,8 @@ type PausedInteraction struct {
 	Integration         string     `json:"integration,omitempty"`
 	// SeenResponseIDs retains provider/response ID pairs already counted. Since v0.4.
 	SeenResponseIDs [][2]string `json:"seen_response_ids,omitempty"`
+	// LastFailedCallType retains the latest failed model call's category for resumed RunTask errors.
+	LastFailedCallType string `json:"last_failed_call_type,omitempty"`
 	// PendingCalls and PendingTools carry usage accepted after the paused segment closed. Since v0.4.
 	PendingCalls []map[string]any `json:"pending_calls,omitempty"`
 	PendingTools []map[string]any `json:"pending_tools,omitempty"`
@@ -466,6 +470,8 @@ type Interaction struct {
 	callCount              int
 	successfulCallSequence int
 	lastCall, lastOK       *recordedCall
+	lastFailedCallType     string
+	isTask                 bool
 	seen                   map[string]*recordedCall
 	tools                  []*recordedTool
 	overflow               []*recordedCall // calls past MaxCallsPerInteraction, one per usage group
@@ -799,7 +805,7 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 	completed = true
 	if err != nil {
 		t := i.answerErrorType(err)
-		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t, afterPause: true})
+		i.End(EndOptions{Status: statusForErrorType(t), ErrorType: t, afterPause: true, preferCallError: true})
 		return err
 	}
 	// A paused run stays open for its resume.
@@ -1014,6 +1020,9 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	i.callCount++
 	i.lastCall = r
+	if r.errorType != "" {
+		i.lastFailedCallType = r.errorType
+	}
 	if r.errorType == "" {
 		i.lastOK = r
 		i.successfulCallSequence = i.callCount
@@ -1659,7 +1668,7 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		AccountID: i.accountID, OnBehalfOf: i.onBehalfOf, TriggerSource: i.triggerSource, TaskName: i.taskName,
 		AgentVersion: i.agentVersion, Variant: i.variant, Confidence: i.confidence,
 		TriggerEventID: i.triggerEventID, ParentInteractionID: i.parent, Intent: i.intent, TraceID: i.traceID,
-		Outcome: i.outcome, Integration: i.integration,
+		Outcome: i.outcome, Integration: i.integration, LastFailedCallType: i.lastFailedCallType,
 	}
 	if i.callCount > 0 {
 		snapshot.ReportCount = Ptr(i.callCount)
@@ -1847,6 +1856,7 @@ func pendingTool(c *recordedTool) map[string]any {
 }
 
 func (i *Interaction) restorePending(snapshot *PausedInteraction) {
+	i.lastFailedCallType = snapshot.LastFailedCallType
 	for _, p := range snapshot.PendingCalls {
 		c := &recordedCall{}
 		if p["credits"] != nil {
@@ -1954,13 +1964,14 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	}
 }
 
-// taskStarted sends ai_task_started when it is switched on and the run did not resume.
+// taskStarted marks a task and sends ai_task_started when enabled and the run did not resume.
 func (i *Interaction) taskStarted() {
+	i.mu.Lock()
+	defer i.unlock()
+	i.isTask = true
 	if !cfg().emitTaskStarted || i.resumed {
 		return
 	}
-	i.mu.Lock()
-	defer i.unlock()
 	if !i.ended {
 		i.sendLocked("ai_task_started", i.baseLocked)
 	}
@@ -2192,6 +2203,11 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	calls := append(slices.Clone(i.calls), i.overflow...)
 	last, lastOK := i.lastCall, i.lastOK
 	status, errorType, pauseReason := o.Status, o.ErrorType, o.PauseReason
+	// Held provider failures settle in beforeEnd hooks, so choose the task's fallback here.
+	if o.preferCallError && i.isTask && errorType == "app_error" && i.lastFailedCallType != "" {
+		errorType = i.lastFailedCallType
+		status = statusForErrorType(errorType)
+	}
 	if status == "" && i.hint != nil && i.hint.calls == i.callCount {
 		status = i.hint.status
 		errorType = first(errorType, i.hint.errorType)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,365 @@ import (
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
 )
+
+type shutdownTransport struct {
+	started   chan struct{}
+	startOnce sync.Once
+	release   chan struct{}
+}
+
+func (s *shutdownTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	s.startOnce.Do(func() { close(s.started) })
+	<-s.release
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("{}")), Header: make(http.Header)}, nil
+}
+
+func TestShutdownBoundsBlockingAnalyticsTransport(t *testing.T) {
+	transport := &shutdownTransport{started: make(chan struct{}), release: make(chan struct{})}
+	client, err := analytics.NewWithConfig("key", analytics.Config{Transport: transport, BatchSize: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := &seenErrors{}
+	setupAI(t, WithAnalytics(client), WithOnError(seen.hook))
+	t.Cleanup(func() {
+		close(transport.release)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if !CloseClient(ctx, client) {
+			t.Error("client did not finish closing after releasing transport")
+		}
+	})
+	answer(t, InteractionOptions{NoPromptEvent: true}, "answer")
+	select {
+	case <-transport.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("analytics send did not start")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if Shutdown(ctx) {
+		t.Fatal("blocked shutdown reported success")
+	}
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Fatalf("Shutdown exceeded its deadline: %v", d)
+	}
+	seen.wait(t, 1)
+	seen.mu.Lock()
+	defer seen.mu.Unlock()
+	if len(seen.infos) != 1 || seen.infos[0].Kind != KindFlushTimeout || !errors.Is(seen.errs[0], context.DeadlineExceeded) {
+		t.Fatalf("hook saw %v %v", seen.infos, seen.errs)
+	}
+}
+
+// observedCloseClient lets tests wait for a Close that outlives its caller's deadline.
+type observedCloseClient struct {
+	analytics.Client
+	done chan struct{}
+}
+
+func (c *observedCloseClient) Flush(ctx context.Context) error {
+	return c.Client.(ContextFlusher).Flush(ctx)
+}
+
+func (c *observedCloseClient) Close() error {
+	defer close(c.done)
+	return c.Client.Close()
+}
+
+func TestCloseClientBoundsBlockingAnalyticsTransport(t *testing.T) {
+	transport := &shutdownTransport{started: make(chan struct{}), release: make(chan struct{})}
+	client, err := analytics.NewWithConfig("key", analytics.Config{Transport: transport, BatchSize: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &observedCloseClient{Client: client, done: make(chan struct{})}
+	seen := &seenErrors{}
+	setupAI(t, WithOnError(seen.hook))
+	closing := false
+	t.Cleanup(func() {
+		close(transport.release)
+		if !closing {
+			go func() { _ = c.Close() }()
+		}
+		select {
+		case <-c.done:
+		case <-time.After(5 * time.Second):
+			t.Error("client did not finish closing after releasing transport")
+		}
+	})
+	if err := client.Enqueue(analytics.Track{UserId: "u", Event: "non_ai_event"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-transport.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("analytics send did not start")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	closing = true
+	if CloseClient(ctx, c) {
+		t.Fatal("blocked Close reported success")
+	}
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Fatalf("CloseClient exceeded its deadline: %v", d)
+	}
+	select {
+	case <-c.done:
+		t.Fatal("Close finished before releasing transport")
+	default:
+	}
+	seen.wait(t, 1)
+	seen.mu.Lock()
+	defer seen.mu.Unlock()
+	if len(seen.infos) != 1 || seen.infos[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "CloseClient"}) || !errors.Is(seen.errs[0], context.DeadlineExceeded) {
+		t.Fatalf("hook saw %v %v", seen.infos, seen.errs)
+	}
+}
+
+type closingClient struct {
+	sink
+	closes atomic.Int32
+	err    error
+}
+
+func (c *closingClient) Close() error {
+	c.closes.Add(1)
+	return c.err
+}
+
+func TestCloseClientReportsCloseErrors(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprint(fail), func(t *testing.T) {
+			c := &closingClient{}
+			if fail {
+				c.err = errors.New("close failed")
+			}
+			seen := &seenErrors{}
+			setupAI(t, WithOnError(seen.hook))
+			if CloseClient(context.Background(), c) == fail {
+				t.Fatal("unexpected CloseClient result")
+			}
+			if c.closes.Load() != 1 {
+				t.Fatalf("Close called %d times", c.closes.Load())
+			}
+			if fail {
+				seen.wait(t, 1)
+				if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushFailed, Where: "CloseClient"}) || seen.errs[0] != c.err {
+					t.Fatalf("hook saw %v %v", got, seen.errs)
+				}
+			} else if got := seen.all(); len(got) != 0 {
+				t.Fatalf("hook saw %v", got)
+			}
+		})
+	}
+}
+
+func TestCloseClientFailureHookCannotBlockReturn(t *testing.T) {
+	for _, deadline := range []bool{false, true} {
+		t.Run(fmt.Sprintf("deadline=%t", deadline), func(t *testing.T) {
+			c := &closingClient{err: errors.New("close failed")}
+			entered, release, notified := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			seen := &seenErrors{}
+			setupAI(t, WithOnError(func(err error, info ErrorInfo) {
+				if info.Kind == KindFlushFailed {
+					close(entered)
+					<-release
+				}
+				seen.hook(err, info)
+				if info.Kind == KindFlushFailed {
+					close(notified)
+					panic("contained failure hook panic")
+				}
+			}))
+			t.Cleanup(func() {
+				close(release)
+				select {
+				case <-notified:
+				case <-time.After(5 * time.Second):
+					t.Error("failure notification did not arrive")
+					return
+				}
+				seen.mu.Lock()
+				defer seen.mu.Unlock()
+				if len(seen.infos) != 1 || seen.infos[0] != (ErrorInfo{Kind: KindFlushFailed, Where: "CloseClient"}) || seen.errs[0] != c.err {
+					t.Errorf("hook saw %v %v", seen.infos, seen.errs)
+				}
+			})
+			ctx := context.Background()
+			if deadline {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithTimeout(ctx, time.Second)
+				defer cancel()
+			}
+			result := make(chan bool, 1)
+			go func() { result <- CloseClient(ctx, c) }()
+			select {
+			case <-entered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("failure hook did not start")
+			}
+			select {
+			case ok := <-result:
+				if ok {
+					t.Fatal("failed Close reported success")
+				}
+			case <-time.After(500 * time.Millisecond):
+				t.Fatal("failure hook blocked CloseClient's return")
+			}
+			if ctx.Err() != nil {
+				t.Fatalf("CloseClient waited for its deadline: %v", ctx.Err())
+			}
+			if got := seen.all(); len(got) != 0 {
+				t.Fatalf("notification arrived before releasing the hook: %v", got)
+			}
+		})
+	}
+}
+
+func TestCloseClientNil(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if !CloseClient(ctx, nil) {
+		t.Fatal("nil client reported failure")
+	}
+}
+
+func TestTimeoutHookCannotBlockDeadline(t *testing.T) {
+	for _, name := range []string{"CloseClient", "Flush", "FlushTimeout", "RunTask"} {
+		t.Run(name, func(t *testing.T) {
+			transport := &shutdownTransport{started: make(chan struct{}), release: make(chan struct{})}
+			client, err := analytics.NewWithConfig("key", analytics.Config{Transport: transport, BatchSize: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			c := &observedCloseClient{Client: client, done: make(chan struct{})}
+			entered, release, notified := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			seen := &seenErrors{}
+			setupAI(t, WithAnalytics(c), WithOnError(func(err error, info ErrorInfo) {
+				close(entered)
+				<-release
+				seen.hook(err, info)
+				close(notified)
+				panic("contained timeout hook panic")
+			}))
+			t.Cleanup(func() {
+				close(release)
+				close(transport.release)
+				if name != "CloseClient" {
+					go func() { _ = c.Close() }()
+				}
+				select {
+				case <-c.done:
+				case <-time.After(5 * time.Second):
+					t.Error("Close did not finish after releasing transport")
+				}
+				select {
+				case <-notified:
+				case <-time.After(5 * time.Second):
+					t.Error("timeout notification did not arrive")
+				}
+				seen.mu.Lock()
+				defer seen.mu.Unlock()
+				where := name
+				if name == "FlushTimeout" {
+					where = "Flush"
+				}
+				if seen.infos[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: where}) || !errors.Is(seen.errs[0], context.DeadlineExceeded) {
+					t.Errorf("hook saw %v %v", seen.infos, seen.errs)
+				}
+			})
+			if err := client.Enqueue(analytics.Track{UserId: "u", Event: "non_ai_event"}); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-transport.started:
+			case <-time.After(5 * time.Second):
+				t.Fatal("analytics send did not start")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+			result := make(chan bool, 1)
+			start := time.Now()
+			go func() {
+				switch name {
+				case "CloseClient":
+					result <- CloseClient(ctx, c)
+				case "Flush":
+					result <- Flush(ctx)
+				case "FlushTimeout":
+					result <- FlushTimeout(50 * time.Millisecond)
+				case "RunTask":
+					want := errors.New("task failed")
+					err := RunTask(context.Background(), "job", TaskOptions{Analytics: c, FlushTimeout: 50 * time.Millisecond}, func(context.Context, *Interaction) error { return want })
+					result <- err != want
+				}
+			}()
+			select {
+			case ok := <-result:
+				if ok || time.Since(start) < 30*time.Millisecond {
+					t.Fatal("unexpected result or returned before the deadline")
+				}
+			case <-time.After(500 * time.Millisecond):
+				t.Fatal("timeout hook blocked the deadline")
+			}
+			select {
+			case <-entered:
+			case <-time.After(5 * time.Second):
+				t.Fatal("timeout hook did not start")
+			}
+			if len(seen.all()) != 0 {
+				t.Fatal("notification arrived before releasing the hook")
+			}
+			select {
+			case <-c.done:
+				t.Fatal("Close finished before releasing transport")
+			default:
+			}
+
+		})
+	}
+}
+
+func TestShutdownLeavesConfiguredClientOpen(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "{}")
+	}))
+	t.Cleanup(srv.Close)
+	client, err := analytics.NewWithConfig("key", analytics.Config{DataPlaneUrl: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &observedCloseClient{Client: client, done: make(chan struct{})}
+	setupAI(t, WithAnalytics(c))
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if !CloseClient(ctx, c) {
+			t.Error("client did not finish closing")
+		}
+	})
+	answer(t, InteractionOptions{NoPromptEvent: true}, "answer") // also remembers c
+	for range 2 {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ok := Shutdown(ctx)
+		cancel()
+		if !ok {
+			t.Fatal("Shutdown failed")
+		}
+		select {
+		case <-c.done:
+			t.Fatal("Shutdown closed the client")
+		default:
+		}
+		if err := client.Enqueue(analytics.Track{UserId: "u", Event: "non_ai_event"}); err != nil {
+			t.Fatalf("client rejected Enqueue after Shutdown: %v", err)
+		}
+	}
+}
 
 // ctxClient is an analytics-go client with Flush(ctx).
 type ctxClient struct {
@@ -130,6 +490,7 @@ func TestFlushSharesOneDeadline(t *testing.T) {
 	if d := time.Since(start); d > time.Second {
 		t.Fatalf("Flush took %v", d)
 	}
+	seen.wait(t, 1)
 	if got := seen.all(); len(got) != 1 || got[0].Kind != KindFlushTimeout {
 		t.Fatalf("hook saw %+v", got)
 	}
@@ -194,6 +555,7 @@ func TestRunTaskFlushIsBounded(t *testing.T) {
 		t.Fatalf("task flush took %v (%d flushes)", d, stuck.ctxFlushes.Load())
 	}
 	// A flush that runs out of time is reported, as in Node; one that finishes is not.
+	seen.wait(t, 1)
 	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "RunTask"}) {
 		t.Fatalf("hook saw %+v", got)
 	}
@@ -293,6 +655,7 @@ func TestFlushTimeoutDoesNotHideAFlushError(t *testing.T) {
 			if run.fn(ctx) {
 				t.Fatal("reported success")
 			}
+			seen.wait(t, 2)
 			want := []ErrorInfo{{Kind: KindFlushTimeout, Where: "Flush"}, {Kind: KindFlushFailed, Where: "Flush"}}
 			if got := seen.all(); fmt.Sprint(got) != fmt.Sprint(want) || seen.errs[1] != failing.err {
 				t.Fatalf("hook saw %+v %v", got, seen.errs)
@@ -325,6 +688,7 @@ func TestFlushReportsAClientErrorAfterTheDeadline(t *testing.T) {
 	if Flush(ctx) {
 		t.Fatal("reported success past the deadline")
 	}
+	seen.wait(t, 1)
 	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindFlushTimeout, Where: "Flush"}) {
 		t.Fatalf("hook saw %+v before the late error", got)
 	}
@@ -398,7 +762,7 @@ func TestFlushReportsTheCollectedErrorBeforeALateOne(t *testing.T) {
 	if Flush(ctx) {
 		t.Fatal("reported success")
 	}
-	time.Sleep(50 * time.Millisecond) // nothing more arrives
+	seen.wait(t, 2)
 	want := []ErrorInfo{{Kind: KindFlushTimeout, Where: "Flush"}, {Kind: KindFlushFailed, Where: "Flush"}}
 	seen.mu.Lock()
 	defer seen.mu.Unlock()

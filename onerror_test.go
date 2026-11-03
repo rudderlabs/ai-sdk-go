@@ -36,6 +36,17 @@ func (s *seenErrors) all() []ErrorInfo {
 	return append([]ErrorInfo(nil), s.infos...)
 }
 
+func (s *seenErrors) wait(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for len(s.all()) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("waiting for %d notifications, got %v", n, s.all())
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func TestOnErrorRateLimitedPerKind(t *testing.T) {
 	seen := &seenErrors{}
 	setupAI(t, WithOnError(seen.hook))

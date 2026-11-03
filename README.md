@@ -269,11 +269,13 @@ Before a script, worker or serverless handler exits, flush within a deadline; on
 ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 defer cancel()
 rudderstackai.Flush(ctx)    // classifications, scores, held retries, then each client; false on timeout or a client flush error
-rudderstackai.Shutdown(ctx) // on SIGTERM: also ends open interactions as incomplete (end_reason shutdown)
-client.Close()              // the SDK never closes your client
+rudderstackai.Shutdown(ctx) // on SIGTERM: also ends open interactions; never closes clients
+rudderstackai.CloseClient(ctx, client) // afterwards, close each client you own within ctx
 ```
 
-An analytics-go client (v4.4.0, the minimum) sends its queue on `Flush`; a custom client without `Flush(ctx)` or `Flush()` cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
+`Shutdown` never closes clients, so shared clients remain available for non-AI events. Call `CloseClient(ctx, client)` afterwards for each client you own: it returns false and reports `flush_timeout` when ctx expires while `Close` continues in the background; a Close error is reported unchanged as `flush_failed`, even after the deadline. Without a deadline, it waits until Close finishes or ctx is canceled.
+
+An analytics-go client (v4.4.0, the minimum) sends its queue on `Flush`; a custom client without `Flush(ctx)` or `Flush()` cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` then `CloseClient` for your clients on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
 
 ## Events
 
@@ -350,7 +352,7 @@ The check validates every event against the spec this version emits (and client 
 | Symptom                                    | Cause and fix                                                                                                                         |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | No events, warning `no RudderStack client` | No client anywhere: `Configure(WithAnalytics(client))`.                                                                               |
-| Events missing from a job or script        | The process exited before analytics-go sent its batch: `Flush(ctx)` (or `Shutdown(ctx)`), then `client.Close()`.                      |
+| Events missing from a job or script        | The process exited before analytics-go sent its batch: `Shutdown(ctx)` then `CloseClient(ctx, client)` on exit, or `Flush(ctx)` while continuing to use the client.                      |
 | One answer split into many                 | Calls ran with a context that carries no interaction, or a stream was read after the interaction ended. Pass the interaction's `ctx`. |
 | No `total_cost_usd`                        | A model is not priced and no gateway reported a cost, a call failed or was cancelled, or a streamed call had no usage.                 |
 | No `ai_interaction_classified`             | No classifier, a call outside an interaction, an answer that failed, or a classifier error (logged once).                             |

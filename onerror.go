@@ -20,10 +20,10 @@ const (
 	// KindRedactionTimeout is a redaction pattern that ran out of time; the field was sent as
 	// "[redaction timed out]".
 	KindRedactionTimeout = "redaction_timeout"
-	// KindFlushTimeout is a [Flush], [Shutdown] or [RunTask] flush that hit its deadline.
+	// KindFlushTimeout is a [Flush], [Shutdown] or [RunTask] flush, or [CloseClient], that hit its deadline.
 	KindFlushTimeout = "flush_timeout"
-	// KindFlushFailed is your RudderStack client's own Flush failing during a [Flush], [Shutdown]
-	// or [RunTask] flush; the error passed is your client's, unchanged.
+	// KindFlushFailed is your RudderStack client's own Flush or Close failing during [Flush],
+	// [Shutdown], [RunTask] or [CloseClient]; the error passed is your client's, unchanged.
 	KindFlushFailed = "flush_failed"
 	// KindClientOutdated is a RudderStack client too old for what the SDK asked of it.
 	KindClientOutdated = "client_outdated"
@@ -43,7 +43,9 @@ const onErrorEvery = time.Minute
 // WithOnError sets a hook that sees errors the SDK contained: it is called at most once per kind
 // a minute, and a panic in it is swallowed. Without it, each kind is logged once (as a slog
 // warning, with the error's type, never its text); RUDDERSTACK_AI_DEBUG logs every occurrence at
-// debug level. Nil removes it.
+// debug level. Timeout notifications from Flush, Shutdown, RunTask and CloseClient run
+// asynchronously so the hook cannot delay their deadline. CloseClient also reports Close errors
+// asynchronously so the hook cannot delay its return. Nil removes it.
 func WithOnError(hook func(err error, info ErrorInfo)) ConfigOption {
 	return func(c *config, _ *pending) error {
 		c.onError = hook

@@ -56,7 +56,15 @@ type CapabilityRequestOptions struct {
 	Capabilities []string
 }
 
-// ToolEventRule turns calls of one tool into a customer-named track event.
+// ToolEventRule turns calls of one tool into a customer-named track event. For idempotent write
+// tools, use a result-aware When predicate to count actual writes: created:false, status "skipped",
+// "already_*" or "blocked" may be successful no-op results. Apply the same rules to every endpoint
+// exposing those tools (stdio, authenticated HTTP and stateless HTTP, for example).
+//
+//	ToolEventRule{Event: "audience_created", When: func(_ map[string]any, result any) bool {
+//		value, ok := result.(map[string]any)
+//		return ok && value["created"] == true
+//	}}
 type ToolEventRule struct {
 	// Event is the event name, for example "audience_created". Names starting with "ai_" or
 	// "mcp_" are reserved.
@@ -66,7 +74,9 @@ type ToolEventRule struct {
 	// property names are ignored. If it panics, or its output would take the event over the
 	// 30,000-byte properties budget, the event is sent without them.
 	Properties func(args map[string]any, result any) map[string]any
-	// When sends the event only when it returns true. If it panics, the event is not sent.
+	// When sends the event only when it returns true. It sees the same arguments and decoded
+	// result as Properties. Nil sends the event for every call, including failures and no-ops;
+	// there is no automatic success or write check. If it panics, the event is not sent.
 	When func(args map[string]any, result any) bool
 }
 

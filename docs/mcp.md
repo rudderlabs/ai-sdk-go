@@ -41,7 +41,7 @@ if err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 }
 ```
 
-Call it once, before serving: it adds a receiving middleware (`AddReceivingMiddleware`) and a sending middleware (`AddSendingMiddleware`), so it works with every transport the go-sdk offers. Wrapping the same server again replaces its options and keeps its state. `WrapMCPServer` returns an error for invalid options. Close the analytics client when the process stops (`defer client.Close()`), which sends queued events; `rudderstackai.Flush` also reaches the clients MCP servers use.
+Call it once, before serving: it adds a receiving middleware (`AddReceivingMiddleware`) and a sending middleware (`AddSendingMiddleware`), so it works with every transport the go-sdk offers. Wrapping the same server again replaces its options and keeps its state. `WrapMCPServer` returns an error for invalid options. When the process stops, call `rudderstackai.Shutdown(ctx)` then `rudderstackai.CloseClient(ctx, client)` for each analytics client you own. Shutdown ends open interactions and flushes without closing clients; `rudderstackai.Flush` also reaches the clients MCP servers use.
 
 ### mcp-go
 
@@ -147,6 +147,27 @@ A tool that already has a `request_context` argument keeps its own and receives 
 ## Declared tool events
 
 `EventRules.Tools` maps a tool name to a `ToolEventRule{Event, Properties, When}`. `Properties(args, result)` and `When(args, result)` see the call's arguments without `request_context` and the result's `structuredContent`, else its single text block parsed as JSON. The event carries `tool_name`, `tool_status`, the common MCP fields and the rule's properties (it cannot override the integration's own). If `Properties` panics, or its output would take the event over the 30,000-byte properties budget, the event is sent without them; if `When` panics the event is not sent.
+
+Without `When`, a declared event fires for every call, including failures and successful no-ops. For idempotent write tools, a successful call can return `created:false`, status `skipped`, an `already_*` status such as `already_exists`, or `blocked` without making a write. Use a result-aware `When` predicate that checks the tool's actual result contract so the event counts completed writes. For a tool that returns `{ "created": true }` only when it creates an audience:
+
+```go
+writeRules := rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
+	"create_audience": {
+		Event: "audience_created",
+		When: func(_ map[string]any, result any) bool {
+			value, ok := result.(map[string]any)
+			return ok && value["created"] == true
+		},
+	},
+}}
+
+// Use writeRules on every endpoint that exposes create_audience.
+err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
+	Analytics: client, EventRules: writeRules,
+})
+```
+
+For status-based results, explicitly allow the statuses that mean a write occurred; omit `skipped`, `already_*` and `blocked`. Reuse the same rules on every endpoint exposing the same write tools, including stdio, authenticated HTTP and stateless HTTP, and on either MCP library. Each wrapped server needs its own `EventRules`; configuring one endpoint does not configure the others. These predicates control only declared events; `mcp_tool_called` still records each completed call.
 
 ## Unmet demand: request_capability
 
