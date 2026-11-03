@@ -1,8 +1,8 @@
-# AI events spec v0.4 tracking plan (rudder-cli, rudder/v1). Mirrors spec/ai-events-v0.4.schema.json.
+# AI events spec v0.4 tracking plan (rudder-cli, rudder/v1). Covers the server v0.4 and client v0.2 schemas.
 # Custom properties are allowed, as in the schema. The tracking plan validates events; it does not set
-# warehouse column types (see the README's "Warehouse column types").
-# Conditional rules stay in the schema only: conversation_id is optional on a client copy of
-# ai_user_prompt_created, and ai_interaction_scored needs score_value or score_label.
+# warehouse column types (see README.md, "Warehouse column types").
+# Conditional requirements stay in the schemas. Shared event rules require only fields
+# required on both server and client copies; the first client prompt may omit conversation_id.
 version: rudder/v1
 kind: tracking-plan
 metadata:
@@ -10,15 +10,15 @@ metadata:
 spec:
   id: ai_events_v0_3
   display_name: AI events v0.4
-  description: Events from the RudderStack AI SDKs (@rudderstack/ai, rudderstack-ai), spec v0.4.
+  description: Events from the Node.js, Python and Go RudderStack AI SDKs, spec v0.4.
   rules:
     - type: event_rule
       id: ai_user_prompt_created_rule
       event: '#event:ai_user_prompt_created'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
-          required: true
         - property: '#property:interaction_id'
           required: true
         - property: '#property:feature'
@@ -48,6 +48,7 @@ spec:
     - type: event_rule
       id: ai_response_received_rule
       event: '#event:ai_response_received'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
@@ -99,49 +100,12 @@ spec:
         - property: '#property:client_error_kind'
         - property: '#property:time_to_first_render_ms'
         - property: '#property:usage_breakdown'
-          properties:
-            - property: '#property:agent_name'
-            - property: '#property:call_purpose'
-            - property: '#property:provider'
-            - property: '#property:model'
-              required: true
-            - property: '#property:requested_model'
-            - property: '#property:call_count'
-              required: true
-            - property: '#property:input_tokens'
-              required: true
-            - property: '#property:output_tokens'
-              required: true
-            - property: '#property:reasoning_tokens'
-            - property: '#property:total_tokens'
-              required: true
-            - property: '#property:cached_input_tokens'
-            - property: '#property:cache_write_tokens'
-            - property: '#property:cache_write_1h_tokens'
-            - property: '#property:service_tier'
-            - property: '#property:server_tool_call_count'
-            - property: '#property:server_tool_cost_usd'
-            - property: '#property:error_count'
-            - property: '#property:cost_usd'
-            - property: '#property:credits'
         - property: '#property:tool_breakdown'
-          properties:
-            - property: '#property:agent_name'
-            - property: '#property:tool_name'
-              required: true
-            - property: '#property:mcp_server'
-            - property: '#property:parent_tool'
-            - property: '#property:call_count'
-              required: true
-            - property: '#property:error_count'
-            - property: '#property:error_types'
-            - property: '#property:duration_ms'
-            - property: '#property:measured_count'
-            - property: '#property:max_duration_ms'
 
     - type: event_rule
       id: ai_task_started_rule
       event: '#event:ai_task_started'
+      additional_properties: true
       properties:
         - property: '#property:conversation_id'
           required: true
@@ -163,6 +127,7 @@ spec:
     - type: event_rule
       id: ai_llm_response_received_rule
       event: '#event:ai_llm_response_received'
+      additional_properties: true
       properties:
         - property: '#property:conversation_id'
           required: true
@@ -210,6 +175,7 @@ spec:
     - type: event_rule
       id: ai_interaction_classified_rule
       event: '#event:ai_interaction_classified'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
@@ -241,6 +207,7 @@ spec:
     - type: event_rule
       id: ai_interaction_scored_rule
       event: '#event:ai_interaction_scored'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
@@ -270,6 +237,7 @@ spec:
     - type: event_rule
       id: ai_limit_reached_rule
       event: '#event:ai_limit_reached'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
@@ -282,10 +250,12 @@ spec:
         - property: '#property:variant'
         - property: '#property:limit_type'
           required: true
+        - property: '#property:source'
 
     - type: event_rule
       id: ai_user_action_rule
       event: '#event:ai_user_action'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:conversation_id'
@@ -300,21 +270,17 @@ spec:
         - property: '#property:action_type'
           required: true
         - property: '#property:action_details'
-          properties:
-            - property: '#property:feedback_type'
-            - property: '#property:feedback_value'
-            - property: '#property:feedback_text'
-            - property: '#property:feedback_reasons'
-            - property: '#property:feedback_scope'
-            - property: '#property:items_total'
-            - property: '#property:items_accepted'
-            - property: '#property:destination'
-            - property: '#property:card_kind'
-            - property: '#property:target_type'
+        - property: '#property:trigger_source'
+        - property: '#property:trigger_event_id'
+        - property: '#property:task_name'
+        - property: '#property:parent_interaction_id'
+        - property: '#property:agent_version'
+        - property: '#property:variant'
 
     - type: event_rule
       id: mcp_client_seen_rule
       event: '#event:mcp_client_seen'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
@@ -332,10 +298,13 @@ spec:
         - property: '#property:oauth_client_id'
         - property: '#property:token_scopes'
         - property: '#property:country'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
 
     - type: event_rule
       id: mcp_tool_called_rule
       event: '#event:mcp_tool_called'
+      additional_properties: true
       properties:
         - property: '#property:mcp_session_id'
         - property: '#property:server_name'
@@ -369,10 +338,12 @@ spec:
         - property: '#property:intent'
         - property: '#property:user_sentiment'
         - property: '#property:call_reason'
+        - property: '#property:server_version'
 
     - type: event_rule
       id: mcp_elicitation_completed_rule
       event: '#event:mcp_elicitation_completed'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
@@ -386,10 +357,15 @@ spec:
         - property: '#property:request_id'
         - property: '#property:duration_ms'
         - property: '#property:error_type'
+        - property: '#property:server_version'
+        - property: '#property:client_name'
+        - property: '#property:client_version'
+        - property: '#property:protocol_version'
 
     - type: event_rule
       id: mcp_capability_requested_rule
       event: '#event:mcp_capability_requested'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
@@ -401,10 +377,14 @@ spec:
         - property: '#property:capability'
           required: true
         - property: '#property:capability_detail'
+        - property: '#property:server_version'
+        - property: '#property:client_version'
+        - property: '#property:protocol_version'
 
     - type: event_rule
       id: mcp_resource_read_rule
       event: '#event:mcp_resource_read'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
@@ -424,10 +404,12 @@ spec:
         - property: '#property:error_type'
         - property: '#property:duration_ms'
         - property: '#property:result_size_bytes'
+        - property: '#property:server_version'
 
     - type: event_rule
       id: mcp_prompt_used_rule
       event: '#event:mcp_prompt_used'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
@@ -447,10 +429,12 @@ spec:
         - property: '#property:error_type'
         - property: '#property:duration_ms'
         - property: '#property:result_size_bytes'
+        - property: '#property:server_version'
 
     - type: event_rule
       id: mcp_event_subscription_changed_rule
       event: '#event:mcp_event_subscription_changed'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:mcp_session_id'
@@ -469,10 +453,16 @@ spec:
         - property: '#property:resumed_from_cursor'
         - property: '#property:history_truncated'
         - property: '#property:failure_reason'
+        - property: '#property:server_version'
+        - property: '#property:client_version'
+        - property: '#property:protocol_version'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
 
     - type: event_rule
       id: mcp_event_delivered_rule
       event: '#event:mcp_event_delivered'
+      additional_properties: true
       properties:
         - property: '#property:sample_rate'
         - property: '#property:server_name'
@@ -489,3 +479,229 @@ spec:
         - property: '#property:attempt_count'
         - property: '#property:delivery_latency_ms'
         - property: '#property:payload_size_bytes'
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_version'
+        - property: '#property:client_name'
+        - property: '#property:client_version'
+        - property: '#property:protocol_version'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
+
+    - type: event_rule
+      id: declared_tool_event_rule
+      event: '#event:declared_tool_event'
+      additional_properties: true
+      properties:
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:account_id'
+        - property: '#property:on_behalf_of'
+        - property: '#property:trigger_source'
+        - property: '#property:trigger_event_id'
+        - property: '#property:task_name'
+        - property: '#property:parent_interaction_id'
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+        - property: '#property:sample_rate'
+        - property: '#property:trigger'
+        - property: '#property:agent_name'
+        - property: '#property:tool_name'
+          required: true
+        - property: '#property:tool_call_id'
+        - property: '#property:tool_status'
+          required: true
+        - property: '#property:tool_duration_ms'
+        - property: '#property:mcp_server'
+        - property: '#property:result_size_bytes'
+        - property: '#property:source'
+
+    - type: event_rule
+      id: mcp_declared_tool_event_rule
+      event: '#event:mcp_declared_tool_event'
+      additional_properties: true
+      properties:
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_name'
+        - property: '#property:server_version'
+        - property: '#property:account_id'
+        - property: '#property:client_name'
+        - property: '#property:client_version'
+        - property: '#property:protocol_version'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
+        - property: '#property:sample_rate'
+        - property: '#property:tool_name'
+          required: true
+        - property: '#property:tool_status'
+          required: true
+
+    - type: event_rule
+      id: ai_assistant_opened_rule
+      event: '#event:ai_assistant_opened'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+        - property: '#property:entry_point'
+
+    - type: event_rule
+      id: ai_assistant_closed_rule
+      event: '#event:ai_assistant_closed'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+        - property: '#property:open_duration_ms'
+        - property: '#property:close_method'
+
+    - type: event_rule
+      id: ai_conversation_started_rule
+      event: '#event:ai_conversation_started'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+
+    - type: event_rule
+      id: ai_conversation_switched_rule
+      event: '#event:ai_conversation_switched'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+        - property: '#property:from_conversation_id'
+          required: true
+
+    - type: event_rule
+      id: ai_conversation_renamed_rule
+      event: '#event:ai_conversation_renamed'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+
+    - type: event_rule
+      id: ai_conversation_deleted_rule
+      event: '#event:ai_conversation_deleted'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+
+    - type: event_rule
+      id: ai_conversation_pinned_rule
+      event: '#event:ai_conversation_pinned'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+
+    - type: event_rule
+      id: ai_conversation_shared_rule
+      event: '#event:ai_conversation_shared'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+
+    - type: event_rule
+      id: ai_agent_selected_rule
+      event: '#event:ai_agent_selected'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+        - property: '#property:agent_name'
+        - property: '#property:from_agent_name'
+        - property: '#property:mode'
+        - property: '#property:from_mode'
+
+    - type: event_rule
+      id: ai_suggestion_shown_rule
+      event: '#event:ai_suggestion_shown'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:suggestion_kind'
+          required: true
+        - property: '#property:item_count'
+
+    - type: event_rule
+      id: ai_feedback_requested_rule
+      event: '#event:ai_feedback_requested'
+      additional_properties: true
+      properties:
+        - property: '#property:source'
+          required: true
+        - property: '#property:feature'
+        - property: '#property:surface'
+        - property: '#property:conversation_id'
+          required: true
+        - property: '#property:agent_version'
+        - property: '#property:variant'
+        - property: '#property:interaction_id'
+          required: true
+        - property: '#property:trigger'

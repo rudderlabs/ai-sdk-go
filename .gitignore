@@ -1,5 +1,6 @@
 coverage.out
 coverage.html
+.gocache/
 *.test
 *.prof
 bin/
