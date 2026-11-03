@@ -1,5 +1,5 @@
 # AI events spec v0.4 properties for the RudderStack data catalog (rudder-cli, rudder/v1).
-# Shared byte for byte by @rudderstack/ai (Node.js) and rudderstack-ai (Python).
+# Shared byte for byte by the Node.js, Python and Go SDK repositories.
 version: rudder/v1
 kind: properties
 metadata:
@@ -51,7 +51,8 @@ spec:
     - id: surface
       name: surface
       type: string
-      description: Where the user met the AI. Set by the app.
+      description: Where the user met the AI. Set by the app. Reuse an existing surface property by ref; the AI enum
+        includes chatgpt_app, claude_app and ide (see README.md).
       config:
         enum: [web, mobile, slack, teams, email, chatgpt_app, claude_app, ide, api, other]
     - id: source
@@ -111,7 +112,7 @@ spec:
     - id: attachment_types
       name: attachment_types
       type: array
-      item_types: [string]
+      item_type: '#custom-type:attachment_type'
       description: Kinds attached, each listed once (image, audio, video, pdf, file). Never file names or content.
     - id: prompt_source
       name: prompt_source
@@ -164,7 +165,7 @@ spec:
     - id: response_status
       name: response_status
       type: string
-      description: Final status of the answer.
+      description: Final status of the answer. The client subset omits incomplete.
       config:
         enum: [success, error, timeout, cancelled, paused, incomplete, blocked]
     - id: block_reason
@@ -215,10 +216,9 @@ spec:
         minimum: 0
     - id: trigger
       name: trigger
+      description: Who started an AI interaction (user or system); on ai_feedback_requested, the app-defined reason
+        for asking, such as after_answer or manual. Shared string; event-specific restrictions stay in the schemas.
       type: string
-      description: Who started the interaction.
-      config:
-        enum: [user, system]
     - id: primary_model
       name: primary_model
       type: string
@@ -252,7 +252,9 @@ spec:
     - id: error_type
       name: error_type
       type: string
-      description: Failure category, for example rate_limit, timeout, cancelled, api_error, max_turns, length, content_filter or guardrail_trip.
+      description: Failure category, for example rate_limit, timeout, cancelled, api_error, max_turns, length, content_filter
+        or guardrail_trip. MCP events restrict this open AI string to rate_limit, timeout, cancelled, denied, auth_error,
+        invalid_request, connection_error and api_error.
     - id: response_id
       name: response_id
       type: string
@@ -427,12 +429,12 @@ spec:
     - id: usage_breakdown
       name: usage_breakdown
       type: array
-      item_types: [object]
+      item_type: '#custom-type:usage_entry'
       description: Usage per agent, call purpose, provider and model.
     - id: tool_breakdown
       name: tool_breakdown
       type: array
-      item_types: [object]
+      item_type: '#custom-type:tool_entry'
       description: Opt-in. Calls per agent, MCP server, tool and parent; call_count sums to tool_call_count.
     - id: tool_name
       name: tool_name
@@ -456,7 +458,7 @@ spec:
       description: Inclusive parent tool for a nested or sub-agent tool call.
     - id: error_types
       name: error_types
-      type: object
+      type: '#custom-type:tool_error_counts'
       description: Failed tool calls by fixed category; never exception text.
     - id: duration_ms
       name: duration_ms
@@ -546,7 +548,9 @@ spec:
     - id: tool_status
       name: tool_status
       type: string
-      description: How the tool call went; denied when it was refused before it ran, unknown when the integration never saw its outcome.
+      description: How the tool call went; denied when it was refused before it ran, unknown when the integration never
+        saw its outcome. Shared union; MCP request events allow only success/error, and MCP or client declared tools
+        also allow unknown.
       config:
         enum: [success, error, denied, unknown]
     - id: tool_duration_ms
@@ -560,6 +564,7 @@ spec:
       name: limit_type
       type: string
       description: Which usage limit of the AI feature was hit, as the app names it, for example credits or messages.
+        Client copies allow only rate, quota, credits and plan; server events accept app-defined values.
       config:
         min_length: 1
 
@@ -572,7 +577,7 @@ spec:
         enum: [feedback_given, feedback_retracted, feedback_dismissed, copied_response, shared, exported, reported, regenerated, accepted, rejected, edited, reverted, clicked_through]
     - id: action_details
       name: action_details
-      type: object
+      type: '#custom-type:action_details'
       description: Details of the action, such as feedback type and value.
     - id: feedback_type
       name: feedback_type
@@ -580,8 +585,8 @@ spec:
       description: Kind of feedback, for example thumbs or rating.
     - id: feedback_value
       name: feedback_value
-      types: [string, number, boolean, 'null']
       description: The feedback given, for example 1, -1, 4 or true.
+      types: [array, boolean, integer, 'null', number, object, string]
     - id: feedback_text
       name: feedback_text
       type: string
@@ -743,7 +748,7 @@ spec:
     - id: result_content_types
       name: result_content_types
       type: array
-      item_types: [string]
+      item_type: '#custom-type:result_content_type'
       description: Content types in the result (text, image, audio, resource_link, resource, structured).
     - id: result_paginated
       name: result_paginated
@@ -859,5 +864,91 @@ spec:
       name: payload_size_bytes
       type: integer
       description: Delivered body size. Never the payload.
+      config:
+        minimum: 0
+
+    # Client-only engagement fields and nested tool error counters
+    - id: rate_limit
+      name: rate_limit
+      type: integer
+      description: Count of rate_limit tool failures.
+      config:
+        minimum: 1
+    - id: timeout
+      name: timeout
+      type: integer
+      description: Count of timeout tool failures.
+      config:
+        minimum: 1
+    - id: cancelled
+      name: cancelled
+      type: integer
+      description: Count of cancelled tool failures.
+      config:
+        minimum: 1
+    - id: denied
+      name: denied
+      type: integer
+      description: Count of denied tool failures.
+      config:
+        minimum: 1
+    - id: auth_error
+      name: auth_error
+      type: integer
+      description: Count of auth_error tool failures.
+      config:
+        minimum: 1
+    - id: invalid_request
+      name: invalid_request
+      type: integer
+      description: Count of invalid_request tool failures.
+      config:
+        minimum: 1
+    - id: connection_error
+      name: connection_error
+      type: integer
+      description: Count of connection_error tool failures.
+      config:
+        minimum: 1
+    - id: api_error
+      name: api_error
+      type: integer
+      description: Count of api_error tool failures.
+      config:
+        minimum: 1
+    - id: entry_point
+      name: entry_point
+      type: string
+      description: Since v0.4. How the assistant was opened in the web or mobile app.
+    - id: open_duration_ms
+      name: open_duration_ms
+      type: integer
+      description: Milliseconds the assistant was open before it closed.
+      config:
+        minimum: 0
+    - id: close_method
+      name: close_method
+      type: string
+      description: Since v0.4. How the assistant was closed in the web or mobile app.
+    - id: from_conversation_id
+      name: from_conversation_id
+      type: string
+      description: The previously selected conversation when the user switched threads.
+    - id: from_agent_name
+      name: from_agent_name
+      type: string
+      description: Since v0.4. Previously selected agent or persona.
+    - id: from_mode
+      name: from_mode
+      type: string
+      description: Since v0.4. Previously selected mode.
+    - id: suggestion_kind
+      name: suggestion_kind
+      type: string
+      description: Since v0.4. The kind of actionable AI output shown.
+    - id: item_count
+      name: item_count
+      type: integer
+      description: Since v0.4. Parts the suggestion has, for output with several.
       config:
         minimum: 0

@@ -69,3 +69,55 @@ spec:
       name: mcp_event_delivered
       event_type: track
       description: Experimental, opt-in. The MCP server finished delivering one MCP Events update.
+    - id: declared_tool_event
+      name: tool_executed
+      event_type: track
+      description: Template for a customer-named AI tool event. Replace tool_executed with the configured event name.
+    - id: mcp_declared_tool_event
+      name: external_tool_executed
+      event_type: track
+      description: Template for a customer-named MCP tool event. Replace external_tool_executed with the configured event name.
+    - id: ai_assistant_opened
+      name: ai_assistant_opened
+      event_type: track
+      description: The user opened the assistant in the web or mobile app.
+    - id: ai_assistant_closed
+      name: ai_assistant_closed
+      event_type: track
+      description: The user closed the assistant, with its open duration and close method.
+    - id: ai_conversation_started
+      name: ai_conversation_started
+      event_type: track
+      description: The user started a new conversation.
+    - id: ai_conversation_switched
+      name: ai_conversation_switched
+      event_type: track
+      description: The user switched to another conversation.
+    - id: ai_conversation_renamed
+      name: ai_conversation_renamed
+      event_type: track
+      description: The user renamed a conversation. Never send its title.
+    - id: ai_conversation_deleted
+      name: ai_conversation_deleted
+      event_type: track
+      description: The user deleted a conversation.
+    - id: ai_conversation_pinned
+      name: ai_conversation_pinned
+      event_type: track
+      description: "Since v0.4. The user pinned a conversation."
+    - id: ai_conversation_shared
+      name: ai_conversation_shared
+      event_type: track
+      description: "Since v0.4. The user shared a conversation. Never send the share URL."
+    - id: ai_agent_selected
+      name: ai_agent_selected
+      event_type: track
+      description: The user selected the agent, mode or persona that answers next.
+    - id: ai_suggestion_shown
+      name: ai_suggestion_shown
+      event_type: track
+      description: Actionable AI output appeared; the denominator of suggestion acceptance rate.
+    - id: ai_feedback_requested
+      name: ai_feedback_requested
+      event_type: track
+      description: The app asked for feedback; the denominator of feedback response rate.
