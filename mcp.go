@@ -8,8 +8,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -56,15 +58,61 @@ func WrapMCPServer(server *mcp.Server, opts Options) error {
 	if w, ok := instances.get(server); ok {
 		n.resolveName(w.opts.Load().reflectedName, w.opts.Load().version)
 		w.opts.Store(n)
+		w.RememberTools(registeredTools(server))
 		return nil
 	}
 	n.resolveName(serverImpl(server))
 	w := &wrapped{}
 	w.opts.Store(n)
+	w.RememberTools(registeredTools(server))
 	instances.update(server, func(*wrapped, bool) *wrapped { return w })
 	server.AddReceivingMiddleware(w.receiving)
 	server.AddSendingMiddleware(w.sending)
 	return nil
+}
+
+// registeredTools snapshots go-sdk v1.8.0's registry under its mutex. The SDK has
+// neither a public tool getter nor a registration hook. Reflection confines this
+// dependency on its internals to one fail-open reader; tools/list still refreshes
+// schemas if a future SDK changes the layout.
+func registeredTools(s *mcp.Server) (tools []mcpbridge.Tool) {
+	var registered []*mcp.Tool
+	safely(func() {
+		v := reflect.ValueOf(s).Elem()
+		muField := v.FieldByName("mu")
+		registry := v.FieldByName("tools")
+		if !muField.IsValid() || muField.Type() != reflect.TypeFor[sync.Mutex]() ||
+			!registry.IsValid() || registry.Kind() != reflect.Pointer || registry.IsNil() {
+			return
+		}
+		mu := (*sync.Mutex)(unsafe.Pointer(muField.UnsafeAddr()))
+		mu.Lock()
+		defer mu.Unlock()
+		features := registry.Elem().FieldByName("features")
+		if !features.IsValid() || features.Kind() != reflect.Map {
+			return
+		}
+		for _, key := range features.MapKeys() {
+			entry := features.MapIndex(key)
+			if entry.Kind() != reflect.Pointer || entry.IsNil() {
+				continue
+			}
+			field := entry.Elem().FieldByName("tool")
+			if !field.IsValid() || field.Type() != reflect.TypeFor[*mcp.Tool]() || field.IsNil() {
+				continue
+			}
+			tool := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface().(*mcp.Tool)
+			registered = append(registered, tool)
+		}
+	})
+	// Marshal outside the SDK lock: a schema can provide its own MarshalJSON.
+	safely(func() {
+		for _, tool := range registered {
+			schema, _ := toJSONValue(tool.InputSchema).(map[string]any)
+			tools = append(tools, mcpbridge.Tool{Name: tool.Name, Schema: schema})
+		}
+	})
+	return tools
 }
 
 // serverImpl reads the name and version the server was created with; the SDK has no getter.

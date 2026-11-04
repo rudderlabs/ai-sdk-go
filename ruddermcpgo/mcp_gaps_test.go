@@ -283,6 +283,35 @@ func TestClientInfoFallback(t *testing.T) {
 	}
 }
 
+func TestInvalidArgumentsWithoutToolsList(t *testing.T) {
+	for _, raw := range []bool{false, true} {
+		t.Run(fmt.Sprintf("raw=%v", raw), func(t *testing.T) {
+			s := workspaceServer(t.Name(), nil)
+			tool := mcp.NewTool("tool", mcp.WithString("workspace_id", mcp.Required()))
+			if raw {
+				tool.InputSchema = mcp.ToolInputSchema{}
+				tool.RawInputSchema = json.RawMessage(`{"type":"object","required":["workspace_id"],"properties":{"workspace_id":{"type":"string"}}}`)
+			}
+			s.AddTool(tool, func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return mcp.NewToolResultError("invalid input"), nil
+			})
+			r := wrap(t, s, Options{})
+			cs := connectStdio(t, s, "2025-06-18", nil)
+			callTool(t, cs, "tool", map[string]any{"workspace_id": map[string]any{"secret": "private-value"}}, nil)
+			p := r.props(t, "mcp_tool_called")
+			if p["error_type"] != "invalid_request" {
+				t.Errorf("error_type = %v", p["error_type"])
+			}
+			if got, _ := p["invalid_arguments"].([]string); !slices.Equal(got, []string{"workspace_id"}) {
+				t.Errorf("invalid_arguments = %v", p["invalid_arguments"])
+			}
+			if strings.Contains(mustJSON(r.all()), "private-value") {
+				t.Error("argument value leaked")
+			}
+		})
+	}
+}
+
 func TestInvalidArgumentsWithErrorClassification(t *testing.T) {
 	for _, valid := range []bool{false, true} {
 		for _, tc := range []struct {

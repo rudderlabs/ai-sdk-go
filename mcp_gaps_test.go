@@ -338,6 +338,49 @@ func TestMCPClientInfoFallback(t *testing.T) {
 	}
 }
 
+func TestMCPInvalidArgumentsWithoutToolsList(t *testing.T) {
+	for _, inferred := range []bool{false, true} {
+		t.Run(fmt.Sprintf("inferred=%v", inferred), func(t *testing.T) {
+			s := mcp.NewServer(&mcp.Implementation{Name: t.Name(), Version: "1.0.0"}, &mcp.ServerOptions{PageSize: 1})
+			if inferred {
+				mcp.AddTool(s, &mcp.Tool{Name: "tool"}, func(context.Context, *mcp.CallToolRequest, struct {
+					WorkspaceID string `json:"workspace_id"`
+				}) (*mcp.CallToolResult, any, error) {
+					return &mcp.CallToolResult{IsError: true}, nil, nil
+				})
+			} else {
+				s.AddTool(&mcp.Tool{Name: "tool", InputSchema: map[string]any{
+					"type": "object", "required": []string{"workspace_id"},
+					"properties": map[string]any{"workspace_id": map[string]any{"type": "string"}},
+				}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+					return &mcp.CallToolResult{IsError: true}, nil
+				})
+			}
+			// A second tool proves learning does not depend on listing page size.
+			s.AddTool(&mcp.Tool{Name: "first", InputSchema: map[string]any{"type": "object"}},
+				func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+					return &mcp.CallToolResult{}, nil
+				})
+			r := wrap(t, s, Options{})
+			if got := len(registeredTools(s)); got != 2 {
+				t.Fatalf("registered tools = %d, want 2", got)
+			}
+			cs := connect(t, s, "2025-06-18", nil)
+			callTool(t, cs, "tool", map[string]any{"workspace_id": map[string]any{"secret": "private-value"}}, nil)
+			p := r.props(t, "mcp_tool_called")
+			if p["error_type"] != "invalid_request" {
+				t.Errorf("error_type = %v", p["error_type"])
+			}
+			if got, _ := p["invalid_arguments"].([]string); !slices.Equal(got, []string{"workspace_id"}) {
+				t.Errorf("invalid_arguments = %v", p["invalid_arguments"])
+			}
+			if strings.Contains(mustJSON(r.all()), "private-value") {
+				t.Error("argument value leaked")
+			}
+		})
+	}
+}
+
 func TestMCPInvalidArgumentsWithErrorClassification(t *testing.T) {
 	for _, valid := range []bool{false, true} {
 		for _, tc := range []struct {

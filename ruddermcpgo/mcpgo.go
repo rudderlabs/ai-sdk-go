@@ -157,6 +157,7 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 			return err
 		}
 		t.opts.Store(&opts)
+		t.rememberTools(s)
 		t.syncCapability(s)
 		return nil
 	}
@@ -167,6 +168,7 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 	}
 	t := &tracked{srv: srv, byMsg: map[any]*call{}, byCtx: map[context.Context]*call{}}
 	t.opts.Store(&opts)
+	t.rememberTools(s)
 	wp := weak.Make(s)
 	instances.Lock()
 	instances.m[wp] = t
@@ -187,6 +189,26 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 	s.Use(t.middleware)
 	t.syncCapability(s)
 	return nil
+}
+
+// mcp-go exposes its registered tools, but has no tool-registration hook.
+func (t *tracked) rememberTools(s *server.MCPServer) {
+	safely(func() {
+		var tools []mcpbridge.Tool
+		own := t.ownCapability()
+		for _, entry := range s.ListTools() {
+			if own != nil && entry.Tool.Name == capabilityTool {
+				continue
+			}
+			var tool map[string]any
+			if b, err := json.Marshal(entry.Tool); err == nil {
+				_ = json.Unmarshal(b, &tool)
+			}
+			schema, _ := tool["inputSchema"].(map[string]any)
+			tools = append(tools, mcpbridge.Tool{Name: entry.Tool.Name, Schema: schema})
+		}
+		t.srv.RememberTools(tools)
+	})
 }
 
 // serverImpl reads the name and version the server was created with; mcp-go has no getter.

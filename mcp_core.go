@@ -875,6 +875,34 @@ func (w *wrapped) CapabilityTool() *mcpbridge.ToolDef {
 	}
 }
 
+// RememberTools learns registered tools before any client has listed them.
+func (w *wrapped) RememberTools(tools []mcpbridge.Tool) {
+	st := w.state()
+	st.Lock()
+	defer st.Unlock()
+	st.rememberTools(tools)
+}
+
+// rememberTools requires st's lock. Keep native argument handling in sync with the schemas.
+func (st *serverState) rememberTools(tools []mcpbridge.Tool) {
+	for _, t := range tools {
+		schema := t.Schema
+		if schema == nil {
+			schema = map[string]any{}
+		}
+		st.toolSchemas.set(t.Name, schema)
+		if t.Name == capabilityTool {
+			st.nativeCapabilityTool = true
+		}
+		props, _ := schema["properties"].(map[string]any)
+		if _, native := props[requestContext]; native {
+			st.nativeContext.set(t.Name, true)
+		} else {
+			st.nativeContext.remove(t.Name)
+		}
+	}
+}
+
 // ListTools records a tools/list page and returns the schemas to send: a copy with
 // request_context added, or nil to keep the tool's own.
 func (rc *reqCtx) ListTools(tools []mcpbridge.Tool, lastPage bool) ([]map[string]any, bool) {
@@ -885,22 +913,17 @@ func (rc *reqCtx) ListTools(tools []mcpbridge.Tool, lastPage bool) ([]map[string
 	}
 	rc.st.Lock()
 	defer rc.st.Unlock()
+	rc.st.rememberTools(tools)
 	out := make([]map[string]any, len(tools))
 	for i, t := range tools {
 		schema := t.Schema
 		if schema == nil {
 			schema = map[string]any{}
 		}
-		rc.st.toolSchemas.set(t.Name, schema)
-		if t.Name == capabilityTool {
-			rc.st.nativeCapabilityTool = true
-		}
 		props, _ := schema["properties"].(map[string]any)
 		if _, native := props[requestContext]; native {
-			rc.st.nativeContext.set(t.Name, true)
 			continue
 		}
-		rc.st.nativeContext.remove(t.Name)
 		if contextSchema == nil {
 			continue
 		}

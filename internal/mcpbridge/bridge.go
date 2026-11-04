@@ -47,7 +47,7 @@ type Client struct {
 	Name, Title, Version string
 }
 
-// Tool is one tool of a tools/list page, its input schema in generic JSON form.
+// Tool is one registered tool, its input schema in generic JSON form.
 type Tool struct {
 	Name   string
 	Schema map[string]any
@@ -96,6 +96,8 @@ type Server interface {
 	Begin(r Request) Call
 	// CapabilityTool is the request_capability tool to offer, nil when off.
 	CapabilityTool() *ToolDef
+	// RememberTools learns original input schemas without a client tools/list request.
+	RememberTools(tools []Tool)
 	RememberResources(byURI map[string]string)
 	RememberTemplates(templates []string)
 	// Elicited records an elicitation outside a tracked call (call is nil) or within one.
