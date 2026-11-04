@@ -60,7 +60,7 @@
         "account_id": {
           "type": "string",
           "minLength": 1,
-          "description": "Customer, workspace or tenant the work is for."
+          "description": "Customer, workspace or tenant the work is for. MCP servers set it per call when the tool picks the workspace."
         },
         "on_behalf_of": {
           "type": "string",
@@ -1116,7 +1116,7 @@
         "account_id": {
           "type": "string",
           "minLength": 1,
-          "description": "Workspace."
+          "description": "Customer, workspace or tenant the work is for. MCP servers set it per call when the tool picks the workspace."
         },
         "client_name": {
           "type": "string",
@@ -1301,7 +1301,7 @@
         "retry_count": {
           "type": "integer",
           "minimum": 0,
-          "description": "Earlier calls with the same tool and arguments in the same mcp_session_id, else interaction_id, compared by hash in memory."
+          "description": "Earlier calls with the same tool and arguments in the same session or interaction. Counts repeats, not failures; absent when the call has neither."
         },
         "call_index": {
           "type": "integer",

@@ -33,7 +33,7 @@ spec:
     - id: account_id
       name: account_id
       type: string
-      description: Customer, workspace or tenant the work is for.
+      description: Customer, workspace or tenant the work is for. MCP servers set it per call when the tool picks the workspace.
     - id: on_behalf_of
       name: on_behalf_of
       type: string
@@ -714,7 +714,7 @@ spec:
     - id: retry_count
       name: retry_count
       type: integer
-      description: Earlier calls with the same tool and arguments in the same session or interaction.
+      description: Earlier calls with the same tool and arguments in the same session or interaction. Counts repeats, not failures; absent when the call has neither.
       config:
         minimum: 0
     - id: call_index

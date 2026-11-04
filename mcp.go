@@ -8,8 +8,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -56,15 +58,61 @@ func WrapMCPServer(server *mcp.Server, opts Options) error {
 	if w, ok := instances.get(server); ok {
 		n.resolveName(w.opts.Load().reflectedName, w.opts.Load().version)
 		w.opts.Store(n)
+		w.RememberTools(registeredTools(server))
 		return nil
 	}
 	n.resolveName(serverImpl(server))
 	w := &wrapped{}
 	w.opts.Store(n)
+	w.RememberTools(registeredTools(server))
 	instances.update(server, func(*wrapped, bool) *wrapped { return w })
 	server.AddReceivingMiddleware(w.receiving)
 	server.AddSendingMiddleware(w.sending)
 	return nil
+}
+
+// registeredTools snapshots go-sdk v1.8.0's registry under its mutex. The SDK has
+// neither a public tool getter nor a registration hook. Reflection confines this
+// dependency on its internals to one fail-open reader; tools/list still refreshes
+// schemas if a future SDK changes the layout.
+func registeredTools(s *mcp.Server) (tools []mcpbridge.Tool) {
+	var registered []*mcp.Tool
+	safely(func() {
+		v := reflect.ValueOf(s).Elem()
+		muField := v.FieldByName("mu")
+		registry := v.FieldByName("tools")
+		if !muField.IsValid() || muField.Type() != reflect.TypeFor[sync.Mutex]() ||
+			!registry.IsValid() || registry.Kind() != reflect.Pointer || registry.IsNil() {
+			return
+		}
+		mu := (*sync.Mutex)(unsafe.Pointer(muField.UnsafeAddr()))
+		mu.Lock()
+		defer mu.Unlock()
+		features := registry.Elem().FieldByName("features")
+		if !features.IsValid() || features.Kind() != reflect.Map {
+			return
+		}
+		for _, key := range features.MapKeys() {
+			entry := features.MapIndex(key)
+			if entry.Kind() != reflect.Pointer || entry.IsNil() {
+				continue
+			}
+			field := entry.Elem().FieldByName("tool")
+			if !field.IsValid() || field.Type() != reflect.TypeFor[*mcp.Tool]() || field.IsNil() {
+				continue
+			}
+			tool := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface().(*mcp.Tool)
+			registered = append(registered, tool)
+		}
+	})
+	// Marshal outside the SDK lock: a schema can provide its own MarshalJSON.
+	safely(func() {
+		for _, tool := range registered {
+			schema, _ := toJSONValue(tool.InputSchema).(map[string]any)
+			tools = append(tools, mcpbridge.Tool{Name: tool.Name, Schema: schema})
+		}
+	})
+	return tools
 }
 
 // serverImpl reads the name and version the server was created with; the SDK has no getter.
@@ -140,6 +188,9 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	ss, _ := req.GetSession().(*mcp.ServerSession)
 	extra := req.GetExtra()
 	params := req.GetParams()
+	if tool, ok := req.(*mcp.CallToolRequest); ok && tool.Params != nil {
+		ctx = mcpbridge.WithToolCall(ctx, tool.Params.Name, tool.Params.Arguments)
+	}
 	r := mcpbridge.Request{Ctx: ctx, Meta: metaOf(params), RequestID: requestIDOf(ctx)}
 	if extra != nil {
 		r.Token = extra.TokenInfo
@@ -165,6 +216,11 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	r.ProtocolVersion = info.version
 	if r.ProtocolVersion == "" && r.HTTP {
 		r.ProtocolVersion = extra.Header.Get("Mcp-Protocol-Version")
+	}
+	if method == "initialize" {
+		if init, ok := params.(*mcp.InitializeParams); ok && init.ClientInfo != nil {
+			r.InitializeClient = &mcpbridge.Client{Name: init.ClientInfo.Name, Title: init.ClientInfo.Title, Version: init.ClientInfo.Version}
+		}
 	}
 	rc := w.begin(r)
 	h := &handling{rc: rc, method: method, session: ss}
@@ -197,6 +253,7 @@ func sessionIDOf(ss *mcp.ServerSession, extra *mcp.RequestExtra) string {
 
 func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
 	p := r.Params
+	h.name = p.Name
 	var raw map[string]json.RawMessage
 	if len(p.Arguments) > 0 && json.Unmarshal(p.Arguments, &raw) != nil {
 		raw = nil
@@ -358,6 +415,9 @@ func (w *wrapped) after(h *handling, res mcp.Result, err, ctxErr error) mcp.Resu
 		o := mcpbridge.Outcome{ErrorType: errType, Cancelled: cancelled}
 		if r, ok := res.(*mcp.CallToolResult); ok && r != nil && err == nil {
 			o.Result = r
+			if r.IsError && rc.opts.ClassifyToolError != nil {
+				callback("Options.ClassifyToolError", func() error { o.ClassifiedError = rc.opts.ClassifyToolError(h.name, r); return nil })
+			}
 			if r.InputRequests != nil {
 				o.InputRequired, o.RequestState = true, r.RequestState
 				for key, ir := range r.InputRequests {

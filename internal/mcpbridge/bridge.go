@@ -33,6 +33,8 @@ type Request struct {
 	Connection string
 	// Client is the client the session initialized with, if known.
 	Client *Client
+	// InitializeClient is the current initialize request's clientInfo.
+	InitializeClient *Client
 	// ProtocolVersion is the negotiated version, when the request's _meta has none.
 	ProtocolVersion string
 	RequestID       string
@@ -45,7 +47,7 @@ type Client struct {
 	Name, Title, Version string
 }
 
-// Tool is one tool of a tools/list page, its input schema in generic JSON form.
+// Tool is one registered tool, its input schema in generic JSON form.
 type Tool struct {
 	Name   string
 	Schema map[string]any
@@ -67,6 +69,8 @@ type Answer struct {
 type Outcome struct {
 	// Result is the result as sent, before JSON encoding; nil on error.
 	Result any
+	// ClassifiedError is the optional application classification of an error result.
+	ClassifiedError string
 	// ErrorType is set when the call failed with a protocol error.
 	ErrorType string
 	// Cancelled reports a call the client cancelled.
@@ -92,6 +96,8 @@ type Server interface {
 	Begin(r Request) Call
 	// CapabilityTool is the request_capability tool to offer, nil when off.
 	CapabilityTool() *ToolDef
+	// RememberTools learns original input schemas without a client tools/list request.
+	RememberTools(tools []Tool)
 	RememberResources(byURI map[string]string)
 	RememberTemplates(templates []string)
 	// Elicited records an elicitation outside a tracked call (call is nil) or within one.
@@ -126,4 +132,24 @@ type Call interface {
 	Succeeded(method string, discoverVersions []string)
 	ToolName() string
 	RequestID() string
+}
+
+// ToolCall carries the current tool's original arguments to identity hooks.
+type ToolCall struct {
+	Name      string
+	Arguments json.RawMessage
+}
+
+type toolCallKey struct{}
+
+// WithToolCall adds call details without changing an application's context.
+func WithToolCall(ctx context.Context, name string, arguments json.RawMessage) context.Context {
+	return context.WithValue(ctx, toolCallKey{}, ToolCall{Name: name, Arguments: append(json.RawMessage(nil), arguments...)})
+}
+
+// ToolCallFromContext returns a copy so hooks cannot alter the request arguments.
+func ToolCallFromContext(ctx context.Context) (ToolCall, bool) {
+	call, ok := ctx.Value(toolCallKey{}).(ToolCall)
+	call.Arguments = append(json.RawMessage(nil), call.Arguments...)
+	return call, ok
 }
