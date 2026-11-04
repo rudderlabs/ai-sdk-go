@@ -10,6 +10,19 @@
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
 - SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events.
 
+## [0.5.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.4.0...v0.5.0) (2026-11-04)
+
+
+### Features
+
+* **catalog:** cover every SDK property and reuse shared properties ([#38](https://github.com/rudderlabs/ai-sdk-go/issues/38)) ([7531e7f](https://github.com/rudderlabs/ai-sdk-go/commit/7531e7fe8e9aac531a99b25e7c27067e098e4e9e))
+* **mcp:** fill event gaps on stateless servers ([#40](https://github.com/rudderlabs/ai-sdk-go/issues/40)) ([9b94bba](https://github.com/rudderlabs/ai-sdk-go/commit/9b94bba535a24c5253b73f643255acdfce3e070e))
+
+
+### Bug Fixes
+
+* keep provider failures in RunTask and add bounded CloseClient ([#37](https://github.com/rudderlabs/ai-sdk-go/issues/37)) ([26c61dc](https://github.com/rudderlabs/ai-sdk-go/commit/26c61dcf4c31e4e010325bc5ba4ec0c3cec8bb5f))
+
 ## [0.4.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.3.0...v0.4.0) (2026-10-30)
 
 
