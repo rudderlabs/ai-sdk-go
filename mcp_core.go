@@ -228,7 +228,7 @@ func clientFromMeta(v any) *mcpbridge.Client {
 }
 
 func knownClient(client *mcpbridge.Client) bool {
-	return client != nil && (client.Name != "" || client.Title != "" || client.Version != "")
+	return client != nil && (strings.TrimSpace(client.Name) != "" || strings.TrimSpace(client.Version) != "")
 }
 
 // Begin starts a request.
@@ -579,15 +579,16 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 			schema, _ := rc.st.toolSchemas.get(rc.toolName)
 			rc.st.Unlock()
 			kind := toolErrorType(o.ClassifiedError, result)
-			if invalid := invalidArguments(schema, t.args); kind == "" && len(invalid) > 0 {
+			if invalid := invalidArguments(schema, t.args); len(invalid) > 0 {
 				extra["invalid_arguments"] = names(invalid)
-				extra["error_type"] = "invalid_request"
-			} else {
 				if kind == "" {
-					kind = "api_error"
+					kind = "invalid_request"
 				}
-				extra["error_type"] = kind
 			}
+			if kind == "" {
+				kind = "api_error"
+			}
+			extra["error_type"] = kind
 		}
 	}
 	rc.finish("mcp_tool_called", "tool_name", rc.toolName, status, extra)

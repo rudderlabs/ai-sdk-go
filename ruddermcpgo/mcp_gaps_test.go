@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
@@ -218,6 +220,123 @@ func TestStatelessClientEveryRequestType(t *testing.T) {
 				}
 				if resolved != want {
 					t.Errorf("resolver calls = %d, want %d", resolved, want)
+				}
+			})
+		}
+	}
+}
+
+func TestClientInfoFallback(t *testing.T) {
+	for _, session := range []bool{false, true} {
+		for _, tc := range []struct {
+			name        string
+			info        map[string]any
+			wantName    string
+			wantVersion string
+		}{
+			{"title_only", map[string]any{"title": "Client Title"}, "", ""},
+			{"whitespace_only", map[string]any{"name": " \t\n", "version": "\u2003 ", "title": "Client Title"}, "", ""},
+			{"name_only", map[string]any{"name": " client ", "version": " \t"}, "client", ""},
+			{"version_only", map[string]any{"name": " \t", "version": " 3 "}, "", "3"},
+		} {
+			t.Run(fmt.Sprintf("%s/session=%v", tc.name, session), func(t *testing.T) {
+				s := workspaceServer("client-fallback", nil)
+				resolved := 0
+				r := wrap(t, s, Options{ClientInfo: func(context.Context) (string, string) {
+					resolved++
+					return "resolved-client", "2"
+				}})
+				meta := sdk.Meta{"io.modelcontextprotocol/clientInfo": tc.info}
+
+				if session {
+					cs := connectStdio(t, s, "2025-06-18", nil)
+					callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, meta)
+				} else {
+					response := s.HandleMessage(context.Background(), []byte(mustJSON(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": "list_destinations", "arguments": map[string]any{"workspace_id": "w"}, "_meta": meta}})))
+					if _, ok := response.(mcp.JSONRPCError); ok {
+						t.Fatalf("tool = %v", response)
+					}
+				}
+
+				wantName, wantVersion := tc.wantName, tc.wantVersion
+				wantResolved := 0
+				if wantName == "" && wantVersion == "" {
+					if session {
+						wantName, wantVersion = "test-client", "1.2.3"
+					} else {
+						wantName, wantVersion = "resolved-client", "2"
+						wantResolved = 1
+					}
+				}
+				p := r.props(t, "mcp_tool_called")
+				if strName, _ := p["client_name"].(string); strName != wantName {
+					t.Errorf("client_name = %v, want %q", p["client_name"], wantName)
+				}
+				if strVersion, _ := p["client_version"].(string); strVersion != wantVersion {
+					t.Errorf("client_version = %v, want %q", p["client_version"], wantVersion)
+				}
+				if resolved != wantResolved {
+					t.Errorf("resolver calls = %d, want %d", resolved, wantResolved)
+				}
+			})
+		}
+	}
+}
+
+func TestInvalidArgumentsWithErrorClassification(t *testing.T) {
+	for _, valid := range []bool{false, true} {
+		for _, tc := range []struct {
+			name       string
+			classified string
+			status     any
+			isError    bool
+			want       string
+		}{
+			{"classifier", "denied", 429, true, "denied"},
+			{"status", "", 429, true, "rate_limit"},
+			{"fallback", "", nil, true, ""},
+			{"success", "denied", 429, false, ""},
+		} {
+			t.Run(fmt.Sprintf("%s/valid=%v", tc.name, valid), func(t *testing.T) {
+				s := workspaceServer("invalid-classification", nil)
+
+				result := mcp.NewToolResultText("ok")
+				result.IsError = tc.isError
+				result.StructuredContent = map[string]any{"status": tc.status}
+				s.AddTool(mcp.NewTool("tool", mcp.WithString("workspace_id", mcp.Required())),
+					func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) { return result, nil })
+				r := wrap(t, s, Options{ClassifyToolError: func(string, *mcp.CallToolResult) string { return tc.classified }})
+				cs := connectStdio(t, s, "2025-06-18", nil)
+
+				if _, err := cs.ListTools(context.Background(), nil); err != nil {
+					t.Fatal(err)
+				}
+				args := map[string]any{"workspace_id": any(map[string]any{"secret": "private-value"})}
+				if valid {
+					args["workspace_id"] = "private-value"
+				}
+				callTool(t, cs, "tool", args, nil)
+				p := r.props(t, "mcp_tool_called")
+				want := tc.want
+				if tc.isError && want == "" {
+					want = "api_error"
+					if !valid {
+						want = "invalid_request"
+					}
+				}
+				if got, _ := p["error_type"].(string); got != want {
+					t.Errorf("error_type = %v, want %q", p["error_type"], want)
+				}
+				if tc.isError && !valid {
+					got, _ := p["invalid_arguments"].([]string)
+					if !slices.Equal(got, []string{"workspace_id"}) {
+						t.Errorf("invalid_arguments = %v", p["invalid_arguments"])
+					}
+				} else if _, exists := p["invalid_arguments"]; exists {
+					t.Errorf("unexpected invalid_arguments = %v", p["invalid_arguments"])
+				}
+				if strings.Contains(mustJSON(r.all()), "private-value") {
+					t.Error("argument value leaked")
 				}
 			})
 		}
