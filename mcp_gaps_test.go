@@ -1,0 +1,278 @@
+package rudderstackai
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/auth"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
+)
+
+func TestMCPStatelessClientAndIdentity(t *testing.T) {
+	for _, source := range []string{"initialize", "meta", "empty_meta", "resolver", "empty_resolver", "panic", "unknown"} {
+		t.Run(source, func(t *testing.T) {
+			s := workspaceServer("stateless-"+source, nil)
+			resolved := 0
+			opts := Options{Identify: func(ctx context.Context, _ *auth.TokenInfo) (Identity, error) {
+				call, ok := ToolCallFromContext(ctx)
+				if !ok {
+					return Identity{}, nil
+				}
+				if call.Name != "list_destinations" {
+					t.Errorf("name = %s", call.Name)
+				}
+				var args map[string]string
+				if err := json.Unmarshal(call.Arguments, &args); err != nil {
+					t.Fatal(err)
+				}
+				return Identity{AccountID: args["workspace_id"], UserID: "user_" + args["workspace_id"]}, nil
+			}}
+			if source != "unknown" {
+				opts.ClientInfo = func(context.Context, *auth.TokenInfo) (string, string) {
+					resolved++
+					if source == "panic" {
+						panic("private error")
+					}
+					if source == "empty_resolver" {
+						return "", ""
+					}
+					return "resolved-client", "2"
+				}
+			}
+			r := wrap(t, s, opts)
+			w, _ := instances.get(s)
+			meta := mcp.Meta{}
+			if source == "meta" || source == "initialize" {
+				meta[metaClientInfo] = map[string]any{"name": "meta-client", "version": "3"}
+			}
+			if source == "empty_meta" {
+				meta[metaClientInfo] = map[string]any{}
+			}
+			if source == "initialize" {
+				_, err := w.receiving(func(context.Context, string, mcp.Request) (mcp.Result, error) {
+					return &mcp.InitializeResult{ProtocolVersion: "2025-06-18"}, nil
+				})(context.Background(), "initialize", &mcp.InitializeRequest{Params: &mcp.InitializeParams{Meta: meta, ClientInfo: &mcp.Implementation{Name: "init-client", Version: "1"}}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if p := r.props(t, "mcp_client_seen"); p["client_name"] != "init-client" || p["client_version"] != "1" {
+					t.Errorf("initialize = %v", p)
+				}
+			}
+			for _, workspace := range []string{"a", "b"} {
+				_, err := w.receiving(func(context.Context, string, mcp.Request) (mcp.Result, error) {
+					return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "ok"}}}, nil
+				})(context.Background(), "tools/call", &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "list_destinations", Arguments: json.RawMessage(fmt.Sprintf(`{"workspace_id":%q}`, workspace)), Meta: meta}})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			calls := r.named("mcp_tool_called")
+			if len(calls) != 2 {
+				t.Fatalf("events = %v", r.names())
+			}
+			for i, workspace := range []string{"a", "b"} {
+				p := calls[i].Properties
+				if p["account_id"] != workspace || calls[i].UserId != "user_"+workspace {
+					t.Errorf("identity = %v", calls[i])
+				}
+				if _, ok := p["mcp_session_id"]; ok {
+					t.Errorf("stateless session = %v", p)
+				}
+				if _, ok := p["retry_count"]; ok {
+					t.Errorf("stateless retries = %v", p)
+				}
+				want := ""
+				if source == "meta" || source == "initialize" {
+					want = "meta-client"
+				}
+				if source == "resolver" || source == "empty_meta" {
+					want = "resolved-client"
+				}
+				if want == "" {
+					if _, ok := p["client_name"]; ok {
+						t.Errorf("client = %v", p)
+					}
+				} else if p["client_name"] != want {
+					t.Errorf("client = %v", p)
+				}
+			}
+			_, err := w.receiving(func(context.Context, string, mcp.Request) (mcp.Result, error) { return &mcp.ReadResourceResult{}, nil })(context.Background(), "resources/read", &mcp.ReadResourceRequest{Params: &mcp.ReadResourceParams{URI: "docs://readme", Meta: meta}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			event := r.named("mcp_resource_read")[0]
+			if _, ok := event.Properties["account_id"]; ok || event.UserId != "" {
+				t.Errorf("identity leaked: %v", event)
+			}
+			wantResolved := 0
+			if source == "resolver" || source == "empty_meta" || source == "empty_resolver" || source == "panic" {
+				wantResolved = 3
+			}
+			if resolved != wantResolved {
+				t.Errorf("resolver calls = %d, want %d", resolved, wantResolved)
+			}
+		})
+	}
+}
+
+func TestMCPClientResolverSessionPrecedence(t *testing.T) {
+	s := workspaceServer("resolver-session", nil)
+	r := wrap(t, s, Options{ClientInfo: func(context.Context, *auth.TokenInfo) (string, string) {
+		t.Error("resolver called with session client")
+		return "wrong", "wrong"
+	}})
+	cs := connect(t, s, "2025-06-18", nil)
+	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
+	if p := r.props(t, "mcp_tool_called"); p["client_name"] != "test-client" {
+		t.Errorf("client = %v", p)
+	}
+}
+
+func TestMCPServerVersionEveryEvent(t *testing.T) {
+	for _, version := range []string{"1.2.3", ""} {
+		t.Run(version, func(t *testing.T) {
+			freshState(t)
+			r := newRecorder(t)
+			server, err := mcpbridge.Wrap("version-test", version, Options{Analytics: r, CapabilityRequests: &CapabilityRequestOptions{Capabilities: []string{"export"}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			c := server.Begin(mcpbridge.Request{Ctx: context.Background(), InitializeClient: &mcpbridge.Client{Name: "client"}})
+			c.Initialized(nil, nil, "2025-06-18")
+			c.ToolCall("tool", nil, false, nil, "")
+			c.ToolDone(mcpbridge.Outcome{Result: &mcp.CallToolResult{}})
+			c.Finished("resources/read", "resource", 0, "")
+			c.Finished("prompts/get", "prompt", 0, "")
+			c.Capability(nil)
+			server.Elicited(c, mcpbridge.Elicitation{Action: "accept"})
+			server.Elicited(nil, mcpbridge.Elicitation{Action: "accept"})
+			if len(r.all()) != 7 {
+				t.Fatalf("events = %v", r.names())
+			}
+			for _, event := range r.all() {
+				got, exists := event.Properties["server_version"]
+				if version == "" && exists || version != "" && got != version {
+					t.Errorf("%s version = %v", event.Event, got)
+				}
+			}
+		})
+	}
+}
+
+func TestMCPToolErrorStatusParity(t *testing.T) {
+	for _, hint := range []string{"meta", "status", "statusCode"} {
+		for _, tc := range []struct {
+			status any
+			want   string
+		}{
+			{401, "auth_error"}, {403, "denied"}, {408, "timeout"}, {504, "timeout"}, {429, "rate_limit"}, {404, "invalid_request"}, {500, "api_error"}, {nil, "api_error"}, {"429", "api_error"},
+		} {
+			t.Run(fmt.Sprintf("%s/%v", hint, tc.status), func(t *testing.T) {
+				s := workspaceServer("status-test", nil)
+				r := wrap(t, s, Options{})
+				w, _ := instances.get(s)
+				result := &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "private error text"}}}
+				if hint == "meta" {
+					result.Meta = mcp.Meta{"com.rudderstack/http_status": tc.status}
+				} else {
+					result.StructuredContent = map[string]any{hint: tc.status}
+				}
+				_, err := w.receiving(func(context.Context, string, mcp.Request) (mcp.Result, error) { return result, nil })(context.Background(), "tools/call", &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "tool", Arguments: json.RawMessage(`{}`)}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if p := r.props(t, "mcp_tool_called"); p["error_type"] != tc.want {
+					t.Errorf("error = %v", p)
+				}
+				if strings.Contains(mustJSON(r.all()), "private error text") {
+					t.Error("error text leaked")
+				}
+			})
+		}
+	}
+}
+
+func TestMCPToolErrorClassifier(t *testing.T) {
+	for _, kind := range []string{"rate_limit", "timeout", "cancelled", "denied", "auth_error", "invalid_request", "connection_error", "api_error", "unsupported", "", "panic"} {
+		t.Run(kind, func(t *testing.T) {
+			s := workspaceServer("classifier-test", nil)
+			result := &mcp.CallToolResult{IsError: true, StructuredContent: map[string]any{"status": 401}}
+			count := 0
+			r := wrap(t, s, Options{ClassifyToolError: func(name string, got *mcp.CallToolResult) string {
+				count++
+				if name != "tool" || got != result {
+					t.Error("classifier arguments")
+				}
+				if kind == "panic" {
+					panic("private error")
+				}
+				return kind
+			}})
+			w, _ := instances.get(s)
+			invoke := func() {
+				_, err := w.receiving(func(context.Context, string, mcp.Request) (mcp.Result, error) { return result, nil })(context.Background(), "tools/call", &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "tool", Arguments: json.RawMessage(`{}`)}})
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			invoke()
+			want := kind
+			if kind == "unsupported" || kind == "" || kind == "panic" {
+				want = "auth_error"
+			}
+			if p := r.props(t, "mcp_tool_called"); p["error_type"] != want {
+				t.Errorf("classification = %v", p)
+			}
+			result.IsError = false
+			invoke()
+			if count != 1 {
+				t.Errorf("classifier calls = %d", count)
+			}
+		})
+	}
+}
+
+func TestMCPStatelessClientEveryRequestType(t *testing.T) {
+	for _, source := range []string{"meta", "resolver"} {
+		for _, method := range []string{"ping", "tools/list", "resources/list", "resources/templates/list", "prompts/list", "resources/read", "prompts/get"} {
+			t.Run(source+"/"+method, func(t *testing.T) {
+				s := workspaceServer("client-types", nil)
+				resolved := 0
+				wrap(t, s, Options{ClientInfo: func(context.Context, *auth.TokenInfo) (string, string) { resolved++; return "client", "1" }})
+				w, _ := instances.get(s)
+				meta := mcp.Meta{}
+				if source == "meta" {
+					meta[metaClientInfo] = map[string]any{"name": "client", "version": "1"}
+				}
+				var req mcp.Request
+				switch method {
+				case "resources/read":
+					req = &mcp.ReadResourceRequest{Params: &mcp.ReadResourceParams{URI: "docs://readme", Meta: meta}}
+				case "prompts/get":
+					req = &mcp.GetPromptRequest{Params: &mcp.GetPromptParams{Name: "prompt", Meta: meta}}
+				case "ping":
+					req = &mcp.ServerRequest[*mcp.PingParams]{Params: &mcp.PingParams{Meta: meta}}
+				default:
+					req = &mcp.ServerRequest[*mcp.ListToolsParams]{Params: &mcp.ListToolsParams{Meta: meta}}
+				}
+				h := w.before(context.Background(), method, req)
+				if h.rc.base["client_name"] != "client" || h.rc.base["client_version"] != "1" {
+					t.Errorf("client = %v", h.rc.base)
+				}
+				want := 0
+				if source == "resolver" {
+					want = 1
+				}
+				if resolved != want {
+					t.Errorf("resolver calls = %d, want %d", resolved, want)
+				}
+			})
+		}
+	}
+}

@@ -64,7 +64,7 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 }
 ```
 
-`ruddermcpgo.Options` has the same fields as `rudderstackai.Options`, except that `Identify` receives only the context: mcp-go verifies no bearer tokens, so read your own authentication from it. `WrapServer` uses mcp-go's own extension points: server hooks (`GetHooks`, or `WithHooks` when the server has none) and a tool handler middleware (`Use`). It removes `request_context` from the arguments in a hook, before input validation and your handler, and adds it to the tool schemas of the `tools/list` result. With `CapabilityRequests`, it registers `request_capability` as a tool (with a schema that accepts any arguments, so input validation never rejects a capability outside the list; `tools/list` shows the full one). Call it after `NewMCPServer` and before serving.
+`ruddermcpgo.Options` has the same fields as `rudderstackai.Options`, except that `Identify` and `ClientInfo` receive only the context and `ClassifyToolError` receives mcp-go's `*mcp.CallToolResult`: mcp-go verifies no bearer tokens, so read your own authentication from it. `WrapServer` uses mcp-go's own extension points: server hooks (`GetHooks`, or `WithHooks` when the server has none) and a tool handler middleware (`Use`). It removes `request_context` from the arguments in a hook, before input validation and your handler, and adds it to the tool schemas of the `tools/list` result. With `CapabilityRequests`, it registers `request_capability` as a tool (with a schema that accepts any arguments, so input validation never rejects a capability outside the list; `tools/list` shows the full one). Call it after `NewMCPServer` and before serving.
 
 ## Options
 
@@ -72,6 +72,8 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 | -------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `Analytics`          | required   | The RudderStack client (`analytics.Client`).                                                                                                                                      |
 | `Identify`           | none       | `func(ctx, *auth.TokenInfo) (Identity, error)`, called once per request with the verified bearer token (`nil` without one); `func(ctx) (Identity, error)` on mcp-go. Returns `UserID`, `AnonymousID`, `AccountID`, `OAuthClientID`, `TokenScopes`, `AuthMethod`, `Country`. If it fails or panics, the request is anonymous. |
+| `ClientInfo`         | none       | `func(ctx, *auth.TokenInfo) (name, version string)`; `func(ctx) (name, version string)` on mcp-go. Fallback client resolver; panics are swallowed. |
+| `ClassifyToolError`  | none       | `func(toolName string, result *mcp.CallToolResult) string` using the wrapper's MCP library. Classifies tool error results; invalid values and panics fall back to status hints and validation. |
 | `EventRules`         | none       | Declared tool events. Names starting with `ai_` or `mcp_` are rejected.                                                                                                          |
 | `RequestContext`     | on         | `Intents` for the injected `request_context` argument; `DisableUserSentiment`; `Disabled` turns it off.                                                                          |
 | `ClientSeenWindow`   | 24 hours   | Window in which a (client, OAuth client, user) is reported once by `mcp_client_seen`, per server name and process.                                                                                               |
@@ -85,7 +87,7 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 
 ## Events
 
-Every event is a track call, within the 30,000-byte [properties budget](events.md), with `context.wrapperLibrary` = `{name: "ai-sdk-go", version, specVersion: "0.4.0", integration: "mcp"}` and, when known, `server_name`, `account_id`, `mcp_session_id`, `client_name`, `client_version`, `protocol_version`, `interaction_id` and `trace_id`. Schemas: [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json). Events without a user are sent with `anonymousId: "ai_system"`.
+Every event is a track call, within the 30,000-byte [properties budget](events.md), with `context.wrapperLibrary` = `{name: "ai-sdk-go", version, specVersion: "0.4.0", integration: "mcp"}` and, when known, `server_name`, `server_version`, `account_id`, `mcp_session_id`, `client_name`, `client_version`, `protocol_version`, `interaction_id` and `trace_id`. Schemas: [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json). Events without a user are sent with `anonymousId: "ai_system"`.
 
 | Event                            | When                                                                   | Main properties |
 | -------------------------------- | ---------------------------------------------------------------------- | --------------- |
@@ -125,10 +127,17 @@ The `input_required` leg of a call sends no `mcp_tool_called`; the retry that co
 
 `Identify(ctx, token)` receives the `*auth.TokenInfo` that `auth.RequireBearerToken` verified (nil over stdio or without auth) and returns the user and workspace. `UserID` should be the OAuth subject and `AccountID` the workspace. Defaults: `UserID` from `token.UserID`, `TokenScopes` from `token.Scopes`, `AuthMethod` `oauth` with a token, else `none`. `OAuthClientID` has no default: `auth.TokenInfo` does not carry the client ID, so return it from your verifier's `Extra`. The token itself and the client's IP address are never sent; return a coarse `Country` if you derive one. If `Identify` fails or panics, the request is sent anonymously (`anonymousId: ai_system`), without the token's user ID or scopes. On mcp-go, `Identify(ctx)` has no token: return what your own authentication put in the context.
 
+For `tools/call`, both wrappers make `rudderstackai.ToolCallFromContext(ctx)` available inside `Identify` and `ClientInfo`. It returns `(MCPToolCall, bool)` with `Name` and original JSON `Arguments`, so identify can decode a workspace argument into `AccountID`. Returned `AccountID` and `UserID` apply only to that request's events, including its elicitations and capability requests; they do not update session identity.
+
+Client name and version come first from the current initialize request's `params.clientInfo`, then `_meta["io.modelcontextprotocol/clientInfo"]` on any request type, then session state. These work without a session or connection key. Only when these provide no client does the wrapper call `ClientInfo`, with the same context and token as identify (context only on mcp-go). Empty returned fields are omitted; a panic leaves the client unknown. Every wrapper-emitted MCP event includes `server_version` when the server's version is known, and omits it otherwise.
+
+For a tool result with `isError: true`, `ClassifyToolError` may return `rate_limit`, `timeout`, `cancelled`, `denied`, `auth_error`, `invalid_request`, `connection_error` or `api_error`. Other values, an empty return or a panic are ignored. The default reads the first numeric HTTP status from `result._meta["com.rudderstack/http_status"]`, `structuredContent.status`, then `structuredContent.statusCode`: 401 → `auth_error`, 403 → `denied`, 408/504 → `timeout`, 429 → `rate_limit`, other 4xx → `invalid_request`, 5xx → `api_error`. Without a mapped status, schema-invalid arguments use `invalid_request`, otherwise `api_error`. Error text is never sent. Retry counting is unchanged: repeats count regardless of success or failure.
+
 ## Joining the calling agent
 
 The server reads exactly these keys from a request's `_meta`:
 
+- `io.modelcontextprotocol/clientInfo` supplies the per-call client name and version;
 - `com.rudderstack/interaction_id` becomes `interaction_id`;
 - the W3C `traceparent` trace-id becomes `trace_id`, else `com.rudderstack/trace_id`.
 

@@ -33,6 +33,8 @@ type Request struct {
 	Connection string
 	// Client is the client the session initialized with, if known.
 	Client *Client
+	// InitializeClient is the current initialize request's clientInfo.
+	InitializeClient *Client
 	// ProtocolVersion is the negotiated version, when the request's _meta has none.
 	ProtocolVersion string
 	RequestID       string
@@ -67,6 +69,8 @@ type Answer struct {
 type Outcome struct {
 	// Result is the result as sent, before JSON encoding; nil on error.
 	Result any
+	// ClassifiedError is the optional application classification of an error result.
+	ClassifiedError string
 	// ErrorType is set when the call failed with a protocol error.
 	ErrorType string
 	// Cancelled reports a call the client cancelled.
@@ -126,4 +130,24 @@ type Call interface {
 	Succeeded(method string, discoverVersions []string)
 	ToolName() string
 	RequestID() string
+}
+
+// ToolCall carries the current tool's original arguments to identity hooks.
+type ToolCall struct {
+	Name      string
+	Arguments json.RawMessage
+}
+
+type toolCallKey struct{}
+
+// WithToolCall adds call details without changing an application's context.
+func WithToolCall(ctx context.Context, name string, arguments json.RawMessage) context.Context {
+	return context.WithValue(ctx, toolCallKey{}, ToolCall{Name: name, Arguments: append(json.RawMessage(nil), arguments...)})
+}
+
+// ToolCallFromContext returns a copy so hooks cannot alter the request arguments.
+func ToolCallFromContext(ctx context.Context) (ToolCall, bool) {
+	call, ok := ctx.Value(toolCallKey{}).(ToolCall)
+	call.Arguments = append(json.RawMessage(nil), call.Arguments...)
+	return call, ok
 }

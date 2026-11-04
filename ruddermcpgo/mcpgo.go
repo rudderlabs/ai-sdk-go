@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"weak"
 
@@ -49,8 +50,14 @@ type Options struct {
 	// Analytics is the RudderStack client. Required.
 	Analytics analytics.Client
 	// Identify maps a request to the user and workspace. Called once per request; if it fails
-	// or panics, the request is anonymous.
+	// or panics, the request is anonymous. ToolCallFromContext(ctx) in rudderstackai
+	// exposes the current tool name and original arguments.
 	Identify func(ctx context.Context) (rudderstackai.Identity, error)
+	// ClientInfo resolves a client only when initialize, metadata and session state
+	// provide none. Panics are swallowed.
+	ClientInfo func(ctx context.Context) (name, version string)
+	// ClassifyToolError classifies isError results using spec MCP categories.
+	ClassifyToolError func(toolName string, result *mcp.CallToolResult) string
 	// EventRules declares tool events. Names starting with "ai_" or "mcp_" are rejected.
 	EventRules rudderstackai.EventRules
 	// RequestContext configures the optional request_context argument, on by default.
@@ -90,12 +97,16 @@ func (o Options) root() rudderstackai.Options {
 		identify := o.Identify
 		r.Identify = func(ctx context.Context, _ *auth.TokenInfo) (rudderstackai.Identity, error) { return identify(ctx) }
 	}
+	if o.ClientInfo != nil {
+		r.ClientInfo = func(ctx context.Context, _ *auth.TokenInfo) (string, string) { return o.ClientInfo(ctx) }
+	}
 	return r
 }
 
 // tracked is one wrapped mcp-go server.
 type tracked struct {
-	srv mcpbridge.Server
+	srv  mcpbridge.Server
+	opts atomic.Pointer[Options]
 	// capability is the request_capability tool this integration registered, if any.
 	mu         sync.Mutex
 	capability *mcp.Tool
@@ -118,6 +129,7 @@ type call struct {
 	name       string
 	caps       any
 	capability bool
+	classify   func(string, *mcp.CallToolResult) string
 }
 
 var instances = struct {
@@ -144,6 +156,7 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 		if err := t.srv.Rewrap(opts.root()); err != nil {
 			return err
 		}
+		t.opts.Store(&opts)
 		t.syncCapability(s)
 		return nil
 	}
@@ -153,6 +166,7 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 		return err
 	}
 	t := &tracked{srv: srv, byMsg: map[any]*call{}, byCtx: map[context.Context]*call{}}
+	t.opts.Store(&opts)
 	wp := weak.Make(s)
 	instances.Lock()
 	instances.m[wp] = t
@@ -288,7 +302,11 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 		return
 	}
 	header := headerOf(message)
-	r := mcpbridge.Request{Ctx: ctx, Meta: env.Params.Meta, RequestID: requestID(id), HTTP: len(header) > 0}
+	identityCtx := ctx
+	if method == "tools/call" {
+		identityCtx = mcpbridge.WithToolCall(ctx, env.Params.Name, env.Params.Arguments)
+	}
+	r := mcpbridge.Request{Ctx: identityCtx, Meta: env.Params.Meta, RequestID: requestID(id), HTTP: len(header) > 0}
 	sessionID := ""
 	if session := server.ClientSessionFromContext(ctx); session != nil {
 		sessionID = session.SessionID()
@@ -320,9 +338,13 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if r.ProtocolVersion == "" && r.HTTP {
 		r.ProtocolVersion = header.Get("Mcp-Protocol-Version")
 	}
-	c := &call{c: t.srv.Begin(r), method: method}
+	if method == "initialize" {
+		r.InitializeClient = env.Params.ClientInfo
+	}
+	c := &call{c: t.srv.Begin(r), method: method, classify: t.opts.Load().ClassifyToolError}
 	switch method {
 	case "tools/call":
+		c.name = env.Params.Name
 		t.toolCall(c, &env, message)
 	case "resources/read":
 		c.name = c.c.ResourceName(env.Params.URI)
@@ -523,6 +545,9 @@ func (t *tracked) succeeded(ctx context.Context, c *call, result any) {
 			return
 		}
 		o := mcpbridge.Outcome{Result: result}
+		if r, ok := result.(*mcp.CallToolResult); ok && r != nil && r.IsError && c.classify != nil {
+			safely(func() { o.ClassifiedError = c.classify(c.name, r) })
+		}
 		if reqs, ok := res["inputRequests"].(map[string]any); ok {
 			o.InputRequired = true
 			o.RequestState, _ = res["requestState"].(string)

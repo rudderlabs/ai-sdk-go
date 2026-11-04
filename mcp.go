@@ -140,6 +140,9 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	ss, _ := req.GetSession().(*mcp.ServerSession)
 	extra := req.GetExtra()
 	params := req.GetParams()
+	if tool, ok := req.(*mcp.CallToolRequest); ok && tool.Params != nil {
+		ctx = mcpbridge.WithToolCall(ctx, tool.Params.Name, tool.Params.Arguments)
+	}
 	r := mcpbridge.Request{Ctx: ctx, Meta: metaOf(params), RequestID: requestIDOf(ctx)}
 	if extra != nil {
 		r.Token = extra.TokenInfo
@@ -165,6 +168,11 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	r.ProtocolVersion = info.version
 	if r.ProtocolVersion == "" && r.HTTP {
 		r.ProtocolVersion = extra.Header.Get("Mcp-Protocol-Version")
+	}
+	if method == "initialize" {
+		if init, ok := params.(*mcp.InitializeParams); ok && init.ClientInfo != nil {
+			r.InitializeClient = &mcpbridge.Client{Name: init.ClientInfo.Name, Title: init.ClientInfo.Title, Version: init.ClientInfo.Version}
+		}
 	}
 	rc := w.begin(r)
 	h := &handling{rc: rc, method: method, session: ss}
@@ -197,6 +205,7 @@ func sessionIDOf(ss *mcp.ServerSession, extra *mcp.RequestExtra) string {
 
 func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
 	p := r.Params
+	h.name = p.Name
 	var raw map[string]json.RawMessage
 	if len(p.Arguments) > 0 && json.Unmarshal(p.Arguments, &raw) != nil {
 		raw = nil
@@ -358,6 +367,9 @@ func (w *wrapped) after(h *handling, res mcp.Result, err, ctxErr error) mcp.Resu
 		o := mcpbridge.Outcome{ErrorType: errType, Cancelled: cancelled}
 		if r, ok := res.(*mcp.CallToolResult); ok && r != nil && err == nil {
 			o.Result = r
+			if r.IsError && rc.opts.ClassifyToolError != nil {
+				callback("Options.ClassifyToolError", func() error { o.ClassifiedError = rc.opts.ClassifyToolError(h.name, r); return nil })
+			}
 			if r.InputRequests != nil {
 				o.InputRequired, o.RequestState = true, r.RequestState
 				for key, ir := range r.InputRequests {

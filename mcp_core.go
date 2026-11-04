@@ -202,6 +202,7 @@ type reqCtx struct {
 	// when there is none.
 	scope    string
 	toolName string
+	client   *mcpbridge.Client
 	http     bool
 	meta     map[string]any
 	start    time.Time
@@ -226,6 +227,10 @@ func clientFromMeta(v any) *mcpbridge.Client {
 	return &mcpbridge.Client{Name: str(m["name"]), Title: str(m["title"]), Version: str(m["version"])}
 }
 
+func knownClient(client *mcpbridge.Client) bool {
+	return client != nil && (client.Name != "" || client.Title != "" || client.Version != "")
+}
+
 // Begin starts a request.
 func (w *wrapped) Begin(r mcpbridge.Request) mcpbridge.Call { return w.begin(r) }
 
@@ -233,14 +238,24 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	opts := w.opts.Load()
 	tok, _ := r.Token.(*auth.TokenInfo)
 	id := opts.identity(r.Ctx, tok)
-	client := clientFromMeta(r.Meta[metaClientInfo])
-	if client == nil {
+	client := r.InitializeClient
+	if !knownClient(client) {
+		client = clientFromMeta(r.Meta[metaClientInfo])
+	}
+	if !knownClient(client) {
 		client = r.Client
+	}
+	if !knownClient(client) && opts.ClientInfo != nil {
+		var name, version string
+		if callback("Options.ClientInfo", func() error { name, version = opts.ClientInfo(r.Ctx, tok); return nil }) {
+			client = &mcpbridge.Client{Name: name, Version: version}
+		}
 	}
 	interactionID, traceID := joinIDs(r.Meta)
 	base := map[string]any{}
 	put(base, "mcp_session_id", capID(r.SessionID))
 	base["server_name"] = opts.name
+	put(base, "server_version", opts.version)
 	put(base, "account_id", id.AccountID)
 	if client != nil {
 		put(base, "client_name", capID(client.Name))
@@ -258,7 +273,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	put(base, "trace_id", traceID)
 	rc := &reqCtx{
 		w: w, st: stateFor(opts.name), opts: opts, base: base, who: who{id.UserID, id.AnonymousID}, identity: id,
-		requestID: capID(r.RequestID), http: r.HTTP, meta: map[string]any{}, start: time.Now(),
+		client: client, requestID: capID(r.RequestID), http: r.HTTP, meta: map[string]any{}, start: time.Now(),
 	}
 	// A copy: the SDK may remove the protocol keys from _meta while it handles the request.
 	for _, k := range []string{metaProtocolVersion, metaClientInfo, metaClientCapabilities} {
@@ -299,13 +314,16 @@ func (rc *reqCtx) Succeeded(method string, discoverVersions []string) {
 	if method == methodDiscover && !slices.Contains(discoverVersions, str(rc.meta[metaProtocolVersion])) {
 		return
 	}
-	rc.clientSeen(clientFromMeta(rc.meta[metaClientInfo]), capabilityNames(rc.meta[metaClientCapabilities]))
+	rc.clientSeen(rc.client, capabilityNames(rc.meta[metaClientCapabilities]))
 }
 
 // Initialized reports a successful initialize.
 func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, version string) {
 	put(rc.base, "protocol_version", capLabel(version))
-	rc.clientSeen(client, capabilityNames(capabilities))
+	if rc.client == nil {
+		rc.client = client
+	}
+	rc.clientSeen(rc.client, capabilityNames(capabilities))
 }
 
 func (rc *reqCtx) clientSeen(client *mcpbridge.Client, caps []string) {
@@ -560,11 +578,15 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 			rc.st.Lock()
 			schema, _ := rc.st.toolSchemas.get(rc.toolName)
 			rc.st.Unlock()
-			if invalid := invalidArguments(schema, t.args); len(invalid) > 0 {
+			kind := toolErrorType(o.ClassifiedError, result)
+			if invalid := invalidArguments(schema, t.args); kind == "" && len(invalid) > 0 {
 				extra["invalid_arguments"] = names(invalid)
 				extra["error_type"] = "invalid_request"
 			} else {
-				extra["error_type"] = "api_error"
+				if kind == "" {
+					kind = "api_error"
+				}
+				extra["error_type"] = kind
 			}
 		}
 	}
@@ -782,6 +804,7 @@ func (w *wrapped) elicitationCompleted(rc *reqCtx, e elicitation) {
 	} else {
 		opts = w.opts.Load()
 		p["server_name"] = opts.name
+		put(p, "server_version", opts.version)
 	}
 	p["elicitation_action"] = e.action
 	put(p, "tool_name", e.toolName)
@@ -900,4 +923,37 @@ func (rc *reqCtx) ListTools(tools []mcpbridge.Tool, lastPage bool) ([]map[string
 func fromContext(ctx context.Context) *reqCtx {
 	rc, _ := ctx.Value(reqCtxKey{}).(*reqCtx)
 	return rc
+}
+
+// toolErrorType uses only spec categories and numeric HTTP status hints, never error text.
+func toolErrorType(classified string, result map[string]any) string {
+	switch classified {
+	case "rate_limit", "timeout", "cancelled", "denied", "auth_error", "invalid_request", "connection_error", "api_error":
+		return classified
+	}
+	meta, _ := result["_meta"].(map[string]any)
+	structured, _ := result["structuredContent"].(map[string]any)
+	var status float64
+	for _, value := range []any{meta["com.rudderstack/http_status"], structured["status"], structured["statusCode"]} {
+		if number, ok := value.(float64); ok {
+			status = number
+			break
+		}
+	}
+	switch {
+	case status == 401:
+		return "auth_error"
+	case status == 403:
+		return "denied"
+	case status == 408 || status == 504:
+		return "timeout"
+	case status == 429:
+		return "rate_limit"
+	case status >= 400 && status < 500:
+		return "invalid_request"
+	case status >= 500 && status < 600:
+		return "api_error"
+	default:
+		return ""
+	}
 }

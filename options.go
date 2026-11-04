@@ -10,6 +10,7 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Transport values for [Options.Transport], as sent in mcp_client_seen.
@@ -92,7 +93,14 @@ type Options struct {
 	Analytics analytics.Client
 	// Identify maps a request's verified bearer token (nil without auth) to the user and
 	// workspace. Called once per request; if it fails or panics, the request is anonymous.
+	// ToolCallFromContext(ctx) exposes the current tool name and original arguments.
 	Identify func(ctx context.Context, token *auth.TokenInfo) (Identity, error)
+	// ClientInfo resolves client name and version only when initialize, per-call metadata
+	// and session state provide none. Panics are swallowed.
+	ClientInfo func(ctx context.Context, token *auth.TokenInfo) (name, version string)
+	// ClassifyToolError classifies an isError result. Only spec MCP error categories are used;
+	// panics and other values fall back to status and argument validation.
+	ClassifyToolError func(toolName string, result *mcp.CallToolResult) string
 	// EventRules declares tool events. Names starting with "ai_" or "mcp_" are rejected.
 	EventRules EventRules
 	// RequestContext configures the optional request_context argument, on by default.
