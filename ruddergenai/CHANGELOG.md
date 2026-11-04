@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/rudderlabs/ai-sdk-go/compare/ruddergenai/v0.3.0...ruddergenai/v0.4.0) (2026-11-04)
+
+
+### Features
+
+* **catalog:** cover every SDK property and reuse shared properties ([#38](https://github.com/rudderlabs/ai-sdk-go/issues/38)) ([7531e7f](https://github.com/rudderlabs/ai-sdk-go/commit/7531e7fe8e9aac531a99b25e7c27067e098e4e9e))
+
 ## [0.3.0](https://github.com/rudderlabs/ai-sdk-go/compare/ruddergenai/v0.2.1...ruddergenai/v0.3.0) (2026-10-30)
 
 

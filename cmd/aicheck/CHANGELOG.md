@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.2.0...cmd/aicheck/v0.3.0) (2026-11-04)
+
+
+### Features
+
+* **mcp:** fill event gaps on stateless servers ([#40](https://github.com/rudderlabs/ai-sdk-go/issues/40)) ([9b94bba](https://github.com/rudderlabs/ai-sdk-go/commit/9b94bba535a24c5253b73f643255acdfce3e070e))
+
 ## [0.2.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.1.0...cmd/aicheck/v0.2.0) (2026-10-30)
 
 
