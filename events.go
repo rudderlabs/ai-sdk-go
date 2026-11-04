@@ -113,6 +113,7 @@ func (w *wrapped) eventsBase(ctx context.Context, e EventsIdentity) (*options, w
 	opts := w.opts.Load()
 	id := opts.identity(ctx, e.Token)
 	base := map[string]any{"server_name": opts.name}
+	put(base, "server_version", opts.version)
 	account := capID(e.AccountID)
 	if account == "" {
 		account = id.AccountID

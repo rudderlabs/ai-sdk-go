@@ -9,9 +9,11 @@ import (
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 // Dispatch without a ClientSession: initialize and subsequent calls have no state key.
@@ -369,5 +371,69 @@ func TestInvalidArgumentsWithErrorClassification(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestServerVersionEventHelpers(t *testing.T) {
+	for _, version := range []string{"1.2.3", ""} {
+		t.Run(version, func(t *testing.T) {
+			s := server.NewMCPServer(t.Name(), version)
+			r := wrap(t, s, Options{MCPEvents: true})
+			TrackMCPEventSubscription(context.Background(), s, rudderstackai.SubscriptionChange{Action: rudderstackai.SubscriptionCreated, SubscriptionID: "sub", EventName: "update"})
+			send := WrapMCPEventSender(s, func(context.Context, rudderstackai.EventDelivery) (rudderstackai.DeliveryOutcome, error) {
+				return rudderstackai.DeliveryOutcome{HTTPStatus: 200}, nil
+			})
+			if _, err := send(context.Background(), rudderstackai.EventDelivery{SubscriptionID: "sub", EventID: "event", EventName: "update"}); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"mcp_event_subscription_changed", "mcp_event_delivered"} {
+				p := r.props(t, name)
+				got, exists := p["server_version"]
+				if version == "" && exists || version != "" && got != version {
+					t.Errorf("%s version = %v", name, got)
+				}
+			}
+		})
+	}
+}
+
+func TestCallbackPanicsReported(t *testing.T) {
+	for _, where := range []string{"Options.ClassifyToolError", "Options.ClientInfo"} {
+		t.Run(where, func(t *testing.T) {
+			hook.Reset()
+			t.Cleanup(hook.Reset)
+			s := workspaceServer("callback-panic", nil)
+			result := mcp.NewToolResultError("tool failed")
+			result.StructuredContent = map[string]any{"status": 401}
+			s.AddTool(mcp.NewTool("tool"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) { return result, nil })
+			opts := Options{}
+			if where == "Options.ClassifyToolError" {
+				opts.ClassifyToolError = func(string, *mcp.CallToolResult) string { panic("callback failed") }
+			} else {
+				opts.ClientInfo = func(context.Context) (string, string) { panic("callback failed") }
+			}
+			r := wrap(t, s, opts)
+			var seen []rudderstackai.ErrorInfo
+			if err := rudderstackai.Configure(rudderstackai.WithOnError(func(_ error, info rudderstackai.ErrorInfo) { seen = append(seen, info) })); err != nil {
+				t.Fatal(err)
+			}
+			response := s.HandleMessage(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"tool","arguments":{}}}`))
+			if _, ok := response.(mcp.JSONRPCError); ok {
+				t.Fatalf("response = %v", response)
+			}
+			p := r.props(t, "mcp_tool_called")
+			if p["error_type"] != "auth_error" {
+				t.Fatalf("fallback = %v", p)
+			}
+			if where == "Options.ClientInfo" {
+				if _, ok := p["client_name"]; ok {
+					t.Fatalf("client fallback = %v", p)
+				}
+			}
+			safely(func() { panic("SDK failure") })
+			if len(seen) != 2 || seen[0] != (rudderstackai.ErrorInfo{Kind: rudderstackai.KindUserCallback, Where: where}) || seen[1].Kind != rudderstackai.KindInternal {
+				t.Fatalf("hook saw %+v", seen)
+			}
+		})
 	}
 }

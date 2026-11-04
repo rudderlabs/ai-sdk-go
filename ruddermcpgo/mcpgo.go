@@ -568,7 +568,14 @@ func (t *tracked) succeeded(ctx context.Context, c *call, result any) {
 		}
 		o := mcpbridge.Outcome{Result: result}
 		if r, ok := result.(*mcp.CallToolResult); ok && r != nil && r.IsError && c.classify != nil {
-			safely(func() { o.ClassifiedError = c.classify(c.name, r) })
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						hook.Report(rudderstackai.KindUserCallback, "Options.ClassifyToolError", fmt.Errorf("panic: %v", r))
+					}
+				}()
+				o.ClassifiedError = c.classify(c.name, r)
+			}()
 		}
 		if reqs, ok := res["inputRequests"].(map[string]any); ok {
 			o.InputRequired = true

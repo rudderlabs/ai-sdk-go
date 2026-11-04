@@ -138,12 +138,9 @@ func TestMCPClientResolverSessionPrecedence(t *testing.T) {
 func TestMCPServerVersionEveryEvent(t *testing.T) {
 	for _, version := range []string{"1.2.3", ""} {
 		t.Run(version, func(t *testing.T) {
-			freshState(t)
-			r := newRecorder(t)
-			server, err := mcpbridge.Wrap("version-test", version, Options{Analytics: r, CapabilityRequests: &CapabilityRequestOptions{Capabilities: []string{"export"}}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			s := mcp.NewServer(&mcp.Implementation{Name: "version-test", Version: version}, nil)
+			r := wrap(t, s, Options{MCPEvents: true, CapabilityRequests: &CapabilityRequestOptions{Capabilities: []string{"export"}}})
+			server, _ := instances.get(s)
 			c := server.Begin(mcpbridge.Request{Ctx: context.Background(), InitializeClient: &mcpbridge.Client{Name: "client"}})
 			c.Initialized(nil, nil, "2025-06-18")
 			c.ToolCall("tool", nil, false, nil, "")
@@ -153,7 +150,14 @@ func TestMCPServerVersionEveryEvent(t *testing.T) {
 			c.Capability(nil)
 			server.Elicited(c, mcpbridge.Elicitation{Action: "accept"})
 			server.Elicited(nil, mcpbridge.Elicitation{Action: "accept"})
-			if len(r.all()) != 7 {
+			TrackMCPEventSubscription(context.Background(), s, SubscriptionChange{Action: SubscriptionCreated, SubscriptionID: "sub", EventName: "update"})
+			send := WrapMCPEventSender(s, func(context.Context, EventDelivery) (DeliveryOutcome, error) {
+				return DeliveryOutcome{HTTPStatus: 200}, nil
+			})
+			if _, err := send(context.Background(), EventDelivery{SubscriptionID: "sub", EventID: "event", EventName: "update"}); err != nil {
+				t.Fatal(err)
+			}
+			if len(r.all()) != 9 {
 				t.Fatalf("events = %v", r.names())
 			}
 			for _, event := range r.all() {
@@ -438,5 +442,42 @@ func TestMCPInvalidArgumentsWithErrorClassification(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestMCPCallbackPanicsReported(t *testing.T) {
+	for _, where := range []string{"Options.ClassifyToolError", "Options.ClientInfo"} {
+		t.Run(where, func(t *testing.T) {
+			s := workspaceServer("callback-panic", nil)
+			opts := Options{}
+			if where == "Options.ClassifyToolError" {
+				opts.ClassifyToolError = func(string, *mcp.CallToolResult) string { panic("callback failed") }
+			} else {
+				opts.ClientInfo = func(context.Context, *auth.TokenInfo) (string, string) { panic("callback failed") }
+			}
+			r := wrap(t, s, opts)
+			seen := &seenErrors{}
+			setupAI(t, WithOnError(seen.hook))
+			w, _ := instances.get(s)
+			result := &mcp.CallToolResult{IsError: true, StructuredContent: map[string]any{"status": 401}}
+			gotResult, err := w.receiving(func(context.Context, string, mcp.Request) (mcp.Result, error) { return result, nil })(context.Background(), "tools/call", &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: "tool", Arguments: json.RawMessage(`{}`)}})
+			if err != nil || gotResult != result {
+				t.Fatalf("result = %v, err = %v", gotResult, err)
+			}
+			p := r.props(t, "mcp_tool_called")
+			if p["error_type"] != "auth_error" {
+				t.Fatalf("fallback = %v", p)
+			}
+			if where == "Options.ClientInfo" {
+				if _, ok := p["client_name"]; ok {
+					t.Fatalf("client fallback = %v", p)
+				}
+			}
+			safely(func() { panic("SDK failure") })
+			got := seen.all()
+			if len(got) != 2 || got[0] != (ErrorInfo{Kind: KindUserCallback, Where: where}) || got[1].Kind != KindInternal {
+				t.Fatalf("hook saw %+v", got)
+			}
+		})
 	}
 }
