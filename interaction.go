@@ -118,6 +118,7 @@ type LLMCall struct {
 	// Provider as an OpenTelemetry gen_ai.provider.name value (openai, anthropic, aws.bedrock).
 	Provider string
 	// Model that served the call (or the requested model when the provider reports none).
+	// Claude IDs are reported without cloud prefixes, deployment versions or snapshot dates.
 	Model string
 	// RequestedModel is the model the application asked for; sent only when another model
 	// served the call.
@@ -154,7 +155,8 @@ type LLMCall struct {
 	// UsageUnknown marks tokens as unknown or partial, so the call stays unpriced.
 	UsageUnknown bool
 	// Integration reporting the call; the first one tags every event of the interaction.
-	// Empty means manual.
+	// Empty means manual. "tracing" identifies a span report, which can match an
+	// overlapping wrapper report even when there is no shared ResponseID.
 	Integration string
 	// OutputText is the answer text, given to a configured classifier or evaluator. Never sent.
 	OutputText string
@@ -171,8 +173,12 @@ func (i *Interaction) capLocked() {
 // foldCallLocked folds a call past MaxCallsPerInteraction into its usage group's overflow
 // record, so totals and usage_breakdown keep counting without storing the call.
 func (i *Interaction) foldCallLocked(r *recordedCall) {
+	foldCallInto(r, &i.overflow)
+}
+
+func foldCallInto(r *recordedCall, calls *[]*recordedCall) {
 	var dst *recordedCall
-	for _, c := range i.overflow {
+	for _, c := range *calls {
 		if c.agentName == r.agentName && c.callPurpose == r.callPurpose && c.provider == r.provider && c.model == r.model && c.requestedModel == r.requestedModel && c.serviceTier == r.serviceTier {
 			dst = c
 			break
@@ -180,7 +186,7 @@ func (i *Interaction) foldCallLocked(r *recordedCall) {
 	}
 	if dst == nil {
 		first := *r // a copy: lastCall and lastOK may point at r
-		i.overflow = append(i.overflow, &first)
+		*calls = append(*calls, &first)
 		return
 	}
 	if (dst.credits == nil && dst.errorType == "") || (r.credits == nil && r.errorType == "") {
@@ -275,6 +281,9 @@ type ToolResult struct {
 // EndOptions configures [Interaction.End].
 type EndOptions struct {
 	// Status is the final status. Derived from the recorded calls when empty.
+	// StatusError with ErrorType "app_error" preserves the latest call's provider failure
+	// classification. A successful retry clears that failure; other explicit statuses and
+	// more specific error types override the derived outcome.
 	Status    ResponseStatus
 	ErrorType string
 	// PauseReason is what a paused run waits for. Defaults to PauseOther.
@@ -378,12 +387,18 @@ func resumeFrom(o *InteractionOptions) bool {
 }
 
 type recordedCall struct {
+	startedAt, endedAt                               time.Time
+	fromSpan, twinMatched, usageUnknown              bool
+	callEventPending                                 bool
+	reportSequence                                   int
+	creditsExplicit                                  bool
 	credits                                          *float64
 	callPurpose                                      string
 	fallbackUsed, byok                               *bool
 	latency, ttft                                    *time.Duration
 	uncredited                                       bool
 	provider, model, requestedModel, agentName       string
+	rawModel                                         string
 	callCount, errorCount                            int
 	inputTokens, outputTokens                        int
 	reasoningTokens                                  *int
@@ -475,6 +490,7 @@ type Interaction struct {
 	seen                   map[string]*recordedCall
 	tools                  []*recordedTool
 	overflow               []*recordedCall // calls past MaxCallsPerInteraction, one per usage group
+	pendingOverflowCalls   []*recordedCall // un-emitted overflow usage behind the call barrier
 	toolOverflow           []*recordedTool // tool calls past it, one per tool_breakdown identity
 	capped                 bool
 	capPending             bool
@@ -884,6 +900,7 @@ func nonNegative(n int) int { return max(n, 0) }
 
 // RecordCall reports one model call (or CallCount aggregated calls). It returns false when the
 // call was ignored: a repeated provider response ID, or the interaction already ended.
+// A merged wrapper is accepted so it can record tools; a merged span returns false.
 func (i *Interaction) RecordCall(call LLMCall) (recorded bool) {
 	safely(func() { recorded = i.recordCall(call) })
 	return recorded
@@ -940,12 +957,26 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		}
 	}
 	callCount := max(call.CallCount, 1)
+	pricingCallCount := callCount
+	// Price aggregate twins with the shared count and authoritative usage.
+	pricingTwin := i.callTwinLocked(&recordedCall{
+		provider: call.Provider, model: canonicalModel(call.Model), responseID: call.ResponseID, agentName: call.AgentName,
+		fromSpan: call.Integration == "tracing", startedAt: call.StartedAt, endedAt: call.EndedAt,
+	})
+	if pricingTwin != nil {
+		pricingCallCount = max(callCount, pricingTwin.callCount)
+	}
+	useTwinUsage := pricingCallCount > 1 && pricingTwin != nil && !pricingTwin.fromSpan &&
+		!pricingTwin.usageUnknown && call.Integration == "tracing"
 	errorCount := 0
 	if call.ErrorCount != nil {
 		errorCount = nonNegative(*call.ErrorCount)
 	} else if call.ErrorType != "" {
 		errorCount = callCount
 	}
+	// Retain the pre-hook response entry so a pause during the callback can be
+	// distinguished from a duplicate first recorded by the callback itself.
+	responseBeforeCredits := i.seen[call.Provider+"\x00"+call.ResponseID]
 	credits := creditsOf(call.Credits)
 	if call.Credits == nil && call.ResponseID != "" {
 		if earlier := i.seen[call.Provider+"\x00"+call.ResponseID]; earlier != nil {
@@ -955,22 +986,32 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	if call.ErrorType == "cancelled" {
 		credits = nil
 	}
-	if credits == nil && c.credits != nil && call.ErrorType == "" && !call.UsageUnknown {
+	if credits == nil && c.credits != nil && call.ErrorType == "" && (!call.UsageUnknown || useTwinUsage) {
 		// App callbacks may inspect, update or end this interaction.
-		i.mu.Unlock()
-		credits = priceCredits(c.credits, CreditCall{
+		creditCall := CreditCall{
 			Provider: call.Provider, Model: call.Model, InputTokens: input, OutputTokens: output,
 			ReasoningTokens: reasoning, CachedInputTokens: nonNegative(call.CachedInputTokens), CacheWriteTokens: cacheWrite,
-			ServiceTier: tier, CostUSD: cost, CallCount: callCount, AgentName: call.AgentName,
+			ServiceTier: tier, CostUSD: cost, CallCount: pricingCallCount, AgentName: call.AgentName,
 			CallPurpose: call.CallPurpose, FallbackUsed: call.FallbackUsed, BYOK: call.BYOK,
-		})
+		}
+		if useTwinUsage {
+			creditCall.Model = first(pricingTwin.rawModel, pricingTwin.model)
+			creditCall.InputTokens, creditCall.OutputTokens = pricingTwin.inputTokens, pricingTwin.outputTokens
+			creditCall.ReasoningTokens, creditCall.CachedInputTokens = pricingTwin.reasoningTokens, pricingTwin.cachedInputTokens
+			creditCall.CacheWriteTokens, creditCall.ServiceTier, creditCall.CostUSD = pricingTwin.cacheWriteTokens, pricingTwin.serviceTier, pricingTwin.costUSD
+		}
+		i.mu.Unlock()
+		credits = priceCredits(c.credits, creditCall)
 		i.mu.Lock()
 		if i.ended {
 			return false
 		}
 	}
 	if call.ResponseID != "" {
-		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok {
+		// A pre-existing response turned into a tombstone while the hook ran:
+		// its segment closed, so admit this in-flight report in the current one.
+		// A live entry still deduplicates reports accepted in the current segment.
+		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok && (earlier != nil || responseBeforeCredits == nil) {
 			if earlier == nil {
 				return false
 			}
@@ -1008,9 +1049,12 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		}
 	}
 	r := &recordedCall{
-		credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
+		startedAt: call.StartedAt, endedAt: call.EndedAt,
+		fromSpan: call.Integration == "tracing", usageUnknown: call.UsageUnknown,
+		creditsExplicit: call.Credits != nil, credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
 		latency: latency, ttft: ttft,
-		provider: call.Provider, model: call.Model, requestedModel: call.RequestedModel, agentName: call.AgentName,
+		provider: call.Provider, model: canonicalModel(call.Model), requestedModel: call.RequestedModel, agentName: call.AgentName,
+		rawModel:  call.Model,
 		callCount: callCount, errorCount: min(errorCount, callCount),
 		inputTokens: input, outputTokens: output, reasoningTokens: reasoning,
 		cachedInputTokens: nonNegative(call.CachedInputTokens), cacheWriteTokens: cacheWrite,
@@ -1018,15 +1062,24 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		serverToolCallCount: serverToolCalls, serverToolCostUSD: serverToolCost, costUSD: cost,
 		finishReason: call.FinishReason, errorType: call.ErrorType, responseID: call.ResponseID,
 	}
+	// Select after the credit callback, which may itself record another report.
+	if twin := i.callTwinLocked(r); twin != nil {
+		mergeCallTwin(twin, r)
+		// A merge does not advance callCount, so discard a generic app hint that
+		// would otherwise hide the newly learned provider classification.
+		if twin == i.lastCall && i.hint != nil && i.hint.errorType == "app_error" && first(twin.errorType, finishErrors[twin.finishReason]) != "" {
+			i.hint = nil
+		}
+		i.noteCallOutcomeLocked(twin)
+		if twin.responseID != "" {
+			i.admitSeenLocked(twin.provider+"\x00"+twin.responseID, twin)
+		}
+		i.emitReadyCallsLocked()
+		return !r.fromSpan
+	}
 	i.callCount++
-	i.lastCall = r
-	if r.errorType != "" {
-		i.lastFailedCallType = r.errorType
-	}
-	if r.errorType == "" {
-		i.lastOK = r
-		i.successfulCallSequence = i.callCount
-	}
+	r.reportSequence = i.callCount
+	i.noteCallOutcomeLocked(r)
 	if len(i.calls) < cfg().limits.MaxCallsPerInteraction {
 		i.calls = append(i.calls, r)
 		if call.ResponseID != "" {
@@ -1037,12 +1090,158 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		i.foldCallLocked(r)
 	}
 	if c.emitLLMCalls {
-		props := i.callEventLocked(r)
-		i.sendLocked("ai_llm_response_received", func() map[string]any { return props })
+		r.callEventPending = true
+		// Spans and unknown usage can still acquire authoritative wrapper data.
+		// Keep later call events behind them to preserve the call order.
+		if len(i.calls) == 0 || i.calls[len(i.calls)-1] != r {
+			foldCallInto(r, &i.pendingOverflowCalls)
+			i.emitReadyCallsLocked()
+		} else {
+			i.emitReadyCallsLocked()
+			i.flushLocked()
+		}
 	} else {
 		i.flushLocked()
 	}
 	return true
+}
+
+// Outcome bookkeeping follows the first report of each logical call.
+func (i *Interaction) noteCallOutcomeLocked(r *recordedCall) {
+	if i.lastCall == nil || r.reportSequence >= i.lastCall.reportSequence {
+		i.lastCall = r
+		if r.errorType != "" {
+			i.lastFailedCallType = r.errorType
+		}
+	}
+	if r.errorType == "" {
+		if i.lastOK == nil || r.reportSequence >= i.lastOK.reportSequence {
+			i.lastOK = r
+			i.successfulCallSequence = r.reportSequence
+		}
+		return
+	}
+	if i.lastOK == r {
+		i.lastOK = nil
+		i.successfulCallSequence = 0
+		for _, prior := range i.calls {
+			if prior != r && prior.errorType == "" && prior.reportSequence > i.successfulCallSequence {
+				i.lastOK = prior
+				i.successfulCallSequence = prior.reportSequence
+			}
+		}
+	}
+}
+
+func (i *Interaction) emitPendingCallLocked(r *recordedCall) {
+	if !r.callEventPending {
+		return
+	}
+	r.callEventPending = false
+	props := i.callEventLocked(r)
+	i.sendLocked("ai_llm_response_received", func() map[string]any { return props })
+}
+
+func (i *Interaction) emitPendingOverflowLocked() {
+	for _, r := range i.pendingOverflowCalls {
+		i.emitPendingCallLocked(r)
+	}
+	i.pendingOverflowCalls = nil
+}
+
+func (i *Interaction) emitPendingCallsLocked() {
+	for _, r := range i.calls {
+		i.emitPendingCallLocked(r)
+	}
+	i.emitPendingOverflowLocked()
+}
+
+func (i *Interaction) emitReadyCallsLocked() {
+	for _, r := range i.calls {
+		if r.callEventPending && !r.twinMatched && (r.fromSpan || r.usageUnknown) && !r.startedAt.IsZero() && !r.endedAt.IsZero() {
+			return
+		}
+		i.emitPendingCallLocked(r)
+	}
+	i.emitPendingOverflowLocked()
+}
+
+// callTwinLocked pairs each span with at most one wrapper from the same provider
+// and canonical model. Conflicting agents, distinct response IDs and separate windows stay separate.
+func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
+	if call.startedAt.IsZero() || call.endedAt.IsZero() {
+		return nil
+	}
+	var best *recordedCall
+	var bestDistance time.Duration
+	for _, earlier := range i.calls {
+		if earlier.fromSpan == call.fromSpan || earlier.twinMatched || earlier.provider != call.provider ||
+			(earlier.responseID != "" && call.responseID != "") ||
+			(earlier.agentName != "" && call.agentName != "" && earlier.agentName != call.agentName) ||
+			(earlier.model != "" && call.model != "" && earlier.model != call.model) ||
+			earlier.startedAt.IsZero() || earlier.endedAt.IsZero() ||
+			earlier.startedAt.After(call.endedAt.Add(time.Millisecond)) || call.startedAt.After(earlier.endedAt.Add(time.Millisecond)) {
+			continue
+		}
+		distance := earlier.startedAt.Sub(call.startedAt).Abs() + earlier.endedAt.Sub(call.endedAt).Abs()
+		if best == nil || distance < bestDistance {
+			best, bestDistance = earlier, distance
+		}
+	}
+	return best
+}
+
+func mergeCallTwin(kept, later *recordedCall) {
+	kept.twinMatched = true
+	if later.callCount > kept.callCount && !kept.creditsExplicit {
+		kept.credits = later.credits
+	}
+	kept.callCount = max(kept.callCount, later.callCount)
+	// Known wrapper usage supersedes span usage; otherwise fill unknown usage.
+	if (!later.fromSpan && !later.usageUnknown && later.errorType == "") || (kept.usageUnknown && !later.usageUnknown) {
+		// Keep the deployed ID with the authoritative usage; emitted models remain canonical.
+		kept.rawModel = later.rawModel
+		kept.inputTokens, kept.outputTokens = later.inputTokens, later.outputTokens
+		kept.reasoningTokens = later.reasoningTokens
+		kept.cachedInputTokens, kept.cacheWriteTokens, kept.cacheWrite1 = later.cachedInputTokens, later.cacheWriteTokens, later.cacheWrite1
+		kept.serverToolCallCount, kept.serverToolCostUSD = later.serverToolCallCount, later.serverToolCostUSD
+		if later.costUSD != nil || kept.usageUnknown {
+			kept.costUSD = later.costUSD
+		}
+		kept.credits, kept.usageUnknown, kept.creditsExplicit = later.credits, false, later.creditsExplicit
+	}
+	if kept.costUSD == nil && kept.errorType == "" {
+		kept.costUSD = later.costUSD
+	}
+	// The latest error classification wins; known finish reasons and caps survive.
+	kept.errorType, kept.errorCount = later.errorType, later.errorCount
+	if later.errorType != "" && later.errorCount == later.callCount {
+		kept.errorCount = kept.callCount
+	}
+	if later.finishReason != "" && finishErrors[kept.finishReason] != "length" {
+		kept.finishReason = later.finishReason
+	}
+	if kept.errorType == "cancelled" {
+		kept.costUSD, kept.credits = nil, nil
+	}
+	fillString(&kept.model, later.model)
+	fillString(&kept.requestedModel, later.requestedModel)
+	fillString(&kept.agentName, later.agentName)
+	fillString(&kept.responseID, later.responseID)
+	fillString(&kept.serviceTier, later.serviceTier)
+	fillString(&kept.callPurpose, later.callPurpose)
+	if kept.fallbackUsed == nil {
+		kept.fallbackUsed = later.fallbackUsed
+	}
+	if kept.byok == nil {
+		kept.byok = later.byok
+	}
+	if kept.latency == nil {
+		kept.latency = later.latency
+	}
+	if kept.ttft == nil {
+		kept.ttft = later.ttft
+	}
 }
 
 // RecordToolCalls reports tool calls the model made. A call already recorded under the same
@@ -1181,10 +1380,12 @@ var reservedProperties = set(
 )
 
 // customProperties are the extra properties without SDK-owned names.
-func customProperties(extra map[string]any) map[string]any {
+func customProperties(extra map[string]any, capture bool, owned map[string]any) map[string]any {
 	props := map[string]any{}
 	for k, v := range extra {
-		if !reservedProperties[k] {
+		name := propertyName(k)
+		_, sdkOwned := owned[name]
+		if !dropContentProperty(k, capture) && !reservedProperties[name] && !sdkOwned {
 			props[k] = v
 		}
 	}
@@ -1198,6 +1399,10 @@ var toolEventReserved = func() map[string]bool {
 	}
 	return m
 }()
+
+func allowToolEventProperty(key string, capture bool) bool {
+	return !dropContentProperty(key, capture) && !toolEventReserved[propertyName(key)]
+}
 
 // fireToolEvents sends the declared tool event of each settled call (any call when final), once.
 // Rules run without the lock held.
@@ -1235,7 +1440,7 @@ type toolRuleOutcome struct {
 	resultSize int
 }
 
-func evaluateToolRule(rule ToolEventRule, t recordedTool) *toolRuleOutcome {
+func evaluateToolRule(rule ToolEventRule, t recordedTool, capture bool) *toolRuleOutcome {
 	args, _ := t.args.(map[string]any)
 	if rule.When != nil {
 		send := false
@@ -1249,7 +1454,7 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool) *toolRuleOutcome {
 		var out map[string]any
 		if callback("ToolEventRule.Properties", func() error { out = rule.Properties(args, t.result); return nil }) {
 			for k, v := range out {
-				if !toolEventReserved[k] {
+				if allowToolEventProperty(k, capture) {
 					custom[k] = v
 				}
 			}
@@ -1292,7 +1497,7 @@ func (i *Interaction) preparePendingRules(done func()) {
 		// Reserve it against reentrant preparation; final outcome is installed after evaluation.
 		selected.ruleOutcome = &toolRuleOutcome{suppressed: true, properties: map[string]any{}, resultSize: -1}
 		i.mu.Unlock()
-		outcome := evaluateToolRule(rule, tool)
+		outcome := evaluateToolRule(rule, tool, i.captureContent)
 		i.mu.Lock()
 		selected.ruleOutcome = outcome
 		selected.args, selected.result, selected.hasResult = nil, nil, false
@@ -1303,7 +1508,7 @@ func (i *Interaction) preparePendingRules(done func()) {
 func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	outcome := t.ruleOutcome
 	if outcome == nil {
-		outcome = evaluateToolRule(rule, t)
+		outcome = evaluateToolRule(rule, t, i.captureContent)
 	}
 	if outcome.suppressed {
 		return
@@ -1332,7 +1537,7 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	// SDK overrides are no longer custom properties and must survive size trimming.
 	keys := make([]string, 0, len(custom))
 	for k, v := range custom {
-		if _, sdkOwned := p[k]; !sdkOwned {
+		if _, sdkOwned := p[propertyName(k)]; !sdkOwned {
 			p[k] = v
 			keys = append(keys, k)
 		}
@@ -1572,11 +1777,13 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	var props map[string]any
 	i.buildSafelyLocked(func() {
-		props = customProperties(o.ExtraProperties)
-		maps.Copy(props, i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false))
+		owned := i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false)
+		props = customProperties(o.ExtraProperties, i.captureContent, owned)
+		maps.Copy(props, owned)
 	})
 	// Finalization belongs to segment latency, not the subsequent paused interval.
 	i.pausedAt = time.Now()
+	i.emitPendingCallsLocked()
 	if props != nil {
 		i.sendLocked("ai_response_received", func() map[string]any { return props })
 	}
@@ -1744,6 +1951,17 @@ func pendingBool(p map[string]any, key string) bool   { b, _ := p[key].(bool); r
 
 func pendingCall(c *recordedCall) map[string]any {
 	p := map[string]any{}
+	// Preserve event deferral and twin identity across a JSON round trip.
+	p["call_event_pending"] = c.callEventPending
+	p["from_span"], p["twin_matched"], p["usage_unknown"] = c.fromSpan, c.twinMatched, c.usageUnknown
+	p["credits_explicit"] = c.creditsExplicit
+	p["report_sequence"] = c.reportSequence
+	if !c.startedAt.IsZero() {
+		p["started_at"] = c.startedAt.Format(time.RFC3339Nano)
+	}
+	if !c.endedAt.IsZero() {
+		p["ended_at"] = c.endedAt.Format(time.RFC3339Nano)
+	}
 	if c.credits != nil {
 		p["credits"] = *c.credits
 	}
@@ -1775,6 +1993,7 @@ func pendingCall(c *recordedCall) map[string]any {
 	if c.model != "" {
 		p["model"] = c.model
 	}
+	put(p, "raw_model", c.rawModel)
 	if c.requestedModel != "" {
 		p["requested_model"] = c.requestedModel
 	}
@@ -1859,6 +2078,11 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	i.lastFailedCallType = snapshot.LastFailedCallType
 	for _, p := range snapshot.PendingCalls {
 		c := &recordedCall{}
+		c.callEventPending = pendingBool(p, "call_event_pending")
+		c.fromSpan, c.twinMatched, c.usageUnknown = pendingBool(p, "from_span"), pendingBool(p, "twin_matched"), pendingBool(p, "usage_unknown")
+		c.creditsExplicit = pendingBool(p, "credits_explicit")
+		c.startedAt, _ = time.Parse(time.RFC3339Nano, pendingText(p, "started_at"))
+		c.endedAt, _ = time.Parse(time.RFC3339Nano, pendingText(p, "ended_at"))
 		if p["credits"] != nil {
 			c.credits = Ptr(pendingNumber(p, "credits"))
 		}
@@ -1879,7 +2103,8 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		c.unpriced = pendingBool(p, "unpriced")
 		c.feesUnknown = pendingBool(p, "fees_unknown")
 		c.provider = pendingText(p, "provider")
-		c.model = pendingText(p, "model")
+		c.model = canonicalModel(pendingText(p, "model"))
+		c.rawModel = first(pendingText(p, "raw_model"), pendingText(p, "model"))
 		c.requestedModel = pendingText(p, "requested_model")
 		c.agentName = pendingText(p, "agent_name")
 		c.callCount = int(pendingNumber(p, "call_count"))
@@ -1912,6 +2137,10 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 			}
 			i.calls = append(i.calls, c)
 			i.callCount += c.callCount
+			c.reportSequence = i.callCount
+		}
+		if _, ok := p["report_sequence"]; ok {
+			c.reportSequence = int(pendingNumber(p, "report_sequence"))
 		}
 		if pendingBool(p, "last") {
 			i.lastCall = c
@@ -1923,8 +2152,14 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	if snapshot.ReportCount != nil {
 		i.callCount = *snapshot.ReportCount
 	}
+	if i.lastCall != nil {
+		i.lastCall.reportSequence = i.callCount
+	}
 	if snapshot.SuccessfulCallSequence != nil {
 		i.successfulCallSequence = *snapshot.SuccessfulCallSequence
+		if i.lastOK != nil {
+			i.lastOK.reportSequence = i.successfulCallSequence
+		}
 	} else if i.lastOK != nil {
 		i.successfulCallSequence = i.callCount
 	}
@@ -2111,9 +2346,11 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	i.mu.Lock()
 	var props map[string]any
+	i.emitPendingCallsLocked()
 	i.buildSafelyLocked(func() {
-		props = customProperties(o.ExtraProperties)
-		maps.Copy(props, i.buildLocked(o, responseText, responseOK, true))
+		owned := i.buildLocked(o, responseText, responseOK, true)
+		props = customProperties(o.ExtraProperties, i.captureContent, owned)
+		maps.Copy(props, owned)
 	})
 	if props != nil {
 		i.sendLocked("ai_response_received", func() map[string]any { return props })
@@ -2203,8 +2440,18 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	calls := append(slices.Clone(i.calls), i.overflow...)
 	last, lastOK := i.lastCall, i.lastOK
 	status, errorType, pauseReason := o.Status, o.ErrorType, o.PauseReason
-	// Held provider failures settle in beforeEnd hooks, so choose the task's fallback here.
-	if o.preferCallError && i.isTask && errorType == "app_error" && i.lastFailedCallType != "" {
+	// Generic application errors must not replace an unresolved provider classification.
+	if (status == StatusError || status == "") && errorType == "app_error" {
+		if providerStatus, providerError := i.providerFailureLocked(); providerError != "" {
+			errorType = providerError
+			status = providerStatus
+		}
+	}
+	// Held provider failures settle in beforeEnd hooks. Preserve the task fallback only
+	// when no current hint or successful retry has superseded the failure.
+	if o.preferCallError && i.isTask && errorType == "app_error" && i.lastFailedCallType != "" &&
+		i.successfulCallSequence < i.callCount &&
+		(i.hint == nil || i.hint.calls != i.callCount) {
 		errorType = i.lastFailedCallType
 		status = statusForErrorType(errorType)
 	}
@@ -2661,11 +2908,35 @@ func (i *Interaction) firstTokenAt(at time.Time) {
 	}
 }
 
+// providerFailureLocked respects a current hint before falling back to the latest call.
+// Explicit hints without a failure classification suppress older call failures.
+func (i *Interaction) providerFailureLocked() (ResponseStatus, string) {
+	if i.hint != nil && i.hint.calls == i.callCount {
+		if i.hint.status != StatusSuccess && i.hint.errorType != "" && i.hint.errorType != "app_error" {
+			return i.hint.status, i.hint.errorType
+		}
+		return "", ""
+	}
+	if i.lastCall != nil {
+		errorType := first(i.lastCall.errorType, finishErrors[i.lastCall.finishReason])
+		if errorType != "" && errorType != "app_error" {
+			return statusForErrorType(errorType), errorType
+		}
+	}
+	return "", ""
+}
+
 // hintOutcome sets the status End reports unless a call is recorded afterwards.
+// Generic application errors preserve the current provider or finish-reason classification.
 func (i *Interaction) hintOutcome(status ResponseStatus, errorType string) {
 	i.mu.Lock()
+	defer i.mu.Unlock()
+	if status == StatusError && errorType == "app_error" {
+		if _, providerError := i.providerFailureLocked(); providerError != "" {
+			return
+		}
+	}
 	i.hint = &outcomeHint{status: status, errorType: errorType, calls: i.callCount}
-	i.mu.Unlock()
 }
 
 // onBeforeEnd runs fn just before ai_response_received is built.

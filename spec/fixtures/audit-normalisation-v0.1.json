@@ -1,0 +1,3328 @@
+{
+  "fixture_version": 1,
+  "spec_version": "0.4.0",
+  "description": "Shared audit rules A (property guards), B (Claude model identity) and C (outcome precedence). Each case supplies input and expected output. See FIXTURE-FORMAT.md.",
+  "property_names": [
+    {
+      "input": "prompt_text",
+      "expected": {
+        "normalized": "prompt_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "promptText",
+      "expected": {
+        "normalized": "prompt_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "PromptText",
+      "expected": {
+        "normalized": "prompt_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "PROMPT_TEXT",
+      "expected": {
+        "normalized": "prompt_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "prompt--text",
+      "expected": {
+        "normalized": "prompt_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "prompt  text",
+      "expected": {
+        "normalized": "prompt_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "prompt.text",
+      "expected": {
+        "normalized": "prompt_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "__prompt_text__",
+      "expected": {
+        "normalized": "prompt_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "response_text",
+      "expected": {
+        "normalized": "response_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "responseText",
+      "expected": {
+        "normalized": "response_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "ResponseText",
+      "expected": {
+        "normalized": "response_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "RESPONSE_TEXT",
+      "expected": {
+        "normalized": "response_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "response--text",
+      "expected": {
+        "normalized": "response_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "response  text",
+      "expected": {
+        "normalized": "response_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "response.text",
+      "expected": {
+        "normalized": "response_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "__response_text__",
+      "expected": {
+        "normalized": "response_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "feedback_text",
+      "expected": {
+        "normalized": "feedback_text",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "feedbackText",
+      "expected": {
+        "normalized": "feedback_text",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "FeedbackText",
+      "expected": {
+        "normalized": "feedback_text",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "FEEDBACK_TEXT",
+      "expected": {
+        "normalized": "feedback_text",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "feedback--text",
+      "expected": {
+        "normalized": "feedback_text",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "feedback  text",
+      "expected": {
+        "normalized": "feedback_text",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "feedback.text",
+      "expected": {
+        "normalized": "feedback_text",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "__feedback_text__",
+      "expected": {
+        "normalized": "feedback_text",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "intent_summary",
+      "expected": {
+        "normalized": "intent_summary",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "intentSummary",
+      "expected": {
+        "normalized": "intent_summary",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "IntentSummary",
+      "expected": {
+        "normalized": "intent_summary",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "INTENT_SUMMARY",
+      "expected": {
+        "normalized": "intent_summary",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "intent--summary",
+      "expected": {
+        "normalized": "intent_summary",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "intent  summary",
+      "expected": {
+        "normalized": "intent_summary",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "intent.summary",
+      "expected": {
+        "normalized": "intent_summary",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "__intent_summary__",
+      "expected": {
+        "normalized": "intent_summary",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "explanation",
+      "expected": {
+        "normalized": "explanation",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "Explanation",
+      "expected": {
+        "normalized": "explanation",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "EXPLANATION",
+      "expected": {
+        "normalized": "explanation",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "__explanation__",
+      "expected": {
+        "normalized": "explanation",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "call_reason",
+      "expected": {
+        "normalized": "call_reason",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "callReason",
+      "expected": {
+        "normalized": "call_reason",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "CallReason",
+      "expected": {
+        "normalized": "call_reason",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "CALL_REASON",
+      "expected": {
+        "normalized": "call_reason",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "call--reason",
+      "expected": {
+        "normalized": "call_reason",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "call  reason",
+      "expected": {
+        "normalized": "call_reason",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "call.reason",
+      "expected": {
+        "normalized": "call_reason",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "__call_reason__",
+      "expected": {
+        "normalized": "call_reason",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "capability_detail",
+      "expected": {
+        "normalized": "capability_detail",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "capabilityDetail",
+      "expected": {
+        "normalized": "capability_detail",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "CapabilityDetail",
+      "expected": {
+        "normalized": "capability_detail",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "CAPABILITY_DETAIL",
+      "expected": {
+        "normalized": "capability_detail",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "capability--detail",
+      "expected": {
+        "normalized": "capability_detail",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "capability  detail",
+      "expected": {
+        "normalized": "capability_detail",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "capability.detail",
+      "expected": {
+        "normalized": "capability_detail",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "__capability_detail__",
+      "expected": {
+        "normalized": "capability_detail",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "Prompt-Text",
+      "expected": {
+        "normalized": "prompt_text",
+        "content": true,
+        "reserved": true
+      }
+    },
+    {
+      "input": "HTTPStatus",
+      "expected": {
+        "normalized": "http_status",
+        "content": false,
+        "reserved": false
+      }
+    },
+    {
+      "input": "primary--model",
+      "expected": {
+        "normalized": "primary_model",
+        "content": false,
+        "reserved": true
+      }
+    },
+    {
+      "input": "__primary_model__",
+      "expected": {
+        "normalized": "primary_model",
+        "content": false,
+        "reserved": true
+      }
+    },
+    {
+      "input": "AgentVersion",
+      "expected": {
+        "normalized": "agent_version",
+        "content": false,
+        "reserved": true
+      }
+    },
+    {
+      "input": "inputMethod",
+      "expected": {
+        "normalized": "input_method",
+        "content": false,
+        "reserved": true
+      }
+    },
+    {
+      "input": "promptLength",
+      "expected": {
+        "normalized": "prompt_length",
+        "content": false,
+        "reserved": false
+      }
+    },
+    {
+      "input": "promptSource",
+      "expected": {
+        "normalized": "prompt_source",
+        "content": false,
+        "reserved": false
+      }
+    },
+    {
+      "input": "responseTimeMs",
+      "expected": {
+        "normalized": "response_time_ms",
+        "content": false,
+        "reserved": false
+      }
+    },
+    {
+      "input": "cardKinds",
+      "expected": {
+        "normalized": "card_kinds",
+        "content": false,
+        "reserved": false
+      }
+    },
+    {
+      "input": "ResultSizeBytes",
+      "scope": "tool",
+      "expected": {
+        "normalized": "result_size_bytes",
+        "content": false,
+        "reserved": true
+      }
+    }
+  ],
+  "canonical_models": [
+    {
+      "input": "us.anthropic.claude-opus-5",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "anthropic.claude-haiku-4-5-20251001-v1:0",
+      "expected": "claude-haiku-4-5"
+    },
+    {
+      "input": "claude-sonnet-4-5@20250929",
+      "expected": "claude-sonnet-4-5"
+    },
+    {
+      "input": "Claude-Opus-5",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "claude-3-5-sonnet-latest",
+      "expected": "claude-3-5-sonnet-latest"
+    },
+    {
+      "input": "claude-sonnet-5",
+      "expected": "claude-sonnet-5"
+    },
+    {
+      "input": "claude-sonnet-5-5",
+      "expected": "claude-sonnet-5-5"
+    },
+    {
+      "input": "gpt-4.1-mini-2025-04-14",
+      "expected": "gpt-4.1-mini-2025-04-14"
+    },
+    {
+      "input": "GPT-4.1-MINI",
+      "expected": "GPT-4.1-MINI"
+    },
+    {
+      "input": "amazon.nova-pro-v1:0",
+      "expected": "amazon.nova-pro-v1:0"
+    },
+    {
+      "input": "gemini-2.5-pro",
+      "expected": "gemini-2.5-pro"
+    },
+    {
+      "input": "anthropic/Claude-Opus-5-20261101-v1:0",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "claude-sonnet-4-5@v2",
+      "expected": "claude-sonnet-4-5"
+    },
+    {
+      "input": "claude-opus-5-20261101-v1:0-20261102:3@20261103",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "global.us.anthropic.anthropic.Claude-Opus-5-20261101-v2:1",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "claude-opus-5-latest-20261101-v1:0",
+      "expected": "claude-opus-5-latest"
+    },
+    {
+      "input": "claude-opus-5-v2@20261101",
+      "expected": "claude-opus-5-v2"
+    },
+    {
+      "input": "claude-opus-5-2026-11-01",
+      "expected": "claude-opus-5-2026-11-01"
+    },
+    {
+      "input": "us.anthropic.GPT-4:0",
+      "expected": "us.anthropic.GPT-4:0"
+    },
+    {
+      "input": "us.anthropic.Claude-Opus-5-20261101-v2:1",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "us-gov.anthropic.Claude-Opus-5-20261101-v2:1",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "eu.anthropic.Claude-Opus-5-20261101-v2:1",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "apac.anthropic.Claude-Opus-5-20261101-v2:1",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "jp.anthropic.Claude-Opus-5-20261101-v2:1",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "au.anthropic.Claude-Opus-5-20261101-v2:1",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "in.anthropic.Claude-Opus-5-20261101-v2:1",
+      "expected": "claude-opus-5"
+    },
+    {
+      "input": "global.anthropic.Claude-Opus-5-20261101-v2:1",
+      "expected": "claude-opus-5"
+    }
+  ],
+  "calls": [
+    {
+      "name": "aws.bedrock wrapper,span us.anthropic.Claude-Opus-5-20261101-v1:0,us.anthropic.Claude-Opus-5-20261101-v1:0",
+      "input": {
+        "provider": "aws.bedrock",
+        "reports": [
+          {
+            "model": "us.anthropic.Claude-Opus-5-20261101-v1:0",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "us.anthropic.Claude-Opus-5-20261101-v1:0",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "aws.bedrock span,wrapper us.anthropic.Claude-Opus-5-20261101-v1:0,us.anthropic.Claude-Opus-5-20261101-v1:0",
+      "input": {
+        "provider": "aws.bedrock",
+        "reports": [
+          {
+            "model": "us.anthropic.Claude-Opus-5-20261101-v1:0",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "us.anthropic.Claude-Opus-5-20261101-v1:0",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "aws.bedrock wrapper,span us.anthropic.Claude-Opus-5-20261101-v1:0,claude-opus-5",
+      "input": {
+        "provider": "aws.bedrock",
+        "reports": [
+          {
+            "model": "us.anthropic.Claude-Opus-5-20261101-v1:0",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-opus-5",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": 7,
+          "claude-opus-5": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "aws.bedrock span,wrapper us.anthropic.Claude-Opus-5-20261101-v1:0,claude-opus-5",
+      "input": {
+        "provider": "aws.bedrock",
+        "reports": [
+          {
+            "model": "us.anthropic.Claude-Opus-5-20261101-v1:0",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-opus-5",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": 7,
+          "claude-opus-5": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "aws.bedrock wrapper,span claude-opus-5,us.anthropic.Claude-Opus-5-20261101-v1:0",
+      "input": {
+        "provider": "aws.bedrock",
+        "reports": [
+          {
+            "model": "claude-opus-5",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "us.anthropic.Claude-Opus-5-20261101-v1:0",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5": 7,
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "aws.bedrock span,wrapper claude-opus-5,us.anthropic.Claude-Opus-5-20261101-v1:0",
+      "input": {
+        "provider": "aws.bedrock",
+        "reports": [
+          {
+            "model": "claude-opus-5",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "us.anthropic.Claude-Opus-5-20261101-v1:0",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5": 7,
+          "us.anthropic.Claude-Opus-5-20261101-v1:0": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "openrouter wrapper,span anthropic/claude-opus-5-20261101,anthropic/claude-opus-5-20261101",
+      "input": {
+        "provider": "openrouter",
+        "reports": [
+          {
+            "model": "anthropic/claude-opus-5-20261101",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "anthropic/claude-opus-5-20261101",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "provider": "anthropic"
+          }
+        ],
+        "prices": {
+          "anthropic/claude-opus-5-20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "anthropic/claude-opus-5-20261101": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "openrouter span,wrapper anthropic/claude-opus-5-20261101,anthropic/claude-opus-5-20261101",
+      "input": {
+        "provider": "openrouter",
+        "reports": [
+          {
+            "model": "anthropic/claude-opus-5-20261101",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "provider": "anthropic"
+          },
+          {
+            "model": "anthropic/claude-opus-5-20261101",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "anthropic/claude-opus-5-20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "anthropic/claude-opus-5-20261101": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "openrouter wrapper,span anthropic/claude-opus-5-20261101,claude-opus-5",
+      "input": {
+        "provider": "openrouter",
+        "reports": [
+          {
+            "model": "anthropic/claude-opus-5-20261101",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-opus-5",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "provider": "anthropic"
+          }
+        ],
+        "prices": {
+          "anthropic/claude-opus-5-20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "anthropic/claude-opus-5-20261101": 7,
+          "claude-opus-5": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "openrouter span,wrapper anthropic/claude-opus-5-20261101,claude-opus-5",
+      "input": {
+        "provider": "openrouter",
+        "reports": [
+          {
+            "model": "anthropic/claude-opus-5-20261101",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "provider": "anthropic"
+          },
+          {
+            "model": "claude-opus-5",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "provider": "anthropic"
+          }
+        ],
+        "prices": {
+          "anthropic/claude-opus-5-20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "anthropic/claude-opus-5-20261101": 7,
+          "claude-opus-5": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "openrouter wrapper,span claude-opus-5,anthropic/claude-opus-5-20261101",
+      "input": {
+        "provider": "openrouter",
+        "reports": [
+          {
+            "model": "claude-opus-5",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "provider": "anthropic"
+          },
+          {
+            "model": "anthropic/claude-opus-5-20261101",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "provider": "anthropic"
+          }
+        ],
+        "prices": {
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "anthropic/claude-opus-5-20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5": 7,
+          "anthropic/claude-opus-5-20261101": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "openrouter span,wrapper claude-opus-5,anthropic/claude-opus-5-20261101",
+      "input": {
+        "provider": "openrouter",
+        "reports": [
+          {
+            "model": "claude-opus-5",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "provider": "anthropic"
+          },
+          {
+            "model": "anthropic/claude-opus-5-20261101",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "anthropic/claude-opus-5-20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5": 7,
+          "anthropic/claude-opus-5-20261101": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "gcp.vertex_ai wrapper,span claude-opus-5@20261101,claude-opus-5@20261101",
+      "input": {
+        "provider": "gcp.vertex_ai",
+        "reports": [
+          {
+            "model": "claude-opus-5@20261101",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-opus-5@20261101",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "claude-opus-5@20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5@20261101": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "gcp.vertex_ai span,wrapper claude-opus-5@20261101,claude-opus-5@20261101",
+      "input": {
+        "provider": "gcp.vertex_ai",
+        "reports": [
+          {
+            "model": "claude-opus-5@20261101",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-opus-5@20261101",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "claude-opus-5@20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5@20261101": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "gcp.vertex_ai wrapper,span claude-opus-5@20261101,claude-opus-5",
+      "input": {
+        "provider": "gcp.vertex_ai",
+        "reports": [
+          {
+            "model": "claude-opus-5@20261101",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-opus-5",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "claude-opus-5@20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5@20261101": 7,
+          "claude-opus-5": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "gcp.vertex_ai span,wrapper claude-opus-5@20261101,claude-opus-5",
+      "input": {
+        "provider": "gcp.vertex_ai",
+        "reports": [
+          {
+            "model": "claude-opus-5@20261101",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-opus-5",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "claude-opus-5@20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5@20261101": 7,
+          "claude-opus-5": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "gcp.vertex_ai wrapper,span claude-opus-5,claude-opus-5@20261101",
+      "input": {
+        "provider": "gcp.vertex_ai",
+        "reports": [
+          {
+            "model": "claude-opus-5",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-opus-5@20261101",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "claude-opus-5@20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5": 7,
+          "claude-opus-5@20261101": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "gcp.vertex_ai span,wrapper claude-opus-5,claude-opus-5@20261101",
+      "input": {
+        "provider": "gcp.vertex_ai",
+        "reports": [
+          {
+            "model": "claude-opus-5",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-opus-5@20261101",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "claude-opus-5": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "claude-opus-5@20261101": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "claude-opus-5": 7,
+          "claude-opus-5@20261101": 7
+        }
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "distinct claude-sonnet-5 claude-sonnet-5-5",
+      "input": {
+        "provider": "anthropic",
+        "reports": [
+          {
+            "model": "claude-sonnet-5",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-sonnet-5-5",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ]
+      },
+      "expected": {
+        "primary_model": "claude-sonnet-5-5",
+        "llm_call_count": 2,
+        "call_events": 2,
+        "total_input_tokens": 2000,
+        "total_output_tokens": 1000,
+        "groups": [
+          {
+            "model": "claude-sonnet-5",
+            "call_count": 1
+          },
+          {
+            "model": "claude-sonnet-5-5",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "distinct claude-3-5-sonnet claude-3-5-sonnet-latest",
+      "input": {
+        "provider": "anthropic",
+        "reports": [
+          {
+            "model": "claude-3-5-sonnet",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "claude-3-5-sonnet-latest",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ]
+      },
+      "expected": {
+        "primary_model": "claude-3-5-sonnet-latest",
+        "llm_call_count": 2,
+        "call_events": 2,
+        "total_input_tokens": 2000,
+        "total_output_tokens": 1000,
+        "groups": [
+          {
+            "model": "claude-3-5-sonnet",
+            "call_count": 1
+          },
+          {
+            "model": "claude-3-5-sonnet-latest",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "canonical grouping of separate calls",
+      "input": {
+        "provider": "aws.bedrock",
+        "reports": [
+          {
+            "model": "in.anthropic.Claude-Opus-5-20261101-v1:0",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500
+          },
+          {
+            "model": "claude-opus-5",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500
+          }
+        ]
+      },
+      "expected": {
+        "primary_model": "claude-opus-5",
+        "llm_call_count": 2,
+        "call_events": 2,
+        "total_input_tokens": 2000,
+        "total_output_tokens": 1000,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "one millisecond window slack",
+      "input": {
+        "provider": "anthropic",
+        "reports": [
+          {
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "model": "claude-opus-5"
+          },
+          {
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 111,
+            "ended_at": 120,
+            "model": "claude-opus-5"
+          }
+        ]
+      },
+      "expected": {
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ],
+        "primary_model": "claude-opus-5"
+      }
+    },
+    {
+      "name": "nonoverlapping windows stay separate",
+      "input": {
+        "provider": "anthropic",
+        "reports": [
+          {
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "model": "claude-opus-5"
+          },
+          {
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 112,
+            "ended_at": 120,
+            "model": "claude-opus-5"
+          }
+        ]
+      },
+      "expected": {
+        "llm_call_count": 2,
+        "call_events": 2,
+        "total_input_tokens": 2000,
+        "total_output_tokens": 1000,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 2
+          }
+        ],
+        "primary_model": "claude-opus-5"
+      }
+    },
+    {
+      "name": "closest unmatched report wins",
+      "input": {
+        "provider": "anthropic",
+        "reports": [
+          {
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "model": "claude-opus-5"
+          },
+          {
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 120,
+            "ended_at": 130,
+            "model": "claude-opus-5"
+          },
+          {
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 121,
+            "ended_at": 129,
+            "model": "claude-opus-5"
+          }
+        ]
+      },
+      "expected": {
+        "llm_call_count": 2,
+        "call_events": 2,
+        "total_input_tokens": 2000,
+        "total_output_tokens": 1000,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 2
+          }
+        ],
+        "primary_model": "claude-opus-5"
+      }
+    },
+    {
+      "name": "present distinct response IDs stay separate",
+      "input": {
+        "provider": "anthropic",
+        "reports": [
+          {
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "model": "claude-opus-5",
+            "response_id": "a"
+          },
+          {
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "model": "claude-opus-5",
+            "response_id": "b"
+          }
+        ]
+      },
+      "expected": {
+        "llm_call_count": 2,
+        "call_events": 2,
+        "total_input_tokens": 2000,
+        "total_output_tokens": 1000,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 2
+          }
+        ],
+        "primary_model": "claude-opus-5"
+      }
+    },
+    {
+      "name": "shared response ID dedup stays separate from twin matching",
+      "input": {
+        "provider": "anthropic",
+        "reports": [
+          {
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "model": "claude-opus-5",
+            "response_id": "same"
+          },
+          {
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110,
+            "model": "claude-opus-5",
+            "response_id": "same"
+          }
+        ]
+      },
+      "expected": {
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "groups": [
+          {
+            "model": "claude-opus-5",
+            "call_count": 1
+          }
+        ],
+        "primary_model": "claude-opus-5"
+      }
+    },
+    {
+      "name": "missing model IDs still match",
+      "input": {
+        "provider": "anthropic",
+        "reports": [
+          {
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ]
+      },
+      "expected": {
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "groups": [
+          {
+            "model": null,
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "claude raw-row call counts",
+      "adapter": "claude-agent-sdk",
+      "description": "Node.js/Python only: Claude Agent SDK accounting; Go has no Claude Agent SDK adapter. Two dated raw usage rows with one canonical name count their own observed calls and credits once.",
+      "input": {
+        "provider": "anthropic",
+        "resumed": false,
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "audit-fresh-raw-ids",
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-0",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20250929",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "audit-fresh-raw-ids",
+            "uuid": "00000000-0000-0000-0000-000000000002",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-1",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "audit-fresh-raw-ids",
+            "uuid": "00000000-0000-0000-0000-000000000003",
+            "is_error": false,
+            "num_turns": 2,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "total_cost_usd": 0.00144,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 200,
+              "output_tokens": 40,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5-20250929": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.00024,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5-20251001": {
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.0012,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            }
+          }
+        ],
+        "prices": {
+          "claude-sonnet-4-5-20250929": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 2
+          },
+          "claude-sonnet-4-5-20251001": {
+            "input_per_mtok": 10,
+            "output_per_mtok": 10
+          }
+        },
+        "credits": {
+          "claude-sonnet-4-5-20250929": 1,
+          "claude-sonnet-4-5-20251001": 1
+        }
+      },
+      "expected": {
+        "primary_model": "claude-sonnet-4-5",
+        "llm_call_count": 2,
+        "call_events": 2,
+        "total_input_tokens": 200,
+        "total_output_tokens": 40,
+        "total_cost_usd": 0.00144,
+        "total_credits": 2,
+        "groups": [
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "claude resumed raw-id pricing",
+      "adapter": "claude-agent-sdk",
+      "description": "Node.js/Python only: Claude Agent SDK accounting; Go has no Claude Agent SDK adapter. A resumed run without a baseline must price and credit each deployed ID before grouping canonically.",
+      "input": {
+        "provider": "anthropic",
+        "resumed": true,
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "audit-resumed-raw-ids",
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-0",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20250929",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "audit-resumed-raw-ids",
+            "uuid": "00000000-0000-0000-0000-000000000002",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-1",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "audit-resumed-raw-ids",
+            "uuid": "00000000-0000-0000-0000-000000000003",
+            "is_error": false,
+            "num_turns": 2,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "total_cost_usd": 0.0144,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 200,
+              "output_tokens": 40,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5-20250929": {
+                "inputTokens": 1000,
+                "outputTokens": 200,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.0024,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5-20251001": {
+                "inputTokens": 1000,
+                "outputTokens": 200,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.012,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            }
+          }
+        ],
+        "prices": {
+          "claude-sonnet-4-5-20250929": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 2
+          },
+          "claude-sonnet-4-5-20251001": {
+            "input_per_mtok": 10,
+            "output_per_mtok": 10
+          }
+        },
+        "credits": {
+          "claude-sonnet-4-5-20250929": 1,
+          "claude-sonnet-4-5-20251001": 3
+        }
+      },
+      "expected": {
+        "primary_model": "claude-sonnet-4-5",
+        "llm_call_count": 2,
+        "call_events": 2,
+        "total_input_tokens": 200,
+        "total_output_tokens": 40,
+        "total_cost_usd": 0.00144,
+        "total_credits": 4,
+        "groups": [
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 2
+          }
+        ]
+      }
+    }
+  ],
+  "statuses": [
+    {
+      "name": "timeout then hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "timeout",
+        "error_type": "timeout"
+      }
+    },
+    {
+      "name": "rate_limit then hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "rate_limit"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "rate_limit"
+      }
+    },
+    {
+      "name": "api_error then hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "api_error"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "api_error"
+      }
+    },
+    {
+      "name": "cancelled then hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "cancelled"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "cancelled",
+        "error_type": "cancelled"
+      }
+    },
+    {
+      "name": "max_tokens then hint",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "max_tokens"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "length then hint",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "length"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "content_filter then hint",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "content_filter"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "content_filter"
+      }
+    },
+    {
+      "name": "timeout success hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "call",
+          "finish_reason": "stop"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "app_error"
+      }
+    },
+    {
+      "name": "success timeout hint hint",
+      "input": [
+        {
+          "op": "call"
+        },
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "timeout",
+        "error_type": "timeout"
+      }
+    },
+    {
+      "name": "older timeout newer rate limit hint",
+      "input": [
+        {
+          "op": "call"
+        },
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "rate_limit"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "rate_limit"
+      }
+    },
+    {
+      "name": "older timeout newer success hint",
+      "input": [
+        {
+          "op": "call"
+        },
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "success"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "app_error"
+      }
+    },
+    {
+      "name": "no provider hint",
+      "input": [
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "app_error"
+      }
+    },
+    {
+      "name": "timeout then note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "timeout",
+        "error_type": "timeout"
+      }
+    },
+    {
+      "name": "rate_limit then note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "rate_limit"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "rate_limit"
+      }
+    },
+    {
+      "name": "api_error then note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "api_error"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "api_error"
+      }
+    },
+    {
+      "name": "cancelled then note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "cancelled"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "cancelled",
+        "error_type": "cancelled"
+      }
+    },
+    {
+      "name": "max_tokens then note",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "max_tokens"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "length then note",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "length"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "content_filter then note",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "content_filter"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "content_filter"
+      }
+    },
+    {
+      "name": "timeout success note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "call",
+          "finish_reason": "stop"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "app_error"
+      }
+    },
+    {
+      "name": "success timeout hint note",
+      "input": [
+        {
+          "op": "call"
+        },
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "timeout",
+        "error_type": "timeout"
+      }
+    },
+    {
+      "name": "older timeout newer rate limit note",
+      "input": [
+        {
+          "op": "call"
+        },
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "rate_limit"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "rate_limit"
+      }
+    },
+    {
+      "name": "older timeout newer success note",
+      "input": [
+        {
+          "op": "call"
+        },
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "success"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "app_error"
+      }
+    },
+    {
+      "name": "no provider note",
+      "input": [
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "app_error"
+      }
+    },
+    {
+      "name": "timeout then end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "timeout",
+        "error_type": "timeout"
+      }
+    },
+    {
+      "name": "rate_limit then end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "rate_limit"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "rate_limit"
+      }
+    },
+    {
+      "name": "api_error then end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "api_error"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "api_error"
+      }
+    },
+    {
+      "name": "cancelled then end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "cancelled"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "cancelled",
+        "error_type": "cancelled"
+      }
+    },
+    {
+      "name": "max_tokens then end",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "max_tokens"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "length then end",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "length"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "content_filter then end",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "content_filter"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "content_filter"
+      }
+    },
+    {
+      "name": "timeout success end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "call",
+          "finish_reason": "stop"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "app_error"
+      }
+    },
+    {
+      "name": "success timeout hint end",
+      "input": [
+        {
+          "op": "call"
+        },
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "timeout",
+        "error_type": "timeout"
+      }
+    },
+    {
+      "name": "older timeout newer rate limit end",
+      "input": [
+        {
+          "op": "call"
+        },
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "rate_limit"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "rate_limit"
+      }
+    },
+    {
+      "name": "older timeout newer success end",
+      "input": [
+        {
+          "op": "call"
+        },
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "success"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "app_error"
+      }
+    },
+    {
+      "name": "no provider end",
+      "input": [
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "app_error"
+      }
+    },
+    {
+      "name": "explicit success hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "success"
+        }
+      ],
+      "expected": {
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "explicit success note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "note",
+          "status": "success"
+        }
+      ],
+      "expected": {
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "explicit success end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "end",
+          "status": "success"
+        }
+      ],
+      "expected": {
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "explicit cancelled hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "cancelled",
+          "error_type": "cancelled"
+        }
+      ],
+      "expected": {
+        "response_status": "cancelled",
+        "error_type": "cancelled"
+      }
+    },
+    {
+      "name": "explicit cancelled note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "note",
+          "status": "cancelled",
+          "error_type": "cancelled"
+        }
+      ],
+      "expected": {
+        "response_status": "cancelled",
+        "error_type": "cancelled"
+      }
+    },
+    {
+      "name": "explicit cancelled end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "end",
+          "status": "cancelled",
+          "error_type": "cancelled"
+        }
+      ],
+      "expected": {
+        "response_status": "cancelled",
+        "error_type": "cancelled"
+      }
+    },
+    {
+      "name": "explicit incomplete hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "incomplete",
+          "error_type": "length"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "explicit incomplete note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "note",
+          "status": "incomplete",
+          "error_type": "length"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "explicit incomplete end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "end",
+          "status": "incomplete",
+          "error_type": "length"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "explicit blocked hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "blocked"
+        }
+      ],
+      "expected": {
+        "response_status": "blocked"
+      }
+    },
+    {
+      "name": "explicit blocked note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "note",
+          "status": "blocked"
+        }
+      ],
+      "expected": {
+        "response_status": "blocked"
+      }
+    },
+    {
+      "name": "explicit blocked end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "end",
+          "status": "blocked"
+        }
+      ],
+      "expected": {
+        "response_status": "blocked"
+      }
+    },
+    {
+      "name": "explicit error hint",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "validation"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "validation"
+      }
+    },
+    {
+      "name": "explicit error note",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "validation"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "validation"
+      }
+    },
+    {
+      "name": "explicit error end",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout"
+        },
+        {
+          "op": "end",
+          "status": "error",
+          "error_type": "validation"
+        }
+      ],
+      "expected": {
+        "response_status": "error",
+        "error_type": "validation"
+      }
+    },
+    {
+      "name": "app marker before successful provider hint",
+      "input": [
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        },
+        {
+          "op": "call"
+        }
+      ],
+      "expected": {
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "specific app marker before successful provider hint",
+      "input": [
+        {
+          "op": "hint",
+          "status": "cancelled",
+          "error_type": "cancelled"
+        },
+        {
+          "op": "call"
+        }
+      ],
+      "expected": {
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "app marker before timeout provider hint",
+      "input": [
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        },
+        {
+          "op": "call",
+          "error_type": "timeout"
+        }
+      ],
+      "expected": {
+        "response_status": "timeout",
+        "error_type": "timeout"
+      }
+    },
+    {
+      "name": "app marker before max tokens provider hint",
+      "input": [
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        },
+        {
+          "op": "call",
+          "finish_reason": "max_tokens"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "app marker before successful provider note",
+      "input": [
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        },
+        {
+          "op": "call"
+        }
+      ],
+      "expected": {
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "specific app marker before successful provider note",
+      "input": [
+        {
+          "op": "note",
+          "status": "cancelled",
+          "error_type": "cancelled"
+        },
+        {
+          "op": "call"
+        }
+      ],
+      "expected": {
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "app marker before timeout provider note",
+      "input": [
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        },
+        {
+          "op": "call",
+          "error_type": "timeout"
+        }
+      ],
+      "expected": {
+        "response_status": "timeout",
+        "error_type": "timeout"
+      }
+    },
+    {
+      "name": "app marker before max tokens provider note",
+      "input": [
+        {
+          "op": "note",
+          "status": "error",
+          "error_type": "app_error"
+        },
+        {
+          "op": "call",
+          "finish_reason": "max_tokens"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "provider error beats finish reason",
+      "input": [
+        {
+          "op": "call",
+          "error_type": "timeout",
+          "finish_reason": "max_tokens"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "timeout",
+        "error_type": "timeout"
+      }
+    },
+    {
+      "name": "new finish hint replaces timeout",
+      "input": [
+        {
+          "op": "hint",
+          "status": "timeout",
+          "error_type": "timeout"
+        },
+        {
+          "op": "hint",
+          "status": "incomplete",
+          "error_type": "length"
+        },
+        {
+          "op": "hint",
+          "status": "error",
+          "error_type": "app_error"
+        }
+      ],
+      "expected": {
+        "response_status": "incomplete",
+        "error_type": "length"
+      }
+    },
+    {
+      "name": "retry clears finish reason",
+      "input": [
+        {
+          "op": "call",
+          "finish_reason": "max_tokens"
+        },
+        {
+          "op": "call",
+          "finish_reason": "stop"
+        }
+      ],
+      "expected": {
+        "response_status": "success"
+      }
+    }
+  ]
+}

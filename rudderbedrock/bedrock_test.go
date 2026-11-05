@@ -164,7 +164,7 @@ func TestConverseToolUse(t *testing.T) {
 		t.Fatalf("got %d calls", len(calls))
 	}
 	check(t, calls[0], map[string]any{
-		"provider": "aws.bedrock", "model": model, "input_tokens": 45, "output_tokens": 8, "cached_input_tokens": 10,
+		"provider": "aws.bedrock", "model": "claude-sonnet-4-5", "input_tokens": 45, "output_tokens": 8, "cached_input_tokens": 10,
 		"cache_write_tokens": 5, "finish_reason": "tool_calls", "response_id": "req-1",
 	})
 	answer := rec.named(t, "ai_response_received")[0]
@@ -268,7 +268,7 @@ func TestConverseErrors(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected an error")
 			}
-			check(t, rec.named(t, "ai_llm_response_received")[0], map[string]any{"error_type": tc.want, "model": model})
+			check(t, rec.named(t, "ai_llm_response_received")[0], map[string]any{"error_type": tc.want, "model": "claude-sonnet-4-5"})
 		})
 	}
 }

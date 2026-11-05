@@ -27,7 +27,6 @@ func TestRunTaskRestoresLastFailedCallCategory(t *testing.T) {
 							{Provider: "openai", Model: "group-a", ErrorType: category},
 							{Provider: "openai", Model: "group-b", ErrorType: "auth_error"},
 							{Provider: "openai", Model: "group-a", ErrorType: category},
-							{Provider: "openai", Model: "group-b"},
 						} {
 							if !i.RecordCall(call) {
 								t.Fatal("call was rejected")
@@ -98,7 +97,7 @@ func TestRunTaskResumesSnapshotWithoutFailedCallCategory(t *testing.T) {
 	}
 }
 
-func TestRunTaskPrefersLastFailedCallCategory(t *testing.T) {
+func TestRunTaskSuccessfulRetryClearsLastFailedCallCategory(t *testing.T) {
 	for _, category := range []string{"rate_limit", "timeout", "api_error", "context_limit", "auth_error", "invalid_request", "connection_error", "cancelled"} {
 		t.Run(category, func(t *testing.T) {
 			r := setupAI(t)
@@ -112,7 +111,7 @@ func TestRunTaskPrefersLastFailedCallCategory(t *testing.T) {
 			if err != want {
 				t.Fatalf("returned %v, want original error %v", err, want)
 			}
-			if p := r.response(t); p["error_type"] != category || p["response_status"] != string(statusForErrorType(category)) {
+			if p := r.response(t); p["error_type"] != "app_error" || p["response_status"] != "error" {
 				t.Fatal(p)
 			}
 		})

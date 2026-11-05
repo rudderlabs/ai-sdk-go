@@ -52,14 +52,40 @@ func TestObserverCompleted(t *testing.T) {
 	}
 }
 
+func TestMergedWrapperRecordsTools(t *testing.T) {
+	if err := rudderstackai.Configure(rudderstackai.WithEventRules(rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
+		"lookup": {Event: "looked_up"},
+	}})); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rudderstackai.Configure(rudderstackai.WithEventRules(rudderstackai.EventRules{})) })
+	rec, o, i := observer(t, true)
+	o.InputTokens, o.OutputTokens, o.ResponseID = ptr(30), ptr(12), "merged-response"
+	o.NoteTool("t", "call_merged", "lookup", `{"q":1}`, "")
+	i.RecordCall(rudderstackai.LLMCall{Provider: o.Provider, Model: o.Model, Integration: "tracing", StartedAt: o.StartedAt, EndedAt: o.StartedAt.Add(time.Millisecond), InputTokens: 30, OutputTokens: 12})
+	o.Finish(Completed, "")
+	o.Finish(Completed, "")
+	if i.RecordCall(rudderstackai.LLMCall{Provider: o.Provider, Model: o.Model, ResponseID: o.ResponseID}) {
+		t.Fatal("replay accepted")
+	}
+	i.End(rudderstackai.EndOptions{})
+	want(t, rec.props(t, "ai_response_received"), map[string]any{"llm_call_count": 1, "tool_call_count": 1})
+	if len(rec.named("ai_llm_response_received")) != 1 {
+		t.Fatal("duplicate call event")
+	}
+	if len(rec.named("looked_up")) != 1 {
+		t.Fatal("merged wrapper did not emit its tool event exactly once")
+	}
+}
+
 func TestObserverTruncated(t *testing.T) {
 	rec, o, i := observer(t, true)
 	o.InputTokens, o.OutputTokens = ptr(8), ptr(3)
 	o.Incomplete = true
 	o.Finish(Completed, "")
 	// A stream cut off before its terminal event keeps the tokens seen so far, unpriced.
-	want(t, rec.props(t, "ai_llm_response_received"), map[string]any{"error_type": "api_error", "input_tokens": 8, "output_tokens": 3, "cost_usd": nil})
 	i.End(rudderstackai.EndOptions{})
+	want(t, rec.props(t, "ai_llm_response_received"), map[string]any{"error_type": "api_error", "input_tokens": 8, "output_tokens": 3, "cost_usd": nil})
 	want(t, rec.props(t, "ai_response_received"), map[string]any{"response_status": "error", "error_type": "api_error"})
 }
 

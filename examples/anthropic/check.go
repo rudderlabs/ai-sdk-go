@@ -45,12 +45,12 @@ func expectEvents(msgs []dataplane.Message, res result) error {
 		{"ai_user_prompt_created", map[string]any{"feature": "support_bot", "surface": "web"}},
 		{"ai_response_received", map[string]any{
 			"response_status": "success", "trigger": "user", "primary_provider": "anthropic",
-			"primary_model": "claude-haiku-4-5-20251001", "finish_reason": "end_turn", "llm_call_count": 1,
+			"primary_model": "claude-haiku-4-5", "finish_reason": "end_turn", "llm_call_count": 1,
 			"total_input_tokens": 1166, "total_output_tokens": 14, "total_tokens": 1180,
 			"total_cached_input_tokens": 1024, "total_cache_write_tokens": 120, "total_cost_usd": cost,
 			"time_to_first_token_ms": harness.Present,
 			"usage_breakdown": []map[string]any{{
-				"provider": "anthropic", "model": "claude-haiku-4-5-20251001",
+				"provider": "anthropic", "model": "claude-haiku-4-5",
 				"call_count": 1, "input_tokens": 1166, "output_tokens": 14, "total_tokens": 1180, "cached_input_tokens": 1024,
 				"cache_write_tokens": 120, "service_tier": "standard", "error_count": 0, "cost_usd": cost,
 			}},

@@ -122,6 +122,9 @@ func WithCaptureContent(on bool) ConfigOption {
 }
 
 // WithLLMCallEvents also sends one ai_llm_response_received per model call. Off by default.
+// Retained, timed span or unknown-usage reports emit after their twin arrives or at End/Pause,
+// so the event includes the merged usage and cost. Later call events wait behind them to keep
+// call order; otherwise known wrapper usage emits immediately.
 func WithLLMCallEvents(on bool) ConfigOption {
 	return func(c *config, _ *pending) error {
 		c.emitLLMCalls = on

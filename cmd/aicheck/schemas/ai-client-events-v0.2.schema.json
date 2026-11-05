@@ -533,10 +533,11 @@
             "error",
             "timeout",
             "cancelled",
+            "incomplete",
             "blocked",
             "paused"
           ],
-          "description": "Since v0.4. blocked means the app intentionally declined to answer. Since v0.4. A rendered pause and the resumed final answer share interaction_id; each rendered segment sends one client copy. pause_count and total_paused_ms belong to the server answer."
+          "description": "incomplete means a rendered partial answer ended before completion. Since v0.4. blocked means the app intentionally declined to answer. Since v0.4. A rendered pause and the resumed final answer share interaction_id; each rendered segment sends one client copy. pause_count and total_paused_ms belong to the server answer."
         },
         "client_error_kind": {
           "enum": [

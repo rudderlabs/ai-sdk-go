@@ -70,6 +70,40 @@ func bareModel(model string) string {
 	return vertexAnthropicID.ReplaceAllString(m, "$1-$2")
 }
 
+var (
+	claudeBedrockVersion = regexp.MustCompile(`(?:-v[0-9]+:[0-9]+|:[0-9]+)$`)
+	claudeVertexVersion  = regexp.MustCompile(`@[0-9a-z._-]+$`)
+	claudeDate           = regexp.MustCompile(`-[0-9]{8}$`)
+)
+
+// canonicalModel gives Claude the same family name on every provider. Other models retain
+// their original IDs. Pricing uses the original ID so deployment-specific prices still work.
+func canonicalModel(model string) string {
+	value := strings.ToLower(model[strings.LastIndex(model, "/")+1:])
+	for {
+		stripped := value
+		// Keep the profile list shared with pricing, including sovereign cloud regions.
+		for _, prefix := range bedrockProfiles {
+			if strings.HasPrefix(stripped, prefix) {
+				stripped = strings.TrimPrefix(stripped, prefix)
+				break
+			}
+		}
+		stripped = strings.TrimPrefix(stripped, "anthropic.")
+		stripped = claudeBedrockVersion.ReplaceAllString(stripped, "")
+		stripped = claudeVertexVersion.ReplaceAllString(stripped, "")
+		stripped = claudeDate.ReplaceAllString(stripped, "")
+		if stripped == value {
+			break
+		}
+		value = stripped
+	}
+	if !strings.Contains(value, "claude") {
+		return model
+	}
+	return value
+}
+
 // What may follow a model name without changing its identity: dates, snapshots, versions, tags.
 var versionSuffix = regexp.MustCompile(`^(?:-[0-9]{4}-[0-9]{2}-[0-9]{2}|-[0-9]{8}|-[0-9]{3,4}|-v[0-9]+(?:\.[0-9]+)*|-latest)*(?:[:@][0-9a-z._-]+)?$`)
 

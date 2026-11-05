@@ -689,7 +689,7 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 		var out map[string]any
 		if callback("ToolEventRule.Properties", func() error { out = rule.Properties(args, value); return nil }) {
 			for k, v := range out {
-				if !owned[k] {
+				if allowToolEventProperty(k, rc.opts.CaptureContent) && !owned[propertyName(k)] {
 					p[k] = v
 				}
 			}

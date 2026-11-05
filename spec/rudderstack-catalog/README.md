@@ -5,6 +5,8 @@ v0.2 schemas, including MCP events, lifecycle reasons and client engagement.
 Import all four YAML files together. Node.js, Python and Go SDK repositories
 ship identical copies of every file in this directory; copy changes verbatim.
 
+SDK guards compare warehouse snake_case names after lowercasing, collapsing non-alphanumeric separator runs and trimming underscores; original custom names and warning keys remain unchanged. Model fields use lowercase canonical Claude identities for emission, grouping and deduplication; repeatedly remove cloud profiles, `anthropic.`, Bedrock versions, Vertex revisions and eight-digit dates, retaining `-latest` and other aliases. Non-Claude IDs remain byte-unchanged; pricing uses raw IDs. See [the spec changelog](../CHANGELOG.md) and [shared audit fixtures](../fixtures/audit-normalisation-v0.1.json) for exact rules and examples.
+
 ## Using with an existing catalog
 
 Reuse an existing property by reference when its name matches a schema wire key.
@@ -32,7 +34,7 @@ schemas remain authoritative for restrictions specific to an event:
 | `source` | Shared enum `client`, `server`; client events require exactly `client`. |
 | `tool_status` | Shared enum `success`, `error`, `denied`, `unknown`. MCP request events allow only `success`, `error`; MCP/client declared tools additionally allow `unknown`. |
 | `error_type` | Open on AI answers; MCP error types are `rate_limit`, `timeout`, `cancelled`, `denied`, `auth_error`, `invalid_request`, `connection_error`, `api_error`. |
-| `response_status` | Shared enum includes `incomplete`; the client subset omits it. |
+| `response_status` | Shared server/client enum includes `incomplete` for a partial answer that ended before completion. |
 | `limit_type` | Open on server events; client copies use only `rate`, `quota`, `credits`, `plan`. |
 | `model`, `provider` | Shared string/null types; nullable breakdown entries reuse these same definitions. |
 | `feedback_value` | The server schema imposes no type restriction: all JSON types are permitted. |
