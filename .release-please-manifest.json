@@ -1,9 +1,9 @@
 {
-  ".": "0.5.1",
-  "rudderopenai": "0.3.1",
-  "rudderanthropic": "0.3.1",
-  "ruddergenai": "0.4.1",
-  "rudderbedrock": "0.3.1",
+  ".": "0.6.0",
+  "rudderopenai": "0.3.2",
+  "rudderanthropic": "0.3.2",
+  "ruddergenai": "0.4.2",
+  "rudderbedrock": "0.3.2",
   "rudderotel": "0.1.1",
-  "cmd/aicheck": "0.3.0"
+  "cmd/aicheck": "0.4.0"
 }
