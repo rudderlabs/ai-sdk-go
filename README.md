@@ -276,7 +276,7 @@ rudderstackai.CloseClient(ctx, client) // afterwards, close each client you own 
 
 `Shutdown` never closes clients, so shared clients remain available for non-AI events. Call `CloseClient(ctx, client)` afterwards for each client you own: it returns false and reports `flush_timeout` when ctx expires while `Close` continues in the background; a Close error is reported unchanged as `flush_failed`, even after the deadline. Without a deadline, it waits until Close finishes or ctx is canceled.
 
-An analytics-go client (v4.5.0, the minimum) sends its queue on `Flush`; a custom client without `Flush(ctx)` or `Flush()` cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` then `CloseClient` for your clients on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
+An analytics-go client (v4.5.1, the minimum) sends its queue on `Flush`; a custom client without `Flush(ctx)` or `Flush()` cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` then `CloseClient` for your clients on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
 
 ## Events
 
@@ -368,7 +368,7 @@ Each module requires the oldest version it supports, so adding it never upgrades
 | Module                                        | Requires and tested at (minimum)                               | Also tested with |
 | --------------------------------------------- | -------------------------------------------------------------- | ---------------- |
 | All modules                                   | Go 1.26.10                                                      | Go 1.26, 1.27    |
-| `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.5.0, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.2.1 |
+| `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.5.1, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.2.1 |
 | `.../rudderopenai`                            | `github.com/openai/openai-go/v3` v3.70.0                        | v3.77.0          |
 | `.../rudderanthropic`                         | `github.com/anthropics/anthropic-sdk-go` v1.78.0                | v1.80.0          |
 | `.../ruddergenai`                             | `google.golang.org/genai` v1.72.0                               | v1.73.0          |
@@ -390,7 +390,7 @@ Events carry `specVersion` `0.4.0`. The server schema and conformance fixture ar
 
 No API was removed.
 
-- **RudderStack client**: every module requires `github.com/rudderlabs/analytics-go/v4` v4.5.0, so `Flush` and `Shutdown` send its queue. A custom client without `Flush(ctx)` or `Flush()` is still reported once as `client_outdated`.
+- **RudderStack client**: every module requires `github.com/rudderlabs/analytics-go/v4` v4.5.1, so `Flush` and `Shutdown` send its queue. A custom client without `Flush(ctx)` or `Flush()` is still reported once as `client_outdated`.
 - **`app_error`**: an answer that fails in your own code after a successful model call has `error_type: app_error`, not `api_error`. An error from a model call, or one that carries a provider signal (HTTP status, provider error code or provider error type), keeps its type. Update queries that count `api_error` as all failures.
 - **Usage on failed streams**: a streamed call that fails partway keeps the tokens it already reported and still counts in `llm_call_count` (unpriced). A Gemini stream that fails mid-way is now a failed call, no longer a success.
 

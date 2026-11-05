@@ -4,7 +4,7 @@ go 1.26.10
 
 require (
 	github.com/rudderlabs/ai-sdk-go v0.3.0
-	github.com/rudderlabs/analytics-go/v4 v4.5.0
+	github.com/rudderlabs/analytics-go/v4 v4.5.1
 	google.golang.org/genai v1.72.0
 )
 
