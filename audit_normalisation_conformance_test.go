@@ -33,8 +33,9 @@ type auditReport struct {
 }
 
 type auditCallCase struct {
-	Name  string `json:"name"`
-	Input struct {
+	Name    string `json:"name"`
+	Adapter string `json:"adapter"`
+	Input   struct {
 		Provider string        `json:"provider"`
 		Reports  []auditReport `json:"reports"`
 		Prices   map[string]struct {
@@ -81,10 +82,10 @@ func TestAuditNormalisationConformance(t *testing.T) {
 		t.Fatalf("unsupported fixture version %d", fixture.FixtureVersion)
 	}
 	total := len(fixture.PropertyNames) + len(fixture.CanonicalModels) + len(fixture.Calls) + len(fixture.Statuses)
-	if total != 179 {
-		t.Fatalf("expected 179 cases, got %d", total)
+	if total != 181 {
+		t.Fatalf("expected 181 cases, got %d", total)
 	}
-	passed := 0
+	passed, skipped := 0, 0
 	for n, tc := range fixture.PropertyNames {
 		if t.Run(fmt.Sprintf("property/%02d/%s", n, tc.Input), func(t *testing.T) {
 			if got := propertyName(tc.Input); got != tc.Expected.Normalized {
@@ -158,6 +159,11 @@ func TestAuditNormalisationConformance(t *testing.T) {
 		}
 	}
 	for _, tc := range fixture.Calls {
+		// Go has no Claude Agent SDK adapter; FIXTURE-FORMAT.md marks those cases Node.js/Python only.
+		if tc.Adapter == "claude-agent-sdk" {
+			skipped++
+			continue
+		}
 		if t.Run("calls/"+tc.Name, func(t *testing.T) {
 			prices := map[string]ModelPrice{}
 			for model, p := range tc.Input.Prices {
@@ -237,7 +243,10 @@ func TestAuditNormalisationConformance(t *testing.T) {
 			passed++
 		}
 	}
-	t.Logf("audit normalisation: %d/%d passed, 0 skipped", passed, total)
+	if skipped != 2 {
+		t.Errorf("expected 2 Claude Agent SDK cases skipped, got %d", skipped)
+	}
+	t.Logf("audit normalisation: %d/%d passed, %d skipped", passed, total, skipped)
 }
 
 func auditAssertSubset(t *testing.T, actual, expected map[string]any) {
