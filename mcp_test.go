@@ -402,7 +402,7 @@ func TestParamlessRequestsHaveNoMeta(t *testing.T) {
 	seen := &seenErrors{}
 	setupAI(t, WithOnError(seen.hook))
 	server := workspaceServer("paramless-mcp", nil)
-	r := wrap(t, server, Options{})
+	r := wrap(t, server, Options{RequestContext: RequestContextOptions{Enabled: true}})
 	cs := connect(t, server, "2025-06-18", nil)
 	if err := cs.Ping(context.Background(), nil); err != nil {
 		t.Fatal(err)
@@ -458,7 +458,7 @@ func TestGoSDKInternalsStillReadable(t *testing.T) {
 func TestStrippedArgumentsReachHandler(t *testing.T) {
 	seen := &handlerSeen{}
 	server := workspaceServer("workspace-mcp", seen)
-	r := wrap(t, server, Options{RequestContext: RequestContextOptions{Intents: []string{"debug_delivery", "build_audience"}}})
+	r := wrap(t, server, Options{RequestContext: RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}}})
 	cs := connect(t, server, "2025-06-18", nil)
 	tools, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
@@ -502,7 +502,7 @@ func toStrings(v any) []string {
 
 func TestCallReasonWithCaptureMaskedAndCapped(t *testing.T) {
 	server := workspaceServer("workspace-mcp", nil)
-	r := wrap(t, server, Options{CaptureContent: true})
+	r := wrap(t, server, Options{CaptureContent: true, RequestContext: RequestContextOptions{Enabled: true}})
 	cs := connect(t, server, "2025-06-18", nil)
 	reason := "  Mail ann@example.com about it " + strings.Repeat("x", 300)
 	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w", requestContext: map[string]any{"call_reason": reason, "intent": "anything"}}, nil)
@@ -516,10 +516,55 @@ func TestCallReasonWithCaptureMaskedAndCapped(t *testing.T) {
 	}
 }
 
-func TestRequestContextDisabled(t *testing.T) {
+func TestRequestContextOff(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts Options
+	}{
+		{"default", Options{}},
+		{"explicit", Options{RequestContext: RequestContextOptions{Enabled: false}}},
+		{"options do not enable", Options{CaptureContent: true, RequestContext: RequestContextOptions{Intents: []string{"debug_delivery"}, DisableUserSentiment: true}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			seen := &handlerSeen{}
+			server := workspaceServer("context-off-mcp", seen)
+			server.AddTool(&mcp.Tool{Name: "list_destinations", InputSchema: map[string]any{
+				"type": "object", "properties": map[string]any{"workspace_id": map[string]any{"type": "string"}},
+			}}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				seen.add(req.Params.Arguments)
+				return &mcp.CallToolResult{}, nil
+			})
+			r := wrap(t, server, tc.opts)
+			cs := connect(t, server, "2025-06-18", nil)
+			tools, err := cs.ListTools(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(tools.Tools) == 0 || strings.Contains(mustJSON(tools), requestContext) {
+				t.Fatalf("unexpected tools while request context is off: %s", mustJSON(tools))
+			}
+			args := map[string]any{"workspace_id": "w", requestContext: map[string]any{"intent": "debug_delivery", "user_sentiment": "negative", "call_reason": "why"}}
+			callTool(t, cs, "list_destinations", args, nil)
+			if seen.last() != mustJSON(args) {
+				t.Errorf("handler got %s, want %s", seen.last(), mustJSON(args))
+			}
+			p := r.props(t, "mcp_tool_called")
+			if !slices.Equal(p["argument_keys"].([]string), []string{requestContext, "workspace_id"}) {
+				t.Errorf("argument_keys = %v", p["argument_keys"])
+			}
+			for _, key := range []string{"intent", "user_sentiment", "call_reason"} {
+				if _, ok := p[key]; ok {
+					t.Errorf("%s recorded while request context is off", key)
+				}
+			}
+		})
+	}
+}
+
+func TestRequestContextEmptySchema(t *testing.T) {
 	seen := &handlerSeen{}
 	server := workspaceServer("workspace-mcp", seen)
-	wrap(t, server, Options{RequestContext: RequestContextOptions{Disabled: true}})
+	wrap(t, server, Options{RequestContext: RequestContextOptions{Enabled: false}})
 	cs := connect(t, server, "2025-06-18", nil)
 	tools, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
@@ -528,7 +573,7 @@ func TestRequestContextDisabled(t *testing.T) {
 	if strings.Contains(mustJSON(tools), requestContext) {
 		t.Error("request_context offered while disabled")
 	}
-	wrap(t, server, Options{RequestContext: RequestContextOptions{DisableUserSentiment: true}})
+	wrap(t, server, Options{RequestContext: RequestContextOptions{Enabled: true, DisableUserSentiment: true}})
 	tools, _ = cs.ListTools(context.Background(), nil)
 	if strings.Contains(mustJSON(tools), requestContext) {
 		t.Error("an empty request_context was offered")
@@ -536,29 +581,33 @@ func TestRequestContextDisabled(t *testing.T) {
 }
 
 func TestNativeRequestContextLeftAlone(t *testing.T) {
-	server := mcp.NewServer(&mcp.Implementation{Name: "native-mcp", Version: "1"}, nil)
-	var got string
-	server.AddTool(&mcp.Tool{Name: "own", InputSchema: map[string]any{
-		"type": "object", "properties": map[string]any{requestContext: map[string]any{"type": "string"}},
-	}}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		got = string(req.Params.Arguments)
-		return &mcp.CallToolResult{}, nil
-	})
-	r := wrap(t, server, Options{})
-	cs := connect(t, server, "2025-06-18", nil)
-	tools, err := cs.ListTools(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if prop := tools.Tools[0].InputSchema.(map[string]any)["properties"].(map[string]any)[requestContext]; mustJSON(prop) != `{"type":"string"}` {
-		t.Errorf("schema changed: %v", prop)
-	}
-	callTool(t, cs, "own", map[string]any{requestContext: "mine"}, nil)
-	if got != `{"request_context":"mine"}` {
-		t.Errorf("handler got %s", got)
-	}
-	if got := r.props(t, "mcp_tool_called")["argument_keys"].([]string); !slices.Equal(got, []string{requestContext}) {
-		t.Errorf("argument_keys = %v", got)
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(enabled), func(t *testing.T) {
+			server := mcp.NewServer(&mcp.Implementation{Name: "native-mcp", Version: "1"}, nil)
+			var got string
+			server.AddTool(&mcp.Tool{Name: "own", InputSchema: map[string]any{
+				"type": "object", "properties": map[string]any{requestContext: map[string]any{"type": "string"}},
+			}}, func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				got = string(req.Params.Arguments)
+				return &mcp.CallToolResult{}, nil
+			})
+			r := wrap(t, server, Options{RequestContext: RequestContextOptions{Enabled: enabled}})
+			cs := connect(t, server, "2025-06-18", nil)
+			tools, err := cs.ListTools(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if prop := tools.Tools[0].InputSchema.(map[string]any)["properties"].(map[string]any)[requestContext]; mustJSON(prop) != `{"type":"string"}` {
+				t.Errorf("schema changed: %v", prop)
+			}
+			callTool(t, cs, "own", map[string]any{requestContext: "mine"}, nil)
+			if got != `{"request_context":"mine"}` {
+				t.Errorf("handler got %s", got)
+			}
+			if got := r.props(t, "mcp_tool_called")["argument_keys"].([]string); !slices.Equal(got, []string{requestContext}) {
+				t.Errorf("argument_keys = %v", got)
+			}
+		})
 	}
 }
 
@@ -776,6 +825,7 @@ func TestRedactOptions(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			server := workspaceServer("redact-mcp", nil)
 			c.opts.CaptureContent = true
+			c.opts.RequestContext.Enabled = true
 			r := wrap(t, server, c.opts)
 			cs := connect(t, server, "2025-06-18", nil)
 			callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w", requestContext: map[string]any{"call_reason": "mail ann@example.com now"}}, nil)

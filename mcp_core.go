@@ -387,7 +387,7 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 		return false, true
 	}
 	if args != nil {
-		if reported, ok := args[requestContext]; ok && !opts.RequestContext.Disabled && !nativeContext {
+		if reported, ok := args[requestContext]; ok && opts.RequestContext.Enabled && !nativeContext {
 			strip = true
 			var v any
 			_ = json.Unmarshal(reported, &v)
@@ -908,7 +908,7 @@ func (st *serverState) rememberTools(tools []mcpbridge.Tool) {
 func (rc *reqCtx) ListTools(tools []mcpbridge.Tool, lastPage bool) ([]map[string]any, bool) {
 	opts := rc.opts
 	var contextSchema map[string]any
-	if !opts.RequestContext.Disabled {
+	if opts.RequestContext.Enabled {
 		contextSchema = requestContextSchema(opts)
 	}
 	rc.st.Lock()

@@ -34,7 +34,7 @@ if err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 	EventRules: rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
 		"create_audience": {Event: "audience_created"},
 	}},
-	RequestContext: rudderstackai.RequestContextOptions{Intents: []string{"debug_delivery", "build_audience"}},
+	RequestContext: rudderstackai.RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}},
 	Transport:      rudderstackai.TransportStdio, // for a stdio server; streamable HTTP is detected
 }); err != nil {
 	log.Fatal(err)
@@ -64,7 +64,7 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 }
 ```
 
-`ruddermcpgo.Options` has the same fields as `rudderstackai.Options`, except that `Identify` and `ClientInfo` receive only the context and `ClassifyToolError` receives mcp-go's `*mcp.CallToolResult`: mcp-go verifies no bearer tokens, so read your own authentication from it. `WrapServer` uses mcp-go's own extension points: server hooks (`GetHooks`, or `WithHooks` when the server has none) and a tool handler middleware (`Use`). It removes `request_context` from the arguments in a hook, before input validation and your handler, and adds it to the tool schemas of the `tools/list` result. With `CapabilityRequests`, it registers `request_capability` as a tool (with a schema that accepts any arguments, so input validation never rejects a capability outside the list; `tools/list` shows the full one). Call it after `NewMCPServer` and before serving.
+`ruddermcpgo.Options` has the same fields as `rudderstackai.Options`, except that `Identify` and `ClientInfo` receive only the context and `ClassifyToolError` receives mcp-go's `*mcp.CallToolResult`: mcp-go verifies no bearer tokens, so read your own authentication from it. `WrapServer` uses mcp-go's own extension points: server hooks (`GetHooks`, or `WithHooks` when the server has none) and a tool handler middleware (`Use`). When `RequestContext.Enabled` is true, it removes `request_context` from the arguments in a hook, before input validation and your handler, and adds it to the tool schemas of the `tools/list` result. With `CapabilityRequests`, it registers `request_capability` as a tool (with a schema that accepts any arguments, so input validation never rejects a capability outside the list; `tools/list` shows the full one). Call it after `NewMCPServer` and before serving.
 
 ## Options
 
@@ -75,7 +75,7 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 | `ClientInfo`         | none       | `func(ctx, *auth.TokenInfo) (name, version string)`; `func(ctx) (name, version string)` on mcp-go. Fallback client resolver; panics are swallowed. |
 | `ClassifyToolError`  | none       | `func(toolName string, result *mcp.CallToolResult) string` using the wrapper's MCP library. Classifies tool error results; invalid values and panics fall back to status hints and validation. |
 | `EventRules`         | none       | Declared tool events. Names starting with `ai_` or `mcp_` are rejected.                                                                                                          |
-| `RequestContext`     | on         | `Intents` for the injected `request_context` argument; `DisableUserSentiment`; `Disabled` turns it off.                                                                          |
+| `RequestContext`     | off        | `Enabled: true` injects `request_context`; `Intents` and `DisableUserSentiment` apply only when enabled.                                                                          |
 | `ClientSeenWindow`   | 24 hours   | Window in which a (client, OAuth client, user) is reported once by `mcp_client_seen`, per server name and process.                                                                                               |
 | `CaptureContent`     | off        | Sends `call_reason` and `capability_detail`, masked and capped at 200 characters.                                                                                                |
 | `CapabilityRequests` | off (nil)  | `&CapabilityRequestOptions{Capabilities: []string{"bulk_export"}}` adds the `request_capability` tool.                                                                         |
@@ -106,7 +106,7 @@ How the `mcp_tool_called` signals are derived:
 - **`tool_status` and `error_type`**: a result with `IsError` is `error` with `is_error_result: true` (`mcp.AddTool` turns a handler error and an argument validation failure into one); its `error_type` is `invalid_request` when arguments failed the schema, else `api_error`. A returned error maps by JSON-RPC code: parse error, invalid request, method not found, invalid params, header mismatch (-32020), missing client capability (-32021) and unsupported protocol version (-32022) are `invalid_request`, request timeout (-32001) `timeout`, connection closed (-32000) `connection_error`, URL elicitation required (-32042) `auth_error`. Other errors map as in the Node.js and Python SDKs: a context deadline or network timeout is `timeout`, a refused or reset connection `connection_error`, then by HTTP status (`StatusCode()` or `HTTPStatusCode()`: 429 `rate_limit`, 408 and 504 `timeout`, 401 and 403 `auth_error`, 400 and 422 `invalid_request`) or type name (`ratelimit`, `throttling`, `timeout`, `cancel`, `authentication`, `accessdenied`, `badrequest`, `connection`, ...), following wrapped errors; anything else is `api_error`. A call the client cancels (`notifications/cancelled`) is `cancelled` with `time_to_cancel_ms` instead of `duration_ms`; a call that completed before the cancellation reached it stays a success.
 - **`invalid_arguments`**: on a failed call, the names of the arguments that fail the tool's input schema one level deep (missing required, wrong `type`, not in `enum`, not `const`, unexpected when `additionalProperties: false`). Needs the schema from a `tools/list` this process answered.
 - **`call_index`, `ms_since_previous_call` and `retry_count`**: counted per server name and process, per `mcp_session_id`, else per caller-sent `interaction_id`, else per stdio or in-memory connection. `call_index` starts at 0; `ms_since_previous_call` is the gap since the previous call in the scope ended; `retry_count` counts earlier calls of the same tool with the same arguments (a SHA-256 hash of their canonical JSON, kept in memory). Without any scope (a stateless HTTP request with a minted `interaction_id`) the three are left out.
-- **`argument_keys`**: the argument names, sorted by Unicode code point (not the client's order), without `request_context`. `client_capabilities` is sorted the same way. Both are then capped at 100 names of 64 characters.
+- **`argument_keys`**: the argument names, sorted by Unicode code point (not the client's order), without the injected `request_context` when enabled. When disabled, or when a tool declares its own argument, `request_context` is included. `client_capabilities` is sorted the same way. Both are then capped at 100 names of 64 characters.
 - **Result**: `result_size_bytes` is the UTF-8 size of the result's compact JSON (no HTML escaping), `result_tokens_estimate` that size divided by 4 (rounded down), `result_content_types` the content block types plus `structured` for `structuredContent`, `result_paginated` whether the result or its `structuredContent` carries a `nextCursor` (or `next_cursor`).
 
 ## Protocol revisions
@@ -145,7 +145,9 @@ Values are opaque strings capped at 256 characters, as are IDs and names from th
 
 ## Agent-reported context
 
-The server never sees the user's prompt. To learn why a tool was called, the integration adds one optional `request_context` object to each tool's input schema in `tools/list`, removes it from the arguments before the handler runs, and records it on `mcp_tool_called`:
+The server never sees the user's prompt. Request context is **off by default**. Opt in with `RequestContext: rudderstackai.RequestContextOptions{Enabled: true}` in either wrapper's options. `Intents` and `DisableUserSentiment` apply only when enabled; setting them or `CaptureContent` alone does not enable it. With request context off, no `request_context` is added to `tools/list`, and a client-sent argument is passed to the tool untouched.
+
+When enabled, the integration adds one optional `request_context` object to each tool's input schema in `tools/list`, removes it from the arguments before the handler runs, and records it on `mcp_tool_called`:
 
 - `intent`: from `RequestContext.Intents` (plus `other`); a value not in the list is sent as `other`. Without a list, `intent` is not offered. Avoid sensitive categories: the label alone can reveal them.
 - `user_sentiment`: `negative`, `neutral` or `positive`. `DisableUserSentiment` drops it.
@@ -155,7 +157,7 @@ A tool that already has a `request_context` argument keeps its own and receives 
 
 ## Declared tool events
 
-`EventRules.Tools` maps a tool name to a `ToolEventRule{Event, Properties, When}`. `Properties(args, result)` and `When(args, result)` see the call's arguments without `request_context` and the result's `structuredContent`, else its single text block parsed as JSON. The event carries `tool_name`, `tool_status`, the common MCP fields and the rule's properties (it cannot override the integration's own). If `Properties` panics, or its output would take the event over the 30,000-byte properties budget, the event is sent without them; if `When` panics the event is not sent.
+`EventRules.Tools` maps a tool name to a `ToolEventRule{Event, Properties, When}`. `Properties(args, result)` and `When(args, result)` see the call's arguments without the injected `request_context` when enabled (unchanged when disabled or declared by the tool) and the result's `structuredContent`, else its single text block parsed as JSON. The event carries `tool_name`, `tool_status`, the common MCP fields and the rule's properties (it cannot override the integration's own). If `Properties` panics, or its output would take the event over the 30,000-byte properties budget, the event is sent without them; if `When` panics the event is not sent.
 
 Without `When`, a declared event fires for every call, including failures and successful no-ops. For idempotent write tools, a successful call can return `created:false`, status `skipped`, an `already_*` status such as `already_exists`, or `blocked` without making a write. Use a result-aware `When` predicate that checks the tool's actual result contract so the event counts completed writes. For a tool that returns `{ "created": true }` only when it creates an audience:
 

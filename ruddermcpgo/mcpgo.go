@@ -60,7 +60,7 @@ type Options struct {
 	ClassifyToolError func(toolName string, result *mcp.CallToolResult) string
 	// EventRules declares tool events. Names starting with "ai_" or "mcp_" are rejected.
 	EventRules rudderstackai.EventRules
-	// RequestContext configures the optional request_context argument, on by default.
+	// RequestContext configures the optional request_context argument, off by default.
 	RequestContext rudderstackai.RequestContextOptions
 	// ClientSeenWindow is the window in which a (client, OAuth client, user) is reported once
 	// by mcp_client_seen, per server name and process. Zero means 24 hours.
@@ -145,7 +145,7 @@ func lookup(s *server.MCPServer) *tracked {
 
 // WrapServer tracks an mcp-go server. Call it once at startup, after adding the server's own
 // options and before serving. It adds server hooks and a tool handler middleware; requests and
-// responses pass through unchanged except for the request_context argument (added to each
+// responses pass through unchanged except for the enabled request_context argument (added to each
 // tool's input schema in tools/list and removed before the tool runs) and, when enabled, the
 // request_capability tool. Wrapping the same server again replaces its options.
 func WrapServer(s *server.MCPServer, opts Options) error {

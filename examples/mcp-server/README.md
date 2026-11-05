@@ -2,6 +2,8 @@
 
 A workspace MCP server tracked with `rudderstackai.WrapMCPServer`: a list tool, a create tool with a declared `audience_created` event, the `request_context` argument with an intent list, and the `request_capability` tool.
 
+Request context is off by default. This example opts in with `RequestContext: rudderstackai.RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}}`.
+
 ```sh
 # End to end against a local mock data plane, no credentials needed:
 go run ./examples/mcp-server --check
