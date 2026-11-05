@@ -63,7 +63,7 @@ func TestRedactionConformance(t *testing.T) {
 	for _, c := range loadRedactionFixture(t).Cases {
 		t.Run(c.Name, func(t *testing.T) {
 			n := max(c.Repeat, 1)
-			got, ok := maskText(strings.Repeat(c.Input, n))
+			got, ok := MaskText(strings.Repeat(c.Input, n))
 			if c.Expected == nil {
 				if ok {
 					t.Error("want the text withheld")

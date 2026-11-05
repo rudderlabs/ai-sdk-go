@@ -175,9 +175,13 @@ func maskWith(rules []redactRule, compiled []*regexp2.Regexp, text string) strin
 
 func hasSensitive(text string) bool { return maskBuiltIn(text) != text }
 
-// maskText masks one opt-in text field; ok is false when the text is too long to mask and
-// must be withheld.
-func maskText(text string) (string, bool) {
+// MaskText masks text with the built-in patterns, the ones that mask captured text: emails, phone
+// numbers, payment cards, IP addresses, IDs and API keys or tokens become [email], [phone], [card],
+// [ip], [ssn], [iban] and [secret]. Use it on free text you send yourself, such as what a
+// [ToolEventRule]'s Properties returns: the SDK sends those properties as returned. It ignores
+// [WithRedaction] and the redact hooks. ok is false when the text is over 32,000 code points: do
+// not send it. A text whose masking runs out of time comes back as "[redaction timed out]".
+func MaskText(text string) (masked string, ok bool) {
 	if utf8.RuneCountInString(text) > maxMaskedCodePoints {
 		return "", false
 	}

@@ -2,6 +2,7 @@ package rudderstackai_test
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -12,6 +13,12 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
+
+func ExampleMaskText() {
+	masked, ok := rudderstackai.MaskText("Fails for jane.doe@acme.com with Bearer abcdefghijklmnopqrstu")
+	fmt.Println(masked, ok)
+	// Output: Fails for [email] with [secret] true
+}
 
 type audienceIn struct {
 	Name string `json:"name"`

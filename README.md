@@ -259,6 +259,7 @@ Sent by default: IDs, models, token counts, latency, cost, status, tool names. N
 
 - `WithRedactHook` adds your own masking after the built-ins; a hook that fails or panics drops the field. Text over 32,000 code points is withheld rather than masked. Names and postal addresses are not caught.
 - One rule: `WithRedaction(false)` turns redaction off, the built-ins and the hook alike; MCP `Options.DisableRedaction` does the same for `Redact`.
+- `MaskText(text)` applies the built-ins to text you send yourself, such as a declared tool event's `Properties`, which are sent as returned.
 - MCP servers have their own `Options.CaptureContent`. Patterns are shared with Node.js and Python ([`spec/fixtures/redaction-v0.1.json`](spec/fixtures/redaction-v0.1.json)); details: [docs/configuration.md](docs/configuration.md#privacy-and-masking).
 
 ## Serverless and workers
