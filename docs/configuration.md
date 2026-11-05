@@ -213,6 +213,8 @@ err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID)
 
 Sent by default: IDs, models, token counts, latency, cost, status, tool names. Never sent by default: prompt, answer and feedback text, score explanations, tool arguments and results.
 
+Custom response extras, declared tool properties and action details drop content-named keys when capture is off: `prompt_text`, `response_text`, `feedback_text`, `intent_summary`, `explanation`, `call_reason` and `capability_detail`. The check recognizes camelCase, PascalCase, uppercase, hyphens and spaces, and warns once per original key. Unrelated names such as `promptLength` and `cardKinds` are kept. SDK-owned property names are reserved under those same spellings even with capture on. Use the dedicated prompt/response fields for those properties.
+
 With content capture on (`WithCaptureContent(true)`, or `CaptureContent` per interaction or task), `prompt_text`, `response_text`, `action_details.feedback_text` and `explanation` are sent. They, and the classifier's `intent_summary`, are masked first:
 
 | Pattern                                                                                                                                                                                  | Becomes    |

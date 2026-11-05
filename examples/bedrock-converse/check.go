@@ -53,7 +53,7 @@ func expectEvents(msgs []dataplane.Message, res result) error {
 	}{
 		{"ai_user_prompt_created", map[string]any{"feature": "travel_assistant", "surface": "web"}},
 		{"ai_response_received", map[string]any{
-			"response_status": "success", "trigger": "user", "primary_provider": "aws.bedrock", "primary_model": model,
+			"response_status": "success", "trigger": "user", "primary_provider": "aws.bedrock", "primary_model": "claude-haiku-4-5",
 			"finish_reason": "stop", "llm_call_count": 2, "tool_call_count": 1,
 			"total_input_tokens": 1436 + 1120, "total_output_tokens": 54 + 18, "total_tokens": 2628,
 			"total_cached_input_tokens": 1024, "total_cache_write_tokens": 1024,

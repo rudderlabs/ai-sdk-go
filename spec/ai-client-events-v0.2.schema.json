@@ -533,6 +533,7 @@
             "error",
             "timeout",
             "cancelled",
+            "incomplete",
             "blocked",
             "paused"
           ],

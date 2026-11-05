@@ -29,6 +29,20 @@ func TestReviewFeedbackSystemTrigger(t *testing.T) {
 	}
 }
 
+func TestAuditClientIncompleteStatus(t *testing.T) {
+	for _, status := range []string{"success", "error", "timeout", "cancelled", "incomplete", "blocked", "paused", "unknown"} {
+		capture := `{"type":"track","event":"ai_response_received","userId":"u","properties":{"source":"client","conversation_id":"c","interaction_id":"11111111-1111-4111-8111-111111111111","response_status":"` + status + `"}}`
+		code, out := reviewCheck(t, capture)
+		want := 0
+		if status == "unknown" {
+			want = 1
+		}
+		if code != want {
+			t.Errorf("%s: exit %d, want %d: %s", status, code, want, out)
+		}
+	}
+}
+
 func TestReviewJoinedToolMissingName(t *testing.T) {
 	capture := `{"type":"track","event":"run_query","userId":"u1","properties":{"source":"client","conversation_id":"c1","interaction_id":"11111111-1111-4111-8111-111111111111","tool_status":"success"}}`
 	code, out := reviewCheck(t, capture, "--expect-legacy", "run_query", "--no-ai-events")

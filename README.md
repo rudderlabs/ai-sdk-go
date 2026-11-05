@@ -391,7 +391,7 @@ Events carry `specVersion` `0.4.0`. The server schema and conformance fixture ar
 No API was removed.
 
 - **RudderStack client**: every module requires `github.com/rudderlabs/analytics-go/v4` v4.5.1, so `Flush` and `Shutdown` send its queue. A custom client without `Flush(ctx)` or `Flush()` is still reported once as `client_outdated`.
-- **`app_error`**: an answer that fails in your own code after a successful model call has `error_type: app_error`, not `api_error`. An error from a model call, or one that carries a provider signal (HTTP status, provider error code or provider error type), keeps its type. Update queries that count `api_error` as all failures.
+- **`app_error`**: an answer that fails in your own code after a successful model call has `error_type: app_error`, not `api_error`. An error from a model call, or one that carries a provider signal (HTTP status, provider error code or provider error type), keeps its type. A generic `EndOptions{Status: StatusError, ErrorType: "app_error"}` also preserves the latest call's provider classification; a successful retry clears it. Update queries that count `api_error` as all failures.
 - **Usage on failed streams**: a streamed call that fails partway keeps the tokens it already reported and still counts in `llm_call_count` (unpriced). A Gemini stream that fails mid-way is now a failed call, no longer a success.
 
 ## Known limitations

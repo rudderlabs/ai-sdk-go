@@ -15969,7 +15969,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -15986,7 +15986,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 10,
                 "output_tokens": 50,
@@ -16028,7 +16028,7 @@
             "interaction_id": "$int2",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -16044,7 +16044,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 10,
                 "output_tokens": 50,
@@ -16169,7 +16169,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -16185,7 +16185,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 10,
                 "output_tokens": 5,
@@ -16296,7 +16296,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "anthropic.claude-haiku-4-5-20251001-v1:0",
+            "primary_model": "claude-haiku-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -16312,7 +16312,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "anthropic.claude-haiku-4-5-20251001-v1:0",
+                "model": "claude-haiku-4-5",
                 "call_count": 1,
                 "input_tokens": 10,
                 "output_tokens": 5,
@@ -16500,7 +16500,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -16528,7 +16528,7 @@
               },
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 2,
                 "input_tokens": 20,
                 "output_tokens": 8,
@@ -16715,7 +16715,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -16743,7 +16743,7 @@
               },
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 2,
                 "input_tokens": 20,
                 "output_tokens": 8,
@@ -16981,7 +16981,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-haiku-4-5-20251001",
+            "primary_model": "claude-haiku-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -16998,7 +16998,7 @@
               {
                 "agent_name": "researcher",
                 "provider": "anthropic",
-                "model": "claude-haiku-4-5-20251001",
+                "model": "claude-haiku-4-5",
                 "call_count": 2,
                 "input_tokens": 4092,
                 "output_tokens": 206,
@@ -17010,7 +17010,7 @@
               },
               {
                 "provider": "anthropic",
-                "model": "claude-haiku-4-5-20251001",
+                "model": "claude-haiku-4-5",
                 "call_count": 2,
                 "input_tokens": 7304,
                 "output_tokens": 248,
@@ -17208,7 +17208,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -17224,7 +17224,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 100,
                 "output_tokens": 10,
@@ -17265,7 +17265,7 @@
             "interaction_id": "$int2",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -17281,7 +17281,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 150,
                 "output_tokens": 20,
@@ -17485,7 +17485,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -17501,7 +17501,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 2,
                 "input_tokens": 250,
                 "output_tokens": 30,
@@ -17636,7 +17636,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -17651,7 +17651,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 40,
                 "output_tokens": 5,
@@ -17802,7 +17802,7 @@
             "conversation_id": "sess-resume-base",
             "interaction_id": "$int1",
             "provider": "anthropic",
-            "model": "claude-sonnet-4-5-20250929",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 150,
             "output_tokens": 20,
             "total_tokens": 170,
@@ -17826,7 +17826,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -17842,7 +17842,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 150,
                 "output_tokens": 20,
@@ -17992,7 +17992,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -18008,7 +18008,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 150,
                 "output_tokens": 20,
@@ -18158,7 +18158,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -18174,7 +18174,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 50,
                 "output_tokens": 8,
@@ -18367,7 +18367,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -18383,7 +18383,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 100,
                 "output_tokens": 10,
@@ -18410,7 +18410,7 @@
             "interaction_id": "$int2",
             "response_status": "success",
             "trigger": "system",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -18426,7 +18426,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 150,
                 "output_tokens": 20,
@@ -18733,7 +18733,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -18749,7 +18749,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 100,
                 "output_tokens": 10,
@@ -18790,7 +18790,7 @@
             "interaction_id": "$int2",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -18806,7 +18806,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 150,
                 "output_tokens": 20,
@@ -18972,7 +18972,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -18988,7 +18988,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 100,
                 "output_tokens": 10,
@@ -19029,7 +19029,7 @@
             "interaction_id": "$int2",
             "response_status": "error",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -19044,7 +19044,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 150,
                 "output_tokens": 2,
@@ -19244,7 +19244,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -19260,7 +19260,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 100,
                 "output_tokens": 10,
@@ -19303,7 +19303,7 @@
             "interaction_id": "$int2",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -19319,7 +19319,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 150,
                 "output_tokens": 20,
@@ -19463,7 +19463,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-3-5-sonnet-v2@20241022",
+            "primary_model": "claude-3-5-sonnet",
             "primary_provider": "gcp.vertex_ai",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -19479,7 +19479,7 @@
             "usage_breakdown": [
               {
                 "provider": "gcp.vertex_ai",
-                "model": "claude-3-5-sonnet-v2@20241022",
+                "model": "claude-3-5-sonnet",
                 "call_count": 1,
                 "input_tokens": 220,
                 "output_tokens": 30,
@@ -19604,7 +19604,7 @@
             "interaction_id": "$int1",
             "response_status": "error",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -25474,7 +25474,7 @@
             "interaction_id": "$int1",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-haiku-4-5-20251001",
+            "primary_model": "claude-haiku-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -25491,7 +25491,7 @@
               {
                 "agent_name": "adder-sonnet",
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 404,
                 "output_tokens": 60,
@@ -25504,7 +25504,7 @@
               {
                 "agent_name": "adder-haiku",
                 "provider": "anthropic",
-                "model": "claude-haiku-4-5-20251001",
+                "model": "claude-haiku-4-5",
                 "call_count": 1,
                 "input_tokens": 620,
                 "output_tokens": 19,
@@ -25516,7 +25516,7 @@
               },
               {
                 "provider": "anthropic",
-                "model": "claude-haiku-4-5-20251001",
+                "model": "claude-haiku-4-5",
                 "call_count": 3,
                 "input_tokens": 3878,
                 "output_tokens": 90,
@@ -30276,7 +30276,7 @@
             "interaction_id": "$int1",
             "feature": "parity",
             "provider": "aws.bedrock",
-            "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 45,
             "output_tokens": 8,
             "total_tokens": 53,
@@ -30303,7 +30303,7 @@
             "feature": "parity",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "llm_call_count": 1,
@@ -30318,7 +30318,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 45,
                 "output_tokens": 8,
@@ -30553,7 +30553,7 @@
             "feature": "parity",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "llm_call_count": 2,
@@ -30568,7 +30568,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 2,
                 "input_tokens": 90,
                 "output_tokens": 22,
@@ -30777,7 +30777,7 @@
             "interaction_id": "$int1",
             "feature": "parity",
             "provider": "aws.bedrock",
-            "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 45,
             "output_tokens": 8,
             "total_tokens": 53,
@@ -30825,7 +30825,7 @@
             "feature": "parity",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -30841,7 +30841,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 45,
                 "output_tokens": 8,
@@ -31051,7 +31051,7 @@
             "interaction_id": "$int1",
             "feature": "parity",
             "provider": "aws.bedrock",
-            "model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 5,
             "output_tokens": 1,
             "total_tokens": 6,
@@ -31075,7 +31075,7 @@
             "interaction_id": "$int1",
             "feature": "parity",
             "provider": "aws.bedrock",
-            "model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 5,
             "output_tokens": 1,
             "total_tokens": 6,
@@ -31099,7 +31099,7 @@
             "interaction_id": "$int1",
             "feature": "parity",
             "provider": "aws.bedrock",
-            "model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 5,
             "output_tokens": 1,
             "total_tokens": 6,
@@ -31123,7 +31123,7 @@
             "interaction_id": "$int1",
             "feature": "parity",
             "provider": "aws.bedrock",
-            "model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 5,
             "output_tokens": 1,
             "total_tokens": 6,
@@ -31148,7 +31148,7 @@
             "feature": "parity",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "llm_call_count": 4,
@@ -31162,7 +31162,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 4,
                 "input_tokens": 20,
                 "output_tokens": 4,
@@ -31280,7 +31280,7 @@
             "feature": "parity",
             "response_status": "error",
             "trigger": "user",
-            "primary_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "llm_call_count": 1,
@@ -31294,7 +31294,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 0,
                 "output_tokens": 0,
@@ -31336,7 +31336,7 @@
             "feature": "parity",
             "response_status": "error",
             "trigger": "user",
-            "primary_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "llm_call_count": 1,
@@ -31350,7 +31350,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 0,
                 "output_tokens": 0,
@@ -31531,7 +31531,7 @@
             "interaction_id": "$int1",
             "feature": "parity",
             "provider": "aws.bedrock",
-            "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 0,
             "output_tokens": 0,
             "total_tokens": 0,
@@ -31557,7 +31557,7 @@
             "interaction_id": "$int1",
             "feature": "parity",
             "provider": "aws.bedrock",
-            "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 40,
             "output_tokens": 6,
             "total_tokens": 46,
@@ -31584,7 +31584,7 @@
             "feature": "parity",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -31600,7 +31600,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 2,
                 "input_tokens": 40,
                 "output_tokens": 6,
@@ -31724,7 +31724,7 @@
             "feature": "parity",
             "response_status": "cancelled",
             "trigger": "user",
-            "primary_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "llm_call_count": 1,
@@ -31738,7 +31738,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 0,
                 "output_tokens": 0,
@@ -31834,7 +31834,7 @@
             "interaction_id": "$int1",
             "feature": "parity",
             "provider": "aws.bedrock",
-            "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 0,
             "output_tokens": 0,
             "total_tokens": 0,
@@ -31861,7 +31861,7 @@
             "feature": "parity",
             "response_status": "error",
             "trigger": "user",
-            "primary_model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -31876,7 +31876,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 0,
                 "output_tokens": 0,
@@ -32017,7 +32017,7 @@
             "feature": "parity",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5@20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "gcp.vertex_ai",
             "latency_ms": "<number>",
             "llm_call_count": 2,
@@ -32032,7 +32032,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 20,
                 "output_tokens": 4,
@@ -32044,7 +32044,7 @@
               },
               {
                 "provider": "gcp.vertex_ai",
-                "model": "claude-sonnet-4-5@20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 30,
                 "output_tokens": 6,
@@ -32067,7 +32067,7 @@
     },
     {
       "name": "cloud_model_id_pricing",
-      "description": "Cloud model IDs priced from base model names: Bedrock IDs with and without inference-profile prefixes (us., eu., apac., jp., global.) and a non-Anthropic vendor (amazon.nova-pro), a Vertex @revision ID, and an Azure deployment mapped with azure_deployment_models. Events keep the IDs as sent.",
+      "description": "Cloud model IDs priced from base model names: Bedrock IDs with and without inference-profile prefixes (us., eu., apac., jp., global.) and a non-Anthropic vendor (amazon.nova-pro), a Vertex @revision ID, and an Azure deployment mapped with azure_deployment_models. Events use canonical Claude family names and retain non-Claude IDs as sent.",
       "config": {
         "azure_deployment_models": {
           "support-prod": "gpt-4o"
@@ -32206,75 +32206,15 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
-                "call_count": 1,
-                "input_tokens": 1000,
-                "output_tokens": 100,
-                "total_tokens": 1100,
+                "model": "claude-sonnet-4-5",
+                "call_count": 6,
+                "input_tokens": 6000,
+                "output_tokens": 600,
+                "total_tokens": 6600,
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "error_count": 0,
-                "cost_usd": 0.0045
-              },
-              {
-                "provider": "aws.bedrock",
-                "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
-                "call_count": 1,
-                "input_tokens": 1000,
-                "output_tokens": 100,
-                "total_tokens": 1100,
-                "cached_input_tokens": 0,
-                "cache_write_tokens": 0,
-                "error_count": 0,
-                "cost_usd": 0.0045
-              },
-              {
-                "provider": "aws.bedrock",
-                "model": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0",
-                "call_count": 1,
-                "input_tokens": 1000,
-                "output_tokens": 100,
-                "total_tokens": 1100,
-                "cached_input_tokens": 0,
-                "cache_write_tokens": 0,
-                "error_count": 0,
-                "cost_usd": 0.0045
-              },
-              {
-                "provider": "aws.bedrock",
-                "model": "apac.anthropic.claude-sonnet-4-5-20250929-v1:0",
-                "call_count": 1,
-                "input_tokens": 1000,
-                "output_tokens": 100,
-                "total_tokens": 1100,
-                "cached_input_tokens": 0,
-                "cache_write_tokens": 0,
-                "error_count": 0,
-                "cost_usd": 0.0045
-              },
-              {
-                "provider": "aws.bedrock",
-                "model": "jp.anthropic.claude-sonnet-4-5-20250929-v1:0",
-                "call_count": 1,
-                "input_tokens": 1000,
-                "output_tokens": 100,
-                "total_tokens": 1100,
-                "cached_input_tokens": 0,
-                "cache_write_tokens": 0,
-                "error_count": 0,
-                "cost_usd": 0.0045
-              },
-              {
-                "provider": "aws.bedrock",
-                "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-                "call_count": 1,
-                "input_tokens": 1000,
-                "output_tokens": 100,
-                "total_tokens": 1100,
-                "cached_input_tokens": 0,
-                "cache_write_tokens": 0,
-                "error_count": 0,
-                "cost_usd": 0.0045
+                "cost_usd": 0.027
               },
               {
                 "provider": "aws.bedrock",
@@ -32290,7 +32230,7 @@
               },
               {
                 "provider": "gcp.vertex_ai",
-                "model": "claude-sonnet-4-5@20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 1000,
                 "output_tokens": 100,
@@ -32398,7 +32338,7 @@
             "feature": "parity",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "anthropic.claude-sonnet-4-5-mini-v1:0",
+            "primary_model": "claude-sonnet-4-5-mini",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "llm_call_count": 3,
@@ -32422,7 +32362,7 @@
               },
               {
                 "provider": "anthropic",
-                "model": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 1000,
                 "output_tokens": 100,
@@ -32433,7 +32373,7 @@
               },
               {
                 "provider": "aws.bedrock",
-                "model": "anthropic.claude-sonnet-4-5-mini-v1:0",
+                "model": "claude-sonnet-4-5-mini",
                 "call_count": 1,
                 "input_tokens": 1000,
                 "output_tokens": 100,
@@ -32760,7 +32700,7 @@
             "interaction_id": "$int1",
             "feature": "gateways",
             "provider": "anthropic",
-            "model": "anthropic/claude-sonnet-4-5",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 40,
             "output_tokens": 12,
             "total_tokens": 52,
@@ -32788,7 +32728,7 @@
             "feature": "gateways",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "anthropic/claude-sonnet-4-5",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -32804,7 +32744,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "anthropic/claude-sonnet-4-5",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 40,
                 "output_tokens": 12,
@@ -33204,7 +33144,7 @@
             "interaction_id": "$int1",
             "feature": "gateways",
             "provider": "anthropic",
-            "model": "anthropic/claude-sonnet-4-5-20250929",
+            "model": "claude-sonnet-4-5",
             "requested_model": "fast",
             "input_tokens": 30,
             "output_tokens": 10,
@@ -33232,7 +33172,7 @@
             "feature": "gateways",
             "response_status": "success",
             "trigger": "user",
-            "primary_model": "anthropic/claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "llm_call_count": 1,
@@ -33247,7 +33187,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "anthropic/claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "requested_model": "fast",
                 "call_count": 1,
                 "input_tokens": 30,
@@ -33588,7 +33528,7 @@
             "interaction_id": "$int1",
             "feature": "gateways",
             "provider": "anthropic",
-            "model": "anthropic/claude-sonnet-4-5-20250929",
+            "model": "claude-sonnet-4-5",
             "input_tokens": 1000000,
             "output_tokens": 100000,
             "total_tokens": 1100000,
@@ -33654,7 +33594,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "anthropic/claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 1000000,
                 "output_tokens": 100000,
@@ -35400,7 +35340,7 @@
             "feature": "parity",
             "response_status": "incomplete",
             "trigger": "user",
-            "primary_model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "llm_call_count": 1,
@@ -35415,7 +35355,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "anthropic.claude-sonnet-4-5-20250929-v1:0",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 5,
                 "output_tokens": 1,
@@ -35455,7 +35395,7 @@
             "interaction_id": "$int3",
             "response_status": "incomplete",
             "trigger": "user",
-            "primary_model": "claude-sonnet-4-5-20250929",
+            "primary_model": "claude-sonnet-4-5",
             "primary_provider": "anthropic",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
@@ -35472,7 +35412,7 @@
             "usage_breakdown": [
               {
                 "provider": "anthropic",
-                "model": "claude-sonnet-4-5-20250929",
+                "model": "claude-sonnet-4-5",
                 "call_count": 1,
                 "input_tokens": 40,
                 "output_tokens": 5,
@@ -42200,7 +42140,7 @@
             "feature": "parity",
             "response_status": "error",
             "trigger": "user",
-            "primary_model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "primary_model": "claude-3-5-sonnet",
             "primary_provider": "aws.bedrock",
             "latency_ms": "<number>",
             "llm_call_count": 1,
@@ -42214,7 +42154,7 @@
             "usage_breakdown": [
               {
                 "provider": "aws.bedrock",
-                "model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+                "model": "claude-3-5-sonnet",
                 "call_count": 1,
                 "input_tokens": 0,
                 "output_tokens": 0,

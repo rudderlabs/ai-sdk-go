@@ -118,6 +118,7 @@ type LLMCall struct {
 	// Provider as an OpenTelemetry gen_ai.provider.name value (openai, anthropic, aws.bedrock).
 	Provider string
 	// Model that served the call (or the requested model when the provider reports none).
+	// Claude IDs are reported without cloud prefixes, deployment versions or snapshot dates.
 	Model string
 	// RequestedModel is the model the application asked for; sent only when another model
 	// served the call.
@@ -275,6 +276,9 @@ type ToolResult struct {
 // EndOptions configures [Interaction.End].
 type EndOptions struct {
 	// Status is the final status. Derived from the recorded calls when empty.
+	// StatusError with ErrorType "app_error" preserves the latest call's provider failure
+	// classification. A successful retry clears that failure; other explicit statuses and
+	// more specific error types override the derived outcome.
 	Status    ResponseStatus
 	ErrorType string
 	// PauseReason is what a paused run waits for. Defaults to PauseOther.
@@ -1010,7 +1014,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	r := &recordedCall{
 		credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
 		latency: latency, ttft: ttft,
-		provider: call.Provider, model: call.Model, requestedModel: call.RequestedModel, agentName: call.AgentName,
+		provider: call.Provider, model: canonicalModel(call.Model), requestedModel: call.RequestedModel, agentName: call.AgentName,
 		callCount: callCount, errorCount: min(errorCount, callCount),
 		inputTokens: input, outputTokens: output, reasoningTokens: reasoning,
 		cachedInputTokens: nonNegative(call.CachedInputTokens), cacheWriteTokens: cacheWrite,
@@ -1181,10 +1185,12 @@ var reservedProperties = set(
 )
 
 // customProperties are the extra properties without SDK-owned names.
-func customProperties(extra map[string]any) map[string]any {
+func customProperties(extra map[string]any, capture bool, owned map[string]any) map[string]any {
 	props := map[string]any{}
 	for k, v := range extra {
-		if !reservedProperties[k] {
+		name := propertyName(k)
+		_, sdkOwned := owned[name]
+		if !dropContentProperty(k, capture) && !reservedProperties[name] && !sdkOwned {
 			props[k] = v
 		}
 	}
@@ -1235,7 +1241,7 @@ type toolRuleOutcome struct {
 	resultSize int
 }
 
-func evaluateToolRule(rule ToolEventRule, t recordedTool) *toolRuleOutcome {
+func evaluateToolRule(rule ToolEventRule, t recordedTool, capture bool) *toolRuleOutcome {
 	args, _ := t.args.(map[string]any)
 	if rule.When != nil {
 		send := false
@@ -1249,7 +1255,7 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool) *toolRuleOutcome {
 		var out map[string]any
 		if callback("ToolEventRule.Properties", func() error { out = rule.Properties(args, t.result); return nil }) {
 			for k, v := range out {
-				if !toolEventReserved[k] {
+				if !dropContentProperty(k, capture) && !toolEventReserved[propertyName(k)] {
 					custom[k] = v
 				}
 			}
@@ -1292,7 +1298,7 @@ func (i *Interaction) preparePendingRules(done func()) {
 		// Reserve it against reentrant preparation; final outcome is installed after evaluation.
 		selected.ruleOutcome = &toolRuleOutcome{suppressed: true, properties: map[string]any{}, resultSize: -1}
 		i.mu.Unlock()
-		outcome := evaluateToolRule(rule, tool)
+		outcome := evaluateToolRule(rule, tool, i.captureContent)
 		i.mu.Lock()
 		selected.ruleOutcome = outcome
 		selected.args, selected.result, selected.hasResult = nil, nil, false
@@ -1303,7 +1309,7 @@ func (i *Interaction) preparePendingRules(done func()) {
 func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	outcome := t.ruleOutcome
 	if outcome == nil {
-		outcome = evaluateToolRule(rule, t)
+		outcome = evaluateToolRule(rule, t, i.captureContent)
 	}
 	if outcome.suppressed {
 		return
@@ -1332,7 +1338,7 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	// SDK overrides are no longer custom properties and must survive size trimming.
 	keys := make([]string, 0, len(custom))
 	for k, v := range custom {
-		if _, sdkOwned := p[k]; !sdkOwned {
+		if _, sdkOwned := p[propertyName(k)]; !sdkOwned {
 			p[k] = v
 			keys = append(keys, k)
 		}
@@ -1572,8 +1578,9 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	var props map[string]any
 	i.buildSafelyLocked(func() {
-		props = customProperties(o.ExtraProperties)
-		maps.Copy(props, i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false))
+		owned := i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false)
+		props = customProperties(o.ExtraProperties, i.captureContent, owned)
+		maps.Copy(props, owned)
 	})
 	// Finalization belongs to segment latency, not the subsequent paused interval.
 	i.pausedAt = time.Now()
@@ -1879,7 +1886,7 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		c.unpriced = pendingBool(p, "unpriced")
 		c.feesUnknown = pendingBool(p, "fees_unknown")
 		c.provider = pendingText(p, "provider")
-		c.model = pendingText(p, "model")
+		c.model = canonicalModel(pendingText(p, "model"))
 		c.requestedModel = pendingText(p, "requested_model")
 		c.agentName = pendingText(p, "agent_name")
 		c.callCount = int(pendingNumber(p, "call_count"))
@@ -2112,8 +2119,9 @@ func (i *Interaction) end(o EndOptions) {
 	i.mu.Lock()
 	var props map[string]any
 	i.buildSafelyLocked(func() {
-		props = customProperties(o.ExtraProperties)
-		maps.Copy(props, i.buildLocked(o, responseText, responseOK, true))
+		owned := i.buildLocked(o, responseText, responseOK, true)
+		props = customProperties(o.ExtraProperties, i.captureContent, owned)
+		maps.Copy(props, owned)
 	})
 	if props != nil {
 		i.sendLocked("ai_response_received", func() map[string]any { return props })
@@ -2211,6 +2219,14 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	if status == "" && i.hint != nil && i.hint.calls == i.callCount {
 		status = i.hint.status
 		errorType = first(errorType, i.hint.errorType)
+	}
+	// Generic application errors must not replace an unresolved provider classification.
+	if (status == StatusError || status == "") && errorType == "app_error" && last != nil {
+		providerError := first(last.errorType, finishErrors[last.finishReason])
+		if providerError != "" && providerError != "app_error" {
+			errorType = providerError
+			status = statusForErrorType(providerError)
+		}
 	}
 	if status == "" {
 		finished := ""

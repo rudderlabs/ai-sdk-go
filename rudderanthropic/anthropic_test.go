@@ -394,6 +394,94 @@ func TestHTTPErrors(t *testing.T) {
 	}
 }
 
+func TestAuditAppErrorPreservesProviderFailure(t *testing.T) {
+	for _, tc := range []struct {
+		code                    int
+		kind, status, errorType string
+	}{
+		{504, "timeout_error", "timeout", "timeout"},
+		{429, "rate_limit_error", "error", "rate_limit"},
+		{529, "overloaded_error", "error", "api_error"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			llm, rec := setup(t)
+			llm.Script("anthropic.messages", jsonReply(t, map[string]any{}))
+			raw, _ := json.Marshal(map[string]any{"type": "error", "error": map[string]any{"type": tc.kind, "message": "failed"}})
+			llm.Script("anthropic.messages", testkit.Reply{Status: tc.code, JSON: raw})
+			c := newClient(llm)
+			ctx, in := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+			// An earlier success must not hide the later provider failure.
+			if _, err := c.Messages.New(ctx, anthropic.MessageNewParams{}, body(t, request(nil))); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := c.Messages.New(ctx, anthropic.MessageNewParams{}, body(t, request(nil))); err == nil {
+				t.Fatal("expected provider error")
+			}
+			in.End(rudderstackai.EndOptions{Status: rudderstackai.StatusError, ErrorType: "app_error"})
+			p := rec.events(t)["ai_response_received"][0]
+			eq(t, p, "response_status", tc.status)
+			eq(t, p, "error_type", tc.errorType)
+		})
+	}
+}
+
+func TestAuditCanonicalCloudModels(t *testing.T) {
+	for _, tc := range []struct{ provider, model string }{
+		{"anthropic", "claude-haiku-4-5-20251001"},
+		{"aws.bedrock", "anthropic.claude-haiku-4-5-20251001-v1:0"},
+		{"aws.bedrock", "us.anthropic.claude-haiku-4-5-20251001-v1:0"},
+		{"gcp.vertex_ai", "claude-haiku-4-5@20251001"},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			llm, rec := setup(t, rudderstackai.WithLLMCallEvents(true))
+			if err := rudderstackai.RegisterPrice("claude-haiku-4-5", rudderstackai.ModelPrice{TokenPrice: rudderstackai.TokenPrice{InputPerMtok: 1, OutputPerMtok: 5}}); err != nil {
+				t.Fatal(err)
+			}
+			llm.Script("anthropic.messages", jsonReply(t, map[string]any{
+				"id": "msg_sync", "model": tc.model, "content": []any{}, "stop_reason": "end_turn",
+				"usage": map[string]any{"input_tokens": 10, "output_tokens": 3},
+			}), sse(t,
+				map[string]any{"type": "message_start", "message": map[string]any{"id": "msg_stream", "model": tc.model, "usage": map[string]any{"input_tokens": 10}}},
+				map[string]any{"type": "message_delta", "delta": map[string]any{"stop_reason": "end_turn"}, "usage": map[string]any{"output_tokens": 3}},
+				map[string]any{"type": "message_stop"},
+			))
+			c := newClient(llm, rudderanthropic.WithProvider(tc.provider))
+			ctx, in := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+			if _, err := c.Messages.New(ctx, anthropic.MessageNewParams{}, body(t, request(nil))); err != nil {
+				t.Fatal(err)
+			}
+			st := c.Messages.NewStreaming(ctx, anthropic.MessageNewParams{}, body(t, request(map[string]any{"stream": true})))
+			for st.Next() {
+			}
+			_ = st.Close()
+			if err := st.Err(); err != nil {
+				t.Fatal(err)
+			}
+			in.End(rudderstackai.EndOptions{})
+			ev := rec.events(t)
+			p := ev["ai_response_received"][0]
+			eq(t, p, "primary_model", "claude-haiku-4-5")
+			eq(t, p, "primary_provider", tc.provider)
+			usage := p["usage_breakdown"].([]any)
+			if len(usage) != 1 {
+				t.Fatal(usage)
+			}
+			eq(t, usage[0].(map[string]any), "model", "claude-haiku-4-5")
+			eq(t, usage[0].(map[string]any), "call_count", 2)
+			calls := ev["ai_llm_response_received"]
+			if len(calls) != 2 {
+				t.Fatal(calls)
+			}
+			for _, call := range calls {
+				eq(t, call, "model", "claude-haiku-4-5")
+			}
+			if p["total_cost_usd"] == nil {
+				t.Fatal("canonical model lost pricing", p)
+			}
+		})
+	}
+}
+
 func TestOtherEndpointsUntracked(t *testing.T) {
 	llm, rec := setup(t)
 	c := newClient(llm)

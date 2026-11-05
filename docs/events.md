@@ -139,7 +139,11 @@ One per interaction, sent by `Interaction.End` (or when `RunInteraction` / `RunT
 | `response_text`          | `EndOptions.ResponseText`, only with content capture on, masked                                              |
 | `trace_id`               | `TraceID` / `SetTraceID`, else the function registered with [`WithTraceIDFrom`](configuration.md#trace_id) (such as `rudderotel.TraceID`); absent otherwise |
 
-`EndOptions.ExtraProperties` adds your own properties; names the SDK owns (every property above, plus `spec_version`, `source`, `prompt_text`, `input_method`, `attachment_count`, `attachment_types`) are ignored.
+`primary_model`, per-call `model` and `usage_breakdown.model` use canonical Claude family names: `us.anthropic.claude-haiku-4-5-20251001-v1:0` and `claude-haiku-4-5@20251001` both become `claude-haiku-4-5`. Cloud/vendor prefixes, deployment versions and trailing dates are removed; distinct families such as `claude-sonnet-5` and `claude-sonnet-5-5` stay distinct. OpenAI and Gemini IDs retain their original form. Price lookup still uses the original deployed ID.
+
+`EndOptions.ExtraProperties` adds your own properties; names the SDK owns (every property above, plus `spec_version`, `source`, `prompt_text`, `input_method`, `attachment_count`, `attachment_types`) are ignored, including camelCase, PascalCase, uppercase, hyphenated and space-separated variants.
+
+A browser/client response copy may also report `incomplete` when it renders a partial terminal answer from a run that stopped at a cap. The client schema remains v0.2.
 
 A background task's answer adds its system-actor fields:
 
@@ -162,7 +166,9 @@ A background task's answer adds its system-actor fields:
 
 ## Status
 
-`response_status` is `success`, `error`, `timeout`, `cancelled`, `paused` or `incomplete`, decided in this order:
+`response_status` is `success`, `error`, `timeout`, `cancelled`, `blocked`, `paused` or `incomplete`, decided in this order:
+
+`EndOptions{Status: StatusError, ErrorType: "app_error"}` preserves the latest call's provider failure status and error type (for example, `timeout` or `rate_limit`). A successful retry clears that failure. Other explicit statuses and more specific error types keep their override behavior.
 
 1. `EndOptions.Status`, when it is one of the `Status*` constants (any other value logs a warning and is ignored). `RunInteraction` and `RunTask` pass the status of the error `fn` returned or panicked with (`timeout` for `timeout`, `cancelled` for `cancelled`, else `error`); its `error_type` is the failed call's own when a wrapped call failed with that error, else `ErrorTypeOf(err)`, with `app_error` in place of `api_error` when nothing in the error chain names a provider (see [Error types](#error-types)).
 2. Otherwise the last recorded call decides: a failed call gives the status of its `ErrorType` (`timeout`, `cancelled`, `max_turns` / `max_budget_usd` / `length` → `incomplete`, anything else `error`), even after earlier successful calls and even when your code handled the error. A failed call followed by a successful retry is a success.

@@ -68,8 +68,10 @@ func TrackAction(ctx context.Context, o TrackActionOptions) {
 			if i := FromContext(ctx); i != nil {
 				capture = i.captureContent
 			}
-			if !capture {
-				delete(details, "feedback_text")
+			for key := range details {
+				if dropContentProperty(key, capture) {
+					delete(details, key)
+				}
 			}
 			// The spec types these as strings: drop a wrong-typed value rather than send an
 			// invalid event.

@@ -70,6 +70,26 @@ func bareModel(model string) string {
 	return vertexAnthropicID.ReplaceAllString(m, "$1-$2")
 }
 
+// Suffix parts mirror the Agent adapter's Claude family canonicalizer. Strip repeatedly:
+// Vertex can append @<date> after -v2, and Bedrock appends :0 after its version.
+var claudeModelSuffix = regexp.MustCompile(`(?:[:@][0-9a-z._-]+|-v[0-9]+(?:\.[0-9]+)*|-latest|-[0-9]{8}|-[0-9]{4}-[0-9]{2}-[0-9]{2}|-[0-9]{3,4})$`)
+
+// canonicalModel gives Claude the same family name on every provider. Other models retain
+// their original IDs. Pricing uses the original ID so deployment-specific prices still work.
+func canonicalModel(model string) string {
+	bare := bareModel(model)
+	if !strings.HasPrefix(bare, "claude-") {
+		return model
+	}
+	for {
+		stripped := claudeModelSuffix.ReplaceAllString(bare, "")
+		if stripped == bare {
+			return bare
+		}
+		bare = stripped
+	}
+}
+
 // What may follow a model name without changing its identity: dates, snapshots, versions, tags.
 var versionSuffix = regexp.MustCompile(`^(?:-[0-9]{4}-[0-9]{2}-[0-9]{2}|-[0-9]{8}|-[0-9]{3,4}|-v[0-9]+(?:\.[0-9]+)*|-latest)*(?:[:@][0-9a-z._-]+)?$`)
 
