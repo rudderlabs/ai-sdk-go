@@ -62,7 +62,7 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 					}
 				}
 			}
-			for _, key := range []string{"provider", "model", "requested_model", "response_id", "agent_name", "call_purpose", "service_tier", "finish_reason", "error_type", "tool_name", "raw_name", "tool_call_id", "mcp_server", "parent_tool"} {
+			for _, key := range []string{"provider", "model", "raw_model", "requested_model", "response_id", "agent_name", "call_purpose", "service_tier", "finish_reason", "error_type", "tool_name", "raw_name", "tool_call_id", "mcp_server", "parent_tool"} {
 				if v, ok := p[key]; ok {
 					if _, ok := v.(string); !ok {
 						return false

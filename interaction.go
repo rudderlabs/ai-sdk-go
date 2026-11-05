@@ -398,6 +398,7 @@ type recordedCall struct {
 	latency, ttft                                    *time.Duration
 	uncredited                                       bool
 	provider, model, requestedModel, agentName       string
+	rawModel                                         string
 	callCount, errorCount                            int
 	inputTokens, outputTokens                        int
 	reasoningTokens                                  *int
@@ -991,6 +992,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			CallPurpose: call.CallPurpose, FallbackUsed: call.FallbackUsed, BYOK: call.BYOK,
 		}
 		if useTwinUsage {
+			creditCall.Model = first(pricingTwin.rawModel, pricingTwin.model)
 			creditCall.InputTokens, creditCall.OutputTokens = pricingTwin.inputTokens, pricingTwin.outputTokens
 			creditCall.ReasoningTokens, creditCall.CachedInputTokens = pricingTwin.reasoningTokens, pricingTwin.cachedInputTokens
 			creditCall.CacheWriteTokens, creditCall.ServiceTier, creditCall.CostUSD = pricingTwin.cacheWriteTokens, pricingTwin.serviceTier, pricingTwin.costUSD
@@ -1046,6 +1048,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		creditsExplicit: call.Credits != nil, credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
 		latency: latency, ttft: ttft,
 		provider: call.Provider, model: canonicalModel(call.Model), requestedModel: call.RequestedModel, agentName: call.AgentName,
+		rawModel:  call.Model,
 		callCount: callCount, errorCount: min(errorCount, callCount),
 		inputTokens: input, outputTokens: output, reasoningTokens: reasoning,
 		cachedInputTokens: nonNegative(call.CachedInputTokens), cacheWriteTokens: cacheWrite,
@@ -1190,6 +1193,8 @@ func mergeCallTwin(kept, later *recordedCall) {
 	kept.callCount = max(kept.callCount, later.callCount)
 	// Known wrapper usage supersedes span usage; otherwise fill unknown usage.
 	if (!later.fromSpan && !later.usageUnknown && later.errorType == "") || (kept.usageUnknown && !later.usageUnknown) {
+		// Keep the deployed ID with the authoritative usage; emitted models remain canonical.
+		kept.rawModel = later.rawModel
 		kept.inputTokens, kept.outputTokens = later.inputTokens, later.outputTokens
 		kept.reasoningTokens = later.reasoningTokens
 		kept.cachedInputTokens, kept.cacheWriteTokens, kept.cacheWrite1 = later.cachedInputTokens, later.cacheWriteTokens, later.cacheWrite1
@@ -1982,6 +1987,7 @@ func pendingCall(c *recordedCall) map[string]any {
 	if c.model != "" {
 		p["model"] = c.model
 	}
+	put(p, "raw_model", c.rawModel)
 	if c.requestedModel != "" {
 		p["requested_model"] = c.requestedModel
 	}
@@ -2092,6 +2098,7 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		c.feesUnknown = pendingBool(p, "fees_unknown")
 		c.provider = pendingText(p, "provider")
 		c.model = canonicalModel(pendingText(p, "model"))
+		c.rawModel = first(pendingText(p, "raw_model"), pendingText(p, "model"))
 		c.requestedModel = pendingText(p, "requested_model")
 		c.agentName = pendingText(p, "agent_name")
 		c.callCount = int(pendingNumber(p, "call_count"))

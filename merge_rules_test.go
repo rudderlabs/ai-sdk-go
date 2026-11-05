@@ -57,6 +57,65 @@ func TestMergeKeepsAggregateCallCount(t *testing.T) {
 	}
 }
 
+func TestMergePricesWithWrapperDeployedModel(t *testing.T) {
+	const deployedModel = "us.anthropic.claude-opus-5-20261101-v1:0"
+	for _, counts := range [][2]int{{3, 1}, {1, 3}} {
+		for _, spanFirst := range []bool{false, true} {
+			for _, restore := range []bool{false, true} {
+				t.Run(fmt.Sprintf("span=%d/wrapper=%d/spanFirst=%t/restore=%t", counts[0], counts[1], spanFirst, restore), func(t *testing.T) {
+					r := setupAI(t, WithLLMCallEvents(true), WithPrices(map[string]ModelPrice{
+						deployedModel:   {TokenPrice: TokenPrice{InputPerMtok: 2, OutputPerMtok: 4}},
+						"claude-opus-5": {TokenPrice: TokenPrice{InputPerMtok: 20, OutputPerMtok: 40}},
+					}), WithCredits(func(c CreditCall) (*float64, error) {
+						if c.Model == deployedModel {
+							if c.InputTokens != 1000 || c.OutputTokens != 500 || c.CostUSD == nil || *c.CostUSD != 0.004 {
+								t.Errorf("wrapper pricing used different usage or cost: %+v", c)
+							}
+							return Ptr(7 * float64(c.CallCount)), nil
+						}
+						return Ptr(0.0), nil
+					}))
+					client := &pauseReentrantClient{recorder: r}
+					_, in := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+					span := LLMCall{Provider: "aws.bedrock", Model: "claude-opus-5", Integration: "tracing", StartedAt: time.UnixMilli(100), EndedAt: time.UnixMilli(110), CallCount: counts[0], InputTokens: 10, OutputTokens: 5}
+					wrapper := span
+					wrapper.Model, wrapper.Integration, wrapper.CallCount = deployedModel, "anthropic", counts[1]
+					wrapper.InputTokens, wrapper.OutputTokens = 1000, 500
+					firstCall, secondCall := wrapper, span
+					if spanFirst {
+						firstCall, secondCall = span, wrapper
+					}
+					if restore {
+						client.reenter = func() { in.RecordCall(firstCall) }
+						snapshot, ok := in.Pause(PauseOptions{})
+						if !ok || len(snapshot.PendingCalls) != 1 {
+							t.Fatal("pause did not carry the first report", snapshot)
+						}
+						in = round3Resume(t, in, snapshot, true)
+					} else {
+						in.RecordCall(firstCall)
+					}
+					in.RecordCall(secondCall)
+					if got := in.calls[0].rawModel; got != deployedModel {
+						t.Errorf("merged pricing model = %q, want %q", got, deployedModel)
+					}
+					in.End(EndOptions{})
+					auditAssertSubset(t, lastResponse(t, r), map[string]any{"primary_model": "claude-opus-5", "llm_call_count": 3, "total_input_tokens": 1000, "total_output_tokens": 500, "total_cost_usd": 0.004, "total_credits": 21.0})
+					rows := lastResponse(t, r)["usage_breakdown"].([]map[string]any)
+					if len(rows) != 1 {
+						t.Fatalf("usage groups = %d, want 1", len(rows))
+					}
+					auditAssertSubset(t, rows[0], map[string]any{"model": "claude-opus-5", "call_count": 3, "cost_usd": 0.004, "credits": 21.0})
+					if events := r.named("ai_llm_response_received"); len(events) != 1 {
+						t.Fatalf("call events = %d, want 1", len(events))
+					}
+					auditAssertSubset(t, r.props(t, "ai_llm_response_received"), map[string]any{"model": "claude-opus-5", "cost_usd": 0.004})
+				})
+			}
+		}
+	}
+}
+
 func TestMergeKeepsKnownFinishReason(t *testing.T) {
 	for _, reason := range []string{"max_tokens", "length", "content_filter"} {
 		for _, later := range []string{"", "stop"} {
