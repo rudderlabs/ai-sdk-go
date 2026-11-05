@@ -165,7 +165,7 @@ func (o *options) mask(text string) (out string, ok bool) {
 	if o.DisableRedaction {
 		return text, true
 	}
-	if out, ok = maskText(text); !ok {
+	if out, ok = MaskText(text); !ok {
 		return "", false
 	}
 	if o.Redact == nil || out == redactionTimedOut {

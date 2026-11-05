@@ -237,6 +237,7 @@ err := rudderstackai.Configure(
 - Patterns catch fixed shapes only: names, postal addresses and free-form IDs are not caught, and some order numbers look like phone numbers. Use the hook, or leave capture off.
 - Fail closed: a hook that returns an error or panics drops the field. Text over 32,000 code points is withheld rather than masked.
 - One rule: `WithRedaction(false)` sends captured text unmasked and does not run the hook; MCP `Options.DisableRedaction` does the same for `Redact`. The patterns are shared with the Node.js and Python SDKs ([`spec/fixtures/redaction-v0.1.json`](../spec/fixtures/redaction-v0.1.json)).
+- `MaskText(text)` applies the same patterns to text you send yourself, such as free text a [declared tool event](events.md#declared-tool-events) rule's `Properties` returns: the SDK sends those as returned. It ignores `WithRedaction` and the hooks; `ok` is false for text over 32,000 code points, which you should not send.
 
 ## Pricing
 
