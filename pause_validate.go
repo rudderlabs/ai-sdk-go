@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"math"
+	"time"
 )
 
 func validSnapshotInteger(v any) bool {
@@ -38,14 +39,25 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 	}
 	for _, records := range [][]map[string]any{s.PendingCalls, s.PendingTools} {
 		for _, p := range records {
-			for _, key := range []string{"call_count", "error_count", "input_tokens", "output_tokens", "reasoning_tokens", "cached_input_tokens", "cache_write_tokens", "cache_write_1h_tokens", "server_tool_call_count"} {
+			for _, key := range []string{"call_count", "error_count", "input_tokens", "output_tokens", "reasoning_tokens", "cached_input_tokens", "cache_write_tokens", "cache_write_1h_tokens", "server_tool_call_count", "report_sequence"} {
 				if v, ok := p[key]; ok && !validSnapshotInteger(v) {
 					return false
 				}
 			}
-			for _, key := range []string{"last", "last_ok", "history_only", "fallback_used", "byok", "uncredited", "unpriced", "fees_unknown", "error", "settled", "fired"} {
+			for _, key := range []string{"last", "last_ok", "history_only", "fallback_used", "byok", "uncredited", "unpriced", "fees_unknown", "error", "settled", "fired", "call_event_pending", "from_span", "twin_matched", "usage_unknown", "credits_explicit"} {
 				if v, ok := p[key]; ok {
 					if _, ok := v.(bool); !ok {
+						return false
+					}
+				}
+			}
+			for _, key := range []string{"started_at", "ended_at"} {
+				if v, ok := p[key]; ok {
+					s, ok := v.(string)
+					if !ok {
+						return false
+					}
+					if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
 						return false
 					}
 				}

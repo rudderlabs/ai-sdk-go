@@ -959,7 +959,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	pricingCallCount := callCount
 	// Price aggregate twins with the shared count and authoritative usage.
 	pricingTwin := i.callTwinLocked(&recordedCall{
-		provider: call.Provider, model: canonicalModel(call.Model), responseID: call.ResponseID,
+		provider: call.Provider, model: canonicalModel(call.Model), responseID: call.ResponseID, agentName: call.AgentName,
 		fromSpan: call.Integration == "tracing", startedAt: call.StartedAt, endedAt: call.EndedAt,
 	})
 	if pricingTwin != nil {
@@ -1158,7 +1158,7 @@ func (i *Interaction) emitReadyCallsLocked() {
 }
 
 // callTwinLocked pairs each span with at most one wrapper from the same provider
-// and canonical model. Distinct response IDs and separate windows stay separate.
+// and canonical model. Conflicting agents, distinct response IDs and separate windows stay separate.
 func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
 	if call.startedAt.IsZero() || call.endedAt.IsZero() {
 		return nil
@@ -1168,6 +1168,7 @@ func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
 	for _, earlier := range i.calls {
 		if earlier.fromSpan == call.fromSpan || earlier.twinMatched || earlier.provider != call.provider ||
 			(earlier.responseID != "" && call.responseID != "") ||
+			(earlier.agentName != "" && call.agentName != "" && earlier.agentName != call.agentName) ||
 			(earlier.model != "" && call.model != "" && earlier.model != call.model) ||
 			earlier.startedAt.IsZero() || earlier.endedAt.IsZero() ||
 			earlier.startedAt.After(call.endedAt.Add(time.Millisecond)) || call.startedAt.After(earlier.endedAt.Add(time.Millisecond)) {
@@ -1939,6 +1940,17 @@ func pendingBool(p map[string]any, key string) bool   { b, _ := p[key].(bool); r
 
 func pendingCall(c *recordedCall) map[string]any {
 	p := map[string]any{}
+	// Preserve event deferral and twin identity across a JSON round trip.
+	p["call_event_pending"] = c.callEventPending
+	p["from_span"], p["twin_matched"], p["usage_unknown"] = c.fromSpan, c.twinMatched, c.usageUnknown
+	p["credits_explicit"] = c.creditsExplicit
+	p["report_sequence"] = c.reportSequence
+	if !c.startedAt.IsZero() {
+		p["started_at"] = c.startedAt.Format(time.RFC3339Nano)
+	}
+	if !c.endedAt.IsZero() {
+		p["ended_at"] = c.endedAt.Format(time.RFC3339Nano)
+	}
 	if c.credits != nil {
 		p["credits"] = *c.credits
 	}
@@ -2054,6 +2066,11 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	i.lastFailedCallType = snapshot.LastFailedCallType
 	for _, p := range snapshot.PendingCalls {
 		c := &recordedCall{}
+		c.callEventPending = pendingBool(p, "call_event_pending")
+		c.fromSpan, c.twinMatched, c.usageUnknown = pendingBool(p, "from_span"), pendingBool(p, "twin_matched"), pendingBool(p, "usage_unknown")
+		c.creditsExplicit = pendingBool(p, "credits_explicit")
+		c.startedAt, _ = time.Parse(time.RFC3339Nano, pendingText(p, "started_at"))
+		c.endedAt, _ = time.Parse(time.RFC3339Nano, pendingText(p, "ended_at"))
 		if p["credits"] != nil {
 			c.credits = Ptr(pendingNumber(p, "credits"))
 		}
@@ -2108,6 +2125,9 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 			i.calls = append(i.calls, c)
 			i.callCount += c.callCount
 			c.reportSequence = i.callCount
+		}
+		if _, ok := p["report_sequence"]; ok {
+			c.reportSequence = int(pendingNumber(p, "report_sequence"))
 		}
 		if pendingBool(p, "last") {
 			i.lastCall = c
