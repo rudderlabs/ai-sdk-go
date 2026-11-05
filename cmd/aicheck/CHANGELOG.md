@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.4.0...cmd/aicheck/v0.5.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* fixes from the production audit of AI events ([#47](https://github.com/rudderlabs/ai-sdk-go/issues/47))
+
+### Bug Fixes
+
+* fixes from the production audit of AI events ([#47](https://github.com/rudderlabs/ai-sdk-go/issues/47)) ([de9ad71](https://github.com/rudderlabs/ai-sdk-go/commit/de9ad71e6531d0c3c6bbb4cfbc79c46e3411d582))
+
 ## [0.4.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.3.0...cmd/aicheck/v0.4.0) (2026-11-05)
 
 
