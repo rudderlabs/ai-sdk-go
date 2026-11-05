@@ -318,11 +318,12 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 				fail("%s: server_name %s not in %s", where, repr(props.Get("server_name")), reprList(opts.mcpServer))
 			}
 			if keys, ok := props.Get("argument_keys").([]any); ok && slices.ContainsFunc(keys, func(k any) bool { return k == "request_context" }) {
-				// A tool declaring its own request_context gets it untouched; the SDK reads nothing from it.
+				// With request context off (the default), or a tool declaring its own argument,
+				// request_context is passed through untouched; the SDK reads nothing from it.
 				if len(present(props, requestContextFields)) > 0 {
 					fail("%s: request_context reached the tool (argument_keys)", where)
 				} else {
-					notes = append(notes, where+": request_context in argument_keys (fine if the tool declares its own)")
+					notes = append(notes, where+": request_context in argument_keys (fine if tool declares it or request_context is off)")
 				}
 			}
 			server := props.Get("server_name")

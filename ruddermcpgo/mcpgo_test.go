@@ -33,6 +33,75 @@ func toStrings(v any) []string {
 	return out
 }
 
+func TestRequestContextOff(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts Options
+	}{
+		{"default", Options{}},
+		{"explicit", Options{RequestContext: rudderstackai.RequestContextOptions{Enabled: false}}},
+		{"options do not enable", Options{CaptureContent: true, RequestContext: rudderstackai.RequestContextOptions{Intents: []string{"debug_delivery"}, DisableUserSentiment: true}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			seen := &handlerSeen{}
+			s := workspaceServer("context-off-mcpgo", seen)
+			r := wrap(t, s, tc.opts)
+			cs := connectStdio(t, s, "2025-06-18", nil)
+			tools, err := cs.ListTools(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(tools.Tools) == 0 || strings.Contains(mustJSON(tools), requestContext) {
+				t.Fatalf("unexpected tools while request context is off: %s", mustJSON(tools))
+			}
+			args := map[string]any{"workspace_id": "w", requestContext: map[string]any{"intent": "debug_delivery", "user_sentiment": "negative", "call_reason": "why"}}
+			callTool(t, cs, "list_destinations", args, nil)
+			if mustJSON(seen.last()) != mustJSON(args) {
+				t.Errorf("handler got %s, want %s", mustJSON(seen.last()), mustJSON(args))
+			}
+			p := r.props(t, "mcp_tool_called")
+			if !slices.Equal(p["argument_keys"].([]string), []string{requestContext, "workspace_id"}) {
+				t.Errorf("argument_keys = %v", p["argument_keys"])
+			}
+			for _, key := range []string{"intent", "user_sentiment", "call_reason"} {
+				if _, ok := p[key]; ok {
+					t.Errorf("%s recorded while request context is off", key)
+				}
+			}
+		})
+	}
+}
+
+func TestNativeRequestContextLeftAlone(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(strconv.FormatBool(enabled), func(t *testing.T) {
+			s := server.NewMCPServer("native-mcpgo", "1", server.WithToolCapabilities(true))
+			var got any
+			s.AddTool(mcp.NewTool("own", mcp.WithString(requestContext)), func(_ context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				got = req.GetArguments()[requestContext]
+				return mcp.NewToolResultText("ok"), nil
+			})
+			r := wrap(t, s, Options{RequestContext: rudderstackai.RequestContextOptions{Enabled: enabled}})
+			cs := connectStdio(t, s, "2025-06-18", nil)
+			tools, err := cs.ListTools(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prop := tools.Tools[0].InputSchema.(map[string]any)["properties"].(map[string]any)[requestContext]
+			if mustJSON(prop) != `{"type":"string"}` {
+				t.Errorf("schema changed: %v", prop)
+			}
+			callTool(t, cs, "own", map[string]any{requestContext: "mine"}, nil)
+			if got != "mine" {
+				t.Errorf("handler got %v", got)
+			}
+			if keys := r.props(t, "mcp_tool_called")["argument_keys"].([]string); !slices.Equal(keys, []string{requestContext}) {
+				t.Errorf("argument_keys = %v", keys)
+			}
+		})
+	}
+}
+
 // exercise runs what an agent does, against any transport and protocol version.
 func exercise(t *testing.T, cs *sdk.ClientSession) {
 	t.Helper()
@@ -100,7 +169,7 @@ func exercise(t *testing.T, cs *sdk.ClientSession) {
 
 func fullOptions() Options {
 	return Options{
-		RequestContext:     rudderstackai.RequestContextOptions{Intents: []string{"debug_delivery", "build_audience"}},
+		RequestContext:     rudderstackai.RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}},
 		CapabilityRequests: &rudderstackai.CapabilityRequestOptions{Capabilities: []string{"bulk_export"}},
 		EventRules: rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
 			"create_audience": {Event: "audience_created", Properties: func(_ map[string]any, result any) map[string]any {

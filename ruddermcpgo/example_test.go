@@ -38,7 +38,7 @@ func ExampleWrapServer() {
 		EventRules: rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
 			"create_audience": {Event: "audience_created"},
 		}},
-		RequestContext: rudderstackai.RequestContextOptions{Intents: []string{"debug_delivery", "build_audience"}},
+		RequestContext: rudderstackai.RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}},
 	})
 	if err != nil {
 		log.Fatal(err)

@@ -1174,7 +1174,7 @@
         "chatTurnCompleted"
       ],
       "exit_code": 0,
-      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} \nmcp client_name: on 0 of 1 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nnote: #11 mcp_tool_called: request_context in argument_keys (fine if the tool declares its own)\nRESULT: PASS\n"
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 'search', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} \nmcp client_name: on 0 of 1 tool calls\nevents: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nnote: #11 mcp_tool_called: request_context in argument_keys (fine if tool declares it or request_context is off)\nRESULT: PASS\n"
     },
     {
       "name": "request_context with intent",
@@ -2412,7 +2412,7 @@
         "docs"
       ],
       "exit_code": 0,
-      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 'own_context', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} joined\nmcp client_name: on 0 of 1 tool calls\nevents: {'ai_user_prompt_created': 1, 'ai_response_received': 1, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 3}\ninteractions: 1\nnote: #2 mcp_tool_called: request_context in argument_keys (fine if the tool declares its own)\nRESULT: PASS\n"
+      "stdout": "mcp call: {'server_name': 'docs', 'client_name': None, 'protocol_version': None, 'tool_name': 'own_context', 'tool_status': 'success', 'error_type': None, 'intent': None, 'user_sentiment': None} joined\nmcp client_name: on 0 of 1 tool calls\nevents: {'ai_user_prompt_created': 1, 'ai_response_received': 1, 'mcp_tool_called': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 3}\ninteractions: 1\nnote: #2 mcp_tool_called: request_context in argument_keys (fine if tool declares it or request_context is off)\nRESULT: PASS\n"
     },
     {
       "name": "duplicate prompts and answers",

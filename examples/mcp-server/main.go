@@ -110,7 +110,7 @@ func newServer(client analytics.Client, transport string) (*mcp.Server, error) {
 				},
 			},
 		}},
-		RequestContext:     rudderstackai.RequestContextOptions{Intents: []string{"debug_delivery", "build_audience"}},
+		RequestContext:     rudderstackai.RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}},
 		CapabilityRequests: &rudderstackai.CapabilityRequestOptions{Capabilities: []string{"bulk_export"}},
 	})
 	return server, err

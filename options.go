@@ -39,14 +39,17 @@ type Identity struct {
 	Country string
 }
 
-// RequestContextOptions configures the request_context argument added to every tool.
+// RequestContextOptions configures the optional request_context argument, off by default.
 type RequestContextOptions struct {
-	// Disabled turns request_context off.
-	Disabled bool
+	// Enabled adds request_context to tool schemas and removes it before the tool runs.
+	// The zero value leaves schemas and arguments unchanged.
+	Enabled bool
 	// Intents is the closed list the agent picks intent from; "other" is always added. Without
-	// a list, intent is not offered. Avoid sensitive categories: the label alone can reveal them.
+	// a list, intent is not offered. Applies only when Enabled is true. Avoid sensitive
+	// categories: the label alone can reveal them.
 	Intents []string
 	// DisableUserSentiment stops offering user_sentiment (negative, neutral, positive).
+	// Applies only when Enabled is true.
 	DisableUserSentiment bool
 }
 
@@ -70,7 +73,8 @@ type ToolEventRule struct {
 	// Event is the event name, for example "audience_created". Names starting with "ai_" or
 	// "mcp_" are reserved.
 	Event string
-	// Properties returns extra properties from the call's arguments (without request_context)
+	// Properties returns extra properties from the call's arguments (without injected
+	// request_context when enabled; unchanged when off or declared by the tool)
 	// and result (structuredContent, else the single text block parsed as JSON). SDK-owned
 	// property names are ignored. If it panics, or its output would take the event over the
 	// 30,000-byte properties budget, the event is sent without them.
@@ -103,7 +107,7 @@ type Options struct {
 	ClassifyToolError func(toolName string, result *mcp.CallToolResult) string
 	// EventRules declares tool events. Names starting with "ai_" or "mcp_" are rejected.
 	EventRules EventRules
-	// RequestContext configures the optional request_context argument, on by default.
+	// RequestContext configures the optional request_context argument, off by default.
 	RequestContext RequestContextOptions
 	// ClientSeenWindow is the window in which a (client, OAuth client, user) is reported once
 	// by mcp_client_seen, per server name and process. Zero means 24 hours.

@@ -188,7 +188,7 @@ err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 	EventRules: rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
 		"create_audience": {Event: "audience_created"},
 	}},
-	RequestContext: rudderstackai.RequestContextOptions{Intents: []string{"debug_delivery", "build_audience"}},
+	RequestContext: rudderstackai.RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}},
 })
 // Serve as usual: server.Run(ctx, &mcp.StdioTransport{}) or mcp.NewStreamableHTTPHandler(...).
 ```
@@ -197,7 +197,7 @@ err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 - Both libraries take the same options and send the same events. On mcp-go, `Identify(ctx)` reads your own authentication from the context, and `ruddermcpgo.RequestElicitation` records elicitations; on the go-sdk, `rudderstackai.Elicit` records one the client cannot answer ([mcp.md](docs/mcp.md#elicitation)).
 - Protocol revisions: 2025-06-18 (client details from `initialize`, `Mcp-Session-Id` as `mcp_session_id`) and the stateless 2026-07-28 (client details from each request's `_meta`, elicitation by `input_required` and the client's retry), on mcp-go from v1.0. Streamable HTTP is detected; set `Options.Transport` for stdio and SSE.
 - Joins: `com.rudderstack/interaction_id` and the W3C `traceparent` (else `com.rudderstack/trace_id`) in a request's `_meta` become `interaction_id` and `trace_id`. A Go agent sends `Interaction.ID()` itself.
-- Why it was called: an optional `request_context` argument (`intent` from your list, `user_sentiment`, and `call_reason` with `CaptureContent`) is added to each tool's schema and removed before your handler runs.
+- Why it was called: request context is off by default. Opt in with `RequestContext: rudderstackai.RequestContextOptions{Enabled: true}`. When enabled, an optional `request_context` argument (`intent` from your list, `user_sentiment`, and `call_reason` with `CaptureContent`) is added to each tool's schema and removed before your handler runs. When off, schemas and client-sent `request_context` arguments pass through unchanged.
 - State is in memory, per server name, per process (at most 10,000 entries each, least recently used first): servers rebuilt per request keep counting; give each distinct server a unique name. Replicas and restarts each emit their own `mcp_client_seen`.
 - Opt-in: `CapabilityRequests` adds a `request_capability` tool for unmet demand (`mcp_capability_requested`); `MCPEvents: true` enables the experimental MCP Events helpers (`TrackMCPEventSubscription`, `WrapMCPEventSender`).
 

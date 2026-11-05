@@ -37,7 +37,7 @@ var (
 
 // WrapMCPServer tracks an MCP server built on github.com/modelcontextprotocol/go-sdk. Call it
 // once at startup, before serving. It adds a receiving and a sending middleware; requests and
-// responses pass through unchanged except for the request_context argument (added to each
+// responses pass through unchanged except for the enabled request_context argument (added to each
 // tool's input schema and removed before the tool runs) and, when enabled, the
 // request_capability tool. Wrapping the same server again replaces its options.
 //

@@ -1160,7 +1160,7 @@
     },
     "request_context": {
       "type": "object",
-      "description": "The optional object the MCP server integration adds to each tool's input schema (skipped when the tool already has an argument with that name) and strips before the handler runs. Its fields are recorded on mcp_tool_called. intent and user_sentiment are on by default; call_reason only with content capture on.",
+      "description": "The optional object the MCP server integration adds to each tool's input schema when request context is explicitly enabled (off by default; skipped when the tool already has an argument with that name) and strips before the handler runs. Its fields are recorded on mcp_tool_called. When enabled, intent requires a configured list; user_sentiment is included unless disabled; call_reason only with content capture on. When request context is off, tool schemas and arguments are unchanged.",
       "properties": {
         "intent": {
           "type": "string",
