@@ -155,7 +155,8 @@ type LLMCall struct {
 	// UsageUnknown marks tokens as unknown or partial, so the call stays unpriced.
 	UsageUnknown bool
 	// Integration reporting the call; the first one tags every event of the interaction.
-	// Empty means manual.
+	// Empty means manual. "tracing" identifies a span report, which can match an
+	// overlapping wrapper report even when there is no shared ResponseID.
 	Integration string
 	// OutputText is the answer text, given to a configured classifier or evaluator. Never sent.
 	OutputText string
@@ -382,6 +383,8 @@ func resumeFrom(o *InteractionOptions) bool {
 }
 
 type recordedCall struct {
+	startedAt, endedAt                               time.Time
+	fromSpan, twinMatched, usageUnknown              bool
 	credits                                          *float64
 	callPurpose                                      string
 	fallbackUsed, byok                               *bool
@@ -1012,6 +1015,8 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		}
 	}
 	r := &recordedCall{
+		startedAt: call.StartedAt, endedAt: call.EndedAt,
+		fromSpan: call.Integration == "tracing", usageUnknown: call.UsageUnknown,
 		credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
 		latency: latency, ttft: ttft,
 		provider: call.Provider, model: canonicalModel(call.Model), requestedModel: call.RequestedModel, agentName: call.AgentName,
@@ -1021,6 +1026,11 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		cacheWrite1: min(nonNegative(call.CacheWrite1hTokens), cacheWrite), serviceTier: tier,
 		serverToolCallCount: serverToolCalls, serverToolCostUSD: serverToolCost, costUSD: cost,
 		finishReason: call.FinishReason, errorType: call.ErrorType, responseID: call.ResponseID,
+	}
+	// Select after the credit callback, which may itself record another report.
+	if twin := i.callTwinLocked(r); twin != nil {
+		mergeCallTwin(twin, r)
+		return false
 	}
 	i.callCount++
 	i.lastCall = r
@@ -1047,6 +1057,68 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		i.flushLocked()
 	}
 	return true
+}
+
+// callTwinLocked pairs each span with at most one wrapper from the same provider
+// and canonical model. Distinct response IDs and separate windows stay separate.
+func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
+	if call.startedAt.IsZero() || call.endedAt.IsZero() {
+		return nil
+	}
+	var best *recordedCall
+	var bestDistance time.Duration
+	for _, earlier := range i.calls {
+		if earlier.fromSpan == call.fromSpan || earlier.twinMatched || earlier.provider != call.provider ||
+			(earlier.responseID != "" && call.responseID != "") ||
+			(earlier.model != "" && call.model != "" && earlier.model != call.model) ||
+			earlier.startedAt.IsZero() || earlier.endedAt.IsZero() ||
+			earlier.startedAt.After(call.endedAt.Add(time.Millisecond)) || call.startedAt.After(earlier.endedAt.Add(time.Millisecond)) {
+			continue
+		}
+		distance := earlier.startedAt.Sub(call.startedAt).Abs() + earlier.endedAt.Sub(call.endedAt).Abs()
+		if best == nil || distance < bestDistance {
+			best, bestDistance = earlier, distance
+		}
+	}
+	return best
+}
+
+func mergeCallTwin(kept, later *recordedCall) {
+	kept.twinMatched = true
+	// Known wrapper usage supersedes span usage; otherwise fill unknown usage.
+	if (!later.fromSpan && !later.usageUnknown && later.errorType == "") || (kept.usageUnknown && !later.usageUnknown) {
+		kept.inputTokens, kept.outputTokens = later.inputTokens, later.outputTokens
+		kept.reasoningTokens = later.reasoningTokens
+		kept.cachedInputTokens, kept.cacheWriteTokens, kept.cacheWrite1 = later.cachedInputTokens, later.cacheWriteTokens, later.cacheWrite1
+		kept.serverToolCallCount, kept.serverToolCostUSD = later.serverToolCallCount, later.serverToolCostUSD
+		if later.costUSD != nil || kept.usageUnknown {
+			kept.costUSD = later.costUSD
+		}
+		kept.credits, kept.usageUnknown = later.credits, false
+	}
+	if kept.costUSD == nil && kept.errorType == "" {
+		kept.costUSD = later.costUSD
+	}
+	kept.errorCount = max(kept.errorCount, later.errorCount)
+	fillString(&kept.model, later.model)
+	fillString(&kept.requestedModel, later.requestedModel)
+	fillString(&kept.agentName, later.agentName)
+	fillString(&kept.responseID, later.responseID)
+	fillString(&kept.finishReason, later.finishReason)
+	fillString(&kept.serviceTier, later.serviceTier)
+	fillString(&kept.callPurpose, later.callPurpose)
+	if kept.fallbackUsed == nil {
+		kept.fallbackUsed = later.fallbackUsed
+	}
+	if kept.byok == nil {
+		kept.byok = later.byok
+	}
+	if kept.latency == nil {
+		kept.latency = later.latency
+	}
+	if kept.ttft == nil {
+		kept.ttft = later.ttft
+	}
 }
 
 // RecordToolCalls reports tool calls the model made. A call already recorded under the same
