@@ -81,8 +81,8 @@ func TestCallMatchingLatestOutcomeWins(t *testing.T) {
 				wrapper := span
 				wrapper.Integration, wrapper.ErrorType, wrapper.FinishReason = "openai", tc.laterError, tc.finishReason
 				in.RecordCall(span)
-				if in.RecordCall(wrapper) {
-					t.Fatal("twin counted as a new call")
+				if !in.RecordCall(wrapper) {
+					t.Fatal("merged wrapper was rejected")
 				}
 				if in.lastCall.errorType != tc.laterError || (in.lastOK != nil) != (tc.laterError == "") {
 					t.Error("merged outcome bookkeeping is stale")
@@ -140,8 +140,8 @@ func TestCallMatchingRegistersMergedResponseID(t *testing.T) {
 	wrapper.InputTokens, wrapper.CostUSD, wrapper.Credits = 1000, Ptr(0.004), Ptr(7.0)
 	in.RecordCall(span)
 	for attempt := range 2 {
-		if in.RecordCall(wrapper) {
-			t.Fatalf("wrapper attempt %d counted as a new call", attempt)
+		if got := in.RecordCall(wrapper); got != (attempt == 0) {
+			t.Fatalf("wrapper attempt %d accepted = %t", attempt, got)
 		}
 	}
 	in.End(EndOptions{})

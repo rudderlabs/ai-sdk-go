@@ -173,8 +173,12 @@ func (i *Interaction) capLocked() {
 // foldCallLocked folds a call past MaxCallsPerInteraction into its usage group's overflow
 // record, so totals and usage_breakdown keep counting without storing the call.
 func (i *Interaction) foldCallLocked(r *recordedCall) {
+	foldCallInto(r, &i.overflow)
+}
+
+func foldCallInto(r *recordedCall, calls *[]*recordedCall) {
 	var dst *recordedCall
-	for _, c := range i.overflow {
+	for _, c := range *calls {
 		if c.agentName == r.agentName && c.callPurpose == r.callPurpose && c.provider == r.provider && c.model == r.model && c.requestedModel == r.requestedModel && c.serviceTier == r.serviceTier {
 			dst = c
 			break
@@ -182,7 +186,7 @@ func (i *Interaction) foldCallLocked(r *recordedCall) {
 	}
 	if dst == nil {
 		first := *r // a copy: lastCall and lastOK may point at r
-		i.overflow = append(i.overflow, &first)
+		*calls = append(*calls, &first)
 		return
 	}
 	if (dst.credits == nil && dst.errorType == "") || (r.credits == nil && r.errorType == "") {
@@ -386,6 +390,8 @@ type recordedCall struct {
 	startedAt, endedAt                               time.Time
 	fromSpan, twinMatched, usageUnknown              bool
 	callEventPending                                 bool
+	reportSequence                                   int
+	creditsExplicit                                  bool
 	credits                                          *float64
 	callPurpose                                      string
 	fallbackUsed, byok                               *bool
@@ -483,6 +489,7 @@ type Interaction struct {
 	seen                   map[string]*recordedCall
 	tools                  []*recordedTool
 	overflow               []*recordedCall // calls past MaxCallsPerInteraction, one per usage group
+	pendingOverflowCalls   []*recordedCall // un-emitted overflow usage behind the call barrier
 	toolOverflow           []*recordedTool // tool calls past it, one per tool_breakdown identity
 	capped                 bool
 	capPending             bool
@@ -892,6 +899,7 @@ func nonNegative(n int) int { return max(n, 0) }
 
 // RecordCall reports one model call (or CallCount aggregated calls). It returns false when the
 // call was ignored: a repeated provider response ID, or the interaction already ended.
+// A merged wrapper is accepted so it can record tools; a merged span returns false.
 func (i *Interaction) RecordCall(call LLMCall) (recorded bool) {
 	safely(func() { recorded = i.recordCall(call) })
 	return recorded
@@ -948,6 +956,17 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		}
 	}
 	callCount := max(call.CallCount, 1)
+	pricingCallCount := callCount
+	// Price aggregate twins with the shared count and authoritative usage.
+	pricingTwin := i.callTwinLocked(&recordedCall{
+		provider: call.Provider, model: canonicalModel(call.Model), responseID: call.ResponseID,
+		fromSpan: call.Integration == "tracing", startedAt: call.StartedAt, endedAt: call.EndedAt,
+	})
+	if pricingTwin != nil {
+		pricingCallCount = max(callCount, pricingTwin.callCount)
+	}
+	useTwinUsage := pricingCallCount > 1 && pricingTwin != nil && !pricingTwin.fromSpan &&
+		!pricingTwin.usageUnknown && call.Integration == "tracing"
 	errorCount := 0
 	if call.ErrorCount != nil {
 		errorCount = nonNegative(*call.ErrorCount)
@@ -963,15 +982,21 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	if call.ErrorType == "cancelled" {
 		credits = nil
 	}
-	if credits == nil && c.credits != nil && call.ErrorType == "" && !call.UsageUnknown {
+	if credits == nil && c.credits != nil && call.ErrorType == "" && (!call.UsageUnknown || useTwinUsage) {
 		// App callbacks may inspect, update or end this interaction.
-		i.mu.Unlock()
-		credits = priceCredits(c.credits, CreditCall{
+		creditCall := CreditCall{
 			Provider: call.Provider, Model: call.Model, InputTokens: input, OutputTokens: output,
 			ReasoningTokens: reasoning, CachedInputTokens: nonNegative(call.CachedInputTokens), CacheWriteTokens: cacheWrite,
-			ServiceTier: tier, CostUSD: cost, CallCount: callCount, AgentName: call.AgentName,
+			ServiceTier: tier, CostUSD: cost, CallCount: pricingCallCount, AgentName: call.AgentName,
 			CallPurpose: call.CallPurpose, FallbackUsed: call.FallbackUsed, BYOK: call.BYOK,
-		})
+		}
+		if useTwinUsage {
+			creditCall.InputTokens, creditCall.OutputTokens = pricingTwin.inputTokens, pricingTwin.outputTokens
+			creditCall.ReasoningTokens, creditCall.CachedInputTokens = pricingTwin.reasoningTokens, pricingTwin.cachedInputTokens
+			creditCall.CacheWriteTokens, creditCall.ServiceTier, creditCall.CostUSD = pricingTwin.cacheWriteTokens, pricingTwin.serviceTier, pricingTwin.costUSD
+		}
+		i.mu.Unlock()
+		credits = priceCredits(c.credits, creditCall)
 		i.mu.Lock()
 		if i.ended {
 			return false
@@ -1018,7 +1043,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	r := &recordedCall{
 		startedAt: call.StartedAt, endedAt: call.EndedAt,
 		fromSpan: call.Integration == "tracing", usageUnknown: call.UsageUnknown,
-		credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
+		creditsExplicit: call.Credits != nil, credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
 		latency: latency, ttft: ttft,
 		provider: call.Provider, model: canonicalModel(call.Model), requestedModel: call.RequestedModel, agentName: call.AgentName,
 		callCount: callCount, errorCount: min(errorCount, callCount),
@@ -1033,7 +1058,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		mergeCallTwin(twin, r)
 		// A merge does not advance callCount, so discard a generic app hint that
 		// would otherwise hide the newly learned provider classification.
-		if i.hint != nil && i.hint.errorType == "app_error" && first(twin.errorType, finishErrors[twin.finishReason]) != "" {
+		if twin == i.lastCall && i.hint != nil && i.hint.errorType == "app_error" && first(twin.errorType, finishErrors[twin.finishReason]) != "" {
 			i.hint = nil
 		}
 		i.noteCallOutcomeLocked(twin)
@@ -1041,9 +1066,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			i.admitSeenLocked(twin.provider+"\x00"+twin.responseID, twin)
 		}
 		i.emitReadyCallsLocked()
-		return false
+		return !r.fromSpan
 	}
 	i.callCount++
+	r.reportSequence = i.callCount
 	i.noteCallOutcomeLocked(r)
 	if len(i.calls) < cfg().limits.MaxCallsPerInteraction {
 		i.calls = append(i.calls, r)
@@ -1059,7 +1085,8 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		// Spans and unknown usage can still acquire authoritative wrapper data.
 		// Keep later call events behind them to preserve the call order.
 		if len(i.calls) == 0 || i.calls[len(i.calls)-1] != r {
-			i.emitPendingCallLocked(r)
+			foldCallInto(r, &i.pendingOverflowCalls)
+			i.emitReadyCallsLocked()
 		} else {
 			i.emitReadyCallsLocked()
 			i.flushLocked()
@@ -1070,28 +1097,31 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	return true
 }
 
-// A merged report is the latest provider hint, without counting another call.
+// Outcome bookkeeping follows the first report of each logical call.
 func (i *Interaction) noteCallOutcomeLocked(r *recordedCall) {
-	i.lastCall = r
+	if i.lastCall == nil || r.reportSequence >= i.lastCall.reportSequence {
+		i.lastCall = r
+		if r.errorType != "" {
+			i.lastFailedCallType = r.errorType
+		}
+	}
 	if r.errorType == "" {
-		i.lastOK = r
-		i.successfulCallSequence = i.callCount
+		if i.lastOK == nil || r.reportSequence >= i.lastOK.reportSequence {
+			i.lastOK = r
+			i.successfulCallSequence = r.reportSequence
+		}
 		return
 	}
-	i.lastFailedCallType = r.errorType
 	if i.lastOK == r {
 		i.lastOK = nil
 		i.successfulCallSequence = 0
-		for n := len(i.calls) - 1; n >= 0; n-- {
-			if prior := i.calls[n]; prior != r && prior.errorType == "" {
+		for _, prior := range i.calls {
+			if prior != r && prior.errorType == "" && prior.reportSequence > i.successfulCallSequence {
 				i.lastOK = prior
-				i.successfulCallSequence = i.callCount - len(i.calls) + n + 1
-				break
+				i.successfulCallSequence = prior.reportSequence
 			}
 		}
 	}
-	// A failure arriving after a successful report must remain unresolved for tasks.
-	i.successfulCallSequence = min(i.successfulCallSequence, i.callCount-1)
 }
 
 func (i *Interaction) emitPendingCallLocked(r *recordedCall) {
@@ -1103,10 +1133,18 @@ func (i *Interaction) emitPendingCallLocked(r *recordedCall) {
 	i.sendLocked("ai_llm_response_received", func() map[string]any { return props })
 }
 
+func (i *Interaction) emitPendingOverflowLocked() {
+	for _, r := range i.pendingOverflowCalls {
+		i.emitPendingCallLocked(r)
+	}
+	i.pendingOverflowCalls = nil
+}
+
 func (i *Interaction) emitPendingCallsLocked() {
 	for _, r := range i.calls {
 		i.emitPendingCallLocked(r)
 	}
+	i.emitPendingOverflowLocked()
 }
 
 func (i *Interaction) emitReadyCallsLocked() {
@@ -1116,6 +1154,7 @@ func (i *Interaction) emitReadyCallsLocked() {
 		}
 		i.emitPendingCallLocked(r)
 	}
+	i.emitPendingOverflowLocked()
 }
 
 // callTwinLocked pairs each span with at most one wrapper from the same provider
@@ -1144,6 +1183,10 @@ func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
 
 func mergeCallTwin(kept, later *recordedCall) {
 	kept.twinMatched = true
+	if later.callCount > kept.callCount && !kept.creditsExplicit {
+		kept.credits = later.credits
+	}
+	kept.callCount = max(kept.callCount, later.callCount)
 	// Known wrapper usage supersedes span usage; otherwise fill unknown usage.
 	if (!later.fromSpan && !later.usageUnknown && later.errorType == "") || (kept.usageUnknown && !later.usageUnknown) {
 		kept.inputTokens, kept.outputTokens = later.inputTokens, later.outputTokens
@@ -1153,13 +1196,19 @@ func mergeCallTwin(kept, later *recordedCall) {
 		if later.costUSD != nil || kept.usageUnknown {
 			kept.costUSD = later.costUSD
 		}
-		kept.credits, kept.usageUnknown = later.credits, false
+		kept.credits, kept.usageUnknown, kept.creditsExplicit = later.credits, false, later.creditsExplicit
 	}
 	if kept.costUSD == nil && kept.errorType == "" {
 		kept.costUSD = later.costUSD
 	}
-	// The latest provider/finish-reason classification supersedes the earlier hint.
-	kept.errorType, kept.errorCount, kept.finishReason = later.errorType, later.errorCount, later.finishReason
+	// The latest error classification wins; known finish reasons and caps survive.
+	kept.errorType, kept.errorCount = later.errorType, later.errorCount
+	if later.errorType != "" && later.errorCount == later.callCount {
+		kept.errorCount = kept.callCount
+	}
+	if later.finishReason != "" && finishErrors[kept.finishReason] != "length" {
+		kept.finishReason = later.finishReason
+	}
 	if kept.errorType == "cancelled" {
 		kept.costUSD, kept.credits = nil, nil
 	}
@@ -2058,6 +2107,7 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 			}
 			i.calls = append(i.calls, c)
 			i.callCount += c.callCount
+			c.reportSequence = i.callCount
 		}
 		if pendingBool(p, "last") {
 			i.lastCall = c
@@ -2069,8 +2119,14 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	if snapshot.ReportCount != nil {
 		i.callCount = *snapshot.ReportCount
 	}
+	if i.lastCall != nil {
+		i.lastCall.reportSequence = i.callCount
+	}
 	if snapshot.SuccessfulCallSequence != nil {
 		i.successfulCallSequence = *snapshot.SuccessfulCallSequence
+		if i.lastOK != nil {
+			i.lastOK.reportSequence = i.successfulCallSequence
+		}
 	} else if i.lastOK != nil {
 		i.successfulCallSequence = i.callCount
 	}
