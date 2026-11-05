@@ -385,6 +385,7 @@ func resumeFrom(o *InteractionOptions) bool {
 type recordedCall struct {
 	startedAt, endedAt                               time.Time
 	fromSpan, twinMatched, usageUnknown              bool
+	callEventPending                                 bool
 	credits                                          *float64
 	callPurpose                                      string
 	fallbackUsed, byok                               *bool
@@ -1030,17 +1031,20 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	// Select after the credit callback, which may itself record another report.
 	if twin := i.callTwinLocked(r); twin != nil {
 		mergeCallTwin(twin, r)
+		// A merge does not advance callCount, so discard a generic app hint that
+		// would otherwise hide the newly learned provider classification.
+		if i.hint != nil && i.hint.errorType == "app_error" && first(twin.errorType, finishErrors[twin.finishReason]) != "" {
+			i.hint = nil
+		}
+		i.noteCallOutcomeLocked(twin)
+		if twin.responseID != "" {
+			i.admitSeenLocked(twin.provider+"\x00"+twin.responseID, twin)
+		}
+		i.emitReadyCallsLocked()
 		return false
 	}
 	i.callCount++
-	i.lastCall = r
-	if r.errorType != "" {
-		i.lastFailedCallType = r.errorType
-	}
-	if r.errorType == "" {
-		i.lastOK = r
-		i.successfulCallSequence = i.callCount
-	}
+	i.noteCallOutcomeLocked(r)
 	if len(i.calls) < cfg().limits.MaxCallsPerInteraction {
 		i.calls = append(i.calls, r)
 		if call.ResponseID != "" {
@@ -1051,12 +1055,67 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		i.foldCallLocked(r)
 	}
 	if c.emitLLMCalls {
-		props := i.callEventLocked(r)
-		i.sendLocked("ai_llm_response_received", func() map[string]any { return props })
+		r.callEventPending = true
+		// Spans and unknown usage can still acquire authoritative wrapper data.
+		// Keep later call events behind them to preserve the call order.
+		if len(i.calls) == 0 || i.calls[len(i.calls)-1] != r {
+			i.emitPendingCallLocked(r)
+		} else {
+			i.emitReadyCallsLocked()
+			i.flushLocked()
+		}
 	} else {
 		i.flushLocked()
 	}
 	return true
+}
+
+// A merged report is the latest provider hint, without counting another call.
+func (i *Interaction) noteCallOutcomeLocked(r *recordedCall) {
+	i.lastCall = r
+	if r.errorType == "" {
+		i.lastOK = r
+		i.successfulCallSequence = i.callCount
+		return
+	}
+	i.lastFailedCallType = r.errorType
+	if i.lastOK == r {
+		i.lastOK = nil
+		i.successfulCallSequence = 0
+		for n := len(i.calls) - 1; n >= 0; n-- {
+			if prior := i.calls[n]; prior != r && prior.errorType == "" {
+				i.lastOK = prior
+				i.successfulCallSequence = i.callCount - len(i.calls) + n + 1
+				break
+			}
+		}
+	}
+	// A failure arriving after a successful report must remain unresolved for tasks.
+	i.successfulCallSequence = min(i.successfulCallSequence, i.callCount-1)
+}
+
+func (i *Interaction) emitPendingCallLocked(r *recordedCall) {
+	if !r.callEventPending {
+		return
+	}
+	r.callEventPending = false
+	props := i.callEventLocked(r)
+	i.sendLocked("ai_llm_response_received", func() map[string]any { return props })
+}
+
+func (i *Interaction) emitPendingCallsLocked() {
+	for _, r := range i.calls {
+		i.emitPendingCallLocked(r)
+	}
+}
+
+func (i *Interaction) emitReadyCallsLocked() {
+	for _, r := range i.calls {
+		if r.callEventPending && !r.twinMatched && (r.fromSpan || r.usageUnknown) && !r.startedAt.IsZero() && !r.endedAt.IsZero() {
+			return
+		}
+		i.emitPendingCallLocked(r)
+	}
 }
 
 // callTwinLocked pairs each span with at most one wrapper from the same provider
@@ -1099,12 +1158,15 @@ func mergeCallTwin(kept, later *recordedCall) {
 	if kept.costUSD == nil && kept.errorType == "" {
 		kept.costUSD = later.costUSD
 	}
-	kept.errorCount = max(kept.errorCount, later.errorCount)
+	// The latest provider/finish-reason classification supersedes the earlier hint.
+	kept.errorType, kept.errorCount, kept.finishReason = later.errorType, later.errorCount, later.finishReason
+	if kept.errorType == "cancelled" {
+		kept.costUSD, kept.credits = nil, nil
+	}
 	fillString(&kept.model, later.model)
 	fillString(&kept.requestedModel, later.requestedModel)
 	fillString(&kept.agentName, later.agentName)
 	fillString(&kept.responseID, later.responseID)
-	fillString(&kept.finishReason, later.finishReason)
 	fillString(&kept.serviceTier, later.serviceTier)
 	fillString(&kept.callPurpose, later.callPurpose)
 	if kept.fallbackUsed == nil {
@@ -1660,6 +1722,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	})
 	// Finalization belongs to segment latency, not the subsequent paused interval.
 	i.pausedAt = time.Now()
+	i.emitPendingCallsLocked()
 	if props != nil {
 		i.sendLocked("ai_response_received", func() map[string]any { return props })
 	}
@@ -2194,6 +2257,7 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	i.mu.Lock()
 	var props map[string]any
+	i.emitPendingCallsLocked()
 	i.buildSafelyLocked(func() {
 		owned := i.buildLocked(o, responseText, responseOK, true)
 		props = customProperties(o.ExtraProperties, i.captureContent, owned)

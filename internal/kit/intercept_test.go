@@ -478,8 +478,8 @@ func TestInterceptStreamClosedEarly(t *testing.T) {
 	}
 	_ = resp.Body.Close()
 	_ = resp.Body.Close()
-	want(t, h.rec.props(t, "ai_llm_response_received"), map[string]any{"error_type": "cancelled", "cost_usd": nil})
 	i.End(rudderstackai.EndOptions{})
+	want(t, h.rec.props(t, "ai_llm_response_received"), map[string]any{"error_type": "cancelled", "cost_usd": nil})
 	want(t, h.rec.props(t, "ai_response_received"), map[string]any{"response_status": "cancelled"})
 }
 
@@ -579,8 +579,8 @@ func TestInterceptStreamReadErrorKeepsUsage(t *testing.T) {
 		t.Fatal("want the read error")
 	}
 	_ = resp.Body.Close()
-	want(t, h.rec.props(t, "ai_llm_response_received"), map[string]any{"error_type": "api_error", "input_tokens": 12, "output_tokens": 4, "total_tokens": 16})
 	i.End(rudderstackai.EndOptions{})
+	want(t, h.rec.props(t, "ai_llm_response_received"), map[string]any{"error_type": "api_error", "input_tokens": 12, "output_tokens": 4, "total_tokens": 16})
 	want(t, h.rec.props(t, "ai_response_received"), map[string]any{
 		"response_status": "error", "error_type": "api_error", "llm_call_count": 1, "total_input_tokens": 12, "total_output_tokens": 4,
 	})

@@ -58,8 +58,8 @@ func TestObserverTruncated(t *testing.T) {
 	o.Incomplete = true
 	o.Finish(Completed, "")
 	// A stream cut off before its terminal event keeps the tokens seen so far, unpriced.
-	want(t, rec.props(t, "ai_llm_response_received"), map[string]any{"error_type": "api_error", "input_tokens": 8, "output_tokens": 3, "cost_usd": nil})
 	i.End(rudderstackai.EndOptions{})
+	want(t, rec.props(t, "ai_llm_response_received"), map[string]any{"error_type": "api_error", "input_tokens": 8, "output_tokens": 3, "cost_usd": nil})
 	want(t, rec.props(t, "ai_response_received"), map[string]any{"response_status": "error", "error_type": "api_error"})
 }
 
