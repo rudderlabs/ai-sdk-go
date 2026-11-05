@@ -974,6 +974,9 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	} else if call.ErrorType != "" {
 		errorCount = callCount
 	}
+	// Retain the pre-hook response entry so a pause during the callback can be
+	// distinguished from a duplicate first recorded by the callback itself.
+	responseBeforeCredits := i.seen[call.Provider+"\x00"+call.ResponseID]
 	credits := creditsOf(call.Credits)
 	if call.Credits == nil && call.ResponseID != "" {
 		if earlier := i.seen[call.Provider+"\x00"+call.ResponseID]; earlier != nil {
@@ -1005,7 +1008,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		}
 	}
 	if call.ResponseID != "" {
-		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok {
+		// A pre-existing response turned into a tombstone while the hook ran:
+		// its segment closed, so admit this in-flight report in the current one.
+		// A live entry still deduplicates reports accepted in the current segment.
+		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok && (earlier != nil || responseBeforeCredits == nil) {
 			if earlier == nil {
 				return false
 			}

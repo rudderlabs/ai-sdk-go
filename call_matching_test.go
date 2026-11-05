@@ -3,9 +3,87 @@ package rudderstackai
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func TestCallMatchingPauseDuringCreditsHookKeepsWrapperUsage(t *testing.T) {
+	for _, responseID := range []string{"", "same-response"} {
+		t.Run(fmt.Sprintf("responseID=%q", responseID), func(t *testing.T) {
+			entered, paused := make(chan struct{}), make(chan struct{})
+			var enteredOnce sync.Once
+			var hookCalls atomic.Int32
+			r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(CreditCall) (*float64, error) {
+				hookCalls.Add(1)
+				enteredOnce.Do(func() { close(entered) })
+				select {
+				case <-paused:
+				case <-time.After(5 * time.Second):
+					t.Error("pause blocked while credits hook held the call")
+				}
+				return Ptr(7.0), nil
+			}))
+			_, in := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+			span := LLMCall{
+				Provider: "openai", Model: "gpt-4.1", Integration: "tracing", UsageUnknown: true,
+				StartedAt: time.UnixMilli(100), EndedAt: time.UnixMilli(110), ResponseID: responseID,
+			}
+			if !in.RecordCall(span) {
+				t.Fatal("initial span was rejected")
+			}
+			pauseResult := make(chan bool, 1)
+			go func() {
+				defer close(paused)
+				select {
+				case <-entered:
+					_, ok := in.Pause(PauseOptions{})
+					pauseResult <- ok
+				case <-time.After(5 * time.Second):
+					pauseResult <- false
+				}
+			}()
+			wrapper := span
+			wrapper.Integration, wrapper.UsageUnknown, wrapper.InputTokens = "openai", false, 100
+			accepted := in.RecordCall(wrapper)
+			<-paused
+			if !<-pauseResult {
+				t.Fatal("pause failed while credits hook was blocked")
+			}
+			if !accepted || in.Paused() {
+				t.Error("in-flight wrapper was rejected or failed to resume the interaction")
+			}
+			if responseID != "" && in.RecordCall(wrapper) {
+				t.Error("replayed wrapper was accepted")
+			}
+			in.End(EndOptions{})
+			if got := hookCalls.Load(); got != 1 {
+				t.Errorf("credits hook called %d times, want 1", got)
+			}
+			for _, event := range []struct{ name, tokens, credits string }{
+				{"ai_response_received", "total_input_tokens", "total_credits"},
+				{"ai_llm_response_received", "input_tokens", "credits"},
+			} {
+				messages := r.named(event.name)
+				if len(messages) != 2 {
+					t.Errorf("%s count = %d, want one per segment", event.name, len(messages))
+					continue
+				}
+				tokens, credits := 0, 0.0
+				for _, message := range messages {
+					n, _ := message.Properties[event.tokens].(int)
+					c, _ := message.Properties[event.credits].(float64)
+					tokens, credits = tokens+n, credits+c
+				}
+				if tokens != 100 || credits != 7 {
+					t.Errorf("%s totals = %d input tokens, %g credits; want 100 and 7", event.name, tokens, credits)
+				}
+				auditAssertSubset(t, messages[1].Properties, map[string]any{event.tokens: 100, event.credits: 7.0})
+			}
+		})
+	}
+}
 
 func TestCallMatchingConsumesClosestReportOnce(t *testing.T) {
 	r := setupAI(t, WithLLMCallEvents(true))
