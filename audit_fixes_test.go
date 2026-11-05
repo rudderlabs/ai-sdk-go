@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -14,7 +15,10 @@ func propertyVariants(key string) []string {
 	}
 	return []string{key, strings.ToUpper(key), strings.ToUpper(key[:1]) + key[1:],
 		strings.ToLower(pascal[:1]) + pascal[1:], pascal,
-		strings.ReplaceAll(key, "_", "-"), strings.ReplaceAll(key, "_", " ")}
+		strings.ReplaceAll(key, "_", "-"), strings.ReplaceAll(key, "_", " "),
+		strings.ReplaceAll(key, "_", "--"), strings.ReplaceAll(key, "_", "  "),
+		strings.ReplaceAll(key, "_", "."), "__" + key + "__",
+		".-" + strings.ReplaceAll(key, "_", "_ .-- ") + "-."}
 }
 
 func TestAuditContentPropertyVariants(t *testing.T) {
@@ -38,13 +42,27 @@ func TestAuditContentPropertyVariants(t *testing.T) {
 			}
 		}
 	}
-	for _, key := range []string{"promptLength", "cardKinds", "PromptLength", "card-kinds"} {
+	for _, key := range []string{"promptLength", "promptSource", "responseTimeMs", "cardKinds", "PromptLength", "card-kinds"} {
 		if dropContentProperty(key, false) {
 			t.Errorf("unrelated key %q dropped", key)
 		}
 	}
 	if propertyName("LLMCallCount") != "llm_call_count" || propertyName("TotalCostUSD") != "total_cost_usd" {
 		t.Fatal("acronym boundaries not normalized")
+	}
+}
+
+func TestAuditWarehousePropertyNames(t *testing.T) {
+	for _, tc := range []struct{ key, want string }{
+		{"promptText", "prompt_text"}, {"PromptText", "prompt_text"}, {"HTTPStatus", "http_status"},
+		{"prompt--text", "prompt_text"}, {"prompt  text", "prompt_text"}, {"Prompt-Text", "prompt_text"},
+		{"__prompt_text__", "prompt_text"}, {"primary--model", "primary_model"},
+		{"response2Text", "response2_text"}, {"HTTP2Status", "http2_status"},
+		{"...", ""}, {"", ""}, {"_ .prompt\t\n/text!_", "prompt_text"},
+	} {
+		if got := propertyName(tc.key); got != tc.want {
+			t.Errorf("propertyName(%q) = %q, want %q", tc.key, got, tc.want)
+		}
 	}
 }
 
@@ -123,5 +141,135 @@ func TestAuditAppErrorPreservesProviderOutcome(t *testing.T) {
 				t.Fatal(p)
 			}
 		})
+	}
+}
+
+func TestAuditStatusPrecedence(t *testing.T) {
+	type step struct {
+		call   *LLMCall
+		status ResponseStatus
+		err    string
+	}
+	call := func(err, finish string) step { return step{call: &LLMCall{ErrorType: err, FinishReason: finish}} }
+	hint := func(status ResponseStatus, err string) step { return step{status: status, err: err} }
+	app := hint(StatusError, "app_error")
+	timeout := hint(StatusTimeout, "timeout")
+	success := hint(StatusSuccess, "")
+	for _, tc := range []struct {
+		name   string
+		steps  []step
+		end    EndOptions
+		status ResponseStatus
+		err    string
+	}{
+		{"latest specific hint", []step{call("", ""), timeout, hint(StatusError, "rate_limit"), app}, EndOptions{}, StatusError, "rate_limit"},
+		{"latest success hint", []step{call("timeout", ""), timeout, success}, EndOptions{}, StatusSuccess, ""},
+		{"success then generic hint", []step{call("timeout", ""), success, app}, EndOptions{}, StatusError, "app_error"},
+		{"success then generic end", []step{call("timeout", ""), success}, EndOptions{Status: StatusError, ErrorType: "app_error"}, StatusError, "app_error"},
+		{"specific hint then generic end", []step{call("timeout", ""), hint(StatusError, "rate_limit")}, EndOptions{Status: StatusError, ErrorType: "app_error"}, StatusError, "rate_limit"},
+		{"timeout hint after success", []step{call("", ""), timeout, app}, EndOptions{}, StatusTimeout, "timeout"},
+		{"timeout hint then generic end", []step{call("", ""), timeout}, EndOptions{Status: StatusError, ErrorType: "app_error"}, StatusTimeout, "timeout"},
+		{"new incomplete hint", []step{call("timeout", ""), hint(StatusIncomplete, "max_turns"), app}, EndOptions{}, StatusIncomplete, "max_turns"},
+		{"new call success", []step{call("timeout", ""), timeout, call("", "")}, EndOptions{}, StatusSuccess, ""},
+		{"new call specific failure", []step{call("timeout", ""), timeout, call("api_error", ""), app}, EndOptions{}, StatusError, "api_error"},
+		{"new call finish reason", []step{call("timeout", ""), timeout, call("", "length"), app}, EndOptions{}, StatusIncomplete, "length"},
+		{"provider error beats finish reason", []step{call("rate_limit", "max_tokens"), app}, EndOptions{}, StatusError, "rate_limit"},
+		{"generic alone", []step{app}, EndOptions{}, StatusError, "app_error"},
+		{"generic then provider failure", []step{app, call("timeout", "")}, EndOptions{}, StatusTimeout, "timeout"},
+		{"generic then successful call", []step{app, call("", "")}, EndOptions{}, StatusSuccess, ""},
+		{"explicit success", []step{call("timeout", "")}, EndOptions{Status: StatusSuccess}, StatusSuccess, ""},
+		{"explicit cancelled", []step{call("timeout", "")}, EndOptions{Status: StatusCancelled}, StatusCancelled, "cancelled"},
+		{"explicit incomplete", []step{call("timeout", "")}, EndOptions{Status: StatusIncomplete, ErrorType: "max_turns"}, StatusIncomplete, "max_turns"},
+		{"explicit blocked", []step{call("timeout", "")}, EndOptions{Status: StatusBlocked}, StatusBlocked, ""},
+		{"specific app error", []step{call("timeout", "")}, EndOptions{Status: StatusError, ErrorType: "context_limit"}, StatusError, "context_limit"},
+		{"explicit cancelled hint suppresses fallback", []step{call("timeout", ""), hint(StatusCancelled, "")}, EndOptions{Status: StatusError, ErrorType: "app_error"}, StatusError, "app_error"},
+		{"explicit end before provider success", []step{call("", "")}, EndOptions{Status: StatusError, ErrorType: "app_error"}, StatusError, "app_error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := setupAI(t)
+			_, in := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+			for _, s := range tc.steps {
+				if s.call != nil {
+					in.RecordCall(*s.call)
+				} else {
+					in.hintOutcome(s.status, s.err)
+				}
+			}
+			in.End(tc.end)
+			p := r.response(t)
+			if p["response_status"] != string(tc.status) || str(p["error_type"]) != tc.err {
+				t.Fatal(p)
+			}
+		})
+	}
+	for _, finish := range []string{"max_tokens", "length", "content_filter"} {
+		for _, markerFirst := range []bool{false, true} {
+			for _, explicitEnd := range []bool{false, true} {
+				for _, retry := range []bool{false, true} {
+					r := setupAI(t)
+					_, in := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+					if markerFirst {
+						in.hintOutcome(StatusError, "app_error")
+					}
+					in.RecordCall(LLMCall{FinishReason: finish})
+					if !markerFirst {
+						in.hintOutcome(StatusError, "app_error")
+					}
+					if retry {
+						in.RecordCall(LLMCall{})
+					}
+					end := EndOptions{}
+					if explicitEnd {
+						end = EndOptions{Status: StatusError, ErrorType: "app_error"}
+					}
+					in.End(end)
+					status, err := statusForErrorType(finishErrors[finish]), finishErrors[finish]
+					if retry {
+						status, err = StatusSuccess, ""
+						if explicitEnd {
+							status, err = StatusError, "app_error"
+						}
+					}
+					p := r.response(t)
+					if p["response_status"] != string(status) || str(p["error_type"]) != err {
+						t.Fatalf("finish=%s markerFirst=%t explicitEnd=%t retry=%t: %v", finish, markerFirst, explicitEnd, retry, p)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestAuditTaskLatestOutcome(t *testing.T) {
+	for _, useHint := range []bool{false, true} {
+		r := setupAI(t)
+		appError := errors.New("application aborted")
+		err := RunTask(context.Background(), "job", TaskOptions{Flush: Ptr(false)}, func(_ context.Context, in *Interaction) error {
+			in.RecordCall(LLMCall{ErrorType: "timeout"})
+			if useHint {
+				in.hintOutcome(StatusIncomplete, "length")
+			} else {
+				in.RecordCall(LLMCall{FinishReason: "max_tokens"})
+			}
+			return appError
+		})
+		p := r.response(t)
+		if err != appError || p["response_status"] != "incomplete" || p["error_type"] != "length" {
+			t.Fatalf("useHint=%t err=%v response=%v", useHint, err, p)
+		}
+	}
+}
+
+func TestAuditEndMarkerBeforeProviderHook(t *testing.T) {
+	for _, call := range []LLMCall{{}, {ErrorType: "timeout"}, {FinishReason: "length"}} {
+		r := setupAI(t)
+		_, in := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+		in.onBeforeEnd(func() { in.RecordCall(call) })
+		in.End(EndOptions{Status: StatusError, ErrorType: "app_error"})
+		err := first(call.ErrorType, finishErrors[call.FinishReason], "app_error")
+		p := r.response(t)
+		if p["response_status"] != string(statusForErrorType(err)) || p["error_type"] != err {
+			t.Fatal(p)
+		}
 	}
 }

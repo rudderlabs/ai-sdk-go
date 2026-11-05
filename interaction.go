@@ -2211,22 +2211,23 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	calls := append(slices.Clone(i.calls), i.overflow...)
 	last, lastOK := i.lastCall, i.lastOK
 	status, errorType, pauseReason := o.Status, o.ErrorType, o.PauseReason
-	// Held provider failures settle in beforeEnd hooks, so choose the task's fallback here.
-	if o.preferCallError && i.isTask && errorType == "app_error" && i.lastFailedCallType != "" {
+	// Generic application errors must not replace an unresolved provider classification.
+	if (status == StatusError || status == "") && errorType == "app_error" {
+		if providerStatus, providerError := i.providerFailureLocked(); providerError != "" {
+			errorType = providerError
+			status = providerStatus
+		}
+	}
+	// Held provider failures settle in beforeEnd hooks. Preserve the task fallback only
+	// when neither the current hint nor the latest call supplies a classification.
+	if o.preferCallError && i.isTask && errorType == "app_error" && i.lastFailedCallType != "" &&
+		(i.hint == nil || i.hint.calls != i.callCount) {
 		errorType = i.lastFailedCallType
 		status = statusForErrorType(errorType)
 	}
 	if status == "" && i.hint != nil && i.hint.calls == i.callCount {
 		status = i.hint.status
 		errorType = first(errorType, i.hint.errorType)
-	}
-	// Generic application errors must not replace an unresolved provider classification.
-	if (status == StatusError || status == "") && errorType == "app_error" && last != nil {
-		providerError := first(last.errorType, finishErrors[last.finishReason])
-		if providerError != "" && providerError != "app_error" {
-			errorType = providerError
-			status = statusForErrorType(providerError)
-		}
 	}
 	if status == "" {
 		finished := ""
@@ -2677,11 +2678,35 @@ func (i *Interaction) firstTokenAt(at time.Time) {
 	}
 }
 
+// providerFailureLocked respects a current hint before falling back to the latest call.
+// Explicit hints without a failure classification suppress older call failures.
+func (i *Interaction) providerFailureLocked() (ResponseStatus, string) {
+	if i.hint != nil && i.hint.calls == i.callCount {
+		if i.hint.status != StatusSuccess && i.hint.errorType != "" && i.hint.errorType != "app_error" {
+			return i.hint.status, i.hint.errorType
+		}
+		return "", ""
+	}
+	if i.lastCall != nil {
+		errorType := first(i.lastCall.errorType, finishErrors[i.lastCall.finishReason])
+		if errorType != "" && errorType != "app_error" {
+			return statusForErrorType(errorType), errorType
+		}
+	}
+	return "", ""
+}
+
 // hintOutcome sets the status End reports unless a call is recorded afterwards.
+// Generic application errors preserve the current provider or finish-reason classification.
 func (i *Interaction) hintOutcome(status ResponseStatus, errorType string) {
 	i.mu.Lock()
+	defer i.mu.Unlock()
+	if status == StatusError && errorType == "app_error" {
+		if _, providerError := i.providerFailureLocked(); providerError != "" {
+			return
+		}
+	}
 	i.hint = &outcomeHint{status: status, errorType: errorType, calls: i.callCount}
-	i.mu.Unlock()
 }
 
 // onBeforeEnd runs fn just before ai_response_received is built.

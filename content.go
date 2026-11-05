@@ -2,29 +2,21 @@ package rudderstackai
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
-	"unicode"
+)
+
+var (
+	propertyAcronymBoundary = regexp.MustCompile(`([A-Z]+)([A-Z][a-z])`)
+	propertyWordBoundary    = regexp.MustCompile(`([a-z0-9])([A-Z])`)
+	propertySeparators      = regexp.MustCompile(`[^a-z0-9]+`)
 )
 
 // propertyName matches warehouse snake casing without renaming the emitted custom key.
 func propertyName(key string) string {
-	runes := []rune(key)
-	var out strings.Builder
-	for n, r := range runes {
-		if r == '-' || unicode.IsSpace(r) {
-			out.WriteByte('_')
-			continue
-		}
-		if unicode.IsUpper(r) && n > 0 {
-			prev := runes[n-1]
-			if unicode.IsLower(prev) || unicode.IsDigit(prev) ||
-				(unicode.IsUpper(prev) && n+1 < len(runes) && unicode.IsLower(runes[n+1])) {
-				out.WriteByte('_')
-			}
-		}
-		out.WriteRune(unicode.ToLower(r))
-	}
-	return out.String()
+	key = propertyAcronymBoundary.ReplaceAllString(key, "${1}_${2}")
+	key = propertyWordBoundary.ReplaceAllString(key, "${1}_${2}")
+	return strings.Trim(propertySeparators.ReplaceAllString(strings.ToLower(key), "_"), "_")
 }
 
 // Content names shared by the Node.js, Python and Go SDKs.
