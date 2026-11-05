@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/rudderlabs/ai-sdk-go/compare/rudderbedrock/v0.3.1...rudderbedrock/v0.3.2) (2026-11-05)
+
+
+### Bug Fixes
+
+* **deps:** require analytics-go v4.5.1 ([#45](https://github.com/rudderlabs/ai-sdk-go/issues/45)) ([b61362f](https://github.com/rudderlabs/ai-sdk-go/commit/b61362fe3ebe5a5d70b0bc441b5797172bd92ef7))
+
 ## [0.3.1](https://github.com/rudderlabs/ai-sdk-go/compare/rudderbedrock/v0.3.0...rudderbedrock/v0.3.1) (2026-11-04)
 
 

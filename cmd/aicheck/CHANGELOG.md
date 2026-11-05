@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.3.0...cmd/aicheck/v0.4.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** turn request_context off by default ([#43](https://github.com/rudderlabs/ai-sdk-go/issues/43))
+
+### Features
+
+* **mcp:** turn request_context off by default ([#43](https://github.com/rudderlabs/ai-sdk-go/issues/43)) ([4f2f6d4](https://github.com/rudderlabs/ai-sdk-go/commit/4f2f6d4d27fedffd2b716e0655ee6926b76a523f))
+
 ## [0.3.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.2.0...cmd/aicheck/v0.3.0) (2026-11-04)
 
 

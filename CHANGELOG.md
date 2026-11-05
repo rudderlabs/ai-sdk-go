@@ -10,6 +10,23 @@
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
 - SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events.
 
+## [0.6.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.5.1...v0.6.0) (2026-11-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** turn request_context off by default ([#43](https://github.com/rudderlabs/ai-sdk-go/issues/43))
+
+### Features
+
+* export MaskText for free text sent in tool event properties ([#46](https://github.com/rudderlabs/ai-sdk-go/issues/46)) ([f765dcf](https://github.com/rudderlabs/ai-sdk-go/commit/f765dcfd43371198ee1bf51e926b94729d488373))
+* **mcp:** turn request_context off by default ([#43](https://github.com/rudderlabs/ai-sdk-go/issues/43)) ([4f2f6d4](https://github.com/rudderlabs/ai-sdk-go/commit/4f2f6d4d27fedffd2b716e0655ee6926b76a523f))
+
+
+### Bug Fixes
+
+* **deps:** require analytics-go v4.5.1 ([#45](https://github.com/rudderlabs/ai-sdk-go/issues/45)) ([b61362f](https://github.com/rudderlabs/ai-sdk-go/commit/b61362fe3ebe5a5d70b0bc441b5797172bd92ef7))
+
 ## [0.5.1](https://github.com/rudderlabs/ai-sdk-go/compare/v0.5.0...v0.5.1) (2026-11-04)
 
 
