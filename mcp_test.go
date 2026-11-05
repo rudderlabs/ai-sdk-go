@@ -636,6 +636,51 @@ func TestDeclaredToolEvent(t *testing.T) {
 	}
 }
 
+func TestDeclaredToolEventPropertyGuard(t *testing.T) {
+	for _, capture := range []bool{false, true} {
+		t.Run(fmt.Sprintf("capture=%t", capture), func(t *testing.T) {
+			properties := map[string]any{"promptLength": 12, "promptSource": "app", "responseTimeMs": 3, "cardKinds": 2}
+			for _, name := range []string{"prompt_text", "response_text", "feedback_text", "call_reason", "capability_detail", "tool_status", "tool_name", "primary_model", "llm_call_count", "mcp_session_id", "server_version"} {
+				for _, key := range propertyVariants(name) {
+					properties[key] = "custom"
+				}
+			}
+			server := workspaceServer("workspace-mcp", nil)
+			r := wrap(t, server, Options{CaptureContent: capture, EventRules: EventRules{Tools: map[string]ToolEventRule{
+				"create_audience": {Event: "audience_created", Properties: func(map[string]any, any) map[string]any { return properties }},
+			}}})
+			logs := captureLogs(t)
+			cs := connect(t, server, "2025-06-18", nil)
+			for range 2 {
+				callTool(t, cs, "create_audience", map[string]any{"name": "vip"}, nil)
+			}
+			events := r.named("audience_created")
+			if len(events) != 2 {
+				t.Fatalf("declared events: %v", r.names())
+			}
+			for key, value := range properties {
+				name := propertyName(key)
+				retained := !toolEventReserved[name] && !owned[name] && (capture || !contentProperties[name])
+				for _, event := range events {
+					if got := event.Properties[key] == value; got != retained {
+						t.Errorf("%q retained=%t, want %t", key, got, retained)
+					}
+				}
+				wantWarnings := 0
+				if !capture && contentProperties[name] {
+					wantWarnings = 1
+				}
+				if got := logs.count("custom property " + key + " was dropped"); got != wantWarnings {
+					t.Errorf("%q warnings=%d, want %d", key, got, wantWarnings)
+				}
+			}
+			if p := events[0].Properties; p["tool_name"] != "create_audience" || p["tool_status"] != "success" || p["server_name"] != "workspace-mcp" {
+				t.Fatal(p)
+			}
+		})
+	}
+}
+
 func TestDeclaredToolEventOnValidationFailure(t *testing.T) {
 	server := workspaceServer("workspace-mcp", nil)
 	r := wrap(t, server, Options{EventRules: EventRules{Tools: map[string]ToolEventRule{

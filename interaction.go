@@ -1277,6 +1277,10 @@ var toolEventReserved = func() map[string]bool {
 	return m
 }()
 
+func allowToolEventProperty(key string, capture bool) bool {
+	return !dropContentProperty(key, capture) && !toolEventReserved[propertyName(key)]
+}
+
 // fireToolEvents sends the declared tool event of each settled call (any call when final), once.
 // Rules run without the lock held.
 func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
@@ -1327,7 +1331,7 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool, capture bool) *toolRul
 		var out map[string]any
 		if callback("ToolEventRule.Properties", func() error { out = rule.Properties(args, t.result); return nil }) {
 			for k, v := range out {
-				if !dropContentProperty(k, capture) && !toolEventReserved[propertyName(k)] {
+				if allowToolEventProperty(k, capture) {
 					custom[k] = v
 				}
 			}
@@ -2291,8 +2295,9 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 		}
 	}
 	// Held provider failures settle in beforeEnd hooks. Preserve the task fallback only
-	// when neither the current hint nor the latest call supplies a classification.
+	// when no current hint or successful retry has superseded the failure.
 	if o.preferCallError && i.isTask && errorType == "app_error" && i.lastFailedCallType != "" &&
+		i.successfulCallSequence < i.callCount &&
 		(i.hint == nil || i.hint.calls != i.callCount) {
 		errorType = i.lastFailedCallType
 		status = statusForErrorType(errorType)
