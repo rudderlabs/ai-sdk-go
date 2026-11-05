@@ -19343,7 +19343,7 @@
     },
     {
       "name": "claude_alias_resolves_to_latest_snapshot",
-      "description": "A modelUsage alias that matches several API model IDs seen in the turn reports the one with the latest snapshot date (code-unit order on ties), not the lexicographically last ID.",
+      "description": "A modelUsage alias that matches several API model IDs seen in the turn selects the one with the latest snapshot date (code-unit order on ties) before reporting the canonical family name.",
       "config": {},
       "replies": {},
       "steps": [
@@ -19387,7 +19387,7 @@
                 "id": "msg_rev_new",
                 "type": "message",
                 "role": "assistant",
-                "model": "claude-3-5-sonnet-v2@20241022",
+                "model": "claude-3-5-sonnet-20241022@2",
                 "content": [
                   {
                     "type": "text",
@@ -19467,7 +19467,7 @@
             "primary_provider": "gcp.vertex_ai",
             "latency_ms": "<number>",
             "time_to_first_token_ms": "<number>",
-            "llm_call_count": 1,
+            "llm_call_count": 2,
             "tool_call_count": 0,
             "total_input_tokens": 220,
             "total_output_tokens": 30,
@@ -19480,7 +19480,7 @@
               {
                 "provider": "gcp.vertex_ai",
                 "model": "claude-3-5-sonnet",
-                "call_count": 1,
+                "call_count": 2,
                 "input_tokens": 220,
                 "output_tokens": 30,
                 "total_tokens": 250,
@@ -31898,7 +31898,7 @@
     },
     {
       "name": "anthropic_cloud_provider_pricing",
-      "description": "The Anthropic wrapper with provider aws.bedrock (inference-profile model ID) and gcp.vertex_ai (@revision model ID): both calls are priced from claude-sonnet-4-5 and keep their own provider and model in usage_breakdown.",
+      "description": "The Anthropic wrapper with provider aws.bedrock (inference-profile model ID) and gcp.vertex_ai (@revision model ID): both calls are priced from claude-sonnet-4-5 and retain separate providers with the same canonical model in usage_breakdown.",
       "config": {},
       "replies": {
         "anthropic.messages": [

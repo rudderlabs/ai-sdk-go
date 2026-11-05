@@ -10,6 +10,10 @@ The options default to false: existing chat callers that omit a conversation ID 
 
 ## Fields and events
 
+A client response may use `response_status: "incomplete"` when the partial answer it rendered ended before completion. Preserve the server status on the client copy.
+
+Custom content and reserved-property checks use warehouse snake_case (including acronym boundaries), lowercase, collapse runs of non-alphanumeric separators to one underscore, and trim surrounding underscores. Keep unrelated custom names unchanged; content warnings name the original key once. Preserve the server's canonical `primary_model`/`model` on client copies: Claude names follow the repeated profile/vendor/version/date removal rules in [CHANGELOG.md](CHANGELOG.md), are lowercase, and retain aliases such as `-latest`. Non-Claude model IDs remain unchanged.
+
 Every addition below is since v0.4. Names and kinds are app-defined categories, excluding names of user content or URLs.
 
 | Event | Additions |

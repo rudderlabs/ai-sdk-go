@@ -165,7 +165,7 @@ spec:
     - id: response_status
       name: response_status
       type: string
-      description: Final status of the answer. The client subset omits incomplete.
+      description: Final status of the answer. Server and client copies accept incomplete for a partial answer that ended before completion.
       config:
         enum: [success, error, timeout, cancelled, paused, incomplete, blocked]
     - id: block_reason
@@ -222,7 +222,9 @@ spec:
     - id: primary_model
       name: primary_model
       type: string
-      description: Model of the last successful call, or of the last attempted one when none succeeded.
+      description: Model of the last successful call, or of the last attempted one when none succeeded. Claude IDs use
+        lowercase canonical identities with cloud prefixes, versions and eight-digit dates removed repeatedly; aliases
+        such as -latest remain. Non-Claude IDs stay unchanged.
     - id: primary_provider
       name: primary_provider
       type: string
@@ -234,7 +236,8 @@ spec:
     - id: model
       name: model
       types: [string, 'null']
-      description: Model the provider reported, or the requested model.
+      description: Model the provider reported, or the requested model. Claude IDs use the same canonical identity as
+        primary_model for emission, grouping and deduplication; pricing receives raw IDs. Non-Claude IDs stay unchanged.
     - id: requested_model
       name: requested_model
       type: string
