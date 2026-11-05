@@ -1113,6 +1113,7 @@
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
             "total_cost_usd": 0.0045,
+            "finish_reason": "stop",
             "usage_breakdown": [
               {
                 "provider": "anthropic",
