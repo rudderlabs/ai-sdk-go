@@ -249,13 +249,16 @@ func (t *tracked) syncCapability(s *server.MCPServer) {
 		t.capability = nil
 		return
 	}
-	readOnly := true
-	listed := mcp.Tool{Name: def.Name, Description: def.Description, Annotations: mcp.ToolAnnotation{ReadOnlyHint: &readOnly}}
+	listed := mcp.Tool{Name: def.Name, Title: def.Title, Description: def.Description, Annotations: mcp.ToolAnnotation{
+		Title: def.Annotations.Title, ReadOnlyHint: &def.Annotations.ReadOnlyHint,
+		DestructiveHint: &def.Annotations.DestructiveHint, IdempotentHint: &def.Annotations.IdempotentHint,
+		OpenWorldHint: &def.Annotations.OpenWorldHint,
+	}}
 	listed.RawInputSchema, _ = json.Marshal(def.Schema)
 	t.capability = &listed
 	reply := def.Reply
-	registered := mcp.Tool{Name: def.Name, Description: def.Description, Annotations: listed.Annotations,
-		RawInputSchema: json.RawMessage(`{"type":"object"}`)}
+	registered := listed
+	registered.RawInputSchema = json.RawMessage(`{"type":"object"}`)
 	s.AddTool(registered, func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultText(reply), nil
 	})

@@ -3,6 +3,7 @@ package ruddermcpgo
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"runtime"
@@ -102,6 +103,24 @@ func TestNativeRequestContextLeftAlone(t *testing.T) {
 	}
 }
 
+func assertCapabilityMetadata(t *testing.T, tool any) {
+	t.Helper()
+	var listed map[string]any
+	if err := json.Unmarshal([]byte(mustJSON(tool)), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if listed["name"] != capabilityTool || listed["title"] != "Request a missing capability" {
+		t.Errorf("tool = %s", mustJSON(tool))
+	}
+	want := map[string]any{
+		"title": "Request a missing capability", "readOnlyHint": false,
+		"destructiveHint": false, "idempotentHint": false, "openWorldHint": false,
+	}
+	if mustJSON(listed["annotations"]) != mustJSON(want) {
+		t.Errorf("annotations = %s, want %s", mustJSON(listed["annotations"]), mustJSON(want))
+	}
+}
+
 // exercise runs what an agent does, against any transport and protocol version.
 func exercise(t *testing.T, cs *sdk.ClientSession) {
 	t.Helper()
@@ -132,9 +151,10 @@ func exercise(t *testing.T, cs *sdk.ClientSession) {
 			t.Errorf("intent enum = %v", intent["enum"])
 		}
 	}
-	if capability == nil || capability.Annotations == nil || !capability.Annotations.ReadOnlyHint {
-		t.Fatalf("request_capability not offered read-only: %s", mustJSON(capability))
+	if capability == nil {
+		t.Fatal("request_capability not offered")
 	}
+	assertCapabilityMetadata(t, capability)
 	meta := sdk.Meta{metaInteractionID: "int_1", "traceparent": traceparent, "other": "never copied"}
 	callTool(t, cs, "list_destinations", map[string]any{
 		"workspace_id": "ws_private_42", requestContext: map[string]any{"intent": "debug_delivery", "user_sentiment": "negative"},
@@ -404,6 +424,7 @@ func TestRewrapReplacesOptionsAndCapabilityTool(t *testing.T) {
 	if s.GetTool(capabilityTool) == nil {
 		t.Fatal("request_capability not registered")
 	}
+	assertCapabilityMetadata(t, s.GetTool(capabilityTool).Tool)
 	r := wrap(t, s, Options{})
 	if s.GetTool(capabilityTool) != nil {
 		t.Error("request_capability kept after rewrapping without it")
@@ -416,17 +437,29 @@ func TestRewrapReplacesOptionsAndCapabilityTool(t *testing.T) {
 
 func TestNativeCapabilityToolNotShadowed(t *testing.T) {
 	s := server.NewMCPServer("own-cap-mcp", "1", server.WithToolCapabilities(true))
-	s.AddTool(mcp.NewTool(capabilityTool), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	native := mcp.NewTool(capabilityTool, mcp.WithToolTitle("Server capability"), mcp.WithDescription("Server tool"),
+		mcp.WithTitleAnnotation("Server annotation"), mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true), mcp.WithIdempotentHintAnnotation(false), mcp.WithOpenWorldHintAnnotation(true))
+	s.AddTool(native, func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultText("server own"), nil
 	})
+	want := mustJSON(s.GetTool(capabilityTool).Tool)
+	var expected sdk.Tool
+	if err := json.Unmarshal([]byte(want), &expected); err != nil {
+		t.Fatal(err)
+	}
 	r := wrap(t, s, Options{CapabilityRequests: &rudderstackai.CapabilityRequestOptions{}})
 	cs := connectStdio(t, s, "2025-06-18", nil)
 	tools, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 1 || tools.Tools[0].Description != "" {
+	if len(tools.Tools) != 1 || tools.Tools[0].Title != expected.Title || tools.Tools[0].Description != expected.Description ||
+		mustJSON(tools.Tools[0].Annotations) != mustJSON(expected.Annotations) {
 		t.Errorf("tools = %s", mustJSON(tools))
+	}
+	if mustJSON(s.GetTool(capabilityTool).Tool) != want {
+		t.Error("registered server tool changed")
 	}
 	res := callTool(t, cs, capabilityTool, map[string]any{}, nil)
 	if res.Content[0].(*sdk.TextContent).Text != "server own" {

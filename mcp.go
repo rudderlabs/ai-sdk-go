@@ -512,8 +512,12 @@ func toolsList(rc *reqCtx, w *wrapped, r *mcp.ListToolsResult) mcp.Result {
 	}
 	if def := w.CapabilityTool(); addCapability && def != nil {
 		tools = append(tools, &mcp.Tool{
-			Name: def.Name, Description: def.Description, InputSchema: def.Schema,
-			Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+			Name: def.Name, Title: def.Title, Description: def.Description, InputSchema: def.Schema,
+			Annotations: &mcp.ToolAnnotations{
+				Title: def.Annotations.Title, ReadOnlyHint: def.Annotations.ReadOnlyHint,
+				DestructiveHint: &def.Annotations.DestructiveHint, IdempotentHint: def.Annotations.IdempotentHint,
+				OpenWorldHint: &def.Annotations.OpenWorldHint,
+			},
 		})
 		changed = true
 	}
