@@ -182,7 +182,7 @@ For status-based results, explicitly allow the statuses that mean a write occurr
 
 ## Unmet demand: request_capability
 
-The injected tool has both `title` and `annotations.title` set to "Request a missing capability", with `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false` in its annotations.
+The injected tool has both `title` and `annotations.title` set to "Request a missing capability", with `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: false`, and `openWorldHint: false` in its annotations because every call records an event, making it an additive write.
 
 With `CapabilityRequests: &rudderstackai.CapabilityRequestOptions{Capabilities: []string{"bulk_export", "edit_permissions"}}`, `tools/list` gains a `request_capability` tool (arguments `capability` and, with `CaptureContent`, `detail`) the agent calls when no tool can do what the user needs. The integration answers it itself (your server never sees the call) and sends `mcp_capability_requested` with `capability` (a listed gap, else `other`). With `CaptureContent`, an `other` request also carries `capability_detail`: masked, capped at 200 characters, and withheld if it still matches a sensitive pattern. A server that defines its own `request_capability` tool keeps it, and nothing is injected.
 

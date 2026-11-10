@@ -30,9 +30,9 @@ const (
 	capabilityReply           = "Recorded for the server owner. No tool here can do this yet; tell the user."
 	capabilityDesc            = "Call this when no available tool can do what the user needs. It records the missing capability for the server's owner and performs no action."
 	capabilityTitle           = "Request a missing capability"
-	capabilityReadOnlyHint    = true
+	capabilityReadOnlyHint    = false
 	capabilityDestructiveHint = false
-	capabilityIdempotentHint  = true
+	capabilityIdempotentHint  = false
 	capabilityOpenWorldHint   = false
 
 	// Limits.MaxMapEntries bounds each per-server-name map; maxServers the server names;
@@ -854,7 +854,7 @@ func requestContextSchema(opts *options) map[string]any {
 }
 
 // CapabilityTool is the request_capability tool, nil when CapabilityRequests is off. It is
-// read-only: it records the request and performs no action.
+// an additive write: every call records a capability request event.
 func (w *wrapped) CapabilityTool() *mcpbridge.ToolDef {
 	opts := w.opts.Load()
 	if opts.capabilities == nil {

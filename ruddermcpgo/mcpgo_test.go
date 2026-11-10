@@ -113,8 +113,8 @@ func assertCapabilityMetadata(t *testing.T, tool any) {
 		t.Errorf("tool = %s", mustJSON(tool))
 	}
 	want := map[string]any{
-		"title": "Request a missing capability", "readOnlyHint": true,
-		"destructiveHint": false, "idempotentHint": true, "openWorldHint": false,
+		"title": "Request a missing capability", "readOnlyHint": false,
+		"destructiveHint": false, "idempotentHint": false, "openWorldHint": false,
 	}
 	if mustJSON(listed["annotations"]) != mustJSON(want) {
 		t.Errorf("annotations = %s, want %s", mustJSON(listed["annotations"]), mustJSON(want))

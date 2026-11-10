@@ -893,7 +893,7 @@ func TestRedactOptions(t *testing.T) {
 }
 
 func TestCapabilityToolMetadata(t *testing.T) {
-	server := workspaceServer("readonly-mcp", nil)
+	server := workspaceServer("capability-mcp", nil)
 	wrap(t, server, Options{CapabilityRequests: &CapabilityRequestOptions{}})
 	cs := connect(t, server, "2025-06-18", nil)
 	tools, err := cs.ListTools(context.Background(), nil)
@@ -905,8 +905,8 @@ func TestCapabilityToolMetadata(t *testing.T) {
 		t.Errorf("tool = %s", mustJSON(tool))
 	}
 	want := map[string]any{
-		"title": "Request a missing capability", "readOnlyHint": true,
-		"destructiveHint": false, "idempotentHint": true, "openWorldHint": false,
+		"title": "Request a missing capability", "readOnlyHint": false,
+		"destructiveHint": false, "idempotentHint": false, "openWorldHint": false,
 	}
 	var listed map[string]any
 	if err := json.Unmarshal([]byte(mustJSON(tool)), &listed); err != nil {
