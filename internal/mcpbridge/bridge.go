@@ -55,9 +55,19 @@ type Tool struct {
 
 // ToolDef is the request_capability tool the integration answers itself.
 type ToolDef struct {
-	Name, Description string
-	Schema            map[string]any
-	Reply             string
+	Name, Title, Description string
+	Annotations              ToolAnnotations
+	Schema                   map[string]any
+	Reply                    string
+}
+
+// ToolAnnotations describes the injected tool's behavior across MCP libraries.
+type ToolAnnotations struct {
+	Title           string
+	ReadOnlyHint    bool
+	DestructiveHint bool
+	IdempotentHint  bool
+	OpenWorldHint   bool
 }
 
 // Answer is one elicitation answer in a 2026-07-28 retry's inputResponses.

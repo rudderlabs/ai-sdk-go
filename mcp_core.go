@@ -22,13 +22,18 @@ import (
 // the go-sdk here, ruddermcpgo for mark3labs/mcp-go through internal/mcpbridge).
 
 const (
-	capabilityTool  = "request_capability"
-	methodDiscover  = "server/discover"
-	requestContext  = "request_context"
-	protocol2026    = "2026-07-28"
-	legacyProtocol  = "2025-11-25"
-	capabilityReply = "Recorded for the server owner. No tool here can do this yet; tell the user."
-	capabilityDesc  = "Call this when no available tool can do what the user needs. It records the missing capability for the server's owner and performs no action."
+	capabilityTool            = "request_capability"
+	methodDiscover            = "server/discover"
+	requestContext            = "request_context"
+	protocol2026              = "2026-07-28"
+	legacyProtocol            = "2025-11-25"
+	capabilityReply           = "Recorded for the server owner. No tool here can do this yet; tell the user."
+	capabilityDesc            = "Call this when no available tool can do what the user needs. It records the missing capability for the server's owner and performs no action."
+	capabilityTitle           = "Request a missing capability"
+	capabilityReadOnlyHint    = true
+	capabilityDestructiveHint = false
+	capabilityIdempotentHint  = true
+	capabilityOpenWorldHint   = false
 
 	// Limits.MaxMapEntries bounds each per-server-name map; maxServers the server names;
 	// maxTemplates the resource templates per name. The least recently set entries go first.
@@ -868,7 +873,12 @@ func (w *wrapped) CapabilityTool() *mcpbridge.ToolDef {
 		}
 	}
 	return &mcpbridge.ToolDef{
-		Name: capabilityTool, Description: capabilityDesc, Reply: capabilityReply,
+		Name: capabilityTool, Title: capabilityTitle, Description: capabilityDesc, Reply: capabilityReply,
+		Annotations: mcpbridge.ToolAnnotations{
+			Title: capabilityTitle, ReadOnlyHint: capabilityReadOnlyHint,
+			DestructiveHint: capabilityDestructiveHint, IdempotentHint: capabilityIdempotentHint,
+			OpenWorldHint: capabilityOpenWorldHint,
+		},
 		Schema: map[string]any{
 			"type": "object", "properties": props, "required": []string{"capability"}, "additionalProperties": false,
 		},

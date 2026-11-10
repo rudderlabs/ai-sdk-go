@@ -780,15 +780,26 @@ func TestCapabilityDetailWithCapture(t *testing.T) {
 
 func TestNativeCapabilityToolNotShadowed(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "own-cap-mcp", Version: "1"}, nil)
-	server.AddTool(&mcp.Tool{Name: capabilityTool, InputSchema: map[string]any{"type": "object"}},
+	openWorld, destructive := true, true
+	native := &mcp.Tool{Name: capabilityTool, Title: "Server capability", Description: "Server tool",
+		InputSchema: map[string]any{"type": "object"},
+		Annotations: &mcp.ToolAnnotations{Title: "Server annotation", OpenWorldHint: &openWorld, DestructiveHint: &destructive}}
+	server.AddTool(native,
 		func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "server own"}}}, nil
 		})
+	want := mustJSON(native)
 	r := wrap(t, server, Options{CapabilityRequests: &CapabilityRequestOptions{Capabilities: []string{"x"}}})
 	cs := connect(t, server, "2025-06-18", nil)
-	tools, _ := cs.ListTools(context.Background(), nil)
-	if len(tools.Tools) != 1 {
+	tools, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tools.Tools) != 1 || mustJSON(tools.Tools[0]) != want {
 		t.Errorf("tools = %v", mustJSON(tools))
+	}
+	if mustJSON(native) != want {
+		t.Error("registered server tool changed")
 	}
 	res := callTool(t, cs, capabilityTool, map[string]any{}, nil)
 	if res.Content[0].(*mcp.TextContent).Text != "server own" {
@@ -881,7 +892,7 @@ func TestRedactOptions(t *testing.T) {
 	}
 }
 
-func TestCapabilityToolIsReadOnly(t *testing.T) {
+func TestCapabilityToolMetadata(t *testing.T) {
 	server := workspaceServer("readonly-mcp", nil)
 	wrap(t, server, Options{CapabilityRequests: &CapabilityRequestOptions{}})
 	cs := connect(t, server, "2025-06-18", nil)
@@ -890,8 +901,19 @@ func TestCapabilityToolIsReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 	tool := tools.Tools[len(tools.Tools)-1]
-	if tool.Name != capabilityTool || tool.Annotations == nil || !tool.Annotations.ReadOnlyHint {
+	if tool.Name != capabilityTool || tool.Title != "Request a missing capability" {
 		t.Errorf("tool = %s", mustJSON(tool))
+	}
+	want := map[string]any{
+		"title": "Request a missing capability", "readOnlyHint": true,
+		"destructiveHint": false, "idempotentHint": true, "openWorldHint": false,
+	}
+	var listed map[string]any
+	if err := json.Unmarshal([]byte(mustJSON(tool)), &listed); err != nil {
+		t.Fatal(err)
+	}
+	if mustJSON(listed["annotations"]) != mustJSON(want) {
+		t.Errorf("annotations = %s, want %s", mustJSON(listed["annotations"]), mustJSON(want))
 	}
 }
 
