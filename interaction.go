@@ -158,7 +158,8 @@ type LLMCall struct {
 	// Empty means manual. "tracing" identifies a span report, which can match an
 	// overlapping wrapper report even when there is no shared ResponseID.
 	Integration string
-	// OutputText is the answer text, given to a configured classifier or evaluator. Never sent.
+	// OutputText is the answer text for a classifier or evaluator. A tracing report also supplies
+	// response_text when content capture is on and End supplies no ResponseText.
 	OutputText string
 }
 
@@ -262,6 +263,8 @@ type ToolCall struct {
 	ErrorType string
 	// Duration is the measured execution time; never an estimate.
 	Duration *time.Duration
+	// StartedAt is the start of a tracing tool execution; used to resume a paused run.
+	StartedAt time.Time
 	// Args are the call's arguments, given to declared tool rules only; never sent.
 	Args any
 	// Result is the tool's output, given to declared tool rules only; never sent. Seeing one
@@ -453,6 +456,7 @@ type Interaction struct {
 	captureContent, toolBreakdown, classify                                bool
 	explicitAnalytics                                                      analytics.Client
 	msgContext                                                             map[string]any
+	sessionID                                                              int64
 	// resumed: continued from a Resume snapshot.
 	resumed bool
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
@@ -504,6 +508,7 @@ type Interaction struct {
 	settled                bool
 	beforeEnd              []func()
 	prompt, answer         string
+	spanAnswer             string // opt-in response text of the last successful span call
 	messages               any
 	background             chan struct{}
 	// callErrors are errors wrapped calls failed with, newest last, so the app returning one
@@ -640,6 +645,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		conversationID:    conversationID,
 		userID:            id.userID,
 		anonymousID:       id.anonymousID,
+		sessionID:         id.sessionID,
 		feature:           first(o.Feature, cv.feature),
 		surface:           first2(surfaceOf(o.Surface), surfaceOf(cv.surface)),
 		trigger:           trigger,
@@ -1011,12 +1017,15 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		// A pre-existing response turned into a tombstone while the hook ran:
 		// its segment closed, so admit this in-flight report in the current one.
 		// A live entry still deduplicates reports accepted in the current segment.
-		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok && (earlier != nil || responseBeforeCredits == nil) {
+		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok && (earlier != nil || responseBeforeCredits == nil) &&
+			(earlier == nil || earlier.fromSpan == (call.Integration == "tracing") || earlier.twinMatched) {
 			if earlier == nil {
 				return false
 			}
-			if call.ErrorType == "" {
-				i.keepAnswerLocked(call.OutputText)
+			// Wrapper duplicates can supply classifier text; rejected spans must
+			// leave the saved response from the latest accepted call intact.
+			if call.ErrorType == "" && call.Integration != "tracing" {
+				i.keepAnswerLocked(call.OutputText, false)
 			}
 			fillString(&earlier.agentName, call.AgentName)
 			fillString(&earlier.callPurpose, call.CallPurpose)
@@ -1033,9 +1042,13 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			return false
 		}
 	}
-	i.resumeLocked()
+	if call.Integration == "tracing" {
+		i.resumeAtLocked(call.StartedAt)
+	} else {
+		i.resumeLocked()
+	}
 	if call.ErrorType == "" {
-		i.keepAnswerLocked(call.OutputText)
+		i.keepAnswerLocked(call.OutputText, call.Integration == "tracing")
 	}
 	var latency, ttft *time.Duration
 	if !call.StartedAt.IsZero() {
@@ -1166,9 +1179,15 @@ func (i *Interaction) emitReadyCallsLocked() {
 	i.emitPendingOverflowLocked()
 }
 
-// callTwinLocked pairs each span with at most one wrapper from the same provider
-// and canonical model. Conflicting agents, distinct response IDs and separate windows stay separate.
+// callTwinLocked pairs each span with at most one wrapper from the same provider.
+// A shared response ID identifies the call; otherwise compatible models and agents
+// must have overlapping windows.
 func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
+	if call.responseID != "" {
+		if earlier := i.seen[call.provider+"\x00"+call.responseID]; earlier != nil && earlier.fromSpan != call.fromSpan && !earlier.twinMatched {
+			return earlier
+		}
+	}
 	if call.startedAt.IsZero() || call.endedAt.IsZero() {
 		return nil
 	}
@@ -1247,18 +1266,42 @@ func mergeCallTwin(kept, later *recordedCall) {
 // RecordToolCalls reports tool calls the model made. A call already recorded under the same
 // provider ID is not counted again, but its name and outcome fill in.
 func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
+	i.recordToolCalls(false, calls...)
+}
+
+func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 	if len(calls) == 0 {
 		return
 	}
 	safely(func() {
 		var fire []*recordedTool
 		i.mu.Lock()
-		i.resumeLocked()
+		if i.ended {
+			i.mu.Unlock()
+			return
+		}
+		if fromSpan {
+			i.resumeAtLocked(calls[0].StartedAt)
+		} else {
+			i.resumeLocked()
+		}
 		for _, call := range calls {
 			name, server := normalizeTool(call.Name, call.MCPServer)
 			var tool *recordedTool
 			if call.ID != "" {
 				tool = i.toolsByID[call.ID]
+			}
+			// A measured span without a provider ID settles a wrapper's pending call.
+			if tool == nil && fromSpan && call.ID == "" && name != "" {
+				for _, candidate := range i.tools {
+					if candidate.name == name && candidate.mcpServer == server &&
+						(candidate.agentName == "" || call.AgentName == "" || candidate.agentName == call.AgentName) &&
+						(candidate.parentTool == "" || call.ParentTool == "" || candidate.parentTool == call.ParentTool) &&
+						!candidate.settled {
+						tool = candidate
+						break
+					}
+				}
 			}
 			if tool == nil {
 				if len(i.tools) >= cfg().limits.MaxCallsPerInteraction {
@@ -1757,8 +1800,11 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	var responseText string
 	var responseOK bool
-	if o.ResponseText != "" && i.captureContent {
-		responseText, responseOK = redactText(o.ResponseText)
+	i.mu.Lock()
+	capturedAnswer := first(o.ResponseText, i.spanAnswer)
+	i.mu.Unlock()
+	if capturedAnswer != "" && i.captureContent {
+		responseText, responseOK = redactText(capturedAnswer)
 	}
 	i.mu.Lock()
 	// Drain tools added by redaction or tool callbacks before capturing totals.
@@ -1793,7 +1839,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	i.tools, i.toolOverflow, i.toolsByID = nil, nil, map[string]*recordedTool{}
 	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
-	i.prompt, i.answer, i.messages = "", "", nil // not in the snapshot, so not in an in-process resume
+	i.prompt, i.answer, i.spanAnswer, i.messages = "", "", "", nil // not in the snapshot, so not in an in-process resume
 	i.compactions = 0
 	snapshot, ok = i.snapshotLocked()
 	// The flight stays in progress until unlock finishes delivery and deferred reporting.
@@ -1847,12 +1893,20 @@ func (i *Interaction) Resume() {
 }
 
 func (i *Interaction) resumeLocked() {
+	i.resumeAtLocked(time.Time{})
+}
+
+// Late span reports resume at their start, when it belongs to the paused interval.
+func (i *Interaction) resumeAtLocked(start time.Time) {
 	if i.pausedAt.IsZero() || i.ended || i.pausing {
 		return
 	}
-	i.pausedTotal += max(time.Since(i.pausedAt), 0)
+	if start.IsZero() || start.Before(i.pausedAt) {
+		start = time.Now()
+	}
+	i.pausedTotal += max(start.Sub(i.pausedAt), 0)
 	i.pausedAt = time.Time{}
-	i.started = time.Now()
+	i.started = start
 	reopen(i)
 }
 
@@ -2341,8 +2395,11 @@ func (i *Interaction) end(o EndOptions) {
 	// Mask once after the paused branch, outside the lock.
 	var responseText string
 	var responseOK bool
-	if o.ResponseText != "" && i.captureContent {
-		responseText, responseOK = redactText(o.ResponseText)
+	i.mu.Lock()
+	capturedAnswer := first(o.ResponseText, i.spanAnswer)
+	i.mu.Unlock()
+	if capturedAnswer != "" && i.captureContent {
+		responseText, responseOK = redactText(capturedAnswer)
 	}
 	i.mu.Lock()
 	var props map[string]any
@@ -2362,7 +2419,7 @@ func (i *Interaction) end(o EndOptions) {
 			snap.toolNames = append(snap.toolNames, t.name)
 		}
 	}
-	i.prompt, i.answer, i.messages = "", "", nil
+	i.prompt, i.answer, i.spanAnswer, i.messages = "", "", "", nil
 	i.unlock()
 	unregister(i)
 	sweepExpired()
@@ -2789,7 +2846,10 @@ func (i *Interaction) keepsTextLocked() bool {
 	return (i.classify && c.classifier != nil) || c.evaluator != nil
 }
 
-func (i *Interaction) keepAnswerLocked(text string) {
+func (i *Interaction) keepAnswerLocked(text string, fromSpan bool) {
+	if fromSpan && i.captureContent {
+		i.spanAnswer = text
+	}
 	if text != "" && i.keepsTextLocked() {
 		i.answer = text
 	}

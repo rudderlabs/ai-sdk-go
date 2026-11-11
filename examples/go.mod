@@ -14,8 +14,12 @@ require (
 	github.com/rudderlabs/ai-sdk-go/rudderbedrock v0.1.0
 	github.com/rudderlabs/ai-sdk-go/ruddergenai v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderopenai v0.1.0
+	github.com/rudderlabs/ai-sdk-go/rudderotel v0.1.0
 	github.com/rudderlabs/analytics-go/v4 v4.5.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
+	go.opentelemetry.io/otel v1.47.0
+	go.opentelemetry.io/otel/sdk v1.47.0
+	go.opentelemetry.io/otel/trace v1.47.0
 	google.golang.org/genai v1.77.0
 )
 
@@ -57,10 +61,8 @@ require (
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
-	go.opentelemetry.io/otel v1.47.0 // indirect
 	go.opentelemetry.io/otel/log v1.47.0 // indirect
 	go.opentelemetry.io/otel/metric v1.47.0 // indirect
-	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
@@ -81,4 +83,5 @@ replace (
 	github.com/rudderlabs/ai-sdk-go/rudderbedrock => ../rudderbedrock
 	github.com/rudderlabs/ai-sdk-go/ruddergenai => ../ruddergenai
 	github.com/rudderlabs/ai-sdk-go/rudderopenai => ../rudderopenai
+	github.com/rudderlabs/ai-sdk-go/rudderotel => ../rudderotel
 )
