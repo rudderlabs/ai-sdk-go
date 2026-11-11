@@ -156,11 +156,14 @@ arguments/results, retrieval content and legacy prompt/completion prefixes; Open
 outputs, messages, prompt templates, retrieval/embedding/reranker documents; Vercel content fields;
 and OpenLLMetry entity input/output. It drops `gen_ai.choice`,
 `gen_ai.client.inference.operation.details`, and `gen_ai.<role>.message` events. Other events keep
-their non-content attributes. These lists match Node's tracing constants.
+their non-content attributes. These lists match Node's tracing constants. Go also strips error
+text: span status descriptions (including the summary `status_message`) and `exception.message`
+and `exception.stacktrace` attributes on exception events. Exception types and status codes remain.
+Node/Python error-text protections follow in SDK-6802.
 
 With capture enabled, content strings and string arrays, and all string attributes of content
-events, pass through the core's redaction and custom hook. Withheld values are removed; arrays
-are removed if any element is withheld. Header attributes (`ai.request.headers.*`,
+events, plus error text, pass through the core's redaction and custom hook. Withheld values are
+removed; arrays are removed if any element is withheld. Header attributes (`ai.request.headers.*`,
 `http.request.header.*`, `http.response.header.*`), client addresses, user agents, and full
 URL/path/query attributes are always stripped from span, resource, scope, link, and event attributes.
 `http.route` and identity attributes remain. `ai.response.providerMetadata` counts as content.

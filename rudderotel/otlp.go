@@ -7,6 +7,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 type object = map[string]any
@@ -84,8 +86,10 @@ func otlpStatus(code codes.Code) int {
 func spanToOTLP(s sdktrace.ReadOnlySpan, capture bool) (object, []object) {
 	sc := s.SpanContext()
 	status := object{"code": otlpStatus(s.Status().Code)}
-	if s.Status().Description != "" {
-		status["message"] = s.Status().Description
+	if capture && s.Status().Description != "" {
+		if message, ok := hook.Tracing.Redact(s.Status().Description); ok && message != "" {
+			status["message"] = message
+		}
 	}
 	encoded := object{
 		"traceId": sc.TraceID().String(), "spanId": sc.SpanID().String(), "name": s.Name(), "kind": int(s.SpanKind()),

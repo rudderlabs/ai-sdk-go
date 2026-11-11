@@ -9,8 +9,10 @@ import (
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
-// Lists match the Node and Python tracing privacy constants.
+// Lists match the Node and Python tracing privacy constants, except error text
+// protections, which follow in SDK-6802.
 var contentKeys = []string{
+	"exception.message", "exception.stacktrace",
 	"gen_ai.input.messages", "gen_ai.output.messages", "gen_ai.system_instructions",
 	"gen_ai.tool.call.arguments", "gen_ai.tool.call.result", "gen_ai.retrieval.documents", "gen_ai.retrieval.query.text",
 	"input.value", "output.value", "llm.prompt_template.template", "llm.prompt_template.variables", "reranker.query",

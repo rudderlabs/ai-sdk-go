@@ -365,6 +365,16 @@ func TestTracingConformance(t *testing.T) {
 			if err := json.Unmarshal(c.Expected, &expected); err != nil {
 				t.Fatal(err)
 			}
+			if c.Name == "root span without GenAI attributes, identity from the resource" {
+				// Go strips error text with capture off; the Node-owned fixture
+				// follows in SDK-6802. Adjust only this Go-local expectation.
+				properties := expected["properties"].(object)
+				delete(properties, "status_message")
+				rs := properties["otlp"].(object)["resourceSpans"].([]any)[0].(object)
+				ss := rs["scopeSpans"].([]any)[0].(object)
+				span := ss["spans"].([]any)[0].(object)
+				delete(span["status"].(object), "message")
+			}
 			if c.Compare == "truncation" {
 				if actual["properties"].(object)["truncated"] != true {
 					t.Fatal("not truncated")

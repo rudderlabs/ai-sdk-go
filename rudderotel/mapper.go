@@ -76,8 +76,11 @@ func SpanToTrack(s sdktrace.ReadOnlySpan, options Options) (*analytics.Track, er
 		"span_name": s.Name(), "span_kind": kind, "start_time": iso(s.StartTime()), "end_time": iso(s.EndTime()),
 		"duration_ms": float64(duration) / 1000, "status_code": status, "truncated": false, "otlp": otlp,
 	}
-	if s.Status().Description != "" {
-		p["status_message"] = s.Status().Description
+	resourceSpan := otlp["resourceSpans"].([]object)[0]
+	scopeSpan := resourceSpan["scopeSpans"].([]object)[0]
+	span := scopeSpan["spans"].([]object)[0]
+	if message, ok := span["status"].(object)["message"]; ok {
+		p["status_message"] = message
 	}
 	a := attributes(s.Attributes())
 	if v := spanOrResource(s, "session.id"); v != "" {
