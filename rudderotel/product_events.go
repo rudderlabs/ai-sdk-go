@@ -229,7 +229,8 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 		ID: firstString(a, "gen_ai.tool.call.id", "tool_call.id", "tool.id"), Name: firstString(a, "gen_ai.tool.name", "tool.name"),
 		AgentName: firstString(a, "gen_ai.agent.name", "agent.name"), MCPServer: firstString(a, "gen_ai.tool.mcp.server", "mcp.server.name"),
 		ParentTool: firstString(a, "gen_ai.tool.parent.name", "tool.parent.name"), Error: &failed, Duration: &duration,
-		Args: toolValue(a, "gen_ai.tool.call.arguments", "input.value"), Result: toolValue(a, "gen_ai.tool.call.result", "output.value"),
+		StartedAt: s.StartTime(),
+		Args:      toolValue(a, "gen_ai.tool.call.arguments", "input.value"), Result: toolValue(a, "gen_ai.tool.call.result", "output.value"),
 	}
 	if failed {
 		call.ErrorType = spanErrorType(s)

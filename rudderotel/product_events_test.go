@@ -161,3 +161,35 @@ func TestSpanOutputTextParts(t *testing.T) {
 		})
 	}
 }
+
+func TestLateIdentifiedToolSpanResumesFromStart(t *testing.T) {
+	provider, _, events := testProvider(t, Options{Simple: true, ProductEvents: true})
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	defer i.End(rudderstackai.EndOptions{})
+	if _, ok := i.Pause(rudderstackai.PauseOptions{Reason: "approval"}); !ok {
+		t.Fatal("pause failed")
+	}
+	// The role is learned only at End; OnStart cannot resume the interaction.
+	start := time.Now().Add(time.Second)
+	_, span := provider.Tracer("test").Start(ctx, "work", trace.WithTimestamp(start))
+	if !i.Paused() {
+		t.Fatal("unidentified span resumed interaction")
+	}
+	span.SetAttributes(attribute.String("gen_ai.operation.name", "execute_tool"), attribute.String("gen_ai.tool.name", "lookup"))
+	span.End(trace.WithTimestamp(start.Add(time.Second)))
+	i.End(rudderstackai.EndOptions{})
+	for _, event := range events() {
+		if event["event"] == "ai_response_received" {
+			p := event["properties"].(object)
+			if p["response_status"] == "paused" {
+				continue
+			}
+			paused, ok := p["total_paused_ms"].(float64)
+			if !ok || paused < 900 {
+				t.Fatalf("span start lost: total_paused_ms=%v want at least 900", p["total_paused_ms"])
+			}
+			return
+		}
+	}
+	t.Fatal("missing final response")
+}
