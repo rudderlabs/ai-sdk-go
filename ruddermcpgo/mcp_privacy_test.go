@@ -35,11 +35,12 @@ func TestMCPPrivacyWireIDs(t *testing.T) {
 	s := workspaceServer("mcpgo-privacy-ids", nil)
 	r := wrap(t, s, Options{})
 	for i, id := range []any{"SELECT email FROM customers", "req-1", 7, strings.Repeat("a", 65), 1.5, true} {
+		// Fractions and booleans are not usable ids: "unknown", not a hash.
 		raw, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": map[string]any{"name": "list_destinations", "arguments": map[string]any{"workspace_id": "w"}}})
 		_ = s.HandleMessage(context.Background(), raw)
 		p := r.named("mcp_tool_called")[i].Properties
 		got, present := p["request_id"]
-		want := map[int]string{1: "req-1", 2: "7"}[i]
+		want := map[int]string{1: "req-1", 2: "7", 4: "unknown", 5: "unknown"}[i]
 		if want == "" {
 			raw, _ := json.Marshal(id)
 			sum := sha256.Sum256(func() []byte {

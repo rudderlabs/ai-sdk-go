@@ -186,7 +186,8 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 	}
 	emit(opts.Analytics, "mcp_event_subscription_changed", whom, p)
 
-	stateKey := callerStateKey(caller, "", id)
+	// The raw ID: the capped one would merge subscriptions that differ only past the cap.
+	stateKey := callerStateKey(caller, "", change.SubscriptionID)
 	st := w.state()
 	st.Lock()
 	defer st.Unlock()

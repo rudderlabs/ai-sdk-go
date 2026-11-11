@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- SDK-6791: keep MCP tool and argument names tied to current registrations, hash unsafe request IDs, clean client labels, and isolate session state by identified account and user in both Go MCP wrappers.
+- SDK-6791: keep MCP tool, prompt, capability and argument names tied to the server's current registry (mcp-go task and session tools included), allow only `YYYY-MM-DD` protocol versions, encode request IDs uniformly (decimal integers, hashed unsafe strings, `unknown` otherwise), clean declared tool event properties and client labels, and key per-caller state, pending elicitations (one-hour expiry) and client windows by raw account, user and session or interaction in both Go MCP wrappers.
 
 - Release AI events spec v0.4.0 with the v0.4 server schema and conformance fixture; the migration checker accepts 0.3.0 and 0.4.0 captures. The client schema remains v0.2.
 

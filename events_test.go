@@ -60,8 +60,8 @@ func TestSubscriptionChangesAndExpiry(t *testing.T) {
 
 // argument_keys and client_capabilities are sorted by code point in every SDK, whatever the client sent.
 func TestNameListsSortedByCodePoint(t *testing.T) {
-	keys := map[string]any{"b": 1, "\U0001F600": 1, "a": 1, "～": 1, "B": 1}
-	want := []string{"B", "a", "b", "～", "\U0001F600"}
+	keys := map[string]any{"sampling": 1, "\U0001F600": 1, "elicitation": 1, "～": 1, "roots": 1}
+	want := []string{"elicitation", "roots", "sampling", "unknown"}
 	if got := capabilityNames(keys); !slices.Equal(got, want) {
 		t.Errorf("capabilityNames = %q", got)
 	}
@@ -72,17 +72,13 @@ func TestNameListsSortedByCodePoint(t *testing.T) {
 		t.Errorf("argument_keys = %q", got)
 	}
 
-	// Sorted first, then capped at 100 names of 64 code points.
+	// Client-chosen capability names collapse to one "unknown".
 	many := map[string]any{strings.Repeat("é", 70): 1}
 	for i := range 150 {
 		many[fmt.Sprintf("k%03d", 149-i)] = 1
 	}
-	got := capabilityNames(many)
-	if len(got) != 100 || got[0] != "k000" || got[99] != "k099" {
-		t.Errorf("capped capabilityNames = %q…", got[:3])
-	}
-	if got := sortedNames([]string{strings.Repeat("é", 70)}); got[0] != strings.Repeat("é", 64) {
-		t.Errorf("long name = %q", got[0])
+	if got := capabilityNames(many); !slices.Equal(got, []string{"unknown"}) {
+		t.Errorf("unrecognized capabilityNames = %q", got)
 	}
 }
 

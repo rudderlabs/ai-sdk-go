@@ -19,9 +19,9 @@ func TestMCPPrivacyRegisteredNames(t *testing.T) {
 	s := workspaceServer("privacy-names", nil)
 	r := wrap(t, s, Options{})
 	w, _ := instances.get(s)
-	w.RememberTools([]mcpbridge.Tool{{Name: "registered", Schema: map[string]any{"properties": map[string]any{"kept": map[string]any{"type": "string"}}, "additionalProperties": false}}})
+	tools := []mcpbridge.Tool{{Name: "registered", Schema: map[string]any{"properties": map[string]any{"kept": map[string]any{"type": "string"}}, "additionalProperties": false}}}
 	for _, name := range []string{"registered", "jane.doe@acme.com"} {
-		rc := w.begin(mcpbridge.Request{Ctx: context.Background()})
+		rc := w.begin(mcpbridge.Request{Ctx: context.Background(), RegisteredTools: tools})
 		rc.ToolCall(name, map[string]json.RawMessage{"kept": json.RawMessage(`7`), "jane.doe@acme.com": json.RawMessage(`1`), "zzz-private": json.RawMessage(`2`)}, false, nil, "")
 		rc.ToolDone(mcpbridge.Outcome{Result: map[string]any{"isError": true}})
 		p := r.named("mcp_tool_called")[len(r.named("mcp_tool_called"))-1].Properties
@@ -53,12 +53,12 @@ func TestMCPPrivacyRequestIDs(t *testing.T) {
 				got, present := r.props(t, event)["request_id"]
 				want := id
 				if id == "" {
-					want = ""
+					want = "unknown"
 				} else if !safeRPCString.MatchString(id) {
 					sum := sha256.Sum256([]byte(id))
 					want = "sha256:" + hex.EncodeToString(sum[:])[:16]
 				}
-				if present != (want != "") || got != nil && got != want {
+				if !present || got != want {
 					t.Errorf("%s id = %v, want %q", event, got, want)
 				}
 			}
@@ -176,7 +176,8 @@ func TestMCPPrivacyDeclaredCopies(t *testing.T) {
 		return map[string]any{"argument_keys": []string{"jane.doe@acme.com", "workspace_id", "other", "workspace_id"}, "invalid_arguments": []string{"other", "workspace_id", "other"}, "request_id": "SELECT email FROM customers", "client_title": "\u0007bad\n  name"}
 	}}}}})
 	w, _ := instances.get(s)
-	rc := w.begin(mcpbridge.Request{Ctx: context.Background()})
+	tools := []mcpbridge.Tool{{Name: "list_destinations", Schema: map[string]any{"properties": map[string]any{"workspace_id": map[string]any{}}}}}
+	rc := w.begin(mcpbridge.Request{Ctx: context.Background(), RegisteredTools: tools, RequestID: int64(7)})
 	rc.ToolCall("list_destinations", nil, false, nil, "")
 	rc.ToolDone(mcpbridge.Outcome{Result: map[string]any{}})
 	p := r.props(t, "performed")
@@ -185,8 +186,8 @@ func TestMCPPrivacyDeclaredCopies(t *testing.T) {
 			t.Errorf("%s = %v", key, p[key])
 		}
 	}
-	if p["request_id"] != "sha256:"+hex.EncodeToString(sha256Sum("SELECT email FROM customers"))[:16] {
-		t.Errorf("unsafe id copied: %v", p)
+	if p["request_id"] != "7" {
+		t.Errorf("forged id kept: %v", p)
 	}
 	if p["client_title"] != "bad name" {
 		t.Errorf("client title copied: %v", p)
@@ -224,5 +225,3 @@ func TestMCPPrivacyPendingInputs(t *testing.T) {
 		}
 	}
 }
-
-func sha256Sum(s string) []byte { sum := sha256.Sum256([]byte(s)); return sum[:] }

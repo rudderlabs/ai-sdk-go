@@ -191,7 +191,7 @@ func TestInvalidArgumentsNamesNotValues(t *testing.T) {
 	if p["error_type"] != "invalid_request" {
 		t.Errorf("error_type = %v", p["error_type"])
 	}
-	if got := p["invalid_arguments"].([]string); !slices.Equal(got, []string{"name", "unknown", "type"}) {
+	if got := p["invalid_arguments"].([]string); !slices.Equal(got, []string{"unknown", "name", "type"}) {
 		t.Errorf("invalid_arguments = %v", got)
 	}
 	if strings.Contains(mustJSON(r.all()), "sneaky-value") {
@@ -382,8 +382,8 @@ func TestAnalyticsFailuresNeverReachTheServer(t *testing.T) {
 }
 
 func TestRequestIDFallsBackOutsideTheSDK(t *testing.T) {
-	if got := requestIDOf(context.Background()); got != "" {
-		t.Errorf("requestIDOf = %q", got)
+	if got := requestIDOf(context.Background()); got != nil {
+		t.Errorf("requestIDOf = %v", got)
 	}
 }
 

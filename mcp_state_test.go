@@ -177,7 +177,7 @@ func TestStateIsBounded(t *testing.T) {
 	st := stateFor("bounded-calls")
 	st.Lock()
 	defer st.Unlock()
-	for name, size := range map[string]int{"retries": st.retries.size(), "toolSchemas": st.toolSchemas.size(), "scopes": st.scopes.size()} {
+	for name, size := range map[string]int{"retries": st.retries.size(), "scopes": st.scopes.size()} {
 		if size > defaultLimits.MaxMapEntries {
 			t.Errorf("%s = %d entries, more than %d", name, size, defaultLimits.MaxMapEntries)
 		}

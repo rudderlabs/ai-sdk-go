@@ -40,8 +40,10 @@ type Request struct {
 	// ProtocolVersion is the negotiated version, when the request's _meta has none.
 	ProtocolVersion string
 	RequestID       any
-	// RegisteredTools is a current registry snapshot; nil uses remembered schemas.
-	RegisteredTools []Tool
+	// RegisteredTools and RegisteredPrompts are snapshots of the server's registry at this
+	// request. Names outside them (or nil, when unavailable) are reported as unknown.
+	RegisteredTools   []Tool
+	RegisteredPrompts []string
 	// HTTP reports a streamable HTTP request.
 	HTTP bool
 }
@@ -110,8 +112,6 @@ type Server interface {
 	Begin(r Request) Call
 	// CapabilityTool is the request_capability tool to offer, nil when off.
 	CapabilityTool() *ToolDef
-	// RememberTools learns original input schemas without a client tools/list request.
-	RememberTools(tools []Tool)
 	RememberResources(byURI map[string]string)
 	RememberTemplates(templates []string)
 	// Elicited records an elicitation outside a tracked call (call is nil) or within one.
@@ -137,6 +137,8 @@ type Call interface {
 	// Finished records a resources/read or prompts/get; errorType is empty on success.
 	Finished(method, name string, size int, errorType string)
 	ResourceName(uri string) string
+	// PromptName is the registered prompt name, else "unknown"; an empty name stays empty.
+	PromptName(name string) string
 	// ListTools records a tools/list page and returns, per tool, the schema to send (nil keeps
 	// the tool's own), and whether to append request_capability.
 	ListTools(tools []Tool, lastPage bool) ([]map[string]any, bool)

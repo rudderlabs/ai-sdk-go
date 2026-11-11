@@ -23,7 +23,7 @@ const (
 // Identity is who a request is for, as returned by [Options.Identify].
 type Identity struct {
 	// State uses original identified values even when emitted IDs are capped.
-	stateAccountID, stateUserID string
+	stateAccountID, stateUserID, stateAnonymousID string
 	// UserID is the OAuth subject. Defaults to the token's UserID.
 	UserID string
 	// AnonymousID is used when there is no UserID. Defaults to "ai_system".
@@ -239,7 +239,7 @@ func (o *options) identity(ctx context.Context, token *auth.TokenInfo) (id Ident
 			id.AuthMethod = "oauth"
 		}
 	}
-	id.stateAccountID, id.stateUserID = id.AccountID, id.UserID
+	id.stateAccountID, id.stateUserID, id.stateAnonymousID = id.AccountID, id.UserID, id.AnonymousID
 	id.UserID, id.AnonymousID, id.AccountID = capID(id.UserID), capID(id.AnonymousID), capID(id.AccountID)
 	id.OAuthClientID, id.AuthMethod, id.Country = capID(id.OAuthClientID), capLabel(id.AuthMethod), capLabel(id.Country)
 	if id.TokenScopes != nil {
