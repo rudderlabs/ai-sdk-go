@@ -263,6 +263,8 @@ type ToolCall struct {
 	ErrorType string
 	// Duration is the measured execution time; never an estimate.
 	Duration *time.Duration
+	// StartedAt is the start of a tracing tool execution; used to resume a paused run.
+	StartedAt time.Time
 	// Args are the call's arguments, given to declared tool rules only; never sent.
 	Args any
 	// Result is the tool's output, given to declared tool rules only; never sent. Seeing one
@@ -1015,12 +1017,15 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		// A pre-existing response turned into a tombstone while the hook ran:
 		// its segment closed, so admit this in-flight report in the current one.
 		// A live entry still deduplicates reports accepted in the current segment.
-		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok && (earlier != nil || responseBeforeCredits == nil) {
+		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok && (earlier != nil || responseBeforeCredits == nil) &&
+			(earlier == nil || earlier.fromSpan == (call.Integration == "tracing") || earlier.twinMatched) {
 			if earlier == nil {
 				return false
 			}
-			if call.ErrorType == "" {
-				i.keepAnswerLocked(call.OutputText, call.Integration == "tracing")
+			// Wrapper duplicates can supply classifier text; rejected spans must
+			// leave the saved response from the latest accepted call intact.
+			if call.ErrorType == "" && call.Integration != "tracing" {
+				i.keepAnswerLocked(call.OutputText, false)
 			}
 			fillString(&earlier.agentName, call.AgentName)
 			fillString(&earlier.callPurpose, call.CallPurpose)
@@ -1174,9 +1179,15 @@ func (i *Interaction) emitReadyCallsLocked() {
 	i.emitPendingOverflowLocked()
 }
 
-// callTwinLocked pairs each span with at most one wrapper from the same provider
-// and canonical model. Conflicting agents, distinct response IDs and separate windows stay separate.
+// callTwinLocked pairs each span with at most one wrapper from the same provider.
+// A shared response ID identifies the call; otherwise compatible models and agents
+// must have overlapping windows.
 func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
+	if call.responseID != "" {
+		if earlier := i.seen[call.provider+"\x00"+call.responseID]; earlier != nil && earlier.fromSpan != call.fromSpan && !earlier.twinMatched {
+			return earlier
+		}
+	}
 	if call.startedAt.IsZero() || call.endedAt.IsZero() {
 		return nil
 	}
@@ -1269,7 +1280,11 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 			i.mu.Unlock()
 			return
 		}
-		i.resumeLocked()
+		if fromSpan {
+			i.resumeAtLocked(calls[0].StartedAt)
+		} else {
+			i.resumeLocked()
+		}
 		for _, call := range calls {
 			name, server := normalizeTool(call.Name, call.MCPServer)
 			var tool *recordedTool
@@ -1282,7 +1297,7 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 					if candidate.name == name && candidate.mcpServer == server &&
 						(candidate.agentName == "" || call.AgentName == "" || candidate.agentName == call.AgentName) &&
 						(candidate.parentTool == "" || call.ParentTool == "" || candidate.parentTool == call.ParentTool) &&
-						candidate.duration == nil && candidate.err == nil {
+						!candidate.settled {
 						tool = candidate
 						break
 					}
