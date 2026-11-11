@@ -454,6 +454,7 @@ type Interaction struct {
 	captureContent, toolBreakdown, classify                                bool
 	explicitAnalytics                                                      analytics.Client
 	msgContext                                                             map[string]any
+	sessionID                                                              int64
 	// resumed: continued from a Resume snapshot.
 	resumed bool
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
@@ -642,6 +643,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		conversationID:    conversationID,
 		userID:            id.userID,
 		anonymousID:       id.anonymousID,
+		sessionID:         id.sessionID,
 		feature:           first(o.Feature, cv.feature),
 		surface:           first2(surfaceOf(o.Surface), surfaceOf(cv.surface)),
 		trigger:           trigger,
@@ -1035,7 +1037,11 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			return false
 		}
 	}
-	i.resumeLocked()
+	if call.Integration == "tracing" {
+		i.resumeAtLocked(call.StartedAt)
+	} else {
+		i.resumeLocked()
+	}
 	if call.ErrorType == "" {
 		i.keepAnswerLocked(call.OutputText, call.Integration == "tracing")
 	}
@@ -1273,7 +1279,10 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 			// A measured span without a provider ID settles a wrapper's pending call.
 			if tool == nil && fromSpan && call.ID == "" && name != "" {
 				for _, candidate := range i.tools {
-					if candidate.name == name && candidate.mcpServer == server && candidate.agentName == call.AgentName && candidate.parentTool == call.ParentTool && candidate.duration == nil && candidate.err == nil {
+					if candidate.name == name && candidate.mcpServer == server &&
+						(candidate.agentName == "" || call.AgentName == "" || candidate.agentName == call.AgentName) &&
+						(candidate.parentTool == "" || call.ParentTool == "" || candidate.parentTool == call.ParentTool) &&
+						candidate.duration == nil && candidate.err == nil {
 						tool = candidate
 						break
 					}
@@ -1869,12 +1878,20 @@ func (i *Interaction) Resume() {
 }
 
 func (i *Interaction) resumeLocked() {
+	i.resumeAtLocked(time.Time{})
+}
+
+// Late span reports resume at their start, when it belongs to the paused interval.
+func (i *Interaction) resumeAtLocked(start time.Time) {
 	if i.pausedAt.IsZero() || i.ended || i.pausing {
 		return
 	}
-	i.pausedTotal += max(time.Since(i.pausedAt), 0)
+	if start.IsZero() || start.Before(i.pausedAt) {
+		start = time.Now()
+	}
+	i.pausedTotal += max(start.Sub(i.pausedAt), 0)
 	i.pausedAt = time.Time{}
-	i.started = time.Now()
+	i.started = start
 	reopen(i)
 }
 
@@ -2815,7 +2832,7 @@ func (i *Interaction) keepsTextLocked() bool {
 }
 
 func (i *Interaction) keepAnswerLocked(text string, fromSpan bool) {
-	if fromSpan && text != "" && i.captureContent {
+	if fromSpan && i.captureContent {
 		i.spanAnswer = text
 	}
 	if text != "" && i.keepsTextLocked() {

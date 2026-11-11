@@ -57,6 +57,9 @@ func tracingIdentity(ctx context.Context, traceID string) (tags map[string]strin
 		put("rudderstack.anonymous_id", i.anonymousID)
 		put("gen_ai.conversation.id", i.conversationID)
 		put("rudderstack.interaction_id", i.id)
+		if i.sessionID != 0 {
+			put("session.id", strconv.FormatInt(i.sessionID, 10))
+		}
 		if traceID != "" && i.traceID == "" {
 			i.traceID = traceID
 		}
