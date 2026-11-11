@@ -1,5 +1,7 @@
-// Package rudderotel links AI interactions to OpenTelemetry traces: with it, an interaction
-// without an explicit TraceID takes the trace of the span active in its context as trace_id.
+// Package rudderotel consumes OpenTelemetry AI spans as RudderStack track events and optionally
+// records them as calls of open AI interactions. NewSpanProcessor attaches to an app's provider;
+// RegisterTracing creates a global provider, refusing an existing one. TraceID also links an
+// interaction to the span already active in its context.
 //
 //	err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID))
 package rudderotel
