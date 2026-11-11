@@ -191,7 +191,7 @@ func TestInvalidArgumentsNamesNotValues(t *testing.T) {
 	if p["error_type"] != "invalid_request" {
 		t.Errorf("error_type = %v", p["error_type"])
 	}
-	if got := p["invalid_arguments"].([]string); !slices.Equal(got, []string{"name", "extra", "type"}) {
+	if got := p["invalid_arguments"].([]string); !slices.Equal(got, []string{"name", "unknown", "type"}) {
 		t.Errorf("invalid_arguments = %v", got)
 	}
 	if strings.Contains(mustJSON(r.all()), "sneaky-value") {
@@ -213,7 +213,7 @@ func TestInvalidArgumentsCapped(t *testing.T) {
 	}
 	callTool(t, cs, "create_audience", args, nil)
 	got := r.props(t, "mcp_tool_called")["invalid_arguments"].([]string)
-	if len(got) != 100 || got[0] != "x000" || got[99] != "x099" {
+	if !slices.Equal(got, []string{"unknown"}) {
 		t.Errorf("invalid_arguments = %d names, %q…", len(got), got[:min(len(got), 3)])
 	}
 }
@@ -382,7 +382,7 @@ func TestAnalyticsFailuresNeverReachTheServer(t *testing.T) {
 }
 
 func TestRequestIDFallsBackOutsideTheSDK(t *testing.T) {
-	if got := requestIDOf(context.Background()); got != "unknown" {
+	if got := requestIDOf(context.Background()); got != "" {
 		t.Errorf("requestIDOf = %q", got)
 	}
 }
@@ -549,7 +549,7 @@ func TestRequestContextOff(t *testing.T) {
 				t.Errorf("handler got %s, want %s", seen.last(), mustJSON(args))
 			}
 			p := r.props(t, "mcp_tool_called")
-			if !slices.Equal(p["argument_keys"].([]string), []string{requestContext, "workspace_id"}) {
+			if !slices.Equal(p["argument_keys"].([]string), []string{"unknown", "workspace_id"}) {
 				t.Errorf("argument_keys = %v", p["argument_keys"])
 			}
 			for _, key := range []string{"intent", "user_sentiment", "call_reason"} {

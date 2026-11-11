@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 	"unsafe"
+	"weak"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -30,6 +31,7 @@ type sessionInfo struct {
 	connection string
 	client     *mcpbridge.Client
 	sequence   uint64
+	callers    *boundedMap[sessionInfo]
 }
 
 var (
@@ -64,7 +66,13 @@ func WrapMCPServer(server *mcp.Server, opts Options) error {
 		return nil
 	}
 	n.resolveName(serverImpl(server))
-	w := &wrapped{}
+	wp := weak.Make(server)
+	w := &wrapped{tools: func() []mcpbridge.Tool {
+		if s := wp.Value(); s != nil {
+			return registeredTools(s)
+		}
+		return []mcpbridge.Tool{}
+	}}
 	w.opts.Store(n)
 	w.RememberTools(registeredTools(server))
 	instances.update(server, func(*wrapped, bool) *wrapped { return w })
@@ -194,6 +202,12 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 		ctx = mcpbridge.WithToolCall(ctx, tool.Params.Name, tool.Params.Arguments)
 	}
 	r := mcpbridge.Request{Ctx: ctx, Meta: metaOf(params), RequestID: requestIDOf(ctx)}
+	if method == "tools/call" && w.tools != nil {
+		r.RegisteredTools = w.tools()
+		if r.RegisteredTools == nil {
+			r.RegisteredTools = []mcpbridge.Tool{}
+		}
+	}
 	if extra != nil {
 		r.Token = extra.TokenInfo
 		r.HTTP = extra.Header != nil
@@ -202,7 +216,16 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	var info sessionInfo
 	if ss != nil {
 		info, _ = sessions.get(ss)
-		r.Client = info.client
+		r.ClientFor = func(account, user string) (*mcpbridge.Client, string) {
+			var known sessionInfo
+			sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
+				if i.callers != nil {
+					known, _ = i.callers.get(callerStateKey(account, user))
+				}
+				return i
+			})
+			return known.client, known.version
+		}
 		if r.SessionID == "" && !r.HTTP {
 			info = sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
 				if i.connection == "" {
@@ -284,13 +307,17 @@ func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
 	}
 }
 
-func rememberInitialized(ss *mcp.ServerSession, client *mcpbridge.Client, version string, sequence uint64) {
+func rememberInitialized(ss *mcp.ServerSession, client *mcpbridge.Client, version string, sequence uint64, caller string) {
 	if ss == nil {
 		return
 	}
 	sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
-		if sequence > i.sequence {
-			i.version, i.client, i.sequence = version, client, sequence
+		if i.callers == nil {
+			i.callers = newBoundedMap[sessionInfo](cfg().limits.MaxMapEntries)
+		}
+		old, _ := i.callers.get(caller)
+		if sequence > old.sequence {
+			i.callers.set(caller, sessionInfo{version: version, client: cleanClient(client), sequence: sequence})
 		}
 		return i
 	})
@@ -302,7 +329,6 @@ var idKeyType atomic.Pointer[reflect.Type]
 // requestIDOf reads the JSON-RPC request ID the go-sdk stores in the request context. Its key
 // type is unexported, so it is found once by walking the context chain.
 func requestIDOf(ctx context.Context) (id string) {
-	id = "unknown"
 	safely(func() {
 		t := idKeyType.Load()
 		if t == nil {
@@ -316,9 +342,9 @@ func requestIDOf(ctx context.Context) (id string) {
 		if v, ok := ctx.Value(reflect.Zero(*t).Interface()).(jsonrpc.ID); ok && v.IsValid() {
 			switch raw := v.Raw().(type) {
 			case string:
-				id = raw
+				id = safeRequestID(raw)
 			case int64:
-				id = strconv.FormatInt(raw, 10)
+				id = safeRequestID(raw)
 			}
 		}
 	})
@@ -386,7 +412,7 @@ func (w *wrapped) after(h *handling, res mcp.Result, err, ctxErr error) mcp.Resu
 				}
 				caps = h.init.Capabilities
 			}
-			rememberInitialized(h.session, client, r.ProtocolVersion, rc.sequence)
+			rememberInitialized(h.session, client, r.ProtocolVersion, rc.sequence, rc.CallerKey())
 			rc.Initialized(client, caps, r.ProtocolVersion)
 		}
 	case "tools/list":

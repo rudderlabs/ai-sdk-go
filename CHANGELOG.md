@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- SDK-6791: keep MCP tool and argument names tied to current registrations, hash unsafe request IDs, clean client labels, and isolate session state by identified account and user in both Go MCP wrappers.
+
 - Release AI events spec v0.4.0 with the v0.4 server schema and conformance fixture; the migration checker accepts 0.3.0 and 0.4.0 captures. The client schema remains v0.2.
 
 - SDK-5991: support repeated pauses and persisted resumes on top of the client, server-field and sampling stack. Preserve sampling decisions, server scope, confidence and pending call credits across JSON restore; count compactions per response segment.

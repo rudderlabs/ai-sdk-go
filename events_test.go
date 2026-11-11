@@ -28,7 +28,7 @@ func TestSubscriptionChangesAndExpiry(t *testing.T) {
 	got := r.wait(t, "mcp_event_subscription_changed", 2)
 	created, expired := got[0], got[1]
 	p := created.Properties
-	if p["subscription_action"] != "created" || p["ttl_ms"] != int64(30) || !slices.Equal(p["argument_keys"].([]string), []string{"destination_id"}) ||
+	if p["subscription_action"] != "created" || p["ttl_ms"] != int64(30) || !slices.Equal(p["argument_keys"].([]string), []string{"unknown"}) ||
 		p["account_id"] != "workspace_acme" || p["server_name"] != "events-mcp" || p["history_truncated"] != true || created.UserId != "oauth|8812" {
 		t.Errorf("created = %v", p)
 	}
@@ -41,7 +41,7 @@ func TestSubscriptionChangesAndExpiry(t *testing.T) {
 
 	// A refresh resets the timer; an unsubscribe stops it.
 	r.reset()
-	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCreated, SubscriptionID: "sub_2", EventName: "e", TTL: 40 * time.Millisecond})
+	TrackMCPEventSubscription(ctx, server, SubscriptionChange{EventsIdentity: EventsIdentity{UserID: "u1", AccountID: "acct"}, Action: SubscriptionCreated, SubscriptionID: "sub_2", EventName: "e", TTL: 40 * time.Millisecond})
 	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionUnsubscribed, SubscriptionID: "sub_2", EventName: "e", EventsIdentity: EventsIdentity{UserID: "u1", AccountID: "acct"}})
 	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCallbackFailed, SubscriptionID: "sub_3", EventName: "e", FailureReason: "challenge_failed"})
 	TrackMCPEventSubscription(ctx, server, SubscriptionChange{Action: SubscriptionCreated, EventName: "e"})
@@ -68,7 +68,7 @@ func TestNameListsSortedByCodePoint(t *testing.T) {
 	server := workspaceServer("events-mcp", nil)
 	r := wrap(t, server, Options{MCPEvents: true})
 	TrackMCPEventSubscription(context.Background(), server, SubscriptionChange{Action: SubscriptionCreated, SubscriptionID: "s", EventName: "e", Arguments: keys})
-	if got := r.props(t, "mcp_event_subscription_changed")["argument_keys"].([]string); !slices.Equal(got, want) {
+	if got := r.props(t, "mcp_event_subscription_changed")["argument_keys"].([]string); !slices.Equal(got, []string{"unknown"}) {
 		t.Errorf("argument_keys = %q", got)
 	}
 

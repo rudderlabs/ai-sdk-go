@@ -1262,7 +1262,7 @@
         "request_id": {
           "type": "string",
           "minLength": 1,
-          "description": "The JSON-RPC request ID."
+          "description": "The JSON-RPC request id: integers as decimal strings, short safe strings as sent, anything else as sha256: plus 16 hex characters."
         },
         "tool_name": {
           "type": "string",
@@ -1465,7 +1465,7 @@
         "request_id": {
           "type": "string",
           "minLength": 1,
-          "description": "The JSON-RPC request ID."
+          "description": "The JSON-RPC request id: integers as decimal strings, short safe strings as sent, anything else as sha256: plus 16 hex characters."
         },
         "resource_name": {
           "type": "string",
@@ -1515,7 +1515,7 @@
         "request_id": {
           "type": "string",
           "minLength": 1,
-          "description": "The JSON-RPC request ID."
+          "description": "The JSON-RPC request id: integers as decimal strings, short safe strings as sent, anything else as sha256: plus 16 hex characters."
         },
         "prompt_name": {
           "type": "string",

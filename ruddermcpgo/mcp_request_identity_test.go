@@ -183,7 +183,7 @@ func TestFailedInitializeDoesNotKeepSessionClient(t *testing.T) {
 	tracked.before(ctx, 1, "initialize", message)
 	// A failed request never reaches succeeded; discard its pending call.
 	tracked.take(ctx, message)
-	if info, ok := tracked.sessions.load("session"); ok {
+	if info, ok := tracked.sessions.load(`["","","session"]`); ok {
 		t.Fatalf("failed initialize kept session state: %+v", info)
 	}
 }
@@ -204,7 +204,7 @@ func TestInitializeOrderKeepsNewestSessionClient(t *testing.T) {
 	older, newer := begin(1, "older"), begin(2, "newer")
 	tracked.succeeded(ctx, newer, map[string]any{"protocolVersion": "2025-06-18"})
 	tracked.succeeded(ctx, older, map[string]any{"protocolVersion": "2024-11-05"})
-	info, ok := tracked.sessions.load("session")
+	info, ok := tracked.sessions.load(`["","","session"]`)
 	if !ok || info.client.Name != "newer" || info.version != "2025-06-18" {
 		t.Fatalf("stale initialize overwrote session: %+v", info)
 	}

@@ -203,6 +203,8 @@ err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 - State is in memory, per server name, per process (at most 10,000 entries each, least recently used first): servers rebuilt per request keep counting; give each distinct server a unique name. Replicas and restarts each emit their own `mcp_client_seen`.
 - Opt-in: `CapabilityRequests` adds a `request_capability` tool for unmet demand (`mcp_capability_requested`); `MCPEvents: true` enables the experimental MCP Events helpers (`TrackMCPEventSubscription`, `WrapMCPEventSender`).
 
+MCP events keep only registered tool and top-level input property names, replacing other names with `unknown`; `request_id` is the integer id or a short safe string as sent, otherwise `sha256:` plus 16 hex characters. Client name, title and version have control characters removed, whitespace collapsed and a 64-code-point limit; session and interaction state is isolated by the identified account and user.
+
 Call `WrapMCPServer` once, before serving; it takes its own options (`Configure` does not apply). Options, every property and limits: [docs/mcp.md](docs/mcp.md).
 
 ## Product signals

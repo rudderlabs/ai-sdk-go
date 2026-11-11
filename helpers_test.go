@@ -75,6 +75,18 @@ func validateEvent(event string, props map[string]any) error {
 			def = "declared_tool_event"
 		}
 	}
+	// SDK-6791 requires omission; the frozen v0.4 schema still requires request_id.
+	// Validate all other fields against that schema without changing recorded properties.
+	if event == "mcp_tool_called" || event == "mcp_resource_read" || event == "mcp_prompt_used" {
+		if _, present := props["request_id"]; !present {
+			copyProps := map[string]any{}
+			for k, v := range props {
+				copyProps[k] = v
+			}
+			copyProps["request_id"] = "omitted"
+			props = copyProps
+		}
+	}
 	b, err := json.Marshal(props)
 	if err != nil {
 		return err

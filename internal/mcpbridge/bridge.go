@@ -33,11 +33,15 @@ type Request struct {
 	Connection string
 	// Client is the client the session initialized with, if known.
 	Client *Client
+	// ClientFor resolves session details for the identified caller.
+	ClientFor func(account, user string) (*Client, string)
 	// InitializeClient is the current initialize request's clientInfo.
 	InitializeClient *Client
 	// ProtocolVersion is the negotiated version, when the request's _meta has none.
 	ProtocolVersion string
-	RequestID       string
+	RequestID       any
+	// RegisteredTools is a current registry snapshot; nil uses remembered schemas.
+	RegisteredTools []Tool
 	// HTTP reports a streamable HTTP request.
 	HTTP bool
 }
@@ -142,6 +146,7 @@ type Call interface {
 	Succeeded(method string, discoverVersions []string)
 	ToolName() string
 	RequestID() string
+	CallerKey(parts ...string) string
 }
 
 // ToolCall carries the current tool's original arguments to identity hooks.

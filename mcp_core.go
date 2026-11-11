@@ -2,11 +2,17 @@ package rudderstackai
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"maps"
+	"math"
+	"reflect"
+	"regexp"
 	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -70,7 +76,8 @@ func init() {
 // wrapped is one wrapped server instance. Its counters, windows and caches belong to its server
 // name, shared with every instance of that name in the process.
 type wrapped struct {
-	opts atomic.Pointer[options]
+	opts  atomic.Pointer[options]
+	tools func() []mcpbridge.Tool
 }
 
 func (w *wrapped) name() string { return w.opts.Load().name }
@@ -121,16 +128,17 @@ type rememberedClient struct {
 
 // The enclosing serverState supplies the server part of this composite key.
 type rememberedClientKey struct {
+	accountID     string
 	oauthClientID string
 	userID        string
 }
 
 func clientKey(id Identity) rememberedClientKey {
-	user := id.UserID
+	user := id.stateUserID
 	if user == "" {
 		user = id.AnonymousID
 	}
-	return rememberedClientKey{oauthClientID: id.OAuthClientID, userID: user}
+	return rememberedClientKey{accountID: id.stateAccountID, oauthClientID: id.OAuthClientID, userID: user}
 }
 
 var requestSequence atomic.Uint64
@@ -232,6 +240,8 @@ type reqCtx struct {
 	// when there is none.
 	scope            string
 	toolName         string
+	rawToolName      string
+	registeredTools  []mcpbridge.Tool
 	client           *mcpbridge.Client
 	initializeClient *mcpbridge.Client
 	received         time.Time
@@ -244,10 +254,12 @@ type reqCtx struct {
 
 // toolState is one tools/call between its start and its end.
 type toolState struct {
-	args     map[string]any
-	props    map[string]any
-	answered bool
-	skip     bool
+	schema     map[string]any
+	registered bool
+	args       map[string]any
+	props      map[string]any
+	answered   bool
+	skip       bool
 }
 
 type reqCtxKey struct{}
@@ -261,7 +273,7 @@ func clientFromMeta(v any) *mcpbridge.Client {
 }
 
 func knownClient(client *mcpbridge.Client) bool {
-	return client != nil && (strings.TrimSpace(client.Name) != "" || strings.TrimSpace(client.Version) != "")
+	return client != nil && (cleanClientText(client.Name) != "" || cleanClientText(client.Version) != "")
 }
 
 // Begin starts a request.
@@ -274,6 +286,9 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	tok, _ := r.Token.(*auth.TokenInfo)
 	id := opts.identity(r.Ctx, tok)
 	st := stateFor(opts.name)
+	if r.ClientFor != nil {
+		r.Client, r.ProtocolVersion = r.ClientFor(id.stateAccountID, id.stateUserID)
+	}
 	client := r.InitializeClient
 	if !knownClient(client) {
 		client = clientFromMeta(r.Meta[metaClientInfo])
@@ -310,8 +325,8 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	put(base, "oauth_client_id", id.OAuthClientID)
 	put(base, "auth_method", id.AuthMethod)
 	if client != nil {
-		put(base, "client_name", capID(client.Name))
-		put(base, "client_version", capID(client.Version))
+		put(base, "client_name", cleanClientText(client.Name))
+		put(base, "client_version", cleanClientText(client.Version))
 	}
 	version := opaque(r.Meta[metaProtocolVersion])
 	if version == "" {
@@ -325,17 +340,14 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	put(base, "trace_id", traceID)
 	rc := &reqCtx{
 		w: w, st: st, opts: opts, base: base, who: who{id.UserID, id.AnonymousID}, identity: id,
-		client: seenClient, requestID: capID(r.RequestID), http: r.HTTP, meta: map[string]any{}, start: time.Now(),
-		initializeClient: r.InitializeClient, received: received, sequence: sequence,
+		client: seenClient, requestID: safeRequestID(r.RequestID), http: r.HTTP, meta: map[string]any{}, start: time.Now(),
+		initializeClient: r.InitializeClient, received: received, sequence: sequence, registeredTools: r.RegisteredTools,
 	}
 	// A copy: the SDK may remove the protocol keys from _meta while it handles the request.
 	for _, k := range []string{metaProtocolVersion, metaClientInfo, metaClientCapabilities} {
 		if v, ok := r.Meta[k]; ok {
 			rc.meta[k] = v
 		}
-	}
-	if rc.requestID == "" {
-		rc.requestID = "unknown"
 	}
 	switch {
 	case r.SessionID != "":
@@ -345,7 +357,14 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	case r.Connection != "":
 		rc.scope = "connection:" + r.Connection
 	}
+	if rc.scope != "" {
+		rc.scope = callerStateKey(id.stateAccountID, id.stateUserID, rc.scope)
+	}
 	return rc
+}
+
+func (rc *reqCtx) CallerKey(parts ...string) string {
+	return callerStateKey(rc.identity.stateAccountID, rc.identity.stateUserID, parts...)
 }
 
 func (rc *reqCtx) Started()          { rc.start = time.Now() }
@@ -385,7 +404,7 @@ func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, versio
 			previous, ok := rc.st.clients.get(key)
 			if !ok || rc.sequence > previous.sequence {
 				rc.st.clients.set(key, rememberedClient{
-					name: capID(client.Name), version: capID(client.Version), until: rc.received.Add(rc.opts.ClientSeenWindow), sequence: rc.sequence,
+					name: cleanClientText(client.Name), version: cleanClientText(client.Version), until: rc.received.Add(rc.opts.ClientSeenWindow), sequence: rc.sequence,
 				})
 			}
 			rc.st.Unlock()
@@ -398,7 +417,7 @@ func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, versio
 func (rc *reqCtx) clientSeen(client *mcpbridge.Client, caps []string) {
 	var name, title, version string
 	if client != nil {
-		name, title, version = capID(client.Name), capID(client.Title), capID(client.Version)
+		name, title, version = cleanClientText(client.Name), cleanClientText(client.Title), cleanClientText(client.Version)
 	}
 	user := rc.who.userID
 	if user == "" {
@@ -445,14 +464,31 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 	opts := rc.opts
 	t := &toolState{props: map[string]any{}}
 	rc.tool = t
-	rc.toolName = capID(name)
+	rc.rawToolName = name
+	rc.toolName = "unknown"
+	if rc.registeredTools != nil {
+		for _, tool := range rc.registeredTools {
+			if tool.Name == name {
+				t.schema, t.registered = tool.Schema, true
+				break
+			}
+		}
+	} else {
+		rc.st.Lock()
+		t.schema, t.registered = rc.st.toolSchemas.get(name)
+		rc.st.Unlock()
+	}
+	if t.registered {
+		rc.toolName = name
+	}
 	// A call without a tool name fails at the server; it is not reported.
-	t.skip = rc.toolName == ""
+	t.skip = name == ""
 	rc.st.Lock()
 	nativeCap := rc.st.nativeCapabilityTool
-	nativeContext, _ := rc.st.nativeContext.get(rc.toolName)
+	props, _ := t.schema["properties"].(map[string]any)
+	_, nativeContext := props[requestContext]
 	rc.st.Unlock()
-	if rc.toolName == capabilityTool && opts.capabilities != nil && !nativeCap {
+	if name == capabilityTool && opts.capabilities != nil && !nativeCap {
 		return false, true
 	}
 	if args != nil {
@@ -475,7 +511,8 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 			t.args[k] = x
 			keys = append(keys, k)
 		}
-		t.props["argument_keys"] = sortedNames(keys)
+		sort.Strings(keys)
+		t.props["argument_keys"] = registeredArgumentNames(t.schema, keys)
 	}
 	t.props["progress_requested"] = progress
 	t.answered = len(answers) > 0
@@ -506,7 +543,7 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 	}
 	s.last = start
 	if !t.answered {
-		key := rc.scope + "\x00" + argumentsHash(rc.toolName, t.args)
+		key := rc.scope + "\x00" + argumentsHash(rc.rawToolName, t.args)
 		n, _ := rc.st.retries.get(key)
 		t.props["retry_count"] = n
 		rc.st.retries.set(key, n+1)
@@ -644,12 +681,9 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 		extra["is_error_result"] = isError
 		if isError {
 			status = "error"
-			rc.st.Lock()
-			schema, _ := rc.st.toolSchemas.get(rc.toolName)
-			rc.st.Unlock()
 			kind := toolErrorType(o.ClassifiedError, result)
-			if invalid := invalidArguments(schema, t.args); len(invalid) > 0 {
-				extra["invalid_arguments"] = names(invalid)
+			if invalid := invalidArguments(t.schema, t.args); len(invalid) > 0 {
+				extra["invalid_arguments"] = registeredArgumentNames(t.schema, invalid)
 				if kind == "" {
 					kind = "invalid_request"
 				}
@@ -691,7 +725,7 @@ func (rc *reqCtx) finish(event, nameKey, name, status string, extra map[string]a
 	for k, v := range rc.base {
 		p[k] = v
 	}
-	p["request_id"] = rc.requestID
+	put(p, "request_id", rc.requestID)
 	p[nameKey] = name
 	p["tool_status"] = status
 	if _, cancel := extra["time_to_cancel_ms"]; !cancel {
@@ -740,7 +774,10 @@ func toolResultValue(result map[string]any) any {
 }
 
 func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
-	rule, ok := rc.opts.rules[rc.toolName]
+	if rc.tool == nil || !rc.tool.registered {
+		return
+	}
+	rule, ok := rc.opts.rules[rc.rawToolName]
 	if !ok {
 		return
 	}
@@ -759,7 +796,27 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 		if callback("ToolEventRule.Properties", func() error { out = rule.Properties(args, value); return nil }) {
 			for k, v := range out {
 				if allowToolEventProperty(k, rc.opts.CaptureContent) && !owned[propertyName(k)] {
-					p[k] = v
+					switch propertyName(k) {
+					case "argument_keys", "invalid_arguments":
+						var list []string
+						raw, _ := toJSONValue(v).([]any)
+						for _, item := range raw {
+							if name, ok := item.(string); ok {
+								list = append(list, name)
+							}
+						}
+						p[k] = registeredArgumentNames(rc.tool.schema, list)
+					case "request_id":
+						if id := safeRequestID(v); id != "" {
+							p[k] = id
+						}
+					case "client_title":
+						if value := cleanClientText(str(v)); value != "" {
+							p[k] = value
+						}
+					default:
+						p[k] = v
+					}
 				}
 			}
 		}
@@ -776,7 +833,7 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 
 func (rc *reqCtx) inputKey(key, requestState string) string {
 	if requestState != "" {
-		return strings.Join([]string{"state", requestState, key}, "\x00")
+		return callerStateKey(rc.identity.stateAccountID, rc.identity.stateUserID, "state", requestState, key)
 	}
 	whom := str(rc.base["mcp_session_id"])
 	if whom == "" {
@@ -786,7 +843,7 @@ func (rc *reqCtx) inputKey(key, requestState string) string {
 		}
 		whom = str(rc.base["client_name"]) + "\x00" + user
 	}
-	return strings.Join([]string{whom, rc.toolName, key}, "\x00")
+	return callerStateKey(rc.identity.stateAccountID, rc.identity.stateUserID, whom, rc.rawToolName, key)
 }
 
 func (rc *reqCtx) inputRequired(keys []string, requestState string) {
@@ -1055,3 +1112,69 @@ func toolErrorType(classified string, result map[string]any) string {
 		return ""
 	}
 }
+
+// Keys encode separate components so caller-supplied separators cannot collide.
+func callerStateKey(account, user string, parts ...string) string {
+	values := append([]string{account, user}, parts...)
+	b, _ := json.Marshal(values)
+	return string(b)
+}
+
+func cleanClientText(value string) string { return mcpbridge.CleanClientText(value) }
+
+var safeRPCString = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,64}$`)
+
+// Integer IDs keep their decimal string; unsafe ones are hashed so the required property stays
+// present without carrying client-controlled text.
+func safeRequestID(value any) string {
+	switch v := value.(type) {
+	case nil:
+		return ""
+	case string:
+		if v == "" { // no id
+			return ""
+		}
+		if safeRPCString.MatchString(v) {
+			return v
+		}
+		return hashedRequestID(v)
+	}
+	switch v := reflect.ValueOf(value); v.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(v.Int(), 10)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return strconv.FormatUint(v.Uint(), 10)
+	case reflect.Float32, reflect.Float64:
+		n := v.Float()
+		if !math.IsNaN(n) && !math.IsInf(n, 0) && math.Trunc(n) == n {
+			return strconv.FormatFloat(n, 'f', -1, 64)
+		}
+	}
+	b, err := json.Marshal(value)
+	if err != nil {
+		return ""
+	}
+	return hashedRequestID(string(b))
+}
+
+func hashedRequestID(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return "sha256:" + hex.EncodeToString(sum[:])[:16]
+}
+
+// Map before deduplication and the existing list limit, keeping first-seen order.
+func registeredArgumentNames(schema map[string]any, list []string) []string {
+	props, _ := schema["properties"].(map[string]any)
+	out := make([]string, 0, len(list))
+	for _, name := range list {
+		if _, ok := props[name]; !ok {
+			name = "unknown"
+		}
+		if !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out[:min(len(out), maxListItems)]
+}
+
+func cleanClient(client *mcpbridge.Client) *mcpbridge.Client { return mcpbridge.CleanClient(client) }

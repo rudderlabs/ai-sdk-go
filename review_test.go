@@ -101,7 +101,7 @@ func TestReviewSamplingToolBudget(t *testing.T) {
 			custom["padding"] = strings.Repeat("x", maxPropertiesBytes-propertiesBytes(p))
 			rule := ToolEventRule{Event: "searched", Properties: func(map[string]any, any) map[string]any { return custom }}
 			if mcp {
-				rc := &reqCtx{opts: &options{Options: Options{Analytics: r}, rules: map[string]ToolEventRule{"search": rule}}, base: base, toolName: "search", tool: &toolState{}}
+				rc := &reqCtx{opts: &options{Options: Options{Analytics: r}, rules: map[string]ToolEventRule{"search": rule}}, base: base, toolName: "search", rawToolName: "search", tool: &toolState{registered: true}}
 				rc.declaredEvent(nil, "success")
 			} else {
 				if err := Configure(WithEventRules(EventRules{Tools: map[string]ToolEventRule{"search": rule}})); err != nil {
