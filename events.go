@@ -130,7 +130,7 @@ func (w *wrapped) eventsBase(ctx context.Context, e EventsIdentity) (*options, w
 	if e.UserID != "" {
 		stateUser = e.UserID
 	}
-	return opts, who{userID: user, anonymousID: id.AnonymousID}, base, callerStateKey(stateAccount, stateUser)
+	return opts, who{userID: user, anonymousID: id.AnonymousID}, base, callerStateKey(stateAccount, stateUser, id.stateAnonymousID)
 }
 
 // TrackMCPEventSubscription records an MCP Events subscription change as
@@ -187,7 +187,7 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 	emit(opts.Analytics, "mcp_event_subscription_changed", whom, p)
 
 	// The raw ID: the capped one would merge subscriptions that differ only past the cap.
-	stateKey := callerStateKey(caller, "", change.SubscriptionID)
+	stateKey := callerStateKey(caller, "", "", change.SubscriptionID)
 	st := w.state()
 	st.Lock()
 	defer st.Unlock()

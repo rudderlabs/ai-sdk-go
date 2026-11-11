@@ -86,7 +86,7 @@ func TestProtocolVersionExactValues(t *testing.T) {
 				req.Meta = map[string]any{metaProtocolVersion: tc.meta}
 			}
 			if tc.fromSession {
-				req.ClientFor = func(string, string) (*mcpbridge.Client, string) { return nil, "" }
+				req.ClientFor = func(string, string, string) (*mcpbridge.Client, string) { return nil, "" }
 			}
 			rc := w.begin(req)
 			rc.ToolCall("list_destinations", nil, false, nil, "")
@@ -323,6 +323,57 @@ func TestPendingInputsAreScopedAndExpire(t *testing.T) {
 	}
 	if got := r.named("mcp_tool_called")[0].Properties["call_index"]; got != 1 {
 		t.Errorf("expired continuation kept its position: call_index = %v", got)
+	}
+}
+
+// Stateless callers in one account that differ only by anonymous id keep separate state.
+func TestAnonymousCallersKeepSeparateState(t *testing.T) {
+	s := workspaceServer("hardening-anon", nil)
+	r := wrap(t, s, Options{Identify: func(ctx context.Context, _ *auth.TokenInfo) (Identity, error) {
+		return ctx.Value(privacyIdentityKey{}).(Identity), nil
+	}})
+	w, _ := instances.get(s)
+	begin := func(anon, requestID string) *reqCtx {
+		ctx := context.WithValue(context.Background(), privacyIdentityKey{}, Identity{AccountID: "acct", AnonymousID: anon})
+		return w.begin(mcpbridge.Request{Ctx: ctx, RequestID: requestID})
+	}
+	answer := []mcpbridge.Answer{{Key: "k", Action: "accept"}}
+	a := begin("anon-a", "req-a")
+	a.ToolCall("list_destinations", nil, false, nil, "")
+	a.ToolDone(mcpbridge.Outcome{InputRequired: true, InputKeys: []string{"k"}})
+
+	b := begin("anon-b", "req-b")
+	b.ToolCall("list_destinations", nil, false, answer, "")
+	b.ToolDone(mcpbridge.Outcome{Result: map[string]any{}})
+
+	elicited := r.named("mcp_elicitation_completed")
+	if _, ok := elicited[0].Properties["duration_ms"]; ok || elicited[0].Properties["request_id"] == safeRequestID("req-a") {
+		t.Errorf("caller B consumed caller A's continuation: %v", elicited[0].Properties)
+	}
+}
+
+// A known user keeps one state key while the anonymous id changes.
+func TestKnownUserSharesStateAcrossAnonymousIDs(t *testing.T) {
+	s := workspaceServer("hardening-known-user", nil)
+	r := wrap(t, s, Options{Identify: func(ctx context.Context, _ *auth.TokenInfo) (Identity, error) {
+		return ctx.Value(privacyIdentityKey{}).(Identity), nil
+	}})
+	w, _ := instances.get(s)
+	client := &mcpbridge.Client{Name: "agent"}
+	for _, anon := range []string{"anon-a", "anon-b"} {
+		ctx := context.WithValue(context.Background(), privacyIdentityKey{}, Identity{UserID: "u1", AccountID: "acct", AnonymousID: anon})
+		rc := w.begin(mcpbridge.Request{Ctx: ctx, InitializeClient: client, Meta: map[string]any{metaInteractionID: "shared"}})
+		rc.Initialized(client, nil, "2025-06-18")
+		rc.ToolCall("list_destinations", nil, false, nil, "")
+		rc.ToolDone(mcpbridge.Outcome{Result: map[string]any{}})
+	}
+	if got := len(r.named("mcp_client_seen")); got != 1 {
+		t.Errorf("mcp_client_seen = %d, want 1", got)
+	}
+	for i, e := range r.named("mcp_tool_called") {
+		if e.Properties["call_index"] != i {
+			t.Errorf("call %d: call_index = %v, want %d", i, e.Properties["call_index"], i)
+		}
 	}
 }
 

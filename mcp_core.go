@@ -290,7 +290,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	st := stateFor(opts.name)
 	if r.ClientFor != nil {
 		var version string
-		r.Client, version = r.ClientFor(id.stateAccountID, id.stateUserID)
+		r.Client, version = r.ClientFor(id.stateAccountID, id.stateUserID, id.stateAnonymousID)
 		// Keep the HTTP header fallback when this caller has no negotiated version.
 		if version != "" {
 			r.ProtocolVersion = version
@@ -372,7 +372,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 }
 
 func (rc *reqCtx) CallerKey(parts ...string) string {
-	return callerStateKey(rc.identity.stateAccountID, rc.identity.stateUserID, parts...)
+	return callerStateKey(rc.identity.stateAccountID, rc.identity.stateUserID, rc.identity.stateAnonymousID, parts...)
 }
 
 func (rc *reqCtx) Started()          { rc.start = time.Now() }
@@ -427,11 +427,7 @@ func (rc *reqCtx) clientSeen(client *mcpbridge.Client, caps []string) {
 	if client != nil {
 		name, title, version = cleanClientText(client.Name), cleanClientText(client.Title), cleanClientText(client.Version)
 	}
-	user := rc.identity.stateUserID
-	if user == "" {
-		user = rc.identity.stateAnonymousID
-	}
-	key := callerStateKey(rc.identity.stateAccountID, user, name, rc.identity.OAuthClientID)
+	key := callerStateKey(rc.identity.stateAccountID, rc.identity.stateUserID, rc.identity.stateAnonymousID, name, rc.identity.OAuthClientID)
 	now := time.Now()
 	rc.st.Lock()
 	until, seen := rc.st.clientSeen.get(key)
@@ -1115,8 +1111,12 @@ func toolErrorType(classified string, result map[string]any) string {
 }
 
 // Keys encode separate components so caller-supplied separators cannot collide.
-func callerStateKey(account, user string, parts ...string) string {
-	values := append([]string{account, user}, parts...)
+// The anonymous id only separates callers that have no user id.
+func callerStateKey(account, user, anonymous string, parts ...string) string {
+	if user != "" {
+		anonymous = ""
+	}
+	values := append([]string{account, user, anonymous}, parts...)
 	b, _ := json.Marshal(values)
 	return string(b)
 }

@@ -231,11 +231,11 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	var info sessionInfo
 	if ss != nil {
 		info, _ = sessions.get(ss)
-		r.ClientFor = func(account, user string) (*mcpbridge.Client, string) {
+		r.ClientFor = func(account, user, anonymous string) (*mcpbridge.Client, string) {
 			var known sessionInfo
 			sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
 				if i.callers != nil {
-					known, _ = i.callers.get(callerStateKey(account, user))
+					known, _ = i.callers.get(callerStateKey(account, user, anonymous))
 				}
 				return i
 			})

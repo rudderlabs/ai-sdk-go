@@ -409,8 +409,11 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if key == "" {
 		key = r.Connection
 	}
-	r.ClientFor = func(account, user string) (*mcpbridge.Client, string) {
-		scoped, _ := json.Marshal([]string{account, user, key})
+	r.ClientFor = func(account, user, anonymous string) (*mcpbridge.Client, string) {
+		if user != "" {
+			anonymous = ""
+		}
+		scoped, _ := json.Marshal([]string{account, user, anonymous, key})
 		if info, ok := t.sessions.load(string(scoped)); ok && key != "" {
 			return info.client, info.version
 		}

@@ -34,7 +34,7 @@ type Request struct {
 	// Client is the client the session initialized with, if known.
 	Client *Client
 	// ClientFor resolves session details for the identified caller.
-	ClientFor func(account, user string) (*Client, string)
+	ClientFor func(account, user, anonymous string) (*Client, string)
 	// InitializeClient is the current initialize request's clientInfo.
 	InitializeClient *Client
 	// ProtocolVersion is the negotiated version, when the request's _meta has none.
