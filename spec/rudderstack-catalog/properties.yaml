@@ -676,11 +676,11 @@ spec:
     - id: auth_method
       name: auth_method
       type: string
-      description: How the client authenticated, for example oauth, api_key or none.
+      description: How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none).
     - id: oauth_client_id
       name: oauth_client_id
       type: string
-      description: The registered app behind the OAuth token.
+      description: The registered OAuth app behind the request's token, as on mcp_client_seen.
     - id: token_scopes
       name: token_scopes
       type: array
@@ -693,7 +693,7 @@ spec:
     - id: request_id
       name: request_id
       type: string
-      description: The JSON-RPC request ID.
+      description: "The JSON-RPC request id: integers as decimal strings, short safe strings as sent, anything else as sha256: plus 16 hex characters."
     - id: is_error_result
       name: is_error_result
       type: boolean
