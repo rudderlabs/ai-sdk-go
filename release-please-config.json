@@ -71,6 +71,26 @@
         {
           "type": "generic",
           "path": "version.go"
+        },
+        {
+          "type": "generic",
+          "path": "rudderopenai/go.mod"
+        },
+        {
+          "type": "generic",
+          "path": "rudderanthropic/go.mod"
+        },
+        {
+          "type": "generic",
+          "path": "ruddergenai/go.mod"
+        },
+        {
+          "type": "generic",
+          "path": "rudderbedrock/go.mod"
+        },
+        {
+          "type": "generic",
+          "path": "rudderotel/go.mod"
         }
       ],
       "exclude-paths": [
