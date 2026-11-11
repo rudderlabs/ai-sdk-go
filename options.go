@@ -100,7 +100,7 @@ type Options struct {
 	// ToolCallFromContext(ctx) exposes the current tool name and original arguments.
 	Identify func(ctx context.Context, token *auth.TokenInfo) (Identity, error)
 	// ClientInfo resolves client name and version only when initialize, per-call metadata
-	// and session state provide none. Panics are swallowed.
+	// and session state provide none, before remembered clients. Panics are swallowed.
 	ClientInfo func(ctx context.Context, token *auth.TokenInfo) (name, version string)
 	// ClassifyToolError classifies an isError result. Only spec MCP error categories are used;
 	// panics and other values fall back to status and argument validation.
@@ -110,7 +110,8 @@ type Options struct {
 	// RequestContext configures the optional request_context argument, off by default.
 	RequestContext RequestContextOptions
 	// ClientSeenWindow is the window in which a (client, OAuth client, user) is reported once
-	// by mcp_client_seen, per server name and process. Zero means 24 hours.
+	// by mcp_client_seen, per server name and process. Also sets remembered client expiry
+	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
 	// CaptureContent sends agent-written text: call_reason and capability_detail, masked and
 	// capped at 200 characters. Off by default.

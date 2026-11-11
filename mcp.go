@@ -23,11 +23,13 @@ import (
 var instances weakMap[mcp.Server, *wrapped]
 
 // sessionInfo is what the integration keeps per go-sdk session: the protocol version it
-// negotiated at initialize and, for stdio and in-memory connections, the ID that scopes its
-// call counters.
+// negotiated at successful initialize, the client, and, for stdio and in-memory connections,
+// the ID that scopes its call counters.
 type sessionInfo struct {
 	version    string
 	connection string
+	client     *mcpbridge.Client
+	sequence   uint64
 }
 
 var (
@@ -200,9 +202,7 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	var info sessionInfo
 	if ss != nil {
 		info, _ = sessions.get(ss)
-		if ip := ss.InitializeParams(); ip != nil && ip.ClientInfo != nil {
-			r.Client = &mcpbridge.Client{Name: ip.ClientInfo.Name, Title: ip.ClientInfo.Title, Version: ip.ClientInfo.Version}
-		}
+		r.Client = info.client
 		if r.SessionID == "" && !r.HTTP {
 			info = sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
 				if i.connection == "" {
@@ -284,12 +284,14 @@ func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
 	}
 }
 
-func rememberNegotiated(ss *mcp.ServerSession, version string) {
-	if ss == nil || version == "" {
+func rememberInitialized(ss *mcp.ServerSession, client *mcpbridge.Client, version string, sequence uint64) {
+	if ss == nil {
 		return
 	}
 	sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
-		i.version = version
+		if sequence > i.sequence {
+			i.version, i.client, i.sequence = version, client, sequence
+		}
 		return i
 	})
 }
@@ -376,7 +378,6 @@ func (w *wrapped) after(h *handling, res mcp.Result, err, ctxErr error) mcp.Resu
 	switch h.method {
 	case "initialize":
 		if r, ok := res.(*mcp.InitializeResult); ok && err == nil && r != nil {
-			rememberNegotiated(h.session, r.ProtocolVersion)
 			var client *mcpbridge.Client
 			var caps any
 			if h.init != nil {
@@ -385,6 +386,7 @@ func (w *wrapped) after(h *handling, res mcp.Result, err, ctxErr error) mcp.Resu
 				}
 				caps = h.init.Capabilities
 			}
+			rememberInitialized(h.session, client, r.ProtocolVersion, rc.sequence)
 			rc.Initialized(client, caps, r.ProtocolVersion)
 		}
 	case "tools/list":

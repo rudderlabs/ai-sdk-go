@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
@@ -75,14 +76,17 @@ func TestPerRequestServersKeepCounting(t *testing.T) {
 	r := newRecorder(t)
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		s := workspaceServer("per-request-mcp", nil)
-		if err := WrapMCPServer(s, Options{Analytics: r}); err != nil {
+		if err := WrapMCPServer(s, Options{Analytics: r, Identify: identifyFromToken}); err != nil {
 			t.Error(err)
 		}
 		return s
 	}, &mcp.StreamableHTTPOptions{Stateless: true})
-	ts := httptest.NewServer(handler)
+	verify := func(context.Context, string, *http.Request) (*auth.TokenInfo, error) {
+		return &auth.TokenInfo{UserID: "user", Expiration: time.Now().Add(time.Hour), Extra: map[string]any{"client_id": "app"}}, nil
+	}
+	ts := httptest.NewServer(auth.RequireBearerToken(verify, nil)(handler))
 	defer ts.Close()
-	cs, err := mcp.NewClient(testClientInfo, nil).Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: ts.URL, DisableStandaloneSSE: true}, nil)
+	cs, err := mcp.NewClient(testClientInfo, nil).Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: ts.URL, HTTPClient: &http.Client{Transport: bearer{}}, DisableStandaloneSSE: true}, &mcp.ClientSessionOptions{ProtocolVersion: "2025-06-18"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,6 +101,12 @@ func TestPerRequestServersKeepCounting(t *testing.T) {
 	for i, c := range calls {
 		if c.Properties["call_index"] != i || c.Properties["retry_count"] != i {
 			t.Errorf("call %d = %v", i, c.Properties)
+		}
+		if c.Properties["client_name"] != testClientInfo.Name || c.Properties["client_version"] != testClientInfo.Version || c.Properties["oauth_client_id"] != "app" || c.Properties["auth_method"] != "oauth" {
+			t.Errorf("call %d client identity = %v", i, c.Properties)
+		}
+		if _, ok := c.Properties["mcp_session_id"]; ok {
+			t.Errorf("stateless session = %v", c.Properties)
 		}
 	}
 	if got := len(r.named("mcp_client_seen")); got != 1 {
