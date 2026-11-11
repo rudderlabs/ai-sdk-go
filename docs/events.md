@@ -372,6 +372,30 @@ Opt-in with [`WithClassifier`](configuration.md#classifier-and-evaluator). After
 - Input: the prompt (`PromptText`, else the last user message of the request messages an integration kept), the answer (`EndOptions.ResponseText`, else the last successful call's answer text), the names of the tools called (never arguments or results) and earlier messages, within a 12,000-character budget that keeps the start and end of long text. The prompt fences the turn as untrusted data and asks for JSON from closed lists ([`ClassifierPrompt`](configuration.md#classifier-and-evaluator)). An interaction with neither prompt nor answer text is skipped with a warning.
 - Failures: a timeout (default 5 seconds), an error, a panic or an unparseable reply sends nothing and logs one warning per process. Up to 16 classifications and evaluations run at once and up to 1,000 wait; beyond that, work is dropped with a warning at most once a minute.
 
+### Send your own classification
+
+`TrackClassification` sends `ai_interaction_classified` for a classification your own pipeline made, for example a separate task after the answer. It works for any interaction ID, including errored, cancelled and finished ones, and needs no open interaction.
+
+```go
+rudderstackai.TrackClassification(ctx, rudderstackai.TrackClassificationOptions{
+	InteractionID:        interactionID,
+	ConversationID:       chatID,
+	Intent:               "refund_request",
+	Outcome:              "resolved",
+	Classifier:           rudderstackai.ClassifierModel, // default; or ClassifierCustom
+	ClassifierModel:      "claude-haiku-4-5",
+	ClassifierDurationMS: rudderstackai.Ptr(640.0),
+	ClassifierCostUSD:    rudderstackai.Ptr(0.0004),
+	UserID:               userID,
+})
+```
+
+- `InteractionID`, `ConversationID` (falls back to the context) and a non-empty `Intent` are required; without them nothing is sent and one warning is logged (separately for missing IDs and a missing `Intent`). `Outcome` is a string.
+- Labels follow the hook: an `Intent` outside the configured `ClassifierOptions.Intents` becomes `other` (kept as given with none configured); an `Outcome` outside the configured `Outcomes` (default `DefaultOutcomes`) becomes `unclear`.
+- `IntentSummary` is masked, cut to one sentence of at most 25 words and 280 characters, and withheld when it still matches a sensitive pattern.
+- `Classifier` is `model` unless `ClassifierCustom`; another value is replaced by `model` with one warning. `ClassifierDurationMS` (not negative, rounded to the nearest whole number) and `ClassifierCostUSD` (finite, not negative) are dropped with one warning when invalid. The cost is never added to the interaction's `total_cost_usd`.
+- Identity and context options match `TrackScore`: `UserID`/`AnonymousID`, `AccountID`, `OnBehalfOf`, `Feature`, `Surface`, `AgentVersion`, `Variant`, `Analytics` and `Context`; each falls back to the context of `WithValues`. `Trigger` has no context fallback: it is sent only when set to `TriggerUser` or `TriggerSystem`. `WithSampleRates` for `ai_interaction_classified` applies.
+
 ## ai_interaction_scored
 
 One event per score: from your evaluator after each successful answer, or from `TrackScore` for a score from elsewhere (a human review, an offline judge).
@@ -462,7 +486,7 @@ Client events for web and mobile SDKs, including additions since v0.4: [client-e
 ## Server fields added since v0.4
 
 These additions are part of AI events spec v0.4.0. Events carry specVersion `0.4.0`; the client schema remains v0.2.
-`InteractionOptions`, `TaskOptions`, `ContextValues`, `TrackActionOptions`, and `TrackScoreOptions`
+`InteractionOptions`, `TaskOptions`, `ContextValues`, `TrackActionOptions`, `TrackScoreOptions`, and `TrackClassificationOptions`
 accept `AgentVersion` and `Variant`. Use `EndOptions{Status: StatusBlocked, BlockReason: BlockPolicy}`
 for intentional declines, `SetConfidence(ConfidenceHigh)` for app confidence, and
 `RecordCompaction()` for context compactions. A human handoff is outcome `escalated` plus its declared

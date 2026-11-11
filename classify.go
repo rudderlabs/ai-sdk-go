@@ -313,8 +313,9 @@ func parseReply(text string) (ClassifyResult, bool) {
 }
 
 var (
-	whitespace = regexp.MustCompile(`\s+`)
-	sentence   = regexp.MustCompile(`^.*?[.!?](\s|$)`)
+	// JavaScript \s: also the vertical tab, no-break and other Unicode spaces, and the BOM.
+	whitespace = regexp.MustCompile(`[\t\n\v\f\r \x{00a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]+`)
+	sentence   = regexp.MustCompile(`^.*?[.!?]( |$)`)
 )
 
 // summaryOf: one sentence of at most 25 words and 280 code points, masked, withheld when it still
@@ -324,7 +325,7 @@ func summaryOf(raw string) string {
 	if !ok {
 		return ""
 	}
-	text := strings.TrimSpace(whitespace.ReplaceAllString(masked, " "))
+	text := strings.Trim(whitespace.ReplaceAllString(masked, " "), " ")
 	if m := sentence.FindStringSubmatchIndex(text); m != nil {
 		text = text[:m[2]]
 	}
@@ -334,7 +335,7 @@ func summaryOf(raw string) string {
 	if r := []rune(text); len(r) > summaryChars {
 		text = string(r[:summaryChars])
 	}
-	text = strings.TrimSpace(text)
+	text = strings.Trim(text, " ")
 	if text == "" || hasSensitive(text) {
 		return ""
 	}
@@ -468,6 +469,26 @@ func scheduleClassification(i *Interaction, snap turnSnapshot, c *classifierConf
 	return enqueue(func() { classify(i, turn, c) })
 }
 
+// normaliseLabels maps labels onto the classifier's closed lists: an intent outside Intents
+// becomes "other" (any intent is kept without Intents), an outcome outside Outcomes "unclear".
+// A nil c means no classifier is configured: the default outcomes.
+func normaliseLabels(c *classifierConfig, intent, outcome string) (string, string) {
+	outcomes := DefaultOutcomes
+	if c != nil {
+		outcomes = c.Outcomes
+		if intent != "" && c.Intents != nil && !slices.Contains(c.Intents, intent) {
+			intent = "other"
+		}
+	}
+	if intent == "" {
+		intent = "other"
+	}
+	if !slices.Contains(outcomes, outcome) {
+		outcome = "unclear"
+	}
+	return intent, outcome
+}
+
 func classify(i *Interaction, turn ClassifyTurn, c *classifierConfig) {
 	started := time.Now()
 	type outcome struct {
@@ -495,16 +516,7 @@ func classify(i *Interaction, turn ClassifyTurn, c *classifierConfig) {
 		return
 	}
 	p := map[string]any{}
-	intent := out.parsed.Intent
-	if intent == "" || (c.Intents != nil && !slices.Contains(c.Intents, intent)) {
-		intent = "other"
-	}
-	p["intent"] = intent
-	outcomeLabel := out.parsed.Outcome
-	if !slices.Contains(c.Outcomes, outcomeLabel) {
-		outcomeLabel = "unclear"
-	}
-	p["outcome"] = outcomeLabel
+	p["intent"], p["outcome"] = normaliseLabels(c, out.parsed.Intent, out.parsed.Outcome)
 	if c.Classify != nil || c.IntentSummary {
 		put(p, "intent_summary", summaryOf(out.parsed.IntentSummary))
 	}

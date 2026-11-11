@@ -238,6 +238,15 @@ err := rudderstackai.Configure(rudderstackai.WithClassifier(&rudderstackai.Class
 
 `intent` is `other` and `outcome` is `unclear` when the label is not in your lists, so both values are always possible, even with your own `Intents` and `Outcomes`. Calls outside any interaction are never classified; tasks only with `Classify` set. Input, limits and cost: [docs/events.md](docs/events.md#ai_interaction_classified).
 
+To send classifications from your own pipeline, for any interaction (failed ones too), call `TrackClassification` ([details](docs/events.md#send-your-own-classification)):
+
+```go
+rudderstackai.TrackClassification(ctx, rudderstackai.TrackClassificationOptions{
+	InteractionID: interactionID, ConversationID: chatID,
+	Intent: "refund_request", Outcome: "resolved", UserID: userID,
+})
+```
+
 ### Declared tool events
 
 ```go
@@ -287,7 +296,7 @@ An analytics-go client (v4.5.1, the minimum) sends its queue on `Flush`; a custo
 | `ai_user_prompt_created`                                | A user-triggered interaction starts (sent when its first model call starts)  |
 | `ai_response_received`                                  | The interaction ends: status, models, tokens, cost, latency, tool counts     |
 | `ai_user_action`                                        | `TrackAction`: feedback, copy, share, report, regenerate                     |
-| `ai_interaction_classified`                             | After a classified answer, with `intent` and `outcome`                       |
+| `ai_interaction_classified`                             | After a classified answer, with `intent` and `outcome`; or from `TrackClassification` |
 | `ai_interaction_scored`                                 | One per score: from your evaluator, or `TrackScore`                          |
 | `ai_llm_response_received`                              | One per model call, only with `WithLLMCallEvents(true)`                      |
 | Your declared tool events                               | One per call of a tool listed in `WithEventRules` (or MCP `Options.EventRules`) |

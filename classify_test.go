@@ -236,6 +236,14 @@ func TestParseReplyAndSummary(t *testing.T) {
 	if got := summaryOf(strings.Repeat("a", 400)); len(got) != summaryChars {
 		t.Fatalf("chars: %d", len(got))
 	}
+	for _, sep := range []string{"\u00a0", "\u2003", "\u3000", "\ufeff", "\v"} {
+		if got := summaryOf("One." + sep + "Two."); got != "One." {
+			t.Fatalf("sentence split on %q: %q", sep, got)
+		}
+	}
+	if got := summaryOf(strings.Repeat("w\u00a0", 40)); len(strings.Fields(got)) != summaryWords {
+		t.Fatalf("words over NBSP: %q", got)
+	}
 	if summaryOf("   ") != "" {
 		t.Fatal("blank summary")
 	}
