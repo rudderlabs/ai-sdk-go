@@ -129,6 +129,12 @@ spec:
       event: '#event:ai_llm_response_received'
       additional_properties: true
       properties:
+        - property: '#property:call_index'
+        - property: '#property:span_id'
+        - property: '#property:input_messages'
+        - property: '#property:input_truncated'
+        - property: '#property:output_text'
+        - property: '#property:output_tool_calls'
         - property: '#property:conversation_id'
           required: true
         - property: '#property:interaction_id'

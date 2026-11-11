@@ -676,11 +676,11 @@ spec:
     - id: auth_method
       name: auth_method
       type: string
-      description: How the client authenticated, for example oauth, api_key or none.
+      description: How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none).
     - id: oauth_client_id
       name: oauth_client_id
       type: string
-      description: The registered app behind the OAuth token.
+      description: The registered OAuth app behind the request's token, as on mcp_client_seen.
     - id: token_scopes
       name: token_scopes
       type: array
@@ -723,7 +723,7 @@ spec:
     - id: call_index
       name: call_index
       type: integer
-      description: Position of the call within its session, else its interaction.
+      description: Position of an MCP call within its session, else its interaction. Since v0.4 (SDK-6797), ai_llm_response_received uses the 1-based order within its interaction; always allowed, not content.
       config:
         minimum: 0
     - id: ms_since_previous_call
@@ -955,3 +955,52 @@ spec:
       description: Since v0.4. Parts the suggestion has, for output with several.
       config:
         minimum: 0
+
+    # Per-call content and shared OpenTelemetry GenAI message shapes
+    - id: span_id
+      name: span_id
+      type: string
+      description: Since v0.4 (SDK-6797). The span_id of this call's ai_otel_span when emitSpans is enabled; absent otherwise.
+    - id: input_messages
+      name: input_messages
+      type: array
+      item_type: '#custom-type:gen_ai_message'
+      description: Since v0.4 (SDK-6797). Opt-in. Treat as personal data. Only with both emitLlmCalls and captureContent. Full messages sent on this call (system prompt, history and tool results), in the OpenTelemetry GenAI gen_ai.input.messages shape; masked like prompt_text. Past the size cap, drop the oldest messages after the system prompt first.
+    - id: input_truncated
+      name: input_truncated
+      type: boolean
+      description: Since v0.4 (SDK-6797). Opt-in. Treat as personal data. Only with both emitLlmCalls and captureContent. True when input messages were dropped or shortened to fit the size cap.
+    - id: output_text
+      name: output_text
+      type: string
+      description: Since v0.4 (SDK-6797). Opt-in. Treat as personal data. Only with both emitLlmCalls and captureContent. This call's output text; masked like prompt_text.
+    - id: output_tool_calls
+      name: output_tool_calls
+      type: array
+      item_type: '#custom-type:gen_ai_tool_call'
+      description: Since v0.4 (SDK-6797). Opt-in. Treat as personal data. Only with both emitLlmCalls and captureContent. Tool calls requested by this call, using OpenTelemetry GenAI-compatible name and arguments keys; masked like prompt_text.
+    - id: role
+      name: role
+      type: string
+      description: Since v0.4 (SDK-6797). OpenTelemetry GenAI role field.
+    - id: type
+      name: type
+      type: string
+      description: Since v0.4 (SDK-6797). OpenTelemetry GenAI type field.
+    - id: name
+      name: name
+      type: string
+      description: Since v0.4 (SDK-6797). OpenTelemetry GenAI name field.
+    - id: parts
+      name: parts
+      type: array
+      item_type: '#custom-type:gen_ai_message_part'
+      description: Since v0.4 (SDK-6797). OpenTelemetry GenAI message parts.
+    - id: content
+      name: content
+      types: [array, boolean, integer, 'null', number, object, string]
+      description: Since v0.4 (SDK-6797). Opt-in. Treat as personal data. OpenTelemetry GenAI content; any JSON value, masked like prompt_text.
+    - id: arguments
+      name: arguments
+      types: [array, boolean, integer, 'null', number, object, string]
+      description: Since v0.4 (SDK-6797). Opt-in. Treat as personal data. OpenTelemetry GenAI arguments; any JSON value, masked like prompt_text.
