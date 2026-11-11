@@ -1,6 +1,6 @@
 module github.com/rudderlabs/ai-sdk-go
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/dlclark/regexp2 v1.12.0
