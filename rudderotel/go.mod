@@ -3,7 +3,7 @@ module github.com/rudderlabs/ai-sdk-go/rudderotel
 go 1.26.11
 
 require (
-	github.com/rudderlabs/ai-sdk-go v0.3.0
+	github.com/rudderlabs/ai-sdk-go v0.3.0 // x-release-please-version
 	github.com/rudderlabs/analytics-go/v4 v4.5.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	go.opentelemetry.io/otel v1.47.0
