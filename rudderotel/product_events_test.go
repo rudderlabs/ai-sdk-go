@@ -16,6 +16,15 @@ import (
 )
 
 func TestProductEventsConformance(t *testing.T) {
+	runProductEventsConformance(t, "../spec/fixtures/tracing-product-events-v0.1.json")
+}
+
+func TestSpanFirstWrapperSameResponseID(t *testing.T) {
+	runProductEventsConformance(t, "testdata/span-first-wrapper-same-response-id.json")
+}
+
+func runProductEventsConformance(t *testing.T, path string) {
+	t.Helper()
 	var fixtures struct {
 		Cases []struct {
 			Name   string
@@ -54,7 +63,7 @@ func TestProductEventsConformance(t *testing.T) {
 			Expected []object
 		}
 	}
-	loadCases(t, "../spec/fixtures/tracing-product-events-v0.1.json", &fixtures)
+	loadCases(t, path, &fixtures)
 	for _, c := range fixtures.Cases {
 		t.Run(c.Name, func(t *testing.T) {
 			hook.Reset()
