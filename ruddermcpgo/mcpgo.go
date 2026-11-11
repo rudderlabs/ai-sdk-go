@@ -54,7 +54,7 @@ type Options struct {
 	// exposes the current tool name and original arguments.
 	Identify func(ctx context.Context) (rudderstackai.Identity, error)
 	// ClientInfo resolves a client only when initialize, metadata and session state
-	// provide none. Panics are swallowed.
+	// provide none, before remembered clients. Panics are swallowed.
 	ClientInfo func(ctx context.Context) (name, version string)
 	// ClassifyToolError classifies isError results using spec MCP categories.
 	ClassifyToolError func(toolName string, result *mcp.CallToolResult) string
@@ -63,7 +63,8 @@ type Options struct {
 	// RequestContext configures the optional request_context argument, off by default.
 	RequestContext rudderstackai.RequestContextOptions
 	// ClientSeenWindow is the window in which a (client, OAuth client, user) is reported once
-	// by mcp_client_seen, per server name and process. Zero means 24 hours.
+	// by mcp_client_seen, per server name and process. Also sets remembered client expiry
+	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
 	// CaptureContent sends call_reason and capability_detail, masked and capped at 200
 	// characters. Off by default.
@@ -114,12 +115,14 @@ type tracked struct {
 	pending  sync.Mutex
 	byMsg    map[any]*call
 	byCtx    map[context.Context]*call
+	sequence atomic.Uint64
 	sessions sessions
 }
 
 type sessionInfo struct {
-	client  *mcpbridge.Client
-	version string
+	client   *mcpbridge.Client
+	version  string
+	sequence uint64
 }
 
 // call is one request between its hooks.
@@ -128,6 +131,8 @@ type call struct {
 	method     string
 	name       string
 	caps       any
+	client     *mcpbridge.Client
+	sequence   uint64
 	capability bool
 	classify   func(string, *mcp.CallToolResult) string
 }
@@ -318,6 +323,7 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if strings.HasPrefix(method, "notifications/") {
 		return
 	}
+	sequence := t.sequence.Add(1)
 	b, err := json.Marshal(message)
 	if err != nil {
 		return
@@ -335,11 +341,6 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	sessionID := ""
 	if session := server.ClientSessionFromContext(ctx); session != nil {
 		sessionID = session.SessionID()
-		if ci, ok := session.(server.SessionWithClientInfo); ok {
-			if info := ci.GetClientInfo(); info.Name != "" {
-				r.Client = &mcpbridge.Client{Name: info.Name, Version: info.Version}
-			}
-		}
 		if sessionID == "stdio" || (sessionID == "" && !r.HTTP) {
 			// One stdio connection per session object; its fixed ID is not a session ID.
 			r.Connection = fmt.Sprintf("%p", session)
@@ -366,7 +367,7 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if method == "initialize" {
 		r.InitializeClient = env.Params.ClientInfo
 	}
-	c := &call{c: t.srv.Begin(r), method: method, classify: t.opts.Load().ClassifyToolError}
+	c := &call{c: t.srv.Begin(r), method: method, sequence: sequence, classify: t.opts.Load().ClassifyToolError}
 	switch method {
 	case "tools/call":
 		c.name = env.Params.Name
@@ -377,9 +378,7 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 		c.name = env.Params.Name
 	case "initialize":
 		c.name, c.caps = key, env.Params.Capabilities
-		if env.Params.ClientInfo != nil {
-			t.remember(key, sessionInfo{client: env.Params.ClientInfo})
-		}
+		c.client = env.Params.ClientInfo
 	}
 	c.c.Started()
 	t.pending.Lock()
@@ -427,6 +426,9 @@ func (s *sessions) store(key string, info sessionInfo) {
 		s.order, s.items = list.New(), map[string]*list.Element{}
 	}
 	if e, ok := s.items[key]; ok {
+		if info.sequence < e.Value.(*sessionEntry).info.sequence {
+			return
+		}
 		s.order.Remove(e)
 	}
 	s.items[key] = s.order.PushBack(&sessionEntry{key, info})
@@ -532,13 +534,8 @@ func (t *tracked) succeeded(ctx context.Context, c *call, result any) {
 	switch c.method {
 	case "initialize":
 		version, _ := res["protocolVersion"].(string)
-		var client *mcpbridge.Client
-		if info, ok := t.sessions.load(c.name); ok && c.name != "" {
-			client = info.client
-			info.version = version
-			t.remember(c.name, info)
-		}
-		c.c.Initialized(client, c.caps, version)
+		t.remember(c.name, sessionInfo{client: c.client, version: version, sequence: c.sequence})
+		c.c.Initialized(c.client, c.caps, version)
 	case "tools/list":
 		if r, ok := result.(*mcp.ListToolsResult); ok && r != nil {
 			t.toolsList(c, r)

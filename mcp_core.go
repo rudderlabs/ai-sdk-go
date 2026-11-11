@@ -48,6 +48,7 @@ var owned = map[string]bool{
 	"sample_rate":    true,
 	"mcp_session_id": true, "server_name": true, "server_version": true, "account_id": true, "client_name": true,
 	"client_version": true, "protocol_version": true, "interaction_id": true, "trace_id": true,
+	"oauth_client_id": true, "auth_method": true,
 	"tool_name": true, "tool_status": true,
 }
 
@@ -100,6 +101,7 @@ type serverState struct {
 	resources            *boundedMap[string]
 	templates            *boundedMap[func(string) bool]
 	clientSeen           *boundedMap[time.Time]
+	clients              *keyedBoundedMap[rememberedClientKey, rememberedClient]
 	scopes               *boundedMap[*scopeState]
 	retries              *boundedMap[int]
 	inputRequired        *boundedMap[pendingInput]
@@ -110,6 +112,28 @@ type scopeState struct {
 	calls int
 	last  time.Time
 }
+
+type rememberedClient struct {
+	name, version string
+	until         time.Time
+	sequence      uint64
+}
+
+// The enclosing serverState supplies the server part of this composite key.
+type rememberedClientKey struct {
+	oauthClientID string
+	userID        string
+}
+
+func clientKey(id Identity) rememberedClientKey {
+	user := id.UserID
+	if user == "" {
+		user = id.AnonymousID
+	}
+	return rememberedClientKey{oauthClientID: id.OAuthClientID, userID: user}
+}
+
+var requestSequence atomic.Uint64
 
 type pendingInput struct {
 	start     time.Time
@@ -128,6 +152,7 @@ func newServerState() *serverState {
 		resources:     newBoundedMap[string](maxEntries),
 		templates:     newBoundedMap[func(string) bool](maxTemplates),
 		clientSeen:    newBoundedMap[time.Time](maxEntries),
+		clients:       newKeyedBoundedMap[rememberedClientKey, rememberedClient](maxEntries),
 		scopes:        newBoundedMap[*scopeState](maxEntries),
 		retries:       newBoundedMap[int](maxEntries),
 		inputRequired: newBoundedMap[pendingInput](maxEntries),
@@ -205,13 +230,16 @@ type reqCtx struct {
 	requestID string
 	// scope is "session:<id>", else "interaction:<caller's id>", else "connection:<id>"; empty
 	// when there is none.
-	scope    string
-	toolName string
-	client   *mcpbridge.Client
-	http     bool
-	meta     map[string]any
-	start    time.Time
-	tool     *toolState
+	scope            string
+	toolName         string
+	client           *mcpbridge.Client
+	initializeClient *mcpbridge.Client
+	received         time.Time
+	sequence         uint64
+	http             bool
+	meta             map[string]any
+	start            time.Time
+	tool             *toolState
 }
 
 // toolState is one tools/call between its start and its end.
@@ -240,9 +268,12 @@ func knownClient(client *mcpbridge.Client) bool {
 func (w *wrapped) Begin(r mcpbridge.Request) mcpbridge.Call { return w.begin(r) }
 
 func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
+	received := time.Now()
+	sequence := requestSequence.Add(1)
 	opts := w.opts.Load()
 	tok, _ := r.Token.(*auth.TokenInfo)
 	id := opts.identity(r.Ctx, tok)
+	st := stateFor(opts.name)
 	client := r.InitializeClient
 	if !knownClient(client) {
 		client = clientFromMeta(r.Meta[metaClientInfo])
@@ -256,12 +287,28 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 			client = &mcpbridge.Client{Name: name, Version: version}
 		}
 	}
+	// Remembered details enrich request events only; client-seen keeps its existing sources.
+	seenClient := client
+	if !knownClient(client) {
+		if key := clientKey(id); key != (rememberedClientKey{}) {
+			st.Lock()
+			// Keep expired entries' sequence until eviction so stale initializes cannot revive them.
+			if remembered, ok := st.clients.get(key); ok {
+				if remembered.until.After(time.Now()) {
+					client = &mcpbridge.Client{Name: remembered.name, Version: remembered.version}
+				}
+			}
+			st.Unlock()
+		}
+	}
 	interactionID, traceID := joinIDs(r.Meta)
 	base := map[string]any{}
 	put(base, "mcp_session_id", capID(r.SessionID))
 	base["server_name"] = opts.name
 	put(base, "server_version", opts.version)
 	put(base, "account_id", id.AccountID)
+	put(base, "oauth_client_id", id.OAuthClientID)
+	put(base, "auth_method", id.AuthMethod)
 	if client != nil {
 		put(base, "client_name", capID(client.Name))
 		put(base, "client_version", capID(client.Version))
@@ -277,8 +324,9 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	}
 	put(base, "trace_id", traceID)
 	rc := &reqCtx{
-		w: w, st: stateFor(opts.name), opts: opts, base: base, who: who{id.UserID, id.AnonymousID}, identity: id,
-		client: client, requestID: capID(r.RequestID), http: r.HTTP, meta: map[string]any{}, start: time.Now(),
+		w: w, st: st, opts: opts, base: base, who: who{id.UserID, id.AnonymousID}, identity: id,
+		client: seenClient, requestID: capID(r.RequestID), http: r.HTTP, meta: map[string]any{}, start: time.Now(),
+		initializeClient: r.InitializeClient, received: received, sequence: sequence,
 	}
 	// A copy: the SDK may remove the protocol keys from _meta while it handles the request.
 	for _, k := range []string{metaProtocolVersion, metaClientInfo, metaClientCapabilities} {
@@ -324,10 +372,26 @@ func (rc *reqCtx) Succeeded(method string, discoverVersions []string) {
 
 // Initialized reports a successful initialize.
 func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, version string) {
+	if knownClient(rc.initializeClient) {
+		client = rc.initializeClient
+	}
 	put(rc.base, "protocol_version", capLabel(version))
 	if rc.client == nil {
 		rc.client = client
 	}
+	if knownClient(client) {
+		if key := clientKey(rc.identity); key != (rememberedClientKey{}) {
+			rc.st.Lock()
+			previous, ok := rc.st.clients.get(key)
+			if !ok || rc.sequence > previous.sequence {
+				rc.st.clients.set(key, rememberedClient{
+					name: capID(client.Name), version: capID(client.Version), until: rc.received.Add(rc.opts.ClientSeenWindow), sequence: rc.sequence,
+				})
+			}
+			rc.st.Unlock()
+		}
+	}
+
 	rc.clientSeen(rc.client, capabilityNames(capabilities))
 }
 

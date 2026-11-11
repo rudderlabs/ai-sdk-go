@@ -422,40 +422,47 @@ func closedList(values []string) []string {
 }
 
 // boundedMap forgets its least recently set entries past max. Not safe for concurrent use.
-type boundedMap[V any] struct {
+type boundedMap[V any] = keyedBoundedMap[string, V]
+
+// keyedBoundedMap supports unambiguous comparable composite keys.
+type keyedBoundedMap[K comparable, V any] struct {
 	max   int
 	order *list.List
-	items map[string]*list.Element
+	items map[K]*list.Element
 	// evicted, when set, sees each value dropped for the cap.
 	evicted func(V)
 }
 
-type boundedEntry[V any] struct {
-	key   string
+type boundedEntry[K comparable, V any] struct {
+	key   K
 	value V
 }
 
 func newBoundedMap[V any](limit int) *boundedMap[V] {
-	return &boundedMap[V]{max: limit, order: list.New(), items: map[string]*list.Element{}}
+	return newKeyedBoundedMap[string, V](limit)
 }
 
-func (m *boundedMap[V]) get(k string) (V, bool) {
+func newKeyedBoundedMap[K comparable, V any](limit int) *keyedBoundedMap[K, V] {
+	return &keyedBoundedMap[K, V]{max: limit, order: list.New(), items: map[K]*list.Element{}}
+}
+
+func (m *keyedBoundedMap[K, V]) get(k K) (V, bool) {
 	if e, ok := m.items[k]; ok {
-		return e.Value.(*boundedEntry[V]).value, true
+		return e.Value.(*boundedEntry[K, V]).value, true
 	}
 	var zero V
 	return zero, false
 }
 
-func (m *boundedMap[V]) set(k string, v V) {
+func (m *keyedBoundedMap[K, V]) set(k K, v V) {
 	if e, ok := m.items[k]; ok {
 		m.order.Remove(e)
 	}
-	m.items[k] = m.order.PushBack(&boundedEntry[V]{key: k, value: v})
+	m.items[k] = m.order.PushBack(&boundedEntry[K, V]{key: k, value: v})
 	for m.order.Len() > m.max {
 		oldest := m.order.Front()
 		m.order.Remove(oldest)
-		e := oldest.Value.(*boundedEntry[V])
+		e := oldest.Value.(*boundedEntry[K, V])
 		delete(m.items, e.key)
 		if m.evicted != nil {
 			m.evicted(e.value)
@@ -464,7 +471,7 @@ func (m *boundedMap[V]) set(k string, v V) {
 	}
 }
 
-func (m *boundedMap[V]) remove(k string) {
+func (m *keyedBoundedMap[K, V]) remove(k K) {
 	if e, ok := m.items[k]; ok {
 		m.order.Remove(e)
 		delete(m.items, k)
@@ -472,18 +479,18 @@ func (m *boundedMap[V]) remove(k string) {
 }
 
 // each calls f for every entry, least recently set first, until f returns false.
-func (m *boundedMap[V]) each(f func(k string, v V) bool) {
+func (m *keyedBoundedMap[K, V]) each(f func(k K, v V) bool) {
 	for e := m.order.Front(); e != nil; e = e.Next() {
-		be := e.Value.(*boundedEntry[V])
+		be := e.Value.(*boundedEntry[K, V])
 		if !f(be.key, be.value) {
 			return
 		}
 	}
 }
 
-func (m *boundedMap[V]) size() int { return m.order.Len() }
+func (m *keyedBoundedMap[K, V]) size() int { return m.order.Len() }
 
-func (m *boundedMap[V]) clear() {
+func (m *keyedBoundedMap[K, V]) clear() {
 	m.order.Init()
-	m.items = map[string]*list.Element{}
+	m.items = map[K]*list.Element{}
 }

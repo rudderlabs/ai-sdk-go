@@ -147,8 +147,8 @@ func expectEvents(msgs []dataplane.Message, g grant, sessionID string) error {
 		if err := harness.Fields("mcp_tool_called", harness.Find(byEvent["mcp_tool_called"], "call_index", i), map[string]any{
 			"tool_name": "list_sources", "tool_status": "success", "account_id": account, "mcp_session_id": sessionID,
 			"client_name": clientName(g), "call_index": i, "retry_count": i,
-			// Only mcp_client_seen carries the OAuth client and scopes.
-			"oauth_client_id": harness.Absent, "token_scopes": harness.Absent,
+			// Request events carry the OAuth client and auth method; scopes stay on mcp_client_seen.
+			"oauth_client_id": g.info.Extra["client_id"], "auth_method": "oauth", "token_scopes": harness.Absent,
 		}); err != nil {
 			return err
 		}
