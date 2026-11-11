@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	analytics "github.com/rudderlabs/analytics-go/v4"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -284,6 +285,16 @@ func strconvBool(v bool) string {
 	return "false"
 }
 
+type setupCleanupProcessor struct {
+	*tracetest.SpanRecorder
+	stopped bool
+}
+
+func (p *setupCleanupProcessor) Shutdown(context.Context) error {
+	p.stopped = true
+	return nil
+}
+
 func TestRegisterTracing(t *testing.T) {
 	if mode := os.Getenv("RUDDEROTEL_SETUP_TEST"); mode != "" {
 		hook.Reset()
@@ -298,9 +309,32 @@ func TestRegisterTracing(t *testing.T) {
 			_ = otel.Tracer("before-registration")
 		}
 		current := otel.GetTracerProvider()
-		provider, err := RegisterTracing(Options{Analytics: r, Simple: true})
+		if mode == "during-construction" {
+			current = noop.NewTracerProvider()
+			remember := hook.Tracing.RememberClient
+			hook.Tracing.RememberClient = func(client analytics.Client) {
+				remember(client)
+				otel.SetTracerProvider(current)
+			}
+		}
+		setProvider := otel.SetTracerProvider
+		if mode == "after-set" {
+			current = noop.NewTracerProvider()
+			setProvider = func(provider trace.TracerProvider) {
+				otel.SetTracerProvider(provider)
+				otel.SetTracerProvider(current)
+			}
+		}
+		cleanup := &setupCleanupProcessor{SpanRecorder: tracetest.NewSpanRecorder()}
+		var provider *sdktrace.TracerProvider
+		var err error
+		if mode == "after-set" {
+			provider, err = registerTracing(Options{Analytics: r, Simple: true}, setProvider, sdktrace.WithSpanProcessor(cleanup))
+		} else {
+			provider, err = RegisterTracing(Options{Analytics: r, Simple: true}, sdktrace.WithSpanProcessor(cleanup))
+		}
 		if mode != "default" {
-			if err == nil || otel.GetTracerProvider() != current {
+			if err == nil || provider != nil || otel.GetTracerProvider() != current || !cleanup.stopped {
 				t.Fatal("replaced an existing provider")
 			}
 			return
@@ -328,7 +362,7 @@ func TestRegisterTracing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, mode := range []string{"default", "noop", "sdk"} {
+	for _, mode := range []string{"default", "noop", "sdk", "during-construction", "after-set"} {
 		t.Run(mode, func(t *testing.T) {
 			cmd := exec.Command(executable, "-test.run=^TestRegisterTracing$")
 			cmd.Env = append(os.Environ(), "RUDDEROTEL_SETUP_TEST="+mode)

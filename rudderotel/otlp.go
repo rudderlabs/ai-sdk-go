@@ -113,7 +113,7 @@ func spanToOTLP(s sdktrace.ReadOnlySpan, capture bool) (object, []object) {
 	encoded["events"] = events
 	links := []object{}
 	for _, l := range s.Links() {
-		link := object{"traceId": l.SpanContext.TraceID().String(), "spanId": l.SpanContext.SpanID().String(), "attributes": keyValues(l.Attributes)}
+		link := object{"traceId": l.SpanContext.TraceID().String(), "spanId": l.SpanContext.SpanID().String(), "attributes": keyValues(cleanAttributes(l.Attributes, capture, false))}
 		if v := l.SpanContext.TraceState().String(); v != "" {
 			link["traceState"] = v
 		}
@@ -127,13 +127,13 @@ func spanToOTLP(s sdktrace.ReadOnlySpan, capture bool) (object, []object) {
 		scopeJSON["version"] = scope.Version
 	}
 	if scope.Attributes.Len() > 0 {
-		scopeJSON["attributes"] = keyValues(scope.Attributes.ToSlice())
+		scopeJSON["attributes"] = keyValues(cleanAttributes(scope.Attributes.ToSlice(), capture, false))
 	}
 	ss := object{"scope": scopeJSON, "spans": []object{encoded}}
 	if scope.SchemaURL != "" {
 		ss["schemaUrl"] = scope.SchemaURL
 	}
-	resourceAttrs := keyValues(s.Resource().Attributes())
+	resourceAttrs := keyValues(cleanAttributes(s.Resource().Attributes(), capture, false))
 	rs := object{"resource": object{"attributes": resourceAttrs}, "scopeSpans": []object{ss}}
 	if s.Resource().SchemaURL() != "" {
 		rs["schemaUrl"] = s.Resource().SchemaURL()

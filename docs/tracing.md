@@ -86,7 +86,7 @@ count as product calls while failing the default export filter, matching Node an
 
 ## Identity and joins
 
-OnStart adds missing `user.id`, `rudderstack.anonymous_id`, `gen_ai.conversation.id`, and
+OnStart adds missing `user.id`, `session.id`, `rudderstack.anonymous_id`, `gen_ai.conversation.id`, and
 `rudderstack.interaction_id` from the active interaction; outside an interaction, it uses
 `WithValues` and its cookie identity, including `session.id`. Instrumentation's own attributes
 win. Parent `user.id` / `session.id` fill missing context values. System runs (`RunTask`) inherit
@@ -162,8 +162,12 @@ With capture enabled, content strings and string arrays, and all string attribut
 events, pass through the core's redaction and custom hook. Withheld values are removed; arrays
 are removed if any element is withheld. Header attributes (`ai.request.headers.*`,
 `http.request.header.*`, `http.response.header.*`), client addresses, user agents, and full
-URL/path/query attributes are always stripped from span/event attributes. `http.route` and
-identity attributes remain. `ai.response.providerMetadata` counts as content.
+URL/path/query attributes are always stripped from span, resource, scope, link, and event attributes.
+`http.route` and identity attributes remain. `ai.response.providerMetadata` counts as content.
+
+Content stripping and redaction apply to span, resource, scope, link, and event attributes.
+Go deliberately goes beyond Node/Python parity here: their resource, scope, and link attributes
+currently bypass these privacy protections.
 
 Oversized events repeatedly shorten the longest OTLP attribute string in resource, span, event,
 then link traversal order. Cuts preserve UTF-8, retain at least 256 bytes before the
