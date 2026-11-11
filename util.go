@@ -146,30 +146,35 @@ func argumentsHash(tool string, args map[string]any) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// capabilityNames lists the keys of a declared capabilities object, sorted. A null value is
-// not a declared capability; none declared is nil.
+// knownCapabilities are the MCP client capability names; any other name is client-controlled
+// text and is reported as "unknown".
+var knownCapabilities = set("roots", "sampling", "elicitation", "tasks", "experimental", "extensions")
+
+// capabilityNames lists the declared capabilities, sorted by code point, unrecognized names
+// replaced by "unknown" and deduplicated. A null value is not a declared capability; none
+// declared is nil.
 func capabilityNames(v any) []string {
 	m, ok := toJSONValue(v).(map[string]any)
 	if !ok {
 		return nil
 	}
-	out := make([]string, 0, len(m))
+	declared := make([]string, 0, len(m))
 	for k, c := range m {
 		if c != nil {
+			declared = append(declared, k)
+		}
+	}
+	slices.Sort(declared)
+	var out []string
+	for _, k := range declared {
+		if !knownCapabilities[k] {
+			k = "unknown"
+		}
+		if !slices.Contains(out, k) {
 			out = append(out, k)
 		}
 	}
-	if len(out) == 0 {
-		return nil
-	}
-	return sortedNames(out)
-}
-
-// sortedNames sorts names by code point before capping them with names, so every SDK sends the
-// same list whatever the client's order.
-func sortedNames(list []string) []string {
-	sort.Strings(list)
-	return names(list)
+	return out[:min(len(out), maxListItems)]
 }
 
 // names keeps the first maxListItems names, each capped at maxLabelLength code points.

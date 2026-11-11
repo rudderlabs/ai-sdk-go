@@ -22,6 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 	"weak"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -106,8 +107,11 @@ func (o Options) root() rudderstackai.Options {
 
 // tracked is one wrapped mcp-go server.
 type tracked struct {
-	srv  mcpbridge.Server
-	opts atomic.Pointer[Options]
+	// tools and prompts read the registry as it is now, for one session.
+	tools   func(server.ClientSession) []mcpbridge.Tool
+	prompts func() []string
+	srv     mcpbridge.Server
+	opts    atomic.Pointer[Options]
 	// capability is the request_capability tool this integration registered, if any.
 	mu         sync.Mutex
 	capability *mcp.Tool
@@ -162,7 +166,6 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 			return err
 		}
 		t.opts.Store(&opts)
-		t.rememberTools(s)
 		t.syncCapability(s)
 		return nil
 	}
@@ -171,10 +174,21 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 	if err != nil {
 		return err
 	}
-	t := &tracked{srv: srv, byMsg: map[any]*call{}, byCtx: map[context.Context]*call{}}
-	t.opts.Store(&opts)
-	t.rememberTools(s)
 	wp := weak.Make(s)
+	t := &tracked{srv: srv, byMsg: map[any]*call{}, byCtx: map[context.Context]*call{}}
+	t.tools = func(session server.ClientSession) []mcpbridge.Tool {
+		if s := wp.Value(); s != nil {
+			return t.snapshotTools(s, session)
+		}
+		return []mcpbridge.Tool{}
+	}
+	t.prompts = func() []string {
+		if s := wp.Value(); s != nil {
+			return snapshotPrompts(s)
+		}
+		return []string{}
+	}
+	t.opts.Store(&opts)
 	instances.Lock()
 	instances.m[wp] = t
 	instances.Unlock()
@@ -196,24 +210,67 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 	return nil
 }
 
-// mcp-go exposes its registered tools, but has no tool-registration hook.
-func (t *tracked) rememberTools(s *server.MCPServer) {
+// snapshotTools lists what the server would serve this session now: the global tools, task
+// tools (no public getter, so read by reflection like the go-sdk registry) and the session's
+// own tools, which override a global tool of the same name and its schema. The integration's
+// own request_capability is left out.
+func (t *tracked) snapshotTools(s *server.MCPServer, session server.ClientSession) (tools []mcpbridge.Tool) {
+	tools = []mcpbridge.Tool{}
 	safely(func() {
-		var tools []mcpbridge.Tool
-		own := t.ownCapability()
-		for _, entry := range s.ListTools() {
-			if own != nil && entry.Tool.Name == capabilityTool {
-				continue
-			}
-			var tool map[string]any
-			if b, err := json.Marshal(entry.Tool); err == nil {
-				_ = json.Unmarshal(b, &tool)
-			}
-			schema, _ := tool["inputSchema"].(map[string]any)
-			tools = append(tools, mcpbridge.Tool{Name: entry.Tool.Name, Schema: schema})
+		byName := map[string]mcp.Tool{}
+		for name, entry := range s.ListTools() {
+			byName[name] = entry.Tool
 		}
-		t.srv.RememberTools(tools)
+		for _, tool := range taskTools(s) {
+			byName[tool.Name] = tool
+		}
+		if withTools, ok := session.(server.SessionWithTools); ok {
+			for name, entry := range withTools.GetSessionTools() {
+				byName[name] = entry.Tool
+			}
+		}
+		if t.ownCapability() != nil {
+			delete(byName, capabilityTool)
+		}
+		for _, tool := range byName {
+			var m map[string]any
+			if b, err := json.Marshal(tool); err == nil {
+				_ = json.Unmarshal(b, &m)
+			}
+			schema, _ := m["inputSchema"].(map[string]any)
+			tools = append(tools, mcpbridge.Tool{Name: tool.Name, Schema: schema})
+		}
 	})
+	return tools
+}
+
+// taskTools reads mcp-go's task tool registry under its mutex; fail-open if the layout changes.
+func taskTools(s *server.MCPServer) (tools []mcp.Tool) {
+	safely(func() {
+		v := reflect.ValueOf(s).Elem()
+		mu, registry := v.FieldByName("toolsMu"), v.FieldByName("taskTools")
+		if !mu.IsValid() || mu.Type() != reflect.TypeFor[sync.RWMutex]() ||
+			!registry.IsValid() || registry.Type() != reflect.TypeFor[map[string]server.ServerTaskTool]() {
+			return
+		}
+		lock := (*sync.RWMutex)(unsafe.Pointer(mu.UnsafeAddr()))
+		lock.RLock()
+		defer lock.RUnlock()
+		for _, entry := range reflect.NewAt(registry.Type(), unsafe.Pointer(registry.UnsafeAddr())).Elem().Interface().(map[string]server.ServerTaskTool) {
+			tools = append(tools, entry.Tool)
+		}
+	})
+	return tools
+}
+
+func snapshotPrompts(s *server.MCPServer) (names []string) {
+	names = []string{}
+	safely(func() {
+		for name := range s.ListPrompts() {
+			names = append(names, name)
+		}
+	})
+	return names
 }
 
 // serverImpl reads the name and version the server was created with; mcp-go has no getter.
@@ -304,17 +361,6 @@ func headerOf(message any) http.Header {
 	return h
 }
 
-func requestID(id any) string {
-	switch v := id.(type) {
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	case nil:
-		return ""
-	default:
-		return fmt.Sprint(v)
-	}
-}
-
 func (t *tracked) beforeAny(ctx context.Context, id any, method mcp.MCPMethod, message any) {
 	safely(func() { t.before(ctx, id, string(method), message) })
 }
@@ -337,9 +383,17 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if method == "tools/call" {
 		identityCtx = mcpbridge.WithToolCall(ctx, env.Params.Name, env.Params.Arguments)
 	}
-	r := mcpbridge.Request{Ctx: identityCtx, Meta: env.Params.Meta, RequestID: requestID(id), HTTP: len(header) > 0}
+	r := mcpbridge.Request{Ctx: identityCtx, Meta: env.Params.Meta, RequestID: id, HTTP: len(header) > 0}
+	session := server.ClientSessionFromContext(ctx)
+	// Read per request: names come from the registry as it is now, never from earlier lists.
+	if (method == "tools/call" || method == "tools/list") && t.tools != nil {
+		r.RegisteredTools = t.tools(session)
+	}
+	if method == "prompts/get" && t.prompts != nil {
+		r.RegisteredPrompts = t.prompts()
+	}
 	sessionID := ""
-	if session := server.ClientSessionFromContext(ctx); session != nil {
+	if session != nil {
 		sessionID = session.SessionID()
 		if sessionID == "stdio" || (sessionID == "" && !r.HTTP) {
 			// One stdio connection per session object; its fixed ID is not a session ID.
@@ -355,11 +409,15 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if key == "" {
 		key = r.Connection
 	}
-	if info, ok := t.sessions.load(key); ok && key != "" {
-		if r.Client == nil {
-			r.Client = info.client
+	r.ClientFor = func(account, user, anonymous string) (*mcpbridge.Client, string) {
+		if user != "" {
+			anonymous = ""
 		}
-		r.ProtocolVersion = info.version
+		scoped, _ := json.Marshal([]string{account, user, anonymous, key})
+		if info, ok := t.sessions.load(string(scoped)); ok && key != "" {
+			return info.client, info.version
+		}
+		return nil, r.ProtocolVersion
 	}
 	if r.ProtocolVersion == "" && r.HTTP {
 		r.ProtocolVersion = header.Get("Mcp-Protocol-Version")
@@ -375,9 +433,9 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	case "resources/read":
 		c.name = c.c.ResourceName(env.Params.URI)
 	case "prompts/get":
-		c.name = env.Params.Name
+		c.name = c.c.PromptName(env.Params.Name)
 	case "initialize":
-		c.name, c.caps = key, env.Params.Capabilities
+		c.name, c.caps = c.c.CallerKey(key), env.Params.Capabilities
 		c.client = env.Params.ClientInfo
 	}
 	c.c.Started()
@@ -534,7 +592,7 @@ func (t *tracked) succeeded(ctx context.Context, c *call, result any) {
 	switch c.method {
 	case "initialize":
 		version, _ := res["protocolVersion"].(string)
-		t.remember(c.name, sessionInfo{client: c.client, version: version, sequence: c.sequence})
+		t.remember(c.name, sessionInfo{client: mcpbridge.CleanClient(c.client), version: version, sequence: c.sequence})
 		c.c.Initialized(c.client, c.caps, version)
 	case "tools/list":
 		if r, ok := result.(*mcp.ListToolsResult); ok && r != nil {

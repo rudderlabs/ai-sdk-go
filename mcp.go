@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 	"unsafe"
+	"weak"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -30,6 +31,7 @@ type sessionInfo struct {
 	connection string
 	client     *mcpbridge.Client
 	sequence   uint64
+	callers    *boundedMap[sessionInfo]
 }
 
 var (
@@ -60,29 +62,57 @@ func WrapMCPServer(server *mcp.Server, opts Options) error {
 	if w, ok := instances.get(server); ok {
 		n.resolveName(w.opts.Load().reflectedName, w.opts.Load().version)
 		w.opts.Store(n)
-		w.RememberTools(registeredTools(server))
 		return nil
 	}
 	n.resolveName(serverImpl(server))
-	w := &wrapped{}
+	wp := weak.Make(server)
+	w := &wrapped{tools: func() []mcpbridge.Tool {
+		if s := wp.Value(); s != nil {
+			return registeredTools(s)
+		}
+		return []mcpbridge.Tool{}
+	}, prompts: func() []string {
+		if s := wp.Value(); s != nil {
+			return registeredPrompts(s)
+		}
+		return []string{}
+	}}
 	w.opts.Store(n)
-	w.RememberTools(registeredTools(server))
 	instances.update(server, func(*wrapped, bool) *wrapped { return w })
 	server.AddReceivingMiddleware(w.receiving)
 	server.AddSendingMiddleware(w.sending)
 	return nil
 }
 
-// registeredTools snapshots go-sdk v1.8.0's registry under its mutex. The SDK has
-// neither a public tool getter nor a registration hook. Reflection confines this
-// dependency on its internals to one fail-open reader; tools/list still refreshes
-// schemas if a future SDK changes the layout.
+// registeredTools snapshots go-sdk v1.8.0's tool registry; see registered.
 func registeredTools(s *mcp.Server) (tools []mcpbridge.Tool) {
-	var registered []*mcp.Tool
+	items := registered[mcp.Tool](s, "tools", "tool")
+	// Marshal outside the SDK lock: a schema can provide its own MarshalJSON.
+	safely(func() {
+		for _, tool := range items {
+			schema, _ := toJSONValue(tool.InputSchema).(map[string]any)
+			tools = append(tools, mcpbridge.Tool{Name: tool.Name, Schema: schema})
+		}
+	})
+	return tools
+}
+
+// registeredPrompts lists the names in go-sdk v1.8.0's prompt registry.
+func registeredPrompts(s *mcp.Server) (names []string) {
+	for _, p := range registered[mcp.Prompt](s, "prompts", "prompt") {
+		names = append(names, p.Name)
+	}
+	return names
+}
+
+// registered snapshots one of go-sdk v1.8.0's feature registries under its mutex. The SDK has
+// neither a public getter nor a registration hook. Reflection confines this dependency on its
+// internals to one fail-open reader: a changed layout reports no names, so names are unknown.
+func registered[T any](s *mcp.Server, registryField, itemField string) (items []*T) {
 	safely(func() {
 		v := reflect.ValueOf(s).Elem()
 		muField := v.FieldByName("mu")
-		registry := v.FieldByName("tools")
+		registry := v.FieldByName(registryField)
 		if !muField.IsValid() || muField.Type() != reflect.TypeFor[sync.Mutex]() ||
 			!registry.IsValid() || registry.Kind() != reflect.Pointer || registry.IsNil() {
 			return
@@ -99,22 +129,14 @@ func registeredTools(s *mcp.Server) (tools []mcpbridge.Tool) {
 			if entry.Kind() != reflect.Pointer || entry.IsNil() {
 				continue
 			}
-			field := entry.Elem().FieldByName("tool")
-			if !field.IsValid() || field.Type() != reflect.TypeFor[*mcp.Tool]() || field.IsNil() {
+			field := entry.Elem().FieldByName(itemField)
+			if !field.IsValid() || field.Type() != reflect.TypeFor[*T]() || field.IsNil() {
 				continue
 			}
-			tool := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface().(*mcp.Tool)
-			registered = append(registered, tool)
+			items = append(items, reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface().(*T))
 		}
 	})
-	// Marshal outside the SDK lock: a schema can provide its own MarshalJSON.
-	safely(func() {
-		for _, tool := range registered {
-			schema, _ := toJSONValue(tool.InputSchema).(map[string]any)
-			tools = append(tools, mcpbridge.Tool{Name: tool.Name, Schema: schema})
-		}
-	})
-	return tools
+	return items
 }
 
 // serverImpl reads the name and version the server was created with; the SDK has no getter.
@@ -194,6 +216,13 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 		ctx = mcpbridge.WithToolCall(ctx, tool.Params.Name, tool.Params.Arguments)
 	}
 	r := mcpbridge.Request{Ctx: ctx, Meta: metaOf(params), RequestID: requestIDOf(ctx)}
+	// Read per request: names come from the registry as it is now, never from earlier lists.
+	if (method == "tools/call" || method == "tools/list") && w.tools != nil {
+		r.RegisteredTools = w.tools()
+	}
+	if method == "prompts/get" && w.prompts != nil {
+		r.RegisteredPrompts = w.prompts()
+	}
 	if extra != nil {
 		r.Token = extra.TokenInfo
 		r.HTTP = extra.Header != nil
@@ -202,7 +231,16 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	var info sessionInfo
 	if ss != nil {
 		info, _ = sessions.get(ss)
-		r.Client = info.client
+		r.ClientFor = func(account, user, anonymous string) (*mcpbridge.Client, string) {
+			var known sessionInfo
+			sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
+				if i.callers != nil {
+					known, _ = i.callers.get(callerStateKey(account, user, anonymous))
+				}
+				return i
+			})
+			return known.client, known.version
+		}
 		if r.SessionID == "" && !r.HTTP {
 			info = sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
 				if i.connection == "" {
@@ -234,7 +272,7 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	case *mcp.ReadResourceRequest:
 		h.name = rc.ResourceName(x.Params.URI)
 	case *mcp.GetPromptRequest:
-		h.name = x.Params.Name
+		h.name = rc.PromptName(x.Params.Name)
 	}
 	return h
 }
@@ -284,13 +322,17 @@ func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
 	}
 }
 
-func rememberInitialized(ss *mcp.ServerSession, client *mcpbridge.Client, version string, sequence uint64) {
+func rememberInitialized(ss *mcp.ServerSession, client *mcpbridge.Client, version string, sequence uint64, caller string) {
 	if ss == nil {
 		return
 	}
 	sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
-		if sequence > i.sequence {
-			i.version, i.client, i.sequence = version, client, sequence
+		if i.callers == nil {
+			i.callers = newBoundedMap[sessionInfo](cfg().limits.MaxMapEntries)
+		}
+		old, _ := i.callers.get(caller)
+		if sequence > old.sequence {
+			i.callers.set(caller, sessionInfo{version: version, client: cleanClient(client), sequence: sequence})
 		}
 		return i
 	})
@@ -299,10 +341,12 @@ func rememberInitialized(ss *mcp.ServerSession, client *mcpbridge.Client, versio
 // idKeyType is the go-sdk's unexported context key type for the JSON-RPC request ID.
 var idKeyType atomic.Pointer[reflect.Type]
 
-// requestIDOf reads the JSON-RPC request ID the go-sdk stores in the request context. Its key
-// type is unexported, so it is found once by walking the context chain.
-func requestIDOf(ctx context.Context) (id string) {
-	id = "unknown"
+// requestIDOf reads the raw JSON-RPC request ID the go-sdk stores in the request context (a
+// string or int64; nil for none). Its key type is unexported, so it is found once by walking the
+// context chain. Limit: the go-sdk decodes every numeric ID to int64 (fractions truncated, huge
+// values overflowing) before any middleware runs and offers no hook on the raw message, so 1.5
+// arrives as 1 and 1e21 as an out-of-range integer; the original number cannot be recovered.
+func requestIDOf(ctx context.Context) (id any) {
 	safely(func() {
 		t := idKeyType.Load()
 		if t == nil {
@@ -314,12 +358,7 @@ func requestIDOf(ctx context.Context) (id string) {
 			t = &found
 		}
 		if v, ok := ctx.Value(reflect.Zero(*t).Interface()).(jsonrpc.ID); ok && v.IsValid() {
-			switch raw := v.Raw().(type) {
-			case string:
-				id = raw
-			case int64:
-				id = strconv.FormatInt(raw, 10)
-			}
+			id = v.Raw()
 		}
 	})
 	return id
@@ -386,7 +425,7 @@ func (w *wrapped) after(h *handling, res mcp.Result, err, ctxErr error) mcp.Resu
 				}
 				caps = h.init.Capabilities
 			}
-			rememberInitialized(h.session, client, r.ProtocolVersion, rc.sequence)
+			rememberInitialized(h.session, client, r.ProtocolVersion, rc.sequence, rc.CallerKey())
 			rc.Initialized(client, caps, r.ProtocolVersion)
 		}
 	case "tools/list":

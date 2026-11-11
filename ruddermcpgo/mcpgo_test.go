@@ -61,7 +61,7 @@ func TestRequestContextOff(t *testing.T) {
 				t.Errorf("handler got %s, want %s", mustJSON(seen.last()), mustJSON(args))
 			}
 			p := r.props(t, "mcp_tool_called")
-			if !slices.Equal(p["argument_keys"].([]string), []string{requestContext, "workspace_id"}) {
+			if !slices.Equal(p["argument_keys"].([]string), []string{"unknown", "workspace_id"}) {
 				t.Errorf("argument_keys = %v", p["argument_keys"])
 			}
 			for _, key := range []string{"intent", "user_sentiment", "call_reason"} {
@@ -245,7 +245,7 @@ func check(t *testing.T, r *recorder, name, transport, protocol string, seen *ha
 	if p := r.find(t, "mcp_tool_called", "tool_name", "fail"); p["tool_status"] != "error" || p["error_type"] != "api_error" {
 		t.Errorf("fail = %v", p)
 	}
-	if p := r.find(t, "mcp_tool_called", "tool_name", "missing_tool"); p["error_type"] != "invalid_request" {
+	if p := r.find(t, "mcp_tool_called", "tool_name", "unknown"); p["error_type"] != "invalid_request" {
 		t.Errorf("missing_tool = %v", p)
 	}
 	if p := r.props(t, "audience_created"); p["audience_type"] != "computed" || p["tool_name"] != "create_audience" {

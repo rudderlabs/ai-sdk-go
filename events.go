@@ -109,7 +109,7 @@ func eventsTarget(server *mcp.Server) *wrapped {
 	return w
 }
 
-func (w *wrapped) eventsBase(ctx context.Context, e EventsIdentity) (*options, who, map[string]any) {
+func (w *wrapped) eventsBase(ctx context.Context, e EventsIdentity) (*options, who, map[string]any, string) {
 	opts := w.opts.Load()
 	id := opts.identity(ctx, e.Token)
 	base := map[string]any{"server_name": opts.name}
@@ -123,7 +123,14 @@ func (w *wrapped) eventsBase(ctx context.Context, e EventsIdentity) (*options, w
 	if user == "" {
 		user = id.UserID
 	}
-	return opts, who{userID: user, anonymousID: id.AnonymousID}, base
+	stateAccount, stateUser := id.stateAccountID, id.stateUserID
+	if e.AccountID != "" {
+		stateAccount = e.AccountID
+	}
+	if e.UserID != "" {
+		stateUser = e.UserID
+	}
+	return opts, who{userID: user, anonymousID: id.AnonymousID}, base, callerStateKey(stateAccount, stateUser, id.stateAnonymousID)
 }
 
 // TrackMCPEventSubscription records an MCP Events subscription change as
@@ -148,7 +155,7 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 		warnOnce("mcp-subscription-ids", "mcp_event_subscription_changed dropped: SubscriptionID and EventName are required", 0)
 		return
 	}
-	opts, whom, base := w.eventsBase(ctx, change.EventsIdentity)
+	opts, whom, base, caller := w.eventsBase(ctx, change.EventsIdentity)
 	p := map[string]any{
 		"subscription_action": change.Action,
 		"subscription_id":     id,
@@ -159,7 +166,7 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 		for k := range change.Arguments {
 			keys = append(keys, k)
 		}
-		p["argument_keys"] = sortedNames(keys)
+		p["argument_keys"] = registeredArgumentNames(nil, keys)
 	}
 	put(p, "delivery_mode", capLabel(change.DeliveryMode))
 	if change.TTL > 0 {
@@ -173,18 +180,20 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 	}
 	put(p, "failure_reason", capLabel(change.FailureReason))
 	put(p, "mcp_session_id", capID(change.SessionID))
-	put(p, "client_name", capID(change.ClientName))
+	put(p, "client_name", cleanClientText(change.ClientName))
 	for k, v := range base {
 		p[k] = v
 	}
 	emit(opts.Analytics, "mcp_event_subscription_changed", whom, p)
 
+	// The raw ID: the capped one would merge subscriptions that differ only past the cap.
+	stateKey := callerStateKey(caller, "", "", change.SubscriptionID)
 	st := w.state()
 	st.Lock()
 	defer st.Unlock()
-	if t, ok := st.expiries.get(id); ok {
+	if t, ok := st.expiries.get(stateKey); ok {
 		t.Stop()
-		st.expiries.remove(id)
+		st.expiries.remove(stateKey)
 	}
 	if (change.Action == SubscriptionCreated || change.Action == SubscriptionRefreshed) && change.TTL > 0 {
 		expired := change
@@ -195,15 +204,15 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 		var t *time.Timer
 		t = time.AfterFunc(change.TTL, func() {
 			st.Lock()
-			if current, ok := st.expiries.get(id); !ok || current != t {
+			if current, ok := st.expiries.get(stateKey); !ok || current != t {
 				st.Unlock()
 				return
 			}
-			st.expiries.remove(id)
+			st.expiries.remove(stateKey)
 			st.Unlock()
 			safely(func() { w.TrackSubscription(context.WithoutCancel(ctx), expired) })
 		})
-		st.expiries.set(id, t)
+		st.expiries.set(stateKey, t)
 	}
 }
 
@@ -262,7 +271,7 @@ func (w *wrapped) DeliveryDone(ctx context.Context, delivery, result any, failed
 		return
 	}
 	event := cmp.Or(capID(d.EventName), "unknown")
-	opts, whom, base := w.eventsBase(ctx, d.EventsIdentity)
+	opts, whom, base, _ := w.eventsBase(ctx, d.EventsIdentity)
 	p := map[string]any{
 		"subscription_id": id,
 		"event_name":      event,

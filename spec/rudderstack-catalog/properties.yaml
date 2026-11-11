@@ -693,7 +693,7 @@ spec:
     - id: request_id
       name: request_id
       type: string
-      description: The JSON-RPC request ID.
+      description: "The JSON-RPC request id: integers as decimal strings, strings as sha256: plus 16 hex characters, anything else unknown."
     - id: is_error_result
       name: is_error_result
       type: boolean

@@ -125,7 +125,7 @@ func TestMCPRequestOAuthEveryEvent(t *testing.T) {
 			CapabilityRequests: &CapabilityRequestOptions{Capabilities: []string{"export"}},
 			EventRules:         EventRules{Tools: map[string]ToolEventRule{"tool": {Event: "performed"}}}})
 		w, _ := instances.get(s)
-		c := w.Begin(mcpbridge.Request{Ctx: context.Background()})
+		c := w.Begin(mcpbridge.Request{Ctx: context.Background(), RegisteredTools: []mcpbridge.Tool{{Name: "tool"}}})
 		c.ToolCall("tool", nil, false, nil, "")
 		c.ToolDone(mcpbridge.Outcome{Result: &mcp.CallToolResult{}})
 		c.Finished("resources/read", "resource", 0, "")
