@@ -1123,14 +1123,12 @@ func callerStateKey(account, user string, parts ...string) string {
 
 func cleanClientText(value string) string { return mcpbridge.CleanClientText(value) }
 
-var safeRPCString = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,64}$`)
-
 // maxSafeInteger is the largest integer every JSON implementation reads exactly.
 const maxSafeInteger = 9007199254740991
 
 // safeRequestID encodes a JSON-RPC id: nil (no id) is "", integer-valued numbers within
-// +-maxSafeInteger are decimal strings (-0 is "0"), short safe strings stay as sent, other
-// non-empty strings are hashed, and anything else (empty string, bool, object, fractional or
+// +-maxSafeInteger are decimal strings (-0 is "0"), every non-empty string is
+// hashed, and anything else (empty string, bool, object, fractional or
 // out of range number) is "unknown".
 func safeRequestID(value any) string {
 	switch v := value.(type) {
@@ -1139,9 +1137,6 @@ func safeRequestID(value any) string {
 	case string:
 		if v == "" {
 			return "unknown"
-		}
-		if safeRPCString.MatchString(v) {
-			return v
 		}
 		return hashedRequestID(v)
 	case json.Number:

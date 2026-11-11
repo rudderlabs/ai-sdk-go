@@ -36,8 +36,9 @@ func TestSafeRequestIDExactValues(t *testing.T) {
 		{"bool", true, "unknown"},
 		{"object", map[string]any{"a": 1}, "unknown"},
 		{"empty string", "", "unknown"},
-		{"safe string", "req-1", "req-1"},
-		{"numeric string", "7", "7"},
+		{"short string", "req-1", "sha256:9456bdfa12ea7695"},
+		{"sensitive-looking", "customer:ssn:123-45-6789", hashedRequestID("customer:ssn:123-45-6789")},
+		{"numeric string", "7", "sha256:7902699be42c8a8e"},
 		{"sql", "SELECT email FROM customers", "sha256:409abf7beb528a87"},
 		{"long", strings.Repeat("a", 65), hashedRequestID(strings.Repeat("a", 65))},
 	} {
@@ -184,7 +185,7 @@ func TestDeclaredPropertiesAreCleanedWhateverTheirSpelling(t *testing.T) {
 	if !slices.Equal(p["argument_keys"].([]string), []string{"a", "unknown", "z"}) || !slices.Equal(p["invalid_arguments"].([]string), []string{"unknown"}) {
 		t.Errorf("lists = %v / %v", p["argument_keys"], p["invalid_arguments"])
 	}
-	if p["request_id"] != "real-1" || p["client_title"] != "bad title" || p["client_version"] != "1.0 beta" || p["tool_name"] != "probe" {
+	if p["request_id"] != "sha256:9773879a094d490e" || p["client_title"] != "bad title" || p["client_version"] != "1.0 beta" || p["tool_name"] != "probe" {
 		t.Errorf("properties = %v", p)
 	}
 	if _, ok := p["client_name"]; ok {
@@ -298,7 +299,7 @@ func TestPendingInputsAreScopedAndExpire(t *testing.T) {
 		if _, ok := elicited[0].Properties["duration_ms"]; ok || elicited[0].Properties["request_id"] != nil {
 			t.Errorf("state %q: session 2 consumed session 1's continuation: %v", state, elicited[0].Properties)
 		}
-		if elicited[1].Properties["request_id"] != "req-s1" {
+		if elicited[1].Properties["request_id"] != "sha256:1452c9582cee073d" {
 			t.Errorf("state %q: session 1 lost its continuation: %v", state, elicited[1].Properties)
 		}
 	}

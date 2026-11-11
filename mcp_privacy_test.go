@@ -51,12 +51,13 @@ func TestMCPPrivacyRequestIDs(t *testing.T) {
 			rc.Finished("resources/read", "readme", 0, "")
 			for _, event := range []string{"mcp_tool_called", "mcp_elicitation_completed", "mcp_resource_read"} {
 				got, present := r.props(t, event)["request_id"]
-				want := id
-				if id == "" {
-					want = "unknown"
-				} else if !safeRPCString.MatchString(id) {
+				want := "unknown"
+				if id != "" {
 					sum := sha256.Sum256([]byte(id))
 					want = "sha256:" + hex.EncodeToString(sum[:])[:16]
+				}
+				if id == "req-1" && want != "sha256:9456bdfa12ea7695" {
+					t.Fatalf("req-1 hash = %s", want)
 				}
 				if !present || got != want {
 					t.Errorf("%s id = %v, want %q", event, got, want)

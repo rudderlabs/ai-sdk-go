@@ -82,7 +82,7 @@ func TestWireIDEdgeCases(t *testing.T) {
 	s := workspaceServer("mcpgo-hardening-ids", nil)
 	r := wrap(t, s, Options{})
 	for i, tc := range []struct{ raw, want string }{
-		{`7`, "7"}, {`7.0`, "7"}, {`-0`, "0"}, {`"7"`, "7"}, {`1e21`, "unknown"}, {`1.5`, "unknown"},
+		{`7`, "7"}, {`7.0`, "7"}, {`-0`, "0"}, {`"7"`, "sha256:7902699be42c8a8e"}, {`"req-1"`, "sha256:9456bdfa12ea7695"}, {`1e21`, "unknown"}, {`1.5`, "unknown"},
 		{`9007199254740993`, "unknown"}, {`""`, "unknown"}, {`true`, "unknown"}, {`"SELECT email FROM customers"`, "sha256:409abf7beb528a87"},
 	} {
 		msg := `{"jsonrpc":"2.0","id":` + tc.raw + `,"method":"tools/call","params":{"name":"list_destinations","arguments":{"workspace_id":"w"}}}`

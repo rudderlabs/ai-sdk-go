@@ -40,7 +40,7 @@ func TestMCPPrivacyWireIDs(t *testing.T) {
 		_ = s.HandleMessage(context.Background(), raw)
 		p := r.named("mcp_tool_called")[i].Properties
 		got, present := p["request_id"]
-		want := map[int]string{1: "req-1", 2: "7", 4: "unknown", 5: "unknown"}[i]
+		want := map[int]string{1: "sha256:9456bdfa12ea7695", 2: "7", 4: "unknown", 5: "unknown"}[i]
 		if want == "" {
 			raw, _ := json.Marshal(id)
 			sum := sha256.Sum256(func() []byte {
