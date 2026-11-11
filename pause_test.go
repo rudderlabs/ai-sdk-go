@@ -996,6 +996,7 @@ func TestRestorePendingUsageDecodedWithUseNumber(t *testing.T) {
 		i.End(EndOptions{})
 		p := lastResponse(t, r)
 		delete(p, "total_paused_ms") // wall-clock
+		delete(p, "latency_ms")      // wall-clock
 		return p
 	}
 	want, got := finalOf(false), finalOf(true)
