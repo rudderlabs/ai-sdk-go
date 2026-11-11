@@ -4,7 +4,8 @@
   "title": "RudderStack AI tracing: ai_otel_span track event (v0.1)",
   "description": "One OpenTelemetry span carried inside a RudderStack track event. `otlp` is a complete OTLP/JSON ExportTraceServiceRequest holding exactly one span, so a destination can forward it verbatim to any OTLP /v1/traces endpoint. The top-level properties are a denormalised summary for warehouse queries.",
   "type": "object",
-  "required": ["type", "event", "properties", "context", "messageId", "timestamp"],
+  "required": ["type", "event", "properties", "context", "messageId"],
+  "allOf": [{ "anyOf": [{ "required": ["timestamp"] }, { "required": ["originalTimestamp"] }] }],
   "anyOf": [
     { "required": ["userId"], "properties": { "userId": { "type": "string" } } },
     { "required": ["anonymousId"], "properties": { "anonymousId": { "type": "string" } } }
@@ -24,6 +25,7 @@
       "pattern": "^[0-9a-f]{32}-[0-9a-f]{16}$"
     },
     "timestamp": { "description": "Span end time, ISO 8601.", "type": "string" },
+    "originalTimestamp": { "description": "Go analytics client span end time, normalized by the data plane to timestamp.", "type": "string" },
     "context": {
       "type": "object",
       "required": ["wrapperLibrary"],
@@ -32,7 +34,7 @@
           "type": "object",
           "required": ["name", "version", "integration"],
           "properties": {
-            "name": { "enum": ["@rudderstack/ai", "rudderstack-ai"] },
+            "name": { "enum": ["@rudderstack/ai", "rudderstack-ai", "ai-sdk-go"] },
             "version": { "type": "string" },
             "integration": { "enum": ["tracing", "tracing/vercel-ai-sdk"] },
             "wrapperLibrary": { "type": "object" }

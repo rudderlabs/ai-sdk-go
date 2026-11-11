@@ -689,6 +689,55 @@
         }
       }
     },
+    "gen_ai_message": {
+      "type": "object",
+      "description": "Since v0.4 (SDK-6797). OpenTelemetry GenAI message shape; additional message fields are allowed.",
+      "required": [
+        "role",
+        "parts"
+      ],
+      "properties": {
+        "role": {
+          "type": "string"
+        },
+        "parts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gen_ai_message_part"
+          }
+        }
+      }
+    },
+    "gen_ai_message_part": {
+      "type": "object",
+      "description": "Since v0.4 (SDK-6797). OpenTelemetry GenAI message part. Additional fields carry tool calls, tool results and multimodal content.",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "content": {
+          "description": "Content for this part, when present; any JSON value."
+        }
+      }
+    },
+    "gen_ai_tool_call": {
+      "type": "object",
+      "description": "Since v0.4 (SDK-6797). Requested tool call with OpenTelemetry GenAI-compatible naming; additional fields are allowed.",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "arguments": {
+          "description": "Arguments requested for the tool, when present; any JSON value."
+        }
+      }
+    },
     "ai_llm_response_received": {
       "description": "Since v0.4. Optional, one per model call. Off by default in the SDKs. Totals belong on ai_response_received; do not sum these alongside it.",
       "allOf": [
@@ -702,6 +751,37 @@
         "output_tokens"
       ],
       "properties": {
+        "call_index": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Since v0.4 (SDK-6797). 1-based order of the call within its interaction. Always allowed; not content."
+        },
+        "span_id": {
+          "type": "string",
+          "description": "Since v0.4 (SDK-6797). The span_id of this call's ai_otel_span when emitSpans is enabled; absent otherwise."
+        },
+        "input_messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gen_ai_message"
+          },
+          "description": "Since v0.4 (SDK-6797). Opt-in. Treat as personal data. Only with both emitLlmCalls and captureContent. Full messages sent on this call (system prompt, history and tool results), in the OpenTelemetry GenAI gen_ai.input.messages shape; masked like prompt_text. Past the size cap, drop the oldest messages after the system prompt first."
+        },
+        "input_truncated": {
+          "type": "boolean",
+          "description": "Since v0.4 (SDK-6797). Only with input_messages. True when input messages were dropped or shortened to fit the size cap."
+        },
+        "output_text": {
+          "type": "string",
+          "description": "Since v0.4 (SDK-6797). Opt-in. Treat as personal data. Only with both emitLlmCalls and captureContent. This call's output text; masked like prompt_text."
+        },
+        "output_tool_calls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gen_ai_tool_call"
+          },
+          "description": "Since v0.4 (SDK-6797). Opt-in. Treat as personal data. Only with both emitLlmCalls and captureContent. Tool calls requested by this call, using OpenTelemetry GenAI-compatible name and arguments keys; masked like prompt_text."
+        },
         "agent_name": {
           "type": "string"
         },
