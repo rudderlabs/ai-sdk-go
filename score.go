@@ -184,3 +184,113 @@ func sendStandalone(cv *contextValues, event, userID, anonymousID string, client
 	}
 	emitAI(client, event, id.userID, id.anonymousID, props, withSessionID(msgContext, id.sessionID), IntegrationManual, time.Now())
 }
+
+// Classifier kinds for [TrackClassificationOptions.Classifier].
+const (
+	ClassifierModel  = "model"
+	ClassifierCustom = "custom"
+)
+
+// TrackClassificationOptions are a classification of one interaction, for [TrackClassification].
+type TrackClassificationOptions struct {
+	// InteractionID of the classified answer. Required.
+	InteractionID string
+	// ConversationID of the answer. Required (falls back to the context).
+	ConversationID string
+	// Intent is what the user tried to do. Required; outside the configured Intents it becomes
+	// "other".
+	Intent string
+	// Outcome is how the answer went; outside the configured Outcomes (default [DefaultOutcomes])
+	// it becomes "unclear". Required.
+	Outcome string
+	// IntentSummary is one masked sentence about the intent, handled as the classifier hook does.
+	IntentSummary string
+	// Classifier is [ClassifierModel] (default) or [ClassifierCustom].
+	Classifier           string
+	ClassifierModel      string
+	ClassifierDurationMS *float64
+	ClassifierCostUSD    *float64
+	UserID               string
+	AnonymousID          string
+	Feature              string
+	Surface              Surface
+	// Trigger is who started the classified answer.
+	Trigger    Trigger
+	AccountID  string
+	OnBehalfOf string
+	// AgentVersion names the app release or configuration; Variant names its experiment arm.
+	AgentVersion string
+	Variant      string
+	// Analytics is the client for this event. Falls back to the context, then the global client.
+	Analytics analytics.Client
+	// Context is extra message context for this event.
+	Context map[string]any
+}
+
+// TrackClassification sends ai_interaction_classified for a classification made by your own
+// pipeline, for any interaction, including failed or finished ones. It never adds to the
+// interaction's cost. A classification that cannot be made conformant is dropped with a warning.
+func TrackClassification(ctx context.Context, o TrackClassificationOptions) {
+	safely(func() {
+		cv := valuesFrom(ctx)
+		if cv == nil {
+			cv = &contextValues{}
+		}
+		conversation := first(o.ConversationID, cv.conversationID)
+		if o.InteractionID == "" || conversation == "" {
+			warnOnce("classification-ids", "ai_interaction_classified dropped: InteractionID and ConversationID are required", 0)
+			return
+		}
+		if o.Intent == "" {
+			warnOnce("classification-intent", "ai_interaction_classified dropped: Intent is required", 0)
+			return
+		}
+		p := map[string]any{"conversation_id": conversation, "interaction_id": o.InteractionID}
+		p["intent"], p["outcome"] = normaliseLabels(cfg().classifier, o.Intent, o.Outcome)
+		put(p, "intent_summary", summaryOf(o.IntentSummary))
+		switch o.Classifier {
+		case "", ClassifierModel:
+			p["classifier"] = ClassifierModel
+		case ClassifierCustom:
+			p["classifier"] = ClassifierCustom
+		default:
+			warnOnce("classification-classifier", "invalid classifier for ai_interaction_classified; using \"model\"", 0)
+			p["classifier"] = ClassifierModel
+		}
+		put(p, "classifier_model", o.ClassifierModel)
+		if d := o.ClassifierDurationMS; d != nil {
+			if *d >= 0 && !math.IsInf(*d, 0) {
+				p["classifier_duration_ms"] = roundHalfUp(*d)
+			} else {
+				warnOnce("classification-duration", "invalid ClassifierDurationMS for ai_interaction_classified; not sent", 0)
+			}
+		}
+		if c := o.ClassifierCostUSD; c != nil {
+			if *c >= 0 && !math.IsInf(*c, 0) {
+				p["classifier_cost_usd"] = *c
+			} else {
+				warnOnce("classification-cost", "invalid ClassifierCostUSD for ai_interaction_classified; not sent", 0)
+			}
+		}
+		put(p, "feature", first(o.Feature, cv.feature))
+		put(p, "surface", string(first2(surfaceOf(o.Surface), surfaceOf(cv.surface))))
+		put(p, "account_id", first(o.AccountID, cv.accountID))
+		put(p, "on_behalf_of", first(o.OnBehalfOf, cv.onBehalfOf))
+		put(p, "agent_version", first(o.AgentVersion, cv.agentVersion))
+		put(p, "variant", first(o.Variant, cv.variant))
+		if o.Trigger == TriggerUser || o.Trigger == TriggerSystem {
+			p["trigger"] = string(o.Trigger)
+		}
+		sendStandalone(cv, "ai_interaction_classified", o.UserID, o.AnonymousID, o.Analytics, o.Context, p)
+	})
+}
+
+// roundHalfUp rounds like JavaScript Math.round for a non-negative finite value. It stays a float64 so
+// values beyond int64 survive, and compares the fraction since Floor(x+0.5) misrounds near 0.5.
+func roundHalfUp(x float64) float64 {
+	f := math.Floor(x)
+	if x-f >= 0.5 {
+		return f + 1
+	}
+	return f
+}

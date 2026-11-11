@@ -811,7 +811,7 @@
       }
     },
     "ai_interaction_classified": {
-      "description": "Opt-in. One per interaction that succeeded, sent after its ai_response_received: labels from the customer's own model client (classifier: model) or classify function (custom). Never sent when classification fails.",
+      "description": "Opt-in. Sent by the classifier hook once per succeeded interaction, after its ai_response_received (labels from the customer's own model client, classifier: model, or classify function, custom), or by the app with trackClassification (Python track_classification, Go TrackClassification) for any interaction it chooses, including errored, cancelled or finished ones. The hook sends nothing when classification fails.",
       "allOf": [
         {
           "$ref": "#/$defs/ids"

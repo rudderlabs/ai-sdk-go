@@ -7,7 +7,7 @@
 // report into the interaction carried by their context, through an integration module
 // (rudderopenai, rudderanthropic, ruddergenai, rudderbedrock) or [Interaction.RecordCall].
 // [RunTask] runs background work as a system-triggered interaction; [TrackAction] and
-// [TrackScore] send feedback and scores. [Configure] sets the RudderStack client and the
+// [TrackScore] and [TrackClassification] send feedback, scores and classifications. [Configure] sets the RudderStack client and the
 // process-wide options. Prompt, answer and feedback text are sent only with content capture
 // on, masked.
 //

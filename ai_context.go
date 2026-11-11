@@ -8,7 +8,7 @@ import (
 )
 
 // ContextValues are request-wide defaults for the interactions, integrations, [TrackAction] and
-// [TrackScore] calls made with a context from [WithValues]. Empty fields inherit from an
+// [TrackScore] and [TrackClassification] calls made with a context from [WithValues]. Empty fields inherit from an
 // enclosing WithValues.
 type ContextValues struct {
 	UserID         string
