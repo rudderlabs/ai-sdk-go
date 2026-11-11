@@ -331,6 +331,15 @@ err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID)
 
 A value you set always wins. No span is created or exported ([trace_id](docs/configuration.md#trace_id)).
 
+## OpenTelemetry span input
+
+`rudderotel` can export your instrumented AI spans as `ai_otel_span` events with complete OTLP/JSON
+payloads. Add `rudderotel.NewSpanProcessor(rudderotel.Options{Analytics: client})` through
+`sdktrace.WithSpanProcessor`. Set `ProductEvents: true` to record model/tool spans in the active
+interaction, and `LinkTraceID: true` to link its trace. Content capture is off by default.
+For one-call global setup, use `rudderotel.RegisterTracing`; it refuses an existing provider.
+See [tracing](docs/tracing.md) and the [runnable example](examples/tracing).
+
 ## Checking a migration
 
 Moving AI events your app already sends through RudderStack to this SDK? `aicheck` checks a recording of what the app sends; it is its own module, so the app gains no dependency. Record the events while you drive the app, once per switch setting. In the test or harness, make `ruddertest.Recorder` the app's own analytics-go client where the app builds it, before the app calls `rudderstackai.Configure` and reads its switches, so legacy calls and switch-off runs are recorded too (configuring a recorder after start misses them):
@@ -375,7 +384,7 @@ Each module requires the oldest version it supports, so adding it never upgrades
 | `.../rudderanthropic`                         | `github.com/anthropics/anthropic-sdk-go` v1.78.0                | v1.80.0          |
 | `.../ruddergenai`                             | `google.golang.org/genai` v1.72.0                               | v1.73.0          |
 | `.../rudderbedrock`                           | `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` v1.63.1   | v1.63.4          |
-| `.../rudderotel`                              | `go.opentelemetry.io/otel/trace` v1.47.0                        |                  |
+| `.../rudderotel`                              | `go.opentelemetry.io/otel` / `trace` / `sdk` v1.47.0           |                  |
 
 Every module runs the shared cross-SDK fixtures in [`spec/fixtures/`](spec/fixtures) with the Node.js and Python SDKs.
 
