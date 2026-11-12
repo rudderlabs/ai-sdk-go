@@ -91,6 +91,14 @@
         {
           "type": "generic",
           "path": "rudderotel/go.mod"
+        },
+        {
+          "type": "generic",
+          "path": "examples/go.mod"
+        },
+        {
+          "type": "generic",
+          "path": "internal/conformance/go.mod"
         }
       ],
       "exclude-paths": [
