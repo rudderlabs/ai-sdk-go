@@ -122,7 +122,8 @@ func TestFeedbackRequests(t *testing.T) {
 					if p["feedback_category"] != "feature_request" || p["feedback_tool_name"] != "list_destinations" || p["capability"] != "export" || p["interaction_id"] != "int_feedback" {
 						t.Fatalf("event = %s", mustJSON(p))
 					}
-					if (transport != "stateless" || protocol == "2026-07-28") && p["client_name"] != "test-client" {
+					// Stateless 2025 requests carry no client; older mcp-go minimums cannot negotiate 2026-07-28.
+					if (transport != "stateless" || p["protocol_version"] == "2026-07-28") && p["client_name"] != "test-client" {
 						t.Fatalf("client identity = %v", p)
 					}
 					if capture {
