@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderbedrock/v0.4.0...rudderbedrock/v0.5.0) (2026-11-12)
+
+
+### Features
+
+* **mcp:** add OAuth client and remembered client name to MCP events ([#53](https://github.com/rudderlabs/ai-sdk-go/issues/53)) ([dbe17bc](https://github.com/rudderlabs/ai-sdk-go/commit/dbe17bc8153c4ad10c97a12f5871bdc1bf5f2cc7))
+
+
+### Miscellaneous
+
+* **release:** bump integration core requirements with each core release ([#60](https://github.com/rudderlabs/ai-sdk-go/issues/60)) ([e5045b8](https://github.com/rudderlabs/ai-sdk-go/commit/e5045b898d09d8ab068d28331e786245adf320ec))
+
 ## [0.4.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderbedrock/v0.3.2...rudderbedrock/v0.4.0) (2026-11-05)
 
 
