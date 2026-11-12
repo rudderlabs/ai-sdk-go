@@ -161,6 +161,12 @@ type LLMCall struct {
 	// OutputText is the answer text for a classifier or evaluator. A tracing report also supplies
 	// response_text when content capture is on and End supplies no ResponseText.
 	OutputText string
+	// InputMessages is what was sent on this call (system prompt, history, tool results) as GenAI
+	// messages. OutputToolCalls are the tool calls the model requested. With OutputText they are
+	// sent as input_messages, input_truncated, output_text and output_tool_calls, only with
+	// [WithLLMCallEvents] and content capture, masked like prompt_text.
+	InputMessages   []GenAIMessage
+	OutputToolCalls []GenAIToolCall
 }
 
 // capLocked queues a notice, once per interaction; unlock reports it after publishing usage.
@@ -366,6 +372,9 @@ type PausedInteraction struct {
 	SuccessfulCallSequence *int `json:"successful_call_sequence,omitempty"`
 	// PendingCompactions carries compactions recorded after the paused response captured totals.
 	PendingCompactions *int `json:"pending_compactions,omitempty"`
+	// CallSequence is the model calls reported across all segments, so call_index continues after
+	// restoration. Written only with WithLLMCallEvents and above 0. Since v0.4 (SDK-6798).
+	CallSequence *int `json:"call_sequence,omitempty"`
 }
 
 // resumeFrom applies a Resume snapshot's fields to o; false (with a warning) when it is not one.
@@ -410,6 +419,10 @@ type recordedCall struct {
 	serverToolCallCount                              int
 	serverToolCostUSD, costUSD                       *float64
 	finishReason, errorType, responseID              string
+	// callIndex is the 1-based order of the call in its interaction (the first call a folded or
+	// aggregate report stands for); content is its masked input and output until the event is sent.
+	callIndex int
+	content   *callContent
 	// Past MaxCallsPerInteraction, calls are folded into an overflow record per group: unpriced
 	// (a successful call had no cost) and feesUnknown (server-tool fees missing) then stick.
 	unpriced, feesUnknown bool
@@ -469,24 +482,26 @@ type Interaction struct {
 	// started is the start of the current segment: the run, or its latest resume.
 	started time.Time
 	// pausedAt is when the current pause started; zero while running.
-	pausedAt               time.Time
-	pausing                bool
-	pauseGuard             atomic.Bool   // checked before mu, including callback reentry
-	pendingMu              sync.Mutex    // orders pauseGuard release against pendingEnd
-	pendingEnd             *EndOptions   // wrapper end that arrived mid-pause; sent when the pause finishes
-	pendingDone            chan struct{} // closed once pendingEnd is delivered; RunTask's flush waits on it
-	pendingRunning         int           // queued ends being delivered; pendingDone stays until zero
-	pauseCount             int
-	pausedTotal            time.Duration
-	adapterAnalytics       analytics.Client
-	intent, outcome        string
-	traceID                string
-	restored               bool // from a snapshot: the request context never supplies the trace ID
-	integration            string
-	ended                  bool
-	firstToken             time.Duration
-	calls                  []*recordedCall
-	callCount              int
+	pausedAt         time.Time
+	pausing          bool
+	pauseGuard       atomic.Bool   // checked before mu, including callback reentry
+	pendingMu        sync.Mutex    // orders pauseGuard release against pendingEnd
+	pendingEnd       *EndOptions   // wrapper end that arrived mid-pause; sent when the pause finishes
+	pendingDone      chan struct{} // closed once pendingEnd is delivered; RunTask's flush waits on it
+	pendingRunning   int           // queued ends being delivered; pendingDone stays until zero
+	pauseCount       int
+	pausedTotal      time.Duration
+	adapterAnalytics analytics.Client
+	intent, outcome  string
+	traceID          string
+	restored         bool // from a snapshot: the request context never supplies the trace ID
+	integration      string
+	ended            bool
+	firstToken       time.Duration
+	calls            []*recordedCall
+	callCount        int
+	// callSeq is the calls reported so far across pauses: the base of call_index.
+	callSeq                int
 	successfulCallSequence int
 	lastCall, lastOK       *recordedCall
 	lastFailedCallType     string
@@ -920,6 +935,12 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	call.Provider = routedProvider(call.Provider, call.Model)
 	call.RequestedModel = routedModel(call.RequestedModel, call.Model)
+	// Masked before the lock, so an event never holds unmasked content and the redact hook runs
+	// outside it; sent and dropped with the call event.
+	var content *callContent
+	if c.emitLLMCalls && i.captureContent {
+		content = captureCallContent(call.InputMessages, call.OutputText, call.OutputToolCalls)
+	}
 	i.mu.Lock()
 	defer i.unlock()
 	if i.ended {
@@ -1074,9 +1095,12 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		cacheWrite1: min(nonNegative(call.CacheWrite1hTokens), cacheWrite), serviceTier: tier,
 		serverToolCallCount: serverToolCalls, serverToolCostUSD: serverToolCost, costUSD: cost,
 		finishReason: call.FinishReason, errorType: call.ErrorType, responseID: call.ResponseID,
+		content: content,
 	}
 	// Select after the credit callback, which may itself record another report.
 	if twin := i.callTwinLocked(r); twin != nil {
+		// A twin that stands for more calls takes more places in call_index.
+		i.callSeq += max(0, r.callCount-twin.callCount)
 		mergeCallTwin(twin, r)
 		// A merge does not advance callCount, so discard a generic app hint that
 		// would otherwise hide the newly learned provider classification.
@@ -1092,6 +1116,8 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	i.callCount++
 	r.reportSequence = i.callCount
+	r.callIndex = i.callSeq + 1
+	i.callSeq += callCount
 	i.noteCallOutcomeLocked(r)
 	if len(i.calls) < cfg().limits.MaxCallsPerInteraction {
 		i.calls = append(i.calls, r)
@@ -1099,6 +1125,8 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			i.admitSeenLocked(call.Provider+"\x00"+call.ResponseID, r)
 		}
 	} else {
+		// Calls past the cap only keep totals: no content.
+		r.content = nil
 		i.capLocked()
 		i.foldCallLocked(r)
 	}
@@ -1152,6 +1180,7 @@ func (i *Interaction) emitPendingCallLocked(r *recordedCall) {
 	}
 	r.callEventPending = false
 	props := i.callEventLocked(r)
+	r.content = nil
 	i.sendLocked("ai_llm_response_received", func() map[string]any { return props })
 }
 
@@ -1212,6 +1241,14 @@ func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
 
 func mergeCallTwin(kept, later *recordedCall) {
 	kept.twinMatched = true
+	// The adapter's view of the call wins; a span fills in what it lacks.
+	if later.fromSpan {
+		if kept.content == nil {
+			kept.content = later.content
+		}
+	} else if later.content != nil {
+		kept.content = later.content
+	}
 	if later.callCount > kept.callCount && !kept.creditsExplicit {
 		kept.credits = later.credits
 	}
@@ -1748,6 +1785,23 @@ func (i *Interaction) callEventLocked(c *recordedCall) map[string]any {
 	put(p, "response_id", c.responseID)
 	put(p, "finish_reason", c.finishReason)
 	put(p, "error_type", c.errorType)
+	if c.callIndex > 0 {
+		p["call_index"] = c.callIndex
+	}
+	if content := c.content; content != nil {
+		if content.inputMessages != nil {
+			p["input_messages"] = content.inputMessages
+			if content.inputTruncated {
+				p["input_truncated"] = true
+			}
+		}
+		if content.hasOutputText {
+			p["output_text"] = content.outputText
+		}
+		if content.outputToolCalls != nil {
+			p["output_tool_calls"] = content.outputToolCalls
+		}
+	}
 	return p
 }
 
@@ -1939,6 +1993,10 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 	}
 	if i.compactions > 0 {
 		snapshot.PendingCompactions = Ptr(i.compactions)
+	}
+	// Only call_index needs it, which is sent with WithLLMCallEvents.
+	if i.callSeq > 0 && cfg().emitLLMCalls {
+		snapshot.CallSequence = Ptr(i.callSeq)
 	}
 	for key := range i.seen {
 		provider, responseID, _ := strings.Cut(key, "\x00")
@@ -2202,6 +2260,9 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		if pendingBool(p, "last_ok") {
 			i.lastOK = c
 		}
+	}
+	if snapshot.CallSequence != nil {
+		i.callSeq = *snapshot.CallSequence
 	}
 	if snapshot.ReportCount != nil {
 		i.callCount = *snapshot.ReportCount
@@ -2944,6 +3005,14 @@ func (i *Interaction) keepMessages(messages any) {
 	if messages != nil && i.keepsTextLocked() {
 		i.messages = messages
 	}
+}
+
+// capturesCallContent: integrations should hand over each call's input and output
+// (input_messages, output_text, output_tool_calls): call events and content capture are both on.
+func (i *Interaction) capturesCallContent() bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return !i.ended && !i.untracked && i.captureContent && cfg().emitLLMCalls
 }
 
 func (i *Interaction) keepsText() bool {

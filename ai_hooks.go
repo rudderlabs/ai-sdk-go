@@ -24,6 +24,7 @@ func init() {
 	}
 	hook.KeepMessages = func(i any, messages any) { i.(*Interaction).keepMessages(messages) }
 	hook.KeepsText = func(i any) bool { return i.(*Interaction).keepsText() }
+	hook.CapturesCallContent = func(i any) bool { return i.(*Interaction).capturesCallContent() }
 	hook.FirstToken = func(i any, at time.Time) { i.(*Interaction).firstTokenAt(at) }
 	hook.HintOutcome = func(i any, status, errorType string) {
 		i.(*Interaction).hintOutcome(ResponseStatus(status), errorType)

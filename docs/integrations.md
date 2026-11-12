@@ -239,7 +239,8 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 | `FinishReason`, `ErrorType`                       | A failed call stays unpriced unless `CostUSD` is given                                                    |
 | `UsageUnknown`                                    | Tokens unknown or partial: the call stays unpriced                                                        |
 | `Integration`                                     | Integration name for `context.wrapperLibrary`; empty is `manual`                                          |
-| `OutputText`                                      | Answer text for the classifier and evaluator; never sent                                                  |
+| `OutputText`                                      | Answer text for the classifier and evaluator; sent as `output_text` only with call events and content capture |
+| `InputMessages`, `OutputToolCalls`                | GenAI messages sent and tool calls requested; sent only with call events and content capture               |
 
 `ToolCall`: `ID` (merges repeated reports), `Name` (flat `mcp__server__tool` names are split), `MCPServer`, `ParentTool`, `AgentName`, `Error` (`*bool`), `ErrorType`, `Duration` (`*time.Duration`, measured only), `Args` and `Result` (given to declared tool rules, never sent). `ToolResult`: `Error`, `ErrorType`, `Duration`, `Result`. A failure from any report sticks; the first measured duration and the first result win.
 

@@ -22,6 +22,9 @@ var (
 	KeepMessages func(interaction any, messages any)
 	// KeepsText reports whether the interaction keeps prompt and answer text.
 	KeepsText func(interaction any) bool
+	// CapturesCallContent reports whether integrations should hand over each call's input and
+	// output: call events and content capture are both on.
+	CapturesCallContent func(interaction any) bool
 	// FirstToken marks the first streamed token.
 	FirstToken func(interaction any, at time.Time)
 	// HintOutcome sets the status End reports unless a call is recorded afterwards.

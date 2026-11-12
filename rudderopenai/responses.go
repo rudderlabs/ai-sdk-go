@@ -149,7 +149,7 @@ func recordResponse(c *kit.Call, response map[string]any, g gateway) bool {
 		CachedInputTokens: kit.Int(kit.Map(usage["input_tokens_details"])["cached_tokens"]),
 		CostUSD:           cost, ServiceTier: kit.Str(response["service_tier"]), ServerToolCalls: counts,
 		ResponseID: kit.Str(response["id"]), FinishReason: finish, ErrorType: errorType,
-		UsageUnknown: usage == nil, OutputText: responsesText(response),
+		UsageUnknown: usage == nil, OutputText: responsesText(response), OutputToolCalls: kit.ToolCalls(tools),
 	})
 	// A repeated response (same ID) adds no tool calls.
 	if recorded && len(tools) > 0 {
@@ -161,8 +161,9 @@ func recordResponse(c *kit.Call, response map[string]any, g gateway) bool {
 func responsesSpec(cfg config) *kit.Spec {
 	return &kit.Spec{Details: cfg.details,
 		Provider: cfg.provider, Integration: integration, Analytics: cfg.analytics,
-		IsStream:  isStream,
-		OnRequest: recordResponsesToolResults,
+		IsStream:      isStream,
+		OnRequest:     recordResponsesToolResults,
+		InputMessages: responsesInputMessages,
 		// A non-streamed background response is only queued: its outcome comes from polling, which
 		// is not tracked, so the call passes through rather than leave an answer that never ends.
 		Untracked: func(_ *http.Request, body map[string]any) bool {

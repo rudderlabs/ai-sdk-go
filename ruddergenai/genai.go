@@ -33,6 +33,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -115,10 +116,11 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	model := modelOf(req.URL.Path)
 	spec := &kit.Spec{Details: t.o.details,
-		Provider:    provider,
-		Integration: integration,
-		Analytics:   t.o.analytics,
-		IsStream:    func(*http.Request, map[string]any) bool { return method == "streamGenerateContent" },
+		Provider:      provider,
+		Integration:   integration,
+		Analytics:     t.o.analytics,
+		IsStream:      func(*http.Request, map[string]any) bool { return method == "streamGenerateContent" },
+		InputMessages: inputMessages,
 		OnRequest: func(c *kit.Call) {
 			c.Model = model
 			recordFunctionResponses(c.Interaction, c.Request["contents"])
@@ -266,9 +268,6 @@ func recordResponse(c *kit.Call, body map[string]any) {
 	if u != nil {
 		call.InputTokens, call.OutputTokens, call.ReasoningTokens, call.CachedInputTokens = u.input, u.output, u.reasoning, u.cached
 	}
-	if !c.RecordCall(call) {
-		return
-	}
 	var tools []rudderstackai.ToolCall
 	for _, p := range parts {
 		if fc := kit.Map(p["functionCall"]); fc != nil {
@@ -276,6 +275,12 @@ func recordResponse(c *kit.Call, body map[string]any) {
 		} else if p["executableCode"] != nil {
 			tools = append(tools, rudderstackai.ToolCall{Name: codeExecution})
 		}
+	}
+	if kit.CapturesCallContent(c.Interaction) {
+		call.OutputToolCalls = kit.ToolCalls(tools)
+	}
+	if !c.RecordCall(call) {
+		return
 	}
 	if len(tools) > 0 {
 		c.Interaction.RecordToolCalls(tools...)
@@ -525,3 +530,125 @@ func WithFallbackUsed(used bool) Option { return func(c *options) { c.details.Fa
 
 // WithBYOK records whether calls use the end customer's provider key.
 func WithBYOK(byok bool) Option { return func(c *options) { c.details.BYOK = &byok } }
+
+// modalityOf maps a MIME type to image, audio or video; anything else is a file.
+func modalityOf(mime any) string {
+	kind, _, _ := strings.Cut(kit.Str(mime), "/")
+	switch kind {
+	case "image", "audio", "video":
+		return kind
+	}
+	return "file"
+}
+
+// partMeta are part fields that qualify another field instead of being a part kind.
+var partMeta = map[string]bool{"thought": true, "thoughtSignature": true, "videoMetadata": true, "mediaResolution": true}
+
+// inputPart maps one request part to GenAI parts, or returns a function response to send as its
+// own tool message.
+func inputPart(v any) (parts []rudderstackai.GenAIPart, response rudderstackai.GenAIPart) {
+	if s, ok := v.(string); ok {
+		return kit.TextPart(s), nil
+	}
+	part := kit.Map(v)
+	if part == nil {
+		return nil, nil
+	}
+	if text, ok := part["text"].(string); ok {
+		if part["thought"] == true {
+			return kit.ReasoningPart(text), nil
+		}
+		return kit.TextPart(text), nil
+	}
+	if fc := kit.Map(part["functionCall"]); fc != nil {
+		return kit.ToolCallPart(fc["id"], fc["name"], fc["args"]), nil
+	}
+	if fr := kit.Map(part["functionResponse"]); fr != nil {
+		return nil, kit.ToolResponsePart(fr["id"], fr["response"])
+	}
+	if d := kit.Map(part["inlineData"]); d != nil {
+		return []rudderstackai.GenAIPart{kit.BlobPart(modalityOf(d["mimeType"]), d["mimeType"])}, nil
+	}
+	if f := kit.Map(part["fileData"]); f != nil {
+		return kit.URIPart(modalityOf(f["mimeType"]), f["fileUri"], f["mimeType"]), nil
+	}
+	keys := make([]string, 0, len(part))
+	for k := range part {
+		if !partMeta[k] {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	return kit.OtherPart(keys[0]), nil
+}
+
+// partMessages maps parts under role; a function response is its own tool message, in order.
+func partMessages(role string, parts []any) []rudderstackai.GenAIMessage {
+	var out []rudderstackai.GenAIMessage
+	var current []rudderstackai.GenAIPart
+	flush := func() {
+		if len(current) > 0 {
+			out = append(out, kit.Message(role, current...))
+		}
+		current = nil
+	}
+	for _, p := range parts {
+		mapped, response := inputPart(p)
+		if response != nil {
+			flush()
+			out = append(out, kit.Message("tool", response))
+		} else {
+			current = append(current, mapped...)
+		}
+	}
+	flush()
+	return out
+}
+
+func hasParts(v any) bool {
+	m := kit.Map(v)
+	_, ok := m["parts"].([]any)
+	return ok
+}
+
+// contentMessages maps request contents (a string, a part, a content, or a list of those) to
+// messages. Like the SDK, a list of strings and parts is one user turn.
+func contentMessages(v any) []rudderstackai.GenAIMessage {
+	if list, ok := v.([]any); ok {
+		for _, x := range list {
+			if hasParts(x) {
+				var out []rudderstackai.GenAIMessage
+				for _, y := range list {
+					out = append(out, contentMessages(y)...)
+				}
+				return out
+			}
+		}
+		return partMessages("user", list)
+	}
+	if hasParts(v) {
+		m := kit.Map(v)
+		role := "user"
+		if m["role"] == "model" {
+			role = "assistant"
+		}
+		return partMessages(role, m["parts"].([]any))
+	}
+	if v == nil {
+		return nil
+	}
+	return partMessages("user", []any{v})
+}
+
+// inputMessages is the conversation the request carries: system instruction, then contents.
+func inputMessages(request map[string]any) []rudderstackai.GenAIMessage {
+	var all []rudderstackai.GenAIMessage
+	for _, m := range contentMessages(request["systemInstruction"]) {
+		all = append(all, kit.Message("system", m.Parts...))
+	}
+	all = append(all, contentMessages(request["contents"])...)
+	return kit.Messages(all...)
+}

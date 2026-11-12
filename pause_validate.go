@@ -32,7 +32,7 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 	if s.invalidSnapshot {
 		return false
 	}
-	for _, v := range []*int{s.ReportCount, s.SuccessfulCallSequence, s.PendingCompactions} {
+	for _, v := range []*int{s.ReportCount, s.SuccessfulCallSequence, s.PendingCompactions, s.CallSequence} {
 		if v != nil && !validSnapshotInteger(*v) {
 			return false
 		}

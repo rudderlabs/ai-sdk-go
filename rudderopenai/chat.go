@@ -60,8 +60,9 @@ func recordChatToolResults(c *kit.Call) {
 func chatSpec(cfg config, rejected *rejectedHosts) *kit.Spec {
 	return &kit.Spec{Details: cfg.details,
 		Provider: cfg.provider, Integration: integration, Analytics: cfg.analytics,
-		IsStream:  isStream,
-		OnRequest: recordChatToolResults,
+		IsStream:      isStream,
+		OnRequest:     recordChatToolResults,
+		InputMessages: chatInputMessages,
 		// Ask for usage in the final chunk; some OpenAI-compatible hosts reject stream_options, so a
 		// refused request is sent again as the caller wrote it.
 		PrepareStream: func(c *kit.Call) *kit.Prepared {
@@ -131,6 +132,15 @@ func onChatResponse(c *kit.Call, body map[string]any, resp *http.Response) bool 
 	if cost == nil {
 		cost = g.cost
 	}
+	// Every returned choice was generated: count the tool calls of all of them. A repeated
+	// response (same ID) adds none.
+	var tools []rudderstackai.ToolCall
+	for _, ch := range choices {
+		for _, t := range kit.List(kit.Map(kit.Map(ch)["message"])["tool_calls"]) {
+			tc := kit.Map(t)
+			tools = append(tools, rudderstackai.ToolCall{ID: kit.Str(tc["id"]), Name: chatToolName(tc), Args: kit.ParseToolValue(chatToolArgs(tc))})
+		}
+	}
 	recorded := c.RecordCall(rudderstackai.LLMCall{
 		Integration: c.Integration, Provider: c.Provider,
 		Model:          firstOf(g.model, kit.Str(body["model"]), c.Model),
@@ -141,17 +151,8 @@ func onChatResponse(c *kit.Call, body map[string]any, resp *http.Response) bool 
 		CachedInputTokens: kit.Int(kit.Map(usage["prompt_tokens_details"])["cached_tokens"]),
 		CostUSD:           cost, ServiceTier: kit.Str(body["service_tier"]), ResponseID: kit.Str(body["id"]),
 		FinishReason: finish, UsageUnknown: usage == nil,
-		OutputText: kit.Str(message["content"]),
+		OutputText: kit.Str(message["content"]), OutputToolCalls: kit.ToolCalls(tools),
 	})
-	// Every returned choice was generated: count the tool calls of all of them. A repeated
-	// response (same ID) adds none.
-	var tools []rudderstackai.ToolCall
-	for _, ch := range choices {
-		for _, t := range kit.List(kit.Map(kit.Map(ch)["message"])["tool_calls"]) {
-			tc := kit.Map(t)
-			tools = append(tools, rudderstackai.ToolCall{ID: kit.Str(tc["id"]), Name: chatToolName(tc), Args: kit.ParseToolValue(chatToolArgs(tc))})
-		}
-	}
 	if recorded && len(tools) > 0 {
 		c.Interaction.RecordToolCalls(tools...)
 	}

@@ -69,14 +69,15 @@ func Middleware(opts ...Option) option.Middleware {
 		o(&c)
 	}
 	spec := &kit.Spec{Details: c.details,
-		Provider:    c.provider,
-		Integration: integration,
-		Analytics:   c.analytics,
-		IsStream:    func(_ *http.Request, body map[string]any) bool { return body["stream"] == true },
-		Untracked:   func(req *http.Request, _ map[string]any) bool { return !isMessages(req) },
-		OnRequest:   recordToolResults,
-		OnResponse:  recordMessage,
-		NewStream:   newStream,
+		Provider:      c.provider,
+		Integration:   integration,
+		Analytics:     c.analytics,
+		IsStream:      func(_ *http.Request, body map[string]any) bool { return body["stream"] == true },
+		Untracked:     func(req *http.Request, _ map[string]any) bool { return !isMessages(req) },
+		OnRequest:     recordToolResults,
+		InputMessages: inputMessages,
+		OnResponse:    recordMessage,
+		NewStream:     newStream,
 	}
 	return spec.Intercept
 }
@@ -151,6 +152,87 @@ func toolCall(b map[string]any) rudderstackai.ToolCall {
 	return tc
 }
 
+// sourcePart is an image or document block: inline data keeps its kind only.
+func sourcePart(modality string, b map[string]any) []rudderstackai.GenAIPart {
+	src := kit.Map(b["source"])
+	if src["type"] == "url" {
+		return kit.URIPart(modality, src["url"], src["media_type"])
+	}
+	return []rudderstackai.GenAIPart{kit.BlobPart(modality, src["media_type"])}
+}
+
+// blockParts maps one content block to parts; tool_result blocks are split out by the caller.
+func blockParts(b map[string]any) []rudderstackai.GenAIPart {
+	switch b["type"] {
+	case "text":
+		return kit.TextPart(b["text"])
+	case "thinking":
+		return kit.ReasoningPart(b["thinking"])
+	case "image":
+		return sourcePart("image", b)
+	case "document":
+		return sourcePart("document", b)
+	case "tool_use", "server_tool_use", "mcp_tool_use":
+		return kit.ToolCallPart(b["id"], b["name"], b["input"])
+	}
+	return kit.OtherPart(b["type"])
+}
+
+// toolResultResponse is a tool_result content: text only as one string, else its parts.
+func toolResultResponse(content any) any {
+	list, ok := content.([]any)
+	if !ok {
+		return content
+	}
+	var parts []rudderstackai.GenAIPart
+	for _, v := range list {
+		parts = append(parts, blockParts(kit.Map(v))...)
+	}
+	var text strings.Builder
+	for _, p := range parts {
+		if p["type"] != "text" {
+			return parts
+		}
+		text.WriteString(kit.Str(p["content"]))
+	}
+	return text.String()
+}
+
+// inputMessages maps system and messages to GenAI messages; a tool_result block becomes a tool message.
+func inputMessages(req map[string]any) []rudderstackai.GenAIMessage {
+	var sys []rudderstackai.GenAIPart
+	switch s := req["system"].(type) {
+	case string:
+		sys = kit.TextPart(s)
+	case []any:
+		for _, v := range s {
+			sys = append(sys, blockParts(kit.Map(v))...)
+		}
+	}
+	out := []rudderstackai.GenAIMessage{kit.Message("system", sys...)}
+	for _, v := range kit.List(req["messages"]) {
+		m := kit.Map(v)
+		role := kit.Str(m["role"])
+		if s, ok := m["content"].(string); ok {
+			out = append(out, kit.Message(role, kit.TextPart(s)...))
+			continue
+		}
+		var parts []rudderstackai.GenAIPart
+		for _, bv := range kit.List(m["content"]) {
+			b := kit.Map(bv)
+			if b["type"] != "tool_result" {
+				parts = append(parts, blockParts(b)...)
+				continue
+			}
+			out = append(out, kit.Message(role, parts...))
+			parts = nil
+			out = append(out, kit.Message("tool", kit.ToolResponsePart(b["tool_use_id"], toolResultResponse(b["content"]))))
+		}
+		out = append(out, kit.Message(role, parts...))
+	}
+	return kit.Messages(out...)
+}
+
 func recordMessage(c *kit.Call, msg map[string]any, _ *http.Response) bool {
 	usage := kit.Map(msg["usage"])
 	t := normalise(usage)
@@ -175,7 +257,7 @@ func recordMessage(c *kit.Call, msg map[string]any, _ *http.Response) bool {
 		CachedInputTokens: t.read, CacheWriteTokens: t.write, CacheWrite1hTokens: t.write1h,
 		ServiceTier: serviceTier(usage), ServerToolCalls: serverToolCalls(usage),
 		ResponseID: kit.Str(msg["id"]), FinishReason: kit.Str(msg["stop_reason"]),
-		UsageUnknown: usage == nil, OutputText: text.String(),
+		UsageUnknown: usage == nil, OutputText: text.String(), OutputToolCalls: kit.ToolCalls(tools),
 	})
 	if recorded && len(tools) > 0 {
 		c.Interaction.RecordToolCalls(tools...)

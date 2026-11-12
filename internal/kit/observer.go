@@ -37,6 +37,8 @@ type Observer struct {
 	Model          string
 	RequestedModel string
 	StartedAt      time.Time
+	// InputMessages is the request as GenAI messages (see Call.InputMessages).
+	InputMessages []rudderstackai.GenAIMessage
 
 	ResponseID      string
 	InputTokens     *int
@@ -65,6 +67,8 @@ type Observer struct {
 	toolKeys map[string]*streamTool
 	text     strings.Builder
 	keepText bool
+	// capture: the call's output is sent as output_text and output_tool_calls.
+	capture  bool
 	first    bool
 	finished bool
 }
@@ -76,7 +80,8 @@ func NewObserver(c *Call) *Observer {
 		Details: c.Details, StartedAt: c.StartedAt,
 		Interaction: c.Interaction, Ephemeral: c.Ephemeral, Provider: c.Provider, Integration: c.Integration,
 		Model: c.Model, RequestedModel: c.Model, toolKeys: map[string]*streamTool{},
-		keepText: KeepsText(c.Interaction),
+		keepText: KeepsText(c.Interaction), capture: CapturesCallContent(c.Interaction),
+		InputMessages: c.InputMessages,
 	}
 	OnBeforeEnd(c.Interaction, func() {
 		if o.Done {
@@ -138,9 +143,10 @@ func (o *Observer) NoteToolArgs(key, chunk string) {
 	t.args = nil
 }
 
-// NoteText appends streamed answer text, kept only for the classifier and evaluator.
+// NoteText appends streamed answer text, kept only for the classifier, the evaluator and
+// output_text.
 func (o *Observer) NoteText(s string) {
-	if o.keepText && s != "" {
+	if (o.keepText || o.capture) && s != "" {
 		o.mu.Lock()
 		o.text.WriteString(s)
 		o.mu.Unlock()
@@ -152,6 +158,22 @@ func (o *Observer) HasTools() bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return len(o.tools) > 0
+}
+
+// toolCalls are the tools seen so far as output_tool_calls, only when the call's content is captured.
+func (o *Observer) toolCalls() []rudderstackai.GenAIToolCall {
+	if !o.capture {
+		return nil
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	var out []rudderstackai.GenAIToolCall
+	for _, t := range o.tools {
+		if t.name != "" {
+			out = append(out, rudderstackai.GenAIToolCall{Name: t.name, Arguments: ParseToolValue(t.argsValue())})
+		}
+	}
+	return out
 }
 
 func (o *Observer) recordTools() {
@@ -200,6 +222,11 @@ func (o *Observer) Finish(end End, errorType string) {
 			CachedInputTokens: o.CachedInputTokens, CacheWriteTokens: o.CacheWriteTokens, CacheWrite1hTokens: o.CacheWrite1hTokens,
 			UsageUnknown: true,
 		}
+		// What arrived before the failure or cut-off.
+		o.mu.Lock()
+		call.OutputText = o.text.String()
+		o.mu.Unlock()
+		call.OutputToolCalls = o.toolCalls()
 		o.RecordCall(call)
 		// Tools the model already invoked still count.
 		o.recordTools()
@@ -225,6 +252,7 @@ func (o *Observer) Finish(end End, errorType string) {
 	o.mu.Lock()
 	call.OutputText = o.text.String()
 	o.mu.Unlock()
+	call.OutputToolCalls = o.toolCalls()
 	if o.RecordCall(call) {
 		o.recordTools()
 	}
@@ -246,5 +274,6 @@ func (o *Observer) RecordCall(call rudderstackai.LLMCall) bool {
 	call.StartedAt, call.FirstTokenAt = o.StartedAt, o.FirstTokenAt
 	call.CallPurpose = o.Details.CallPurpose
 	call.FallbackUsed, call.BYOK = o.Details.FallbackUsed, o.Details.BYOK
+	call.InputMessages = o.InputMessages
 	return o.Interaction.RecordCall(call)
 }
