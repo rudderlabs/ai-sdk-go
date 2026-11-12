@@ -35,9 +35,17 @@ type fixtureSpan struct {
 	Name, Kind           string
 	Start, End           string
 	Attributes, Resource map[string]any
-	Scope                struct{ Name, Version string }
-	Status               struct{ Code, Message string }
-	Events               []struct {
+	Scope                struct {
+		Name, Version string
+		Attributes    map[string]any
+	}
+	Status struct{ Code, Message string }
+	Links  []struct {
+		TraceID    string `json:"traceId"`
+		SpanID     string `json:"spanId"`
+		Attributes map[string]any
+	}
+	Events []struct {
 		Name       string
 		Time       string `json:"timeUnixNano"`
 		Attributes map[string]any
@@ -150,7 +158,22 @@ func startFixture(ctx context.Context, t *testing.T, f fixtureSpan, processors .
 		ctx = trace.ContextWithRemoteSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{TraceID: tid, SpanID: parent, TraceFlags: trace.FlagsSampled}))
 	}
 	kind := map[string]trace.SpanKind{"internal": trace.SpanKindInternal, "server": trace.SpanKindServer, "client": trace.SpanKindClient, "producer": trace.SpanKindProducer, "consumer": trace.SpanKindConsumer}[f.Kind]
-	_, s := provider.Tracer(f.Scope.Name, trace.WithInstrumentationVersion(f.Scope.Version)).Start(ctx, f.Name, trace.WithTimestamp(nanos(f.Start)), trace.WithSpanKind(kind), trace.WithAttributes(fixtureAttributes(f.Attributes)...))
+	links := make([]trace.Link, 0, len(f.Links))
+	for _, l := range f.Links {
+		linkTraceID, err := trace.TraceIDFromHex(l.TraceID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		linkSpanID, err := trace.SpanIDFromHex(l.SpanID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		links = append(links, trace.Link{
+			SpanContext: trace.NewSpanContext(trace.SpanContextConfig{TraceID: linkTraceID, SpanID: linkSpanID}),
+			Attributes:  fixtureAttributes(l.Attributes),
+		})
+	}
+	_, s := provider.Tracer(f.Scope.Name, trace.WithInstrumentationVersion(f.Scope.Version), trace.WithInstrumentationAttributes(fixtureAttributes(f.Scope.Attributes)...)).Start(ctx, f.Name, trace.WithTimestamp(nanos(f.Start)), trace.WithSpanKind(kind), trace.WithAttributes(fixtureAttributes(f.Attributes)...), trace.WithLinks(links...))
 	status := map[string]codes.Code{"ok": codes.Ok, "error": codes.Error}[f.Status.Code]
 	s.SetStatus(status, f.Status.Message)
 	for _, e := range f.Events {
@@ -364,16 +387,6 @@ func TestTracingConformance(t *testing.T) {
 			var expected object
 			if err := json.Unmarshal(c.Expected, &expected); err != nil {
 				t.Fatal(err)
-			}
-			if c.Name == "root span without GenAI attributes, identity from the resource" {
-				// Go strips error text with capture off; the Node-owned fixture
-				// follows in SDK-6802. Adjust only this Go-local expectation.
-				properties := expected["properties"].(object)
-				delete(properties, "status_message")
-				rs := properties["otlp"].(object)["resourceSpans"].([]any)[0].(object)
-				ss := rs["scopeSpans"].([]any)[0].(object)
-				span := ss["spans"].([]any)[0].(object)
-				delete(span["status"].(object), "message")
 			}
 			if c.Compare == "truncation" {
 				if actual["properties"].(object)["truncated"] != true {
