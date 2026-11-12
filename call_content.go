@@ -1,8 +1,10 @@
 package rudderstackai
 
 import (
+	"encoding"
 	"encoding/json"
 	"math"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -256,8 +258,9 @@ func stripBinary(v any) any {
 	case nil, bool, int, int64, float64, json.Number:
 		return v
 	}
-	// A typed value (a struct, []GenAIPart, a named map): its JSON form.
-	c, ok := jsonSafe(v)
+	// A typed value (a struct, []GenAIPart, map[string][]byte...): walked to plain JSON values
+	// with its byte slices dropped, so they are never encoded as base64.
+	c, ok := typedValue(reflect.ValueOf(v))
 	if !ok {
 		return nil
 	}
@@ -266,6 +269,105 @@ func stripBinary(v any) any {
 		return stripBinary(c)
 	}
 	return c
+}
+
+var (
+	rawMessageType = reflect.TypeOf(json.RawMessage(nil))
+	marshalerType  = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
+	textType       = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+)
+
+// typedValue converts a typed Go value to plain JSON values. ok is false for a byte slice or array
+// (never sent) and for a value that cannot be encoded. A json.RawMessage that is valid JSON is
+// decoded; types with their own marshaler are encoded by it.
+func typedValue(rv reflect.Value) (out any, ok bool) {
+	if !rv.IsValid() {
+		return nil, true
+	}
+	t := rv.Type()
+	if t == rawMessageType {
+		var decoded any
+		if json.Unmarshal(rv.Bytes(), &decoded) != nil {
+			return nil, false
+		}
+		return stripBinary(decoded), true
+	}
+	if t.Implements(marshalerType) || t.Implements(textType) || (rv.CanAddr() && reflect.PointerTo(t).Implements(marshalerType)) {
+		if (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) && rv.IsNil() {
+			return nil, true
+		}
+		return jsonSafe(rv.Interface())
+	}
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if rv.IsNil() {
+			return nil, true
+		}
+		return typedValue(rv.Elem())
+	case reflect.String:
+		return rv.String(), true
+	case reflect.Bool:
+		return rv.Bool(), true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int(), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return rv.Uint(), true
+	case reflect.Float32, reflect.Float64:
+		f := rv.Float()
+		return f, !math.IsNaN(f) && !math.IsInf(f, 0)
+	case reflect.Slice, reflect.Array:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return nil, false
+		}
+		if rv.Kind() == reflect.Slice && rv.IsNil() {
+			return nil, true
+		}
+		list := make([]any, 0, rv.Len())
+		for n := 0; n < rv.Len(); n++ {
+			if e, ok := typedValue(rv.Index(n)); ok {
+				list = append(list, e)
+			}
+		}
+		return list, true
+	case reflect.Map:
+		if t.Key().Kind() != reflect.String {
+			return jsonSafe(rv.Interface())
+		}
+		if rv.IsNil() {
+			return nil, true
+		}
+		m := make(map[string]any, rv.Len())
+		for _, k := range rv.MapKeys() {
+			if e, ok := typedValue(rv.MapIndex(k)); ok {
+				m[k.String()] = e
+			}
+		}
+		return m, true
+	case reflect.Struct:
+		m := map[string]any{}
+		for n := 0; n < t.NumField(); n++ {
+			f := t.Field(n)
+			if !f.IsExported() {
+				continue
+			}
+			name, opts, _ := strings.Cut(f.Tag.Get("json"), ",")
+			if name == "-" && opts == "" {
+				continue
+			}
+			if name == "" {
+				name = f.Name
+			}
+			fv := rv.Field(n)
+			if strings.Contains(opts, "omitempty") && fv.IsZero() {
+				continue
+			}
+			if e, ok := typedValue(fv); ok {
+				m[name] = e
+			}
+		}
+		return m, true
+	}
+	return jsonSafe(rv.Interface())
 }
 
 // genAIMessagesValue is the messages as generic JSON: parts without a string type are skipped, and

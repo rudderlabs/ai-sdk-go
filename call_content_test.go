@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -260,5 +261,37 @@ func TestToolArgumentsAreStripped(t *testing.T) {
 	args := c.outputToolCalls[0].(map[string]any)["arguments"].(map[string]any)["image"].(map[string]any)
 	if _, ok := args["data"]; ok {
 		t.Fatalf("%v", args)
+	}
+}
+
+type typedPayload struct {
+	Name string `json:"name"`
+	Blob []byte `json:"blob"`
+	Raw  json.RawMessage
+	Skip string `json:"-"`
+}
+
+func TestTypedContainersNeverEncodeBytes(t *testing.T) {
+	typed := map[string][]byte{"payload": []byte("PRIVATE")}
+	nested := []map[string][]byte{{"p": []byte("PRIVATE")}}
+	st := typedPayload{Name: "n", Blob: []byte("PRIVATE"), Raw: json.RawMessage(`{"k":1}`), Skip: "x"}
+	c := captureCallContent(
+		[]GenAIMessage{{Role: "tool", Parts: []GenAIPart{
+			{"type": "tool_call_response", "id": "1", "response": typed},
+			{"type": "text", "content": "hi", "extra": nested},
+			{"type": "tool_call_response", "response": &st},
+			{"type": "text", "content": [3]byte{1, 2, 3}},
+		}}},
+		"", []GenAIToolCall{{Name: "t", Arguments: typed}, {Name: "u", Arguments: map[string]any{"deep": []any{typed, st}}}},
+	)
+	b, _ := json.Marshal(map[string]any{"in": c.inputMessages, "out": c.outputToolCalls})
+	got := string(b)
+	for _, leaked := range []string{"PRIVATE", "UFJJVkFURQ", "AQID"} {
+		if strings.Contains(got, leaked) {
+			t.Fatalf("%s leaked: %s", leaked, got)
+		}
+	}
+	if !strings.Contains(got, `"name":"n"`) || !strings.Contains(got, `"Raw":{"k":1}`) || strings.Contains(got, `"Skip"`) {
+		t.Fatalf("struct lost: %s", got)
 	}
 }
