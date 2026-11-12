@@ -35,6 +35,9 @@ type Call struct {
 	Request map[string]any
 	// HTTPRequest is the request as sent.
 	HTTPRequest *http.Request
+	// InputMessages is the request as GenAI messages. An integration's OnRequest sets it, and only
+	// when [CapturesCallContent]; RecordCall and the stream Observer pass it on.
+	InputMessages []rudderstackai.GenAIMessage
 }
 
 // StreamHandler sees each server-sent event of a streamed response and how the stream ended.
@@ -83,6 +86,9 @@ type Spec struct {
 	IsStream func(req *http.Request, body map[string]any) bool
 	// Untracked passes a request through untracked (a background response that is only queued).
 	Untracked func(req *http.Request, body map[string]any) bool
+	// InputMessages maps the request body to GenAI messages for input_messages. Called only when
+	// the call's content is captured.
+	InputMessages func(request map[string]any) []rudderstackai.GenAIMessage
 	// OnRequest sees the request before it is sent (tool results of earlier calls).
 	OnRequest func(c *Call)
 	// PrepareStream may change a streamed request.
@@ -169,6 +175,9 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	safe(func() {
 		if s.OnRequest != nil {
 			s.OnRequest(c)
+		}
+		if s.InputMessages != nil && CapturesCallContent(i) {
+			c.InputMessages = s.InputMessages(c.Request)
 		}
 		if msgs, ok := body["messages"]; ok {
 			KeepMessages(i, msgs)
@@ -523,6 +532,7 @@ func (c *Call) RecordCall(call rudderstackai.LLMCall) bool {
 	call.FirstTokenAt = c.FirstTokenAt
 	call.CallPurpose = c.Details.CallPurpose
 	call.FallbackUsed, call.BYOK = c.Details.FallbackUsed, c.Details.BYOK
+	call.InputMessages = c.InputMessages
 	return c.Interaction.RecordCall(call)
 }
 

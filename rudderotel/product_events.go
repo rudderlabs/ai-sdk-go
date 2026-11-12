@@ -218,6 +218,10 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 	hook.Tracing.AdoptAnalytics(i, client)
 	if role == "llm" {
 		call := spanCall(s)
+		// Built only when the event will carry content; core masks and caps it.
+		if hook.CapturesCallContent(i) {
+			call.InputMessages, call.OutputToolCalls = spanCallContent(a)
+		}
 		i.RecordCall(call)
 		if !call.FirstTokenAt.IsZero() {
 			hook.FirstToken(i, call.FirstTokenAt)

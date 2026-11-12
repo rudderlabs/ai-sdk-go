@@ -36,6 +36,8 @@ type scenario struct {
 	Expected        []obj            `json:"expected"`
 	ExactCallTiming bool             `json:"exact_call_timing"`
 	ExactNumbers    bool             `json:"exact_numbers"`
+	// PerCallContent keeps call_index in the comparison; without it call_index is dropped.
+	PerCallContent bool `json:"per_call_content"`
 }
 
 // apiDriver runs one `call` step of an API. Integration test files register theirs in init.
@@ -306,7 +308,7 @@ func runScenario(t *testing.T, sc scenario) {
 		t.Fatalf("steps: %v", err)
 	}
 	rudderstackai.Flush(context.Background())
-	actual := normalise(rec.all(), sc.ExactCallTiming)
+	actual := normalise(rec.all(), sc.ExactCallTiming, sc.PerCallContent)
 	for _, m := range rec.all() {
 		props := map[string]any(m.Properties)
 		if err := testkit.ValidateEvent(m.Event, jsonRoundTrip(props).(obj)); err != nil {
@@ -500,6 +502,18 @@ func (r *run) step(ctx context.Context, s obj) error {
 			if err != nil {
 				return err
 			}
+			if drop, ok := s["drop_keys"].([]any); ok {
+				var m map[string]any
+				if err := json.Unmarshal(b, &m); err != nil {
+					return err
+				}
+				for _, k := range drop {
+					delete(m, str(k))
+				}
+				if b, err = json.Marshal(m); err != nil {
+					return err
+				}
+			}
 			if r.saved == nil {
 				r.saved = map[string][]byte{}
 			}
@@ -515,13 +529,22 @@ func (r *run) step(ctx context.Context, s obj) error {
 
 // snapshot is the saved pause snapshot an interaction or task option `resume` names.
 func (r *run) snapshot(o obj) *rudderstackai.PausedInteraction {
-	name := str(o["resume"])
-	if name == "" {
+	var raw []byte
+	switch v := o["resume"].(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		raw = r.saved[v]
+	case obj:
+		// A hand-written snapshot, passed as is.
+		raw, _ = json.Marshal(v)
+	default:
 		return nil
 	}
 	var p rudderstackai.PausedInteraction
-	if err := json.Unmarshal(r.saved[name], &p); err != nil {
-		r.t.Fatalf("resume %s: %v", name, err)
+	if err := json.Unmarshal(raw, &p); err != nil {
+		r.t.Fatalf("resume: %v", err)
 	}
 	return &p
 }
@@ -619,6 +642,15 @@ func llmCall(s obj) rudderstackai.LLMCall {
 			c.FirstTokenAt = c.StartedAt.Add(time.Duration(ms * float64(time.Millisecond)))
 		}
 	}
+	c.OutputText = str(s["output_text"])
+	if v, ok := s["input_messages"]; ok {
+		raw, _ := json.Marshal(v)
+		_ = json.Unmarshal(raw, &c.InputMessages)
+	}
+	if v, ok := s["output_tool_calls"]; ok {
+		raw, _ := json.Marshal(v)
+		_ = json.Unmarshal(raw, &c.OutputToolCalls)
+	}
 	if v, ok := s["cost_usd"].(float64); ok {
 		c.CostUSD = &v
 	}
@@ -682,7 +714,7 @@ func modelPrice(p obj) rudderstackai.ModelPrice {
 
 var uuidV4 = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 
-func normalise(msgs []analytics.Track, exactCallTiming bool) []obj {
+func normalise(msgs []analytics.Track, exactCallTiming, perCallContent bool) []obj {
 	ids := map[string]string{}
 	counters := map[string]int{}
 	symbol := func(v any, kind string) any {
@@ -725,6 +757,9 @@ func normalise(msgs []analytics.Track, exactCallTiming bool) []obj {
 		}
 		if value, has := props["conversation_id"]; has {
 			props["conversation_id"] = symbol(value, "conv")
+		}
+		if !perCallContent && m.Event == "ai_llm_response_received" {
+			delete(props, "call_index")
 		}
 		for _, k := range []string{"latency_ms", "time_to_first_token_ms", "tool_duration_ms", "classifier_duration_ms", "total_paused_ms"} {
 			if exactCallTiming && m.Event == "ai_llm_response_received" && (k == "latency_ms" || k == "time_to_first_token_ms") {

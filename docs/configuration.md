@@ -39,7 +39,7 @@ err := rudderstackai.Configure(
 | Option                                  | Default | Meaning                                                                                                                       |
 | --------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `WithAnalytics(client)`                 | none    | Default RudderStack client. Nil clears it.                                                                                    |
-| `WithCaptureContent(on)`                | off     | Send `prompt_text`, `response_text`, `action_details.feedback_text` and score `explanation`, [masked](#privacy-and-masking). |
+| `WithCaptureContent(on)`                | off     | Send `prompt_text`, `response_text`, `action_details.feedback_text`, score `explanation` and, with call events, per-call `input_messages`, `output_text` and `output_tool_calls`, [masked](#privacy-and-masking). |
 | `WithLLMCallEvents(on)`                 | off     | Also send one [`ai_llm_response_received`](events.md#ai_llm_response_received) per model call.                                |
 | `WithTaskStartedEvents(on)`             | off     | Also send [`ai_task_started`](events.md#ai_task_started) when a `RunTask` run starts (not when it resumes).                   |
 | `WithToolBreakdown(on)`                 | off     | Add [`tool_breakdown`](events.md#tool_breakdown) to `ai_response_received`.                                                   |
@@ -215,7 +215,7 @@ Sent by default: IDs, models, token counts, latency, cost, status, tool names. N
 
 Custom response extras, declared tool properties and action details drop content-named keys when capture is off: `prompt_text`, `response_text`, `feedback_text`, `intent_summary`, `explanation`, `call_reason` and `capability_detail`. The check recognizes camelCase, PascalCase, uppercase, hyphens and spaces, and warns once per original key. Unrelated names such as `promptLength` and `cardKinds` are kept. SDK-owned property names are reserved under those same spellings even with capture on. Use the dedicated prompt/response fields for those properties.
 
-With content capture on (`WithCaptureContent(true)`, or `CaptureContent` per interaction or task), `prompt_text`, `response_text`, `action_details.feedback_text` and `explanation` are sent. They, and the classifier's `intent_summary`, are masked first:
+With content capture on (`WithCaptureContent(true)`, or `CaptureContent` per interaction or task), `prompt_text`, `response_text`, `action_details.feedback_text` and `explanation` are sent, and, with `WithLLMCallEvents`, each call's `input_messages`, `output_text` and `output_tool_calls`. They, and the classifier's `intent_summary`, are masked first:
 
 | Pattern                                                                                                                                                                                  | Becomes    |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |

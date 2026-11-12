@@ -73,8 +73,10 @@ func propertiesBytes(p map[string]any) int {
 }
 
 // fitProperties keeps properties within maxPropertiesBytes, so an oversized event keeps its
-// metrics rather than being dropped whole: captured text goes first (response_text, prompt_text,
-// action_details.feedback_text), then tool_breakdown and usage_breakdown entries from the end.
+// metrics rather than being dropped whole: a call's input_messages shrink first (oldest after the
+// system prompt, then the longest strings), then captured text goes (output_text,
+// output_tool_calls, response_text, prompt_text, action_details.feedback_text), then
+// tool_breakdown and usage_breakdown entries from the end.
 func fitProperties(event string, properties map[string]any) map[string]any {
 	if propertiesBytes(properties) <= maxPropertiesBytes {
 		return properties
@@ -88,7 +90,38 @@ func fitProperties(event string, properties map[string]any) map[string]any {
 		warnOnce("event-too-large", fmt.Sprintf("%s was over %d bytes; trimmed it", event, maxPropertiesBytes), 0)
 		return p
 	}
-	for _, key := range []string{"response_text", "prompt_text"} {
+	if input, ok := p["input_messages"].([]any); ok {
+		// Output that overflows on its own goes first, so the input is not shortened for nothing.
+		rest := make(map[string]any, len(p))
+		for k, v := range p {
+			if k != "input_messages" {
+				rest[k] = v
+			}
+		}
+		for _, key := range []string{"output_text", "output_tool_calls"} {
+			if propertiesBytes(rest) <= maxPropertiesBytes {
+				break
+			}
+			delete(rest, key)
+			delete(p, key)
+		}
+		p["input_messages"] = input
+		if fits() {
+			return trimmed()
+		}
+		// Oldest messages after the system prompt go first, then the longest strings are shortened.
+		p["input_truncated"] = true
+		if fitted, ok := trimInputMessages(input, propertiesBytes(p)-maxPropertiesBytes); ok {
+			p["input_messages"] = fitted
+		} else {
+			delete(p, "input_messages")
+			delete(p, "input_truncated")
+		}
+		if fits() {
+			return trimmed()
+		}
+	}
+	for _, key := range []string{"output_text", "output_tool_calls", "response_text", "prompt_text"} {
 		if _, ok := p[key]; !ok {
 			continue
 		}

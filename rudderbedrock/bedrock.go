@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -165,8 +166,9 @@ func docValue(d document.Interface) any {
 	return v
 }
 
-// toolResultValue: a single json block is its value, a single text block parsed JSON or text.
-func toolResultValue(content []types.ToolResultContentBlock) any {
+// toolOutcomeValue is a tool result as the tool rules and tool_breakdown see it: a single json
+// block is its value, a single text block parsed JSON or text. Unchanged by per-call content.
+func toolOutcomeValue(content []types.ToolResultContentBlock) any {
 	if len(content) == 1 {
 		switch b := content[0].(type) {
 		case *types.ToolResultContentBlockMemberJson:
@@ -187,6 +189,34 @@ func toolResultValue(content []types.ToolResultContentBlock) any {
 	return out
 }
 
+// toolResultValue is a tool result as sent: a single json block is its value, text only is one
+// string, anything else the list of parts (media as blobs, never bytes).
+func toolResultValue(content []types.ToolResultContentBlock) any {
+	if len(content) == 1 {
+		if j, ok := content[0].(*types.ToolResultContentBlockMemberJson); ok {
+			return docValue(j.Value)
+		}
+	}
+	var parts []rudderstackai.GenAIPart
+	for _, block := range content {
+		switch b := block.(type) {
+		case *types.ToolResultContentBlockMemberJson:
+			parts = append(parts, rudderstackai.GenAIPart{"type": "json", "content": docValue(b.Value)})
+		case *types.ToolResultContentBlockMemberText:
+			parts = append(parts, kit.TextPart(b.Value)...)
+		case *types.ToolResultContentBlockMemberImage:
+			parts = append(parts, imagePart(b.Value)...)
+		case *types.ToolResultContentBlockMemberVideo:
+			parts = append(parts, videoPart(b.Value)...)
+		case *types.ToolResultContentBlockMemberDocument:
+			parts = append(parts, documentPart(b.Value)...)
+		default:
+			parts = append(parts, kit.OtherPart(otherName(block))...)
+		}
+	}
+	return kit.ResponseOf(parts)
+}
+
 // recordToolResults settles earlier tool calls from the toolResult blocks sent back.
 func recordToolResults(i *rudderstackai.Interaction, messages []types.Message) {
 	for _, m := range messages {
@@ -196,9 +226,125 @@ func recordToolResults(i *rudderstackai.Interaction, messages []types.Message) {
 				continue
 			}
 			failed := r.Value.Status == types.ToolResultStatusError
-			kit.RecordToolResult(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolResultValue(r.Value.Content)}, len(r.Value.Content) > 0)
+			kit.RecordToolResult(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolOutcomeValue(r.Value.Content)}, len(r.Value.Content) > 0)
 		}
 	}
+}
+
+// otherName is the Converse JSON key of a block the SDK does not map.
+func otherName(block any) string {
+	t := fmt.Sprintf("%T", block)
+	t = t[strings.LastIndex(t, "Member")+len("Member"):]
+	if t == "" {
+		return ""
+	}
+	return strings.ToLower(t[:1]) + t[1:]
+}
+
+// mediaPart maps an image, video or document block: an S3 location is a URI, inline bytes a bare blob.
+func mediaPart(modality string, s3 *types.S3Location, mime string) []rudderstackai.GenAIPart {
+	if s3 != nil {
+		return kit.URIPart(modality, aws.ToString(s3.Uri), mime)
+	}
+	return []rudderstackai.GenAIPart{kit.BlobPart(modality, mime)}
+}
+
+func imagePart(b types.ImageBlock) []rudderstackai.GenAIPart {
+	var s3 *types.S3Location
+	if src, ok := b.Source.(*types.ImageSourceMemberS3Location); ok {
+		s3 = &src.Value
+	}
+	mime := ""
+	if b.Format != "" {
+		mime = "image/" + string(b.Format)
+	}
+	return mediaPart("image", s3, mime)
+}
+
+func videoPart(b types.VideoBlock) []rudderstackai.GenAIPart {
+	var s3 *types.S3Location
+	if src, ok := b.Source.(*types.VideoSourceMemberS3Location); ok {
+		s3 = &src.Value
+	}
+	return mediaPart("video", s3, "")
+}
+
+func documentPart(b types.DocumentBlock) []rudderstackai.GenAIPart {
+	var s3 *types.S3Location
+	if src, ok := b.Source.(*types.DocumentSourceMemberS3Location); ok {
+		s3 = &src.Value
+	}
+	return mediaPart("document", s3, "")
+}
+
+// blockParts maps one Converse content block to GenAI parts, or returns a tool result to send as
+// its own tool message.
+func blockParts(block types.ContentBlock) (parts []rudderstackai.GenAIPart, response rudderstackai.GenAIPart) {
+	switch b := block.(type) {
+	case *types.ContentBlockMemberText:
+		return kit.TextPart(b.Value), nil
+	case *types.ContentBlockMemberToolUse:
+		return kit.ToolCallPart(aws.ToString(b.Value.ToolUseId), aws.ToString(b.Value.Name), docValue(b.Value.Input)), nil
+	case *types.ContentBlockMemberToolResult:
+		var result any
+		if len(b.Value.Content) > 0 {
+			result = toolResultValue(b.Value.Content)
+		}
+		return nil, kit.ToolResponsePart(aws.ToString(b.Value.ToolUseId), result)
+	case *types.ContentBlockMemberReasoningContent:
+		if t, ok := b.Value.(*types.ReasoningContentBlockMemberReasoningText); ok {
+			return kit.ReasoningPart(aws.ToString(t.Value.Text)), nil
+		}
+		return kit.OtherPart("reasoningContent"), nil
+	case *types.ContentBlockMemberImage:
+		return imagePart(b.Value), nil
+	case *types.ContentBlockMemberVideo:
+		return videoPart(b.Value), nil
+	case *types.ContentBlockMemberDocument:
+		return documentPart(b.Value), nil
+	}
+	return kit.OtherPart(otherName(block)), nil
+}
+
+// inputMessages is the conversation Converse was sent: system blocks first, then every message,
+// with each tool result as its own tool message, in order.
+func inputMessages(system []types.SystemContentBlock, messages []types.Message) []rudderstackai.GenAIMessage {
+	var all []rudderstackai.GenAIMessage
+	if system != nil {
+		var parts []rudderstackai.GenAIPart
+		for _, b := range system {
+			if t, ok := b.(*types.SystemContentBlockMemberText); ok {
+				parts = append(parts, kit.TextPart(t.Value)...)
+			} else {
+				parts = append(parts, kit.OtherPart(otherName(b))...)
+			}
+		}
+		all = append(all, kit.Message("system", parts...))
+	}
+	for _, m := range messages {
+		role := "user"
+		if m.Role == types.ConversationRoleAssistant {
+			role = "assistant"
+		}
+		var current []rudderstackai.GenAIPart
+		flush := func() {
+			if len(current) > 0 {
+				all = append(all, kit.Message(role, current...))
+			}
+			current = nil
+		}
+		for _, block := range m.Content {
+			parts, response := blockParts(block)
+			if response != nil {
+				flush()
+				all = append(all, kit.Message("tool", response))
+			} else {
+				current = append(current, parts...)
+			}
+		}
+		flush()
+	}
+	return kit.Messages(all...)
 }
 
 // plainMessages is the request's text as the classifier reads it ({role, content: [{text}]}).
@@ -261,12 +407,13 @@ func (t *tracker) HandleInitialize(ctx context.Context, in middleware.Initialize
 func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, call func(context.Context) (middleware.InitializeOutput, middleware.Metadata, error)) (middleware.InitializeOutput, middleware.Metadata, error) {
 	var model *string
 	var messages []types.Message
+	var system []types.SystemContentBlock
 	stream := false
 	switch p := in.Parameters.(type) {
 	case *bedrockruntime.ConverseInput:
-		model, messages = p.ModelId, p.Messages
+		model, messages, system = p.ModelId, p.Messages, p.System
 	case *bedrockruntime.ConverseStreamInput:
-		model, messages, stream = p.ModelId, p.Messages, true
+		model, messages, system, stream = p.ModelId, p.Messages, p.System, true
 	default:
 		return call(ctx)
 	}
@@ -280,6 +427,9 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	}
 	c := &kit.Call{Details: rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, t.cfg.details)), Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
 	safe(func() {
+		if kit.CapturesCallContent(i) {
+			c.InputMessages = inputMessages(system, messages)
+		}
 		recordToolResults(i, messages)
 		kit.KeepMessages(i, plainMessages(messages))
 	})
@@ -335,6 +485,9 @@ func recordResponse(c *kit.Call, out *bedrockruntime.ConverseOutput, responseID 
 			}
 		}
 		call.OutputText = text.String()
+	}
+	if kit.CapturesCallContent(c.Interaction) {
+		call.OutputToolCalls = kit.ToolCalls(tools)
 	}
 	if c.RecordCall(call) && len(tools) > 0 {
 		c.Interaction.RecordToolCalls(tools...)

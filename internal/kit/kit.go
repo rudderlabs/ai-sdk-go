@@ -29,6 +29,10 @@ func KeepMessages(i *rudderstackai.Interaction, messages any) { hook.KeepMessage
 // KeepsText reports whether answer text should be collected for the classifier or evaluator.
 func KeepsText(i *rudderstackai.Interaction) bool { return hook.KeepsText(i) }
 
+// CapturesCallContent reports whether each call's input and output (LLMCall.InputMessages,
+// OutputText, OutputToolCalls) should be handed over: call events and content capture are on.
+func CapturesCallContent(i *rudderstackai.Interaction) bool { return hook.CapturesCallContent(i) }
+
 // FirstToken marks the first streamed token.
 func FirstToken(i *rudderstackai.Interaction, at time.Time) { hook.FirstToken(i, at) }
 

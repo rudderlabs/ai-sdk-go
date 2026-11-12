@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- SDK-6798: send `call_index` on every `ai_llm_response_received` and, with `WithLLMCallEvents` and content capture, `input_messages`, `input_truncated`, `output_text` and `output_tool_calls` from the OpenAI, Anthropic, Google GenAI and Bedrock modules, `rudderotel` product events and `RecordCall` (`LLMCall.InputMessages`, `OutputToolCalls`). Content is masked like `prompt_text` and trimmed to the 30,000-byte event cap. Pause snapshots carry an optional `call_sequence`.
+
 - SDK-6791: keep MCP tool, prompt, capability and argument names tied to the server's current registry (mcp-go task and session tools included), allow only `YYYY-MM-DD` protocol versions, encode request IDs uniformly (decimal integers, hashed strings, `unknown` otherwise), clean declared tool event properties and client labels, and key per-caller state, pending elicitations (one-hour expiry) and client windows by raw account, user and session or interaction in both Go MCP wrappers.
 
 - Release AI events spec v0.4.0 with the v0.4 server schema and conformance fixture; the migration checker accepts 0.3.0 and 0.4.0 captures. The client schema remains v0.2.

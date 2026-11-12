@@ -34,9 +34,9 @@ func runProductEventsConformance(t *testing.T, path string) {
 					InputPerMtok, OutputPerMtok           float64
 					CachedInputPerMtok, CacheWritePerMtok *float64
 				}
-				CaptureContent, EmitLLMCalls, ToolBreakdown bool
-				Analytics                                   string
-				Classifier                                  *struct {
+				CaptureContent, EmitLLMCalls, ToolBreakdown, PerCallContent bool
+				Analytics                                                   string
+				Classifier                                                  *struct {
 					Intents  []string
 					Classify struct{ Intent, Outcome string }
 					DelayMS  int `json:"delay_ms"`
@@ -135,6 +135,9 @@ func runProductEventsConformance(t *testing.T, path string) {
 			actual := []object{}
 			for _, event := range events() {
 				if event["event"] != DefaultEventName {
+					if props, ok := event["properties"].(map[string]any); ok && !c.Config.PerCallContent && event["event"] == "ai_llm_response_received" {
+						delete(props, "call_index")
+					}
 					actual = append(actual, event)
 				}
 			}
