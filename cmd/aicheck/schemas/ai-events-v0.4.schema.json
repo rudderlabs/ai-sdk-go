@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rudderstack.com/schemas/ai-events/0.4.0",
   "title": "RudderStack AI Product Analytics Events v0.4.0 (draft)",
-  "description": "Event properties for ai_user_prompt_created, ai_response_received, ai_user_action, the optional per-call ai_llm_response_received, the optional ai_task_started, the opt-in ai_interaction_classified and ai_interaction_scored, the app-sent ai_limit_reached, customer-named declared tool events (declared_tool_event, mcp_declared_tool_event), and the MCP server events (mcp_client_seen, mcp_tool_called, mcp_elicitation_completed, mcp_capability_requested, mcp_resource_read, mcp_prompt_used, mcp_event_subscription_changed, mcp_event_delivered). Validate the `properties` object of each track call against the matching definition. Custom properties are allowed. The spec version is not a property: SDKs send it as context.wrapperLibrary.specVersion.",
+  "description": "Event properties for ai_user_prompt_created, ai_response_received, ai_user_action, the optional per-call ai_llm_response_received, the optional ai_task_started, the opt-in ai_interaction_classified and ai_interaction_scored, the app-sent ai_limit_reached, customer-named declared tool events (declared_tool_event, mcp_declared_tool_event), and the MCP server events (mcp_client_seen, mcp_tool_called, mcp_elicitation_completed, mcp_feedback_submitted, the deprecated mcp_capability_requested, mcp_resource_read, mcp_prompt_used, mcp_event_subscription_changed, mcp_event_delivered). Validate the `properties` object of each track call against the matching definition. Custom properties are allowed. The spec version is not a property: SDKs send it as context.wrapperLibrary.specVersion.",
   "$defs": {
     "surface": {
       "enum": [
@@ -1491,7 +1491,7 @@
       }
     },
     "mcp_capability_requested": {
-      "description": "Opt-in. The agent called the injected request_capability tool because no existing tool can do what the user needs.",
+      "description": "Deprecated: use mcp_feedback_submitted, whose feature_request category carries the same capability. Opt-in. The agent called the injected request_capability tool because no existing tool can do what the user needs. A server cannot enable both tools.",
       "allOf": [
         {
           "$ref": "#/$defs/mcp_fields"
@@ -1518,6 +1518,55 @@
           "type": "string",
           "minLength": 1,
           "description": "Opt-in, for other only: a short description of the need; masked, capped, and withheld when it still matches a sensitive pattern."
+        }
+      }
+    },
+    "mcp_feedback_submitted": {
+      "description": "Opt-in. The agent called the injected submit_feedback tool to report a problem, a missing capability or what worked well. Refused calls send nothing. Supersedes mcp_capability_requested.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/mcp_fields"
+        }
+      ],
+      "required": [
+        "feedback_category"
+      ],
+      "properties": {
+        "oauth_client_id": {
+          "type": "string",
+          "description": "The registered OAuth app behind the request's token, as on mcp_client_seen."
+        },
+        "auth_method": {
+          "type": "string",
+          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none)."
+        },
+        "feedback_category": {
+          "enum": [
+            "bug_report",
+            "feature_request",
+            "documentation_issue",
+            "access_issue",
+            "performance_issue",
+            "positive_feedback",
+            "other"
+          ],
+          "description": "What the feedback is about. bug_report: a tool fails or returns a wrong result. feature_request: no tool does what the user needs. documentation_issue: a tool's description, argument help or docs are unclear or wrong. access_issue: authentication or permissions stop a tool from working. performance_issue: a tool is too slow or times out. positive_feedback: what worked well. other: none of these."
+        },
+        "feedback_tool_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The tool the feedback is about, when the agent named one. Only a tool the server lists; any other name refuses the call."
+        },
+        "capability": {
+          "type": "string",
+          "minLength": 1,
+          "description": "feature_request only: one of the server owner's known gaps (e.g. bulk_export), or other."
+        },
+        "feedback_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Opt-in (captureContent): the agent's description of the feedback; masked, capped at 2,000 characters, and withheld when it still matches a sensitive pattern."
         }
       }
     },

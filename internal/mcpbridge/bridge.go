@@ -59,7 +59,7 @@ type Tool struct {
 	Schema map[string]any
 }
 
-// ToolDef is the request_capability tool the integration answers itself.
+// ToolDef describes an injected tool the integration answers itself.
 type ToolDef struct {
 	Name, Title, Description string
 	Annotations              ToolAnnotations
@@ -112,6 +112,8 @@ type Server interface {
 	Begin(r Request) Call
 	// CapabilityTool is the request_capability tool to offer, nil when off.
 	CapabilityTool() *ToolDef
+	// FeedbackTool is the submit_feedback tool to offer, nil when off.
+	FeedbackTool() *ToolDef
 	RememberResources(byURI map[string]string)
 	RememberTemplates(templates []string)
 	// Elicited records an elicitation outside a tracked call (call is nil) or within one.
@@ -128,11 +130,13 @@ type Call interface {
 	// Started marks the start of the server's own handling.
 	Started()
 	// ToolCall records the start of a tools/call. strip reports a request_context argument
-	// to remove before the handler runs; capability a request_capability call the integration
+	// to remove before the handler runs; capability an injected request_capability or submit_feedback call the integration
 	// answers itself.
 	ToolCall(name string, args map[string]json.RawMessage, progress bool, answers []Answer, requestState string) (strip, capability bool)
 	// Capability records a request_capability call and returns its reply.
 	Capability(args map[string]json.RawMessage) string
+	// Feedback validates and records feedback; isError means no event was sent.
+	Feedback(args map[string]json.RawMessage) (text string, isError bool)
 	ToolDone(o Outcome)
 	// Finished records a resources/read or prompts/get; errorType is empty on success.
 	Finished(method, name string, size int, errorType string)
@@ -140,7 +144,7 @@ type Call interface {
 	// PromptName is the registered prompt name, else "unknown"; an empty name stays empty.
 	PromptName(name string) string
 	// ListTools records a tools/list page and returns, per tool, the schema to send (nil keeps
-	// the tool's own), and whether to append request_capability.
+	// the tool's own), and whether to append the enabled injected tool.
 	ListTools(tools []Tool, lastPage bool) ([]map[string]any, bool)
 	// Initialized reports a successful initialize.
 	Initialized(client *Client, capabilities any, version string)

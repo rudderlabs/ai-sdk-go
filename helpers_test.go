@@ -25,7 +25,7 @@ var (
 )
 
 var mcpEventDefs = []string{
-	"mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
+	"mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested", "mcp_feedback_submitted",
 	"mcp_resource_read", "mcp_prompt_used", "mcp_event_subscription_changed", "mcp_event_delivered",
 	"mcp_declared_tool_event",
 	"ai_user_prompt_created", "ai_response_received", "ai_llm_response_received",

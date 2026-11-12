@@ -773,6 +773,16 @@ spec:
       description: How the client answered an elicitation.
       config:
         enum: [accept, decline, cancel]
+    - id: feedback_category
+      name: feedback_category
+      type: string
+      description: What the MCP feedback is about.
+      config:
+        enum: [bug_report, feature_request, documentation_issue, access_issue, performance_issue, positive_feedback, other]
+    - id: feedback_tool_name
+      name: feedback_tool_name
+      type: string
+      description: The tool the MCP feedback is about, when named. Only a tool the server lists.
     - id: capability
       name: capability
       type: string

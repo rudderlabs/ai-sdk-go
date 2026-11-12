@@ -17,6 +17,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 	"weak"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -28,7 +30,17 @@ import (
 // the go-sdk here, ruddermcpgo for mark3labs/mcp-go through internal/mcpbridge).
 
 const (
-	capabilityTool            = "request_capability"
+	capabilityTool            = "request_capability" // Deprecated: use FeedbackRequests.
+	feedbackTool              = "submit_feedback"
+	feedbackTitle             = "Send feedback"
+	feedbackReply             = "Sent to the server owner. Tell the user it was sent; nobody replies."
+	feedbackDesc              = "Send feedback about this server's tools to its owner. Call it when the user asks you to send feedback, when no tool can do what the user asked, or when a tool failed, returned a wrong result or has a misleading description. Do not report a retry that worked, an error that went away or your own mistake. Send one call per problem. The owner may read it; nobody replies."
+	feedbackCaptureDesc       = " Describe the problem in your own words; do not paste customer data, payloads, credentials or personal data."
+	feedbackCategoryDesc      = "What the feedback is about. bug_report: a tool fails or returns a wrong result. feature_request: no tool does what the user needs. documentation_issue: a tool's description, argument help or docs are unclear or wrong. access_issue: authentication or permissions stop a tool from working. performance_issue: a tool is too slow or times out. positive_feedback: what worked well. other: none of these."
+	feedbackMaxLength         = 2000
+	feedbackReadOnlyHint      = false
+	feedbackDestructiveHint   = false
+	feedbackIdempotentHint    = false
 	methodDiscover            = "server/discover"
 	requestContext            = "request_context"
 	protocol2026              = "2026-07-28"
@@ -46,6 +58,8 @@ const (
 	maxServers   = 1_000
 	maxTemplates = 1_000
 )
+
+var feedbackCategories = []string{"bug_report", "feature_request", "documentation_issue", "access_issue", "performance_issue", "positive_feedback", "other"}
 
 var sentiments = []string{"negative", "neutral", "positive"}
 
@@ -471,8 +485,11 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 	rc.rawToolName = name
 	rc.toolName = "unknown"
 	// Resolved from the server's current registry only, never from lists clients saw.
-	nativeCap := false
+	nativeCap, nativeFeedback := false, false
 	for _, tool := range rc.registeredTools {
+		if tool.Name == feedbackTool {
+			nativeFeedback = true
+		}
 		if tool.Name == capabilityTool {
 			nativeCap = true
 		}
@@ -487,7 +504,8 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 	t.skip = name == ""
 	props, _ := t.schema["properties"].(map[string]any)
 	_, nativeContext := props[requestContext]
-	if name == capabilityTool && opts.capabilities != nil && !nativeCap {
+	if (name == capabilityTool && opts.capabilities != nil && !nativeCap) ||
+		(name == feedbackTool && opts.feedbackCapabilities != nil && !nativeFeedback) {
 		return false, true
 	}
 	if args != nil {
@@ -597,6 +615,67 @@ func (rc *reqCtx) Capability(args map[string]json.RawMessage) string {
 	}
 	emit(rc.opts.Analytics, "mcp_capability_requested", rc.who, p)
 	return capabilityReply
+}
+
+// Feedback validates a submit_feedback call before sending any event.
+func (rc *reqCtx) Feedback(args map[string]json.RawMessage) (string, bool) {
+	values := map[string]string{}
+	keys := make([]string, 0, len(args))
+	for key := range args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if key != "category" && key != "tool_name" && key != "capability" && (key != "feedback" || !rc.opts.CaptureContent) {
+			return "Remove unknown arguments; use only the fields in the tool schema.", true
+		}
+		var value string
+		if !strings.HasPrefix(strings.TrimSpace(string(args[key])), `"`) || json.Unmarshal(args[key], &value) != nil {
+			return "Use a string for " + key + ".", true
+		}
+		values[key] = value
+	}
+	category := values["category"]
+	if !slices.Contains(feedbackCategories, category) {
+		return "Choose a category from the tool schema.", true
+	}
+	if name, given := values["tool_name"]; given {
+		listed := slices.ContainsFunc(rc.registeredTools, func(t mcpbridge.Tool) bool { return t.Name == name })
+		listed = listed || (name == feedbackTool && rc.opts.feedbackCapabilities != nil) || (name == capabilityTool && rc.opts.capabilities != nil)
+		if !listed {
+			return "Use a tool_name from tools/list, or leave it out.", true
+		}
+	}
+	if _, given := values["capability"]; given && category != "feature_request" {
+		return "Use capability only with feature_request.", true
+	}
+	if rc.opts.CaptureContent {
+		text := values["feedback"]
+		if !strings.ContainsFunc(text, func(r rune) bool { return unicode.IsGraphic(r) && !unicode.IsSpace(r) }) {
+			return "Provide non-empty feedback in plain text.", true
+		}
+		if utf8.RuneCountInString(text) > feedbackMaxLength {
+			return "Limit feedback to 2000 characters.", true
+		}
+	}
+	p := maps.Clone(rc.base)
+	p["feedback_category"] = category
+	if name, given := values["tool_name"]; given {
+		p["feedback_tool_name"] = name
+	}
+	if capability, given := values["capability"]; given {
+		if !slices.Contains(rc.opts.feedbackCapabilities, capability) {
+			capability = "other"
+		}
+		p["capability"] = capability
+	}
+	if rc.opts.CaptureContent {
+		if masked, ok := rc.opts.mask(strings.TrimSpace(values["feedback"])); ok && masked != "" && (rc.opts.DisableRedaction || !hasSensitive(masked)) {
+			p["feedback_text"] = capText(masked, feedbackMaxLength)
+		}
+	}
+	emit(rc.opts.Analytics, "mcp_feedback_submitted", rc.who, p)
+	return feedbackReply, false
 }
 
 // ResourceName is the registered name or URI template of a resource URI, never the URI.
@@ -1031,9 +1110,34 @@ func (w *wrapped) CapabilityTool() *mcpbridge.ToolDef {
 	}
 }
 
+// FeedbackTool is the opt-in submit_feedback tool definition.
+func (w *wrapped) FeedbackTool() *mcpbridge.ToolDef {
+	opts := w.opts.Load()
+	if opts.feedbackCapabilities == nil {
+		return nil
+	}
+	props := map[string]any{
+		"category":   map[string]any{"type": "string", "enum": feedbackCategories, "description": feedbackCategoryDesc},
+		"tool_name":  map[string]any{"type": "string", "description": "The tool the feedback is about, as tools/list names it. Leave it out when the feedback is not about one tool."},
+		"capability": map[string]any{"type": "string", "enum": opts.feedbackCapabilities, "description": "feature_request only: the missing capability; 'other' when none fits."},
+	}
+	required := []string{"category"}
+	description := feedbackDesc
+	if opts.CaptureContent {
+		props["feedback"] = map[string]any{"type": "string", "maxLength": feedbackMaxLength, "description": "What happened and what you expected, or what worked well, in plain text."}
+		required = append(required, "feedback")
+		description += feedbackCaptureDesc
+	}
+	return &mcpbridge.ToolDef{
+		Name: feedbackTool, Title: feedbackTitle, Description: description, Reply: feedbackReply,
+		Annotations: mcpbridge.ToolAnnotations{Title: feedbackTitle, ReadOnlyHint: feedbackReadOnlyHint, DestructiveHint: feedbackDestructiveHint, IdempotentHint: feedbackIdempotentHint, OpenWorldHint: opts.CaptureContent},
+		Schema:      map[string]any{"type": "object", "properties": props, "required": required, "additionalProperties": false},
+	}
+}
+
 // ListTools returns the schemas to send for a tools/list page: a copy with request_context
-// added, or nil to keep the tool's own. Native request_capability is read from the current
-// registry and the page.
+// added, or nil to keep the tool's own. Native injected-tool names are read from the
+// current registry and the page.
 func (rc *reqCtx) ListTools(tools []mcpbridge.Tool, lastPage bool) ([]map[string]any, bool) {
 	opts := rc.opts
 	var contextSchema map[string]any
@@ -1068,7 +1172,9 @@ func (rc *reqCtx) ListTools(tools []mcpbridge.Tool, lastPage bool) ([]map[string
 		newSchema["properties"] = newProps
 		out[i] = newSchema
 	}
-	return out, opts.capabilities != nil && !nativeCap && lastPage
+	nativeFeedback := slices.ContainsFunc(tools, func(t mcpbridge.Tool) bool { return t.Name == feedbackTool }) ||
+		slices.ContainsFunc(rc.registeredTools, func(t mcpbridge.Tool) bool { return t.Name == feedbackTool })
+	return out, lastPage && ((opts.capabilities != nil && !nativeCap) || (opts.feedbackCapabilities != nil && !nativeFeedback))
 }
 
 // fromContext is the request a context belongs to, for elicitations sent within a handler.

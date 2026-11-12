@@ -43,7 +43,7 @@ var (
 // once at startup, before serving. It adds a receiving and a sending middleware; requests and
 // responses pass through unchanged except for the enabled request_context argument (added to each
 // tool's input schema and removed before the tool runs) and, when enabled, the
-// request_capability tool. Wrapping the same server again replaces its options.
+// request_capability (deprecated; use FeedbackRequests) or submit_feedback tool. Wrapping the same server again replaces its options.
 //
 // Counters, client windows and learned schemas belong to the server name (Options.ServerName,
 // else the name the server was created with), shared by every server of that name in the
@@ -308,8 +308,14 @@ func (w *wrapped) toolCall(h *handling, r *mcp.CallToolRequest) {
 	_, progress := p.Meta["progressToken"]
 	strip, capability := h.rc.ToolCall(p.Name, raw, progress, answers, p.RequestState)
 	if capability {
-		reply := h.rc.Capability(raw)
-		h.reply = &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: reply}}}
+		var reply string
+		var isError bool
+		if p.Name == feedbackTool {
+			reply, isError = h.rc.Feedback(raw)
+		} else {
+			reply = h.rc.Capability(raw)
+		}
+		h.reply = &mcp.CallToolResult{IsError: isError, Content: []mcp.Content{&mcp.TextContent{Text: reply}}}
 		return
 	}
 	if strip {
@@ -527,7 +533,7 @@ func Elicit(ctx context.Context, session *mcp.ServerSession, params *mcp.ElicitP
 	return res, err
 }
 
-// toolsList adds request_context and request_capability to a copy of a tools/list page.
+// toolsList adds request_context and the enabled injected tool to a copy of a tools/list page.
 func toolsList(rc *reqCtx, w *wrapped, r *mcp.ListToolsResult) mcp.Result {
 	listed := make([]mcpbridge.Tool, 0, len(r.Tools))
 	index := make([]int, 0, len(r.Tools))
@@ -551,7 +557,11 @@ func toolsList(rc *reqCtx, w *wrapped, r *mcp.ListToolsResult) mcp.Result {
 		tools[index[j]] = &cp
 		changed = true
 	}
-	if def := w.CapabilityTool(); addCapability && def != nil {
+	def := w.CapabilityTool()
+	if def == nil {
+		def = w.FeedbackTool()
+	}
+	if addCapability && def != nil {
 		tools = append(tools, &mcp.Tool{
 			Name: def.Name, Title: def.Title, Description: def.Description, InputSchema: def.Schema,
 			Annotations: &mcp.ToolAnnotations{
