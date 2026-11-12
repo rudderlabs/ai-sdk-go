@@ -4,7 +4,7 @@ Each example is a `main` package in this module (Go 1.26.11 or later) that uses 
 
 | Example                                    | Shows                                                                                                          |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| [`mcp-server`](mcp-server)                 | `WrapMCPServer` over stdio and streamable HTTP: `request_context`, a declared `audience_created` event, `request_capability` |
+| [`mcp-server`](mcp-server)                 | `WrapMCPServer` over stdio and streamable HTTP: `request_context`, a declared `audience_created` event, `submit_feedback` |
 | [`mcp-server-mcpgo`](mcp-server-mcpgo)     | The same server on `github.com/mark3labs/mcp-go`, tracked with `ruddermcpgo.WrapServer`, including 2026-07-28 over streamable HTTP |
 | [`mcp-stateless-http`](mcp-stateless-http) | Stateless streamable HTTP on 2026-07-28: a confirmation asked through an `input_required` result and answered in the retry |
 | [`mcp-auth`](mcp-auth)                     | Streamable HTTP behind a bearer token check, with `Identify`: `userId`, `account_id`, `oauth_client_id`, `token_scopes` |

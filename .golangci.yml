@@ -39,6 +39,11 @@ linters:
         - name: var-naming
   exclusions:
     generated: lax
+    rules:
+      # The adapter and its compatibility tests still support the deprecated API.
+      - path: ruddermcpgo/.*\.go
+        linters: [staticcheck]
+        text: 'SA1019: .*Capability(RequestOptions|Requests).*deprecated'
     presets:
       - common-false-positives
       - std-error-handling

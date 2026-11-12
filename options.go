@@ -56,9 +56,17 @@ type RequestContextOptions struct {
 }
 
 // CapabilityRequestOptions configures the injected request_capability tool.
+//
+// Deprecated: use FeedbackRequestOptions with Options.FeedbackRequests.
 type CapabilityRequestOptions struct {
 	// Capabilities are the known gaps the agent picks from, for example "bulk_export";
 	// "other" is always added.
+	Capabilities []string
+}
+
+// FeedbackRequestOptions configures the opt-in injected submit_feedback tool.
+type FeedbackRequestOptions struct {
+	// Capabilities are the known gaps for feature_request; "other" is always added.
 	Capabilities []string
 }
 
@@ -115,12 +123,17 @@ type Options struct {
 	// by mcp_client_seen, per server name and process. Also sets remembered client expiry
 	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
-	// CaptureContent sends agent-written text: call_reason and capability_detail, masked and
-	// capped at 200 characters. Off by default.
+	// CaptureContent sends masked agent-written text: call_reason and capability_detail
+	// capped at 200 characters, and feedback_text capped at 2000. Off by default.
 	CaptureContent bool
 	// CapabilityRequests adds the request_capability tool, recorded as
 	// mcp_capability_requested. Nil (the default) leaves it out.
+	//
+	// Deprecated: use FeedbackRequests.
 	CapabilityRequests *CapabilityRequestOptions
+	// FeedbackRequests adds submit_feedback, recorded as mcp_feedback_submitted.
+	// Nil leaves it out. Cannot be combined with CapabilityRequests.
+	FeedbackRequests *FeedbackRequestOptions
 	// MCPEvents enables the experimental MCP Events helpers [TrackMCPEventSubscription] and
 	// [WrapMCPEventSender]. Off by default.
 	MCPEvents bool
@@ -131,7 +144,7 @@ type Options struct {
 	// ServerName overrides the name read from the server, sent as server_name. State is kept
 	// per server name, so give each distinct server its own name.
 	ServerName string
-	// Redact runs after the built-in masking of call_reason and capability_detail, for what
+	// Redact runs after the built-in masking of call_reason, capability_detail and feedback_text, for what
 	// the patterns cannot catch. If it returns an error or panics, the field is not sent.
 	Redact func(text string) (string, error)
 	// DisableRedaction turns redaction off: the built-in masking and Redact.
@@ -141,10 +154,11 @@ type Options struct {
 // options is the validated form of Options.
 type options struct {
 	Options
-	rules         map[string]ToolEventRule
-	intents       []string
-	userSentiment bool
-	capabilities  []string
+	rules                map[string]ToolEventRule
+	intents              []string
+	userSentiment        bool
+	capabilities         []string
+	feedbackCapabilities []string
 	// name is ServerName, else reflectedName (the server's own), else "unknown".
 	name          string
 	reflectedName string
@@ -185,6 +199,9 @@ func normalizeOptions(o Options) (*options, error) {
 	if o.Analytics == nil {
 		return nil, errors.New("rudderstackai: Options.Analytics is required")
 	}
+	if o.CapabilityRequests != nil && o.FeedbackRequests != nil {
+		return nil, errors.New("rudderstackai: Options.CapabilityRequests and Options.FeedbackRequests cannot both be set")
+	}
 	if o.ClientSeenWindow < 0 {
 		return nil, errors.New("rudderstackai: Options.ClientSeenWindow must not be negative")
 	}
@@ -212,6 +229,9 @@ func normalizeOptions(o Options) (*options, error) {
 	}
 	if o.CapabilityRequests != nil {
 		n.capabilities = closedList(o.CapabilityRequests.Capabilities)
+	}
+	if o.FeedbackRequests != nil {
+		n.feedbackCapabilities = closedList(o.FeedbackRequests.Capabilities)
 	}
 	return n, nil
 }

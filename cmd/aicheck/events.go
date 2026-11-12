@@ -28,7 +28,7 @@ var (
 		"ai_conversation_shared", "ai_agent_selected", "ai_suggestion_shown", "ai_feedback_requested")
 	// feedback about a whole conversation or feature: its interaction_id is minted for it, no answer has it
 	scopedFeedback = []string{"conversation", "feature"}
-	mcpEvents      = set("mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested",
+	mcpEvents      = set("mcp_client_seen", "mcp_tool_called", "mcp_elicitation_completed", "mcp_capability_requested", "mcp_feedback_submitted",
 		"mcp_resource_read", "mcp_prompt_used", "mcp_event_subscription_changed", "mcp_event_delivered")
 	// a standalone score carries a feature only when given; ai_otel_span (tracing) carries none by default
 	optionalFeature      = set("ai_interaction_scored", "ai_otel_span", "ai_limit_reached")
@@ -46,7 +46,7 @@ var (
 	tracing     = []string{"tracing", "tracing/vercel-ai-sdk"}          // integrations of span events, which carry no specVersion
 	turnEvents  = set("ai_user_prompt_created", "ai_response_received") // the surface of a turn comes from these
 	// intent_summary is not here: the classifier's own intent_summary option sends it, whatever the capture switch
-	content   = set("prompt_text", "response_text", "explanation", "call_reason", "capability_detail")
+	content   = set("prompt_text", "response_text", "explanation", "call_reason", "capability_detail", "feedback_text")
 	rawMCP    = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
 	runFields = []string{"task_name", "trigger_source", "trigger_event_id", "conversation_id", "account_id",
 		"on_behalf_of", "parent_interaction_id", "llm_call_count", "total_tokens"}

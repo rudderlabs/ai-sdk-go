@@ -65,8 +65,8 @@ func exercise(ctx context.Context, cs *sdk.ClientSession, clientName string) err
 	if err != nil {
 		return err
 	}
-	if !slices.ContainsFunc(tools.Tools, func(t *sdk.Tool) bool { return t.Name == "request_capability" }) {
-		return fmt.Errorf("request_capability not offered")
+	if !slices.ContainsFunc(tools.Tools, func(t *sdk.Tool) bool { return t.Name == "submit_feedback" }) {
+		return fmt.Errorf("submit_feedback not offered")
 	}
 	meta := sdk.Meta{"com.rudderstack/interaction_id": "int_" + clientName, "traceparent": traceparent}
 	calls := []*sdk.CallToolParams{
@@ -74,7 +74,7 @@ func exercise(ctx context.Context, cs *sdk.ClientSession, clientName string) err
 			"workspace_id": "ws_1", "request_context": map[string]any{"intent": "debug_delivery", "user_sentiment": "negative"},
 		}},
 		{Name: "create_audience", Meta: meta, Arguments: map[string]any{"name": "vip"}},
-		{Name: "request_capability", Meta: meta, Arguments: map[string]any{"capability": "bulk_export"}},
+		{Name: "submit_feedback", Meta: meta, Arguments: map[string]any{"category": "feature_request", "capability": "bulk_export"}},
 	}
 	for _, c := range calls {
 		res, err := cs.CallTool(ctx, c)
@@ -140,7 +140,7 @@ func stdioLeg(sink *harness.Sink, clientName string, stderr io.Writer) (string, 
 func expectEvents(msgs []dataplane.Message, stdio bool, clientName, protocol string) error {
 	byEvent := harness.ByEvent(msgs)
 	if err := harness.Counts(byEvent, map[string]int{
-		"mcp_client_seen": 1, "mcp_tool_called": 2, "audience_created": 1, "mcp_capability_requested": 1,
+		"mcp_client_seen": 1, "mcp_tool_called": 2, "audience_created": 1, "mcp_feedback_submitted": 1,
 	}); err != nil {
 		return err
 	}
@@ -180,8 +180,8 @@ func expectEvents(msgs []dataplane.Message, stdio bool, clientName, protocol str
 		{"audience_created", byEvent["audience_created"][0].Properties, map[string]any{
 			"audience_type": "computed", "tool_name": "create_audience", "tool_status": "success", "interaction_id": interaction,
 		}},
-		{"mcp_capability_requested", byEvent["mcp_capability_requested"][0].Properties, map[string]any{
-			"capability": "bulk_export", "interaction_id": interaction, "server_name": "workspace-mcp",
+		{"mcp_feedback_submitted", byEvent["mcp_feedback_submitted"][0].Properties, map[string]any{
+			"feedback_category": "feature_request", "capability": "bulk_export", "interaction_id": interaction, "server_name": "workspace-mcp",
 		}},
 	}
 	for _, c := range checks {

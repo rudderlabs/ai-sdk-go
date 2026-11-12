@@ -394,6 +394,29 @@ spec:
         - property: '#property:protocol_version'
 
     - type: event_rule
+      id: mcp_feedback_submitted_rule
+      event: '#event:mcp_feedback_submitted'
+      additional_properties: true
+      properties:
+        - property: '#property:sample_rate'
+        - property: '#property:mcp_session_id'
+        - property: '#property:server_name'
+        - property: '#property:account_id'
+        - property: '#property:oauth_client_id'
+        - property: '#property:auth_method'
+        - property: '#property:client_name'
+        - property: '#property:interaction_id'
+        - property: '#property:trace_id'
+        - property: '#property:feedback_category'
+          required: true
+        - property: '#property:feedback_tool_name'
+        - property: '#property:capability'
+        - property: '#property:feedback_text'
+        - property: '#property:server_version'
+        - property: '#property:client_version'
+        - property: '#property:protocol_version'
+
+    - type: event_rule
       id: mcp_resource_read_rule
       event: '#event:mcp_resource_read'
       additional_properties: true

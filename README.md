@@ -201,7 +201,7 @@ err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 - Joins: `com.rudderstack/interaction_id` and the W3C `traceparent` (else `com.rudderstack/trace_id`) in a request's `_meta` become `interaction_id` and `trace_id`. A Go agent sends `Interaction.ID()` itself.
 - Why it was called: request context is off by default. Opt in with `RequestContext: rudderstackai.RequestContextOptions{Enabled: true}`. When enabled, an optional `request_context` argument (`intent` from your list, `user_sentiment`, and `call_reason` with `CaptureContent`) is added to each tool's schema and removed before your handler runs. When off, schemas and client-sent `request_context` arguments pass through unchanged.
 - State is in memory, per server name, per process (at most 10,000 entries each, least recently used first): servers rebuilt per request keep counting; give each distinct server a unique name. Replicas and restarts each emit their own `mcp_client_seen`.
-- Opt-in: `CapabilityRequests` adds a `request_capability` tool for unmet demand (`mcp_capability_requested`); `MCPEvents: true` enables the experimental MCP Events helpers (`TrackMCPEventSubscription`, `WrapMCPEventSender`).
+- Opt-in: `FeedbackRequests` adds `submit_feedback` for problems, missing capabilities and positive feedback (`mcp_feedback_submitted`). `CapabilityRequests` / `request_capability` are deprecated; use `FeedbackRequests`. The two options cannot be combined. `MCPEvents: true` enables the experimental MCP Events helpers (`TrackMCPEventSubscription`, `WrapMCPEventSender`).
 
 MCP events keep only names registered on the server at call time (tools, prompts), top-level input property names and known client capability names, replacing anything else with `unknown`; `protocol_version` must be a `YYYY-MM-DD` date. `request_id` is an integer id as a decimal string, a string as `sha256:` plus 16 hex characters, and anything else `unknown`. Client name, title and version have control characters removed, whitespace collapsed and a 64-code-point limit; session and interaction state is keyed by the raw account, user and session or interaction, and a pending elicitation expires after an hour.
 
@@ -303,7 +303,8 @@ An analytics-go client (v4.5.1, the minimum) sends its queue on `Flush`; a custo
 | `ai_llm_response_received`                              | One per model call, only with `WithLLMCallEvents(true)`                      |
 | Your declared tool events                               | One per call of a tool listed in `WithEventRules` (or MCP `Options.EventRules`) |
 | `mcp_client_seen`, `mcp_tool_called`, `mcp_elicitation_completed`, `mcp_resource_read`, `mcp_prompt_used` | MCP server requests ([mcp.md](docs/mcp.md#events)) |
-| `mcp_capability_requested`                              | Opt-in: the agent called the injected `request_capability` tool              |
+| `mcp_feedback_submitted` | Opt-in: the agent called the injected `submit_feedback` tool |
+| `mcp_capability_requested`                              | Deprecated: use `FeedbackRequests` / `mcp_feedback_submitted`              |
 | `mcp_event_subscription_changed`, `mcp_event_delivered` | Experimental, opt-in: the MCP Events draft extension                         |
 
 Every event's properties stay within 30,000 serialized bytes (RudderStack rejects events over 32 KiB): captured text goes first, then breakdown entries, and a declared tool event loses its `Properties` output, so metrics still arrive. Every event carries `context.wrapperLibrary` (`name: "ai-sdk-go"`, `version`, `specVersion: "0.4.0"`, `integration`) beside analytics-go's own `context.library`. Sample payloads, every property and error types: [docs/events.md](docs/events.md). Schema: [`spec/ai-events-v0.4.schema.json`](spec/ai-events-v0.4.schema.json); tracking plan: [`spec/rudderstack-catalog/`](spec/rudderstack-catalog).
@@ -436,7 +437,7 @@ No API was removed.
 | [`background-agent`](examples/background-agent)       | `RunTask`: system-triggered work with a chained sub-task and `TrackScore`                      |
 | [`approval-loop`](examples/approval-loop)             | `RunTask` that pauses twice for approval and resumes from a stored snapshot; `ai_task_started` |
 | [`manual`](examples/manual)                           | `StartInteraction`, `RecordCall`, `RecordToolCalls`, a declared tool event, a custom classifier |
-| [`mcp-server`](examples/mcp-server)                   | stdio and streamable HTTP, `request_context`, a declared event, `request_capability`           |
+| [`mcp-server`](examples/mcp-server)                   | stdio and streamable HTTP, `request_context`, a declared event, `submit_feedback`           |
 | [`mcp-server-mcpgo`](examples/mcp-server-mcpgo)       | The same server on mcp-go with `ruddermcpgo.WrapServer`, 2025-06-18 and 2026-07-28             |
 | [`mcp-stateless-http`](examples/mcp-stateless-http)   | Stateless streamable HTTP on 2026-07-28, confirmation through an `input_required` elicitation  |
 | [`mcp-auth`](examples/mcp-auth)                       | A bearer token check and `Identify`: `userId`, `account_id`, `oauth_client_id`, `token_scopes` |

@@ -37,7 +37,9 @@ import (
 )
 
 const (
+	// request_capability is deprecated; use FeedbackRequests.
 	capabilityTool = "request_capability"
+	feedbackTool   = "submit_feedback"
 	requestContext = "request_context"
 	metaVersion    = "io.modelcontextprotocol/protocolVersion"
 	// maxPending bounds the requests in flight that the integration remembers.
@@ -67,12 +69,17 @@ type Options struct {
 	// by mcp_client_seen, per server name and process. Also sets remembered client expiry
 	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
-	// CaptureContent sends call_reason and capability_detail, masked and capped at 200
-	// characters. Off by default.
+	// CaptureContent sends masked call_reason and capability_detail capped at 200
+	// characters, and feedback_text capped at 2000. Off by default.
 	CaptureContent bool
 	// CapabilityRequests registers the request_capability tool, recorded as
 	// mcp_capability_requested. Nil (the default) leaves it out.
+	//
+	// Deprecated: use FeedbackRequests.
 	CapabilityRequests *rudderstackai.CapabilityRequestOptions
+	// FeedbackRequests adds submit_feedback, recorded as mcp_feedback_submitted.
+	// Nil leaves it out. Cannot be combined with CapabilityRequests.
+	FeedbackRequests *rudderstackai.FeedbackRequestOptions
 	// MCPEvents enables the experimental [TrackMCPEventSubscription] and
 	// [WrapMCPEventSender]. Off by default.
 	MCPEvents bool
@@ -81,7 +88,7 @@ type Options struct {
 	Transport string
 	// ServerName overrides the server's own name, sent as server_name.
 	ServerName string
-	// Redact runs after the built-in masking of call_reason and capability_detail; if it fails
+	// Redact runs after the built-in masking of call_reason, capability_detail and feedback_text; if it fails
 	// or panics, the field is not sent.
 	Redact func(text string) (string, error)
 	// DisableRedaction turns redaction off: the built-in masking and Redact.
@@ -92,7 +99,7 @@ func (o Options) root() rudderstackai.Options {
 	r := rudderstackai.Options{
 		Analytics: o.Analytics, EventRules: o.EventRules, RequestContext: o.RequestContext,
 		ClientSeenWindow: o.ClientSeenWindow, CaptureContent: o.CaptureContent,
-		CapabilityRequests: o.CapabilityRequests, MCPEvents: o.MCPEvents, Transport: o.Transport,
+		CapabilityRequests: o.CapabilityRequests, FeedbackRequests: o.FeedbackRequests, MCPEvents: o.MCPEvents, Transport: o.Transport,
 		ServerName: o.ServerName, Redact: o.Redact, DisableRedaction: o.DisableRedaction,
 	}
 	if o.Identify != nil {
@@ -112,9 +119,10 @@ type tracked struct {
 	prompts func() []string
 	srv     mcpbridge.Server
 	opts    atomic.Pointer[Options]
-	// capability is the request_capability tool this integration registered, if any.
+	// capability and feedback are the injected tools this integration registered, if any.
 	mu         sync.Mutex
 	capability *mcp.Tool
+	feedback   *mcp.Tool
 
 	pending  sync.Mutex
 	byMsg    map[any]*call
@@ -131,14 +139,15 @@ type sessionInfo struct {
 
 // call is one request between its hooks.
 type call struct {
-	c          mcpbridge.Call
-	method     string
-	name       string
-	caps       any
-	client     *mcpbridge.Client
-	sequence   uint64
-	capability bool
-	classify   func(string, *mcp.CallToolResult) string
+	c              mcpbridge.Call
+	method         string
+	name           string
+	caps           any
+	client         *mcpbridge.Client
+	sequence       uint64
+	capability     bool
+	feedbackResult *mcp.CallToolResult
+	classify       func(string, *mcp.CallToolResult) string
 }
 
 var instances = struct {
@@ -156,7 +165,7 @@ func lookup(s *server.MCPServer) *tracked {
 // options and before serving. It adds server hooks and a tool handler middleware; requests and
 // responses pass through unchanged except for the enabled request_context argument (added to each
 // tool's input schema in tools/list and removed before the tool runs) and, when enabled, the
-// request_capability tool. Wrapping the same server again replaces its options.
+// request_capability (deprecated; use FeedbackRequests) or submit_feedback tool. Wrapping the same server again replaces its options.
 func WrapServer(s *server.MCPServer, opts Options) error {
 	if s == nil {
 		return errors.New("ruddermcpgo: server is nil")
@@ -167,6 +176,7 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 		}
 		t.opts.Store(&opts)
 		t.syncCapability(s)
+		t.syncFeedback(s)
 		return nil
 	}
 	name, version := serverImpl(s)
@@ -207,13 +217,14 @@ func WrapServer(s *server.MCPServer, opts Options) error {
 	hooks.AddOnError(t.onError)
 	s.Use(t.middleware)
 	t.syncCapability(s)
+	t.syncFeedback(s)
 	return nil
 }
 
 // snapshotTools lists what the server would serve this session now: the global tools, task
 // tools (no public getter, so read by reflection like the go-sdk registry) and the session's
 // own tools, which override a global tool of the same name and its schema. The integration's
-// own request_capability is left out.
+// own request_capability and submit_feedback are left out.
 func (t *tracked) snapshotTools(s *server.MCPServer, session server.ClientSession) (tools []mcpbridge.Tool) {
 	tools = []mcpbridge.Tool{}
 	safely(func() {
@@ -227,6 +238,11 @@ func (t *tracked) snapshotTools(s *server.MCPServer, session server.ClientSessio
 		if withTools, ok := session.(server.SessionWithTools); ok {
 			for name, entry := range withTools.GetSessionTools() {
 				byName[name] = entry.Tool
+			}
+		}
+		if own := t.ownFeedback(); own != nil {
+			if tool, found := byName[feedbackTool]; found && tool.Description == own.Description {
+				delete(byName, feedbackTool)
 			}
 		}
 		if t.ownCapability() != nil {
@@ -330,6 +346,46 @@ func (t *tracked) ownCapability() *mcp.Tool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.capability
+}
+
+// syncFeedback mirrors capability registration; the shared engine validates calls before
+// the handler runs, while tools/list exposes the full schema.
+func (t *tracked) syncFeedback(s *server.MCPServer) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	def := t.srv.FeedbackTool()
+	existing := s.GetTool(feedbackTool)
+	ours := t.feedback != nil && existing != nil && existing.Tool.Description == t.feedback.Description
+	if existing != nil && !ours {
+		t.feedback = nil
+		return
+	}
+	if def == nil {
+		if ours {
+			s.DeleteTools(feedbackTool)
+		}
+		t.feedback = nil
+		return
+	}
+	listed := mcp.Tool{Name: def.Name, Title: def.Title, Description: def.Description, Annotations: mcp.ToolAnnotation{
+		Title: def.Annotations.Title, ReadOnlyHint: &def.Annotations.ReadOnlyHint,
+		DestructiveHint: &def.Annotations.DestructiveHint, IdempotentHint: &def.Annotations.IdempotentHint,
+		OpenWorldHint: &def.Annotations.OpenWorldHint,
+	}}
+	listed.RawInputSchema, _ = json.Marshal(def.Schema)
+	t.feedback = &listed
+	reply := def.Reply
+	registered := listed
+	registered.RawInputSchema = json.RawMessage(`{"type":"object"}`)
+	s.AddTool(registered, func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultText(reply), nil
+	})
+}
+
+func (t *tracked) ownFeedback() *mcp.Tool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.feedback
 }
 
 // envelope is the part of a request the integration reads, decoded from its JSON form so it
@@ -512,6 +568,13 @@ func (t *tracked) toolCall(c *call, env *envelope, message any) {
 	}
 	_, progress := env.Params.Meta["progressToken"]
 	strip, capability := c.c.ToolCall(env.Params.Name, args, progress, answers, env.Params.RequestState)
+	if capability && env.Params.Name == feedbackTool && t.ownFeedback() != nil {
+		c.capability = true
+		text, isError := c.c.Feedback(args)
+		c.feedbackResult = mcp.NewToolResultText(text)
+		c.feedbackResult.IsError = isError
+		return
+	}
 	if capability && t.ownCapability() != nil {
 		c.capability = true
 		c.c.Capability(args)
@@ -559,6 +622,9 @@ func (t *tracked) middleware(next server.ToolHandlerFunc) server.ToolHandlerFunc
 		c := t.byCtx[ctx]
 		t.pending.Unlock()
 		if c != nil {
+			if c.feedbackResult != nil {
+				return c.feedbackResult, nil
+			}
 			ctx = context.WithValue(ctx, callKey{}, c.c)
 		}
 		return next(ctx, req)
@@ -701,9 +767,14 @@ func rootErrorType(err error) string { return mcpbridge.ErrorType(err) }
 
 func (t *tracked) toolsList(c *call, r *mcp.ListToolsResult) {
 	own := t.ownCapability()
+	feedback := t.ownFeedback()
 	listed := make([]mcpbridge.Tool, 0, len(r.Tools))
 	index := make([]int, 0, len(r.Tools))
 	for i, tool := range r.Tools {
+		if feedback != nil && tool.Name == feedbackTool && tool.Description == feedback.Description {
+			r.Tools[i] = *feedback
+			continue
+		}
 		if own != nil && tool.Name == capabilityTool {
 			r.Tools[i] = *own
 			continue

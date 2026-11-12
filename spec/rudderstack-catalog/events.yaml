@@ -53,6 +53,10 @@ spec:
       name: mcp_capability_requested
       event_type: track
       description: Opt-in. An agent asked the MCP server for a capability no tool offers.
+    - id: mcp_feedback_submitted
+      name: mcp_feedback_submitted
+      event_type: track
+      description: Opt-in. The agent called submit_feedback to report a problem, a missing capability or what worked well. Refused calls send nothing.
     - id: mcp_resource_read
       name: mcp_resource_read
       event_type: track

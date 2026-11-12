@@ -1,6 +1,6 @@
 # Events
 
-Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md). The JSON Schema is [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json), shared with the Node.js and Python SDKs; a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
+Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md), including opt-in `mcp_feedback_submitted` through `FeedbackRequests`. `mcp_capability_requested` / `request_capability` are deprecated; use `FeedbackRequests`. The JSON Schema is [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json), shared with the Node.js and Python SDKs; a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
 
 Every event's `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget loses its captured text first (`response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process.
 

@@ -1,6 +1,6 @@
 # MCP server example (mcp-go)
 
-The [`mcp-server`](../mcp-server) workspace server built on [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) and tracked with `ruddermcpgo.WrapServer`: a list tool, a create tool with a declared `audience_created` event, the `request_context` argument with an intent list, and the `request_capability` tool. The events are the same as with the official go-sdk.
+The [`mcp-server`](../mcp-server) workspace server built on [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) and tracked with `ruddermcpgo.WrapServer`: a list tool, a create tool with a declared `audience_created` event, the `request_context` argument with an intent list, and the `submit_feedback` tool. The events are the same as with the official go-sdk.
 
 Request context is off by default. This example opts in with `RequestContext: rudderstackai.RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}}`.
 
@@ -21,5 +21,5 @@ go run ./examples/mcp-server-mcpgo --transport=http --addr=127.0.0.1:8080 # stre
 
 - `mcp_client_seen`: server name and version, client name and version, transport, `auth_method: none`, and the negotiated `protocol_version`;
 - `mcp_tool_called` twice: tool name, status, the negotiated `protocol_version`, `intent` and `user_sentiment` from `request_context`, `interaction_id` and `trace_id` from `_meta`, `argument_keys`, `call_index` and `retry_count`;
-- `audience_created` with `audience_type`, and `mcp_capability_requested` with `capability`;
+- `audience_created` with `audience_type`, and `mcp_feedback_submitted` with `feedback_category: feature_request` and `capability`;
 - every event for the anonymous system user (`anonymousId: ai_system`), with `context.wrapperLibrary`, valid against the spec schema.

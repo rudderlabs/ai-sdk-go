@@ -77,12 +77,13 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 | `EventRules`         | none       | Declared tool events. Names starting with `ai_` or `mcp_` are rejected.                                                                                                          |
 | `RequestContext`     | off        | `Enabled: true` injects `request_context`; `Intents` and `DisableUserSentiment` apply only when enabled.                                                                          |
 | `ClientSeenWindow`   | 24 hours   | Window in which a (client, OAuth client, user) is reported once by `mcp_client_seen`, per server name and process.                                                                                               |
-| `CaptureContent`     | off        | Sends `call_reason` and `capability_detail`, masked and capped at 200 characters.                                                                                                |
-| `CapabilityRequests` | off (nil)  | `&CapabilityRequestOptions{Capabilities: []string{"bulk_export"}}` adds the `request_capability` tool.                                                                         |
+| `CaptureContent`     | off        | Sends masked `call_reason` and `capability_detail` capped at 200 characters, and `feedback_text` capped at 2,000.                                                                                                |
+| `CapabilityRequests` | off (nil)  | Deprecated: use `FeedbackRequests`. Existing `request_capability` behavior remains available.                                                                         |
+| `FeedbackRequests` | off (nil) | `&FeedbackRequestOptions{Capabilities: []string{"bulk_export"}}` adds `submit_feedback`. Cannot be combined with `CapabilityRequests`. |
 | `MCPEvents`          | off        | Enables the experimental [MCP Events](#mcp-events-experimental) helpers.                                                                                                          |
 | `Transport`          | detected   | `TransportStdio` or `TransportSSE`, sent as `transport` on `mcp_client_seen`. Streamable HTTP is detected from the request headers; stdio and SSE look the same from inside the server. |
 | `ServerName`         | the server's | Overrides the name the server was created with, sent as `server_name`. State is kept per server name: give each distinct server its own. |
-| `Redact`             | none       | `func(text string) (string, error)`, run after the built-in masking of `call_reason` and `capability_detail`. If it fails or panics, the field is not sent. |
+| `Redact`             | none       | `func(text string) (string, error)`, run after the built-in masking of `call_reason`, `capability_detail` and `feedback_text`. If it fails or panics, the field is not sent. |
 | `DisableRedaction`   | off        | Turns redaction off: the built-in masking and `Redact`. |
 
 ## Events
@@ -97,7 +98,8 @@ Every event is a track call, within the 30,000-byte [properties budget](events.m
 | `mcp_resource_read`              | A `resources/read` completes or fails                                  | `request_id`, `resource_name` (the registered name or URI template, never the URI), `tool_status`, `error_type`, `duration_ms`, `result_size_bytes` |
 | `mcp_prompt_used`                | A `prompts/get` completes or fails                                     | `request_id`, `prompt_name`, `tool_status`, `error_type`, `duration_ms`, `result_size_bytes` |
 | Declared tool events             | A call of a tool with a rule                                           | `tool_name`, `tool_status` and the rule's properties |
-| `mcp_capability_requested`       | The agent called `request_capability` (opt-in)                         | `capability`, `capability_detail` |
+| `mcp_feedback_submitted` | The agent called `submit_feedback` (opt-in); refused calls send nothing | `feedback_category`, `feedback_tool_name`, `capability`, `feedback_text` |
+| `mcp_capability_requested`       | Deprecated: use `FeedbackRequests`                         | `capability`, `capability_detail` |
 | `mcp_event_subscription_changed` | You record an MCP Events subscription change (experimental)            | `subscription_action`, `subscription_id`, `event_name`, `argument_keys`, `delivery_mode`, `ttl_ms`, `failure_reason` |
 | `mcp_event_delivered`            | A wrapped sender finishes one delivery (experimental)                  | `subscription_id`, `event_name`, `event_id`, `delivery_status`, `http_status`, `attempt_count`, `delivery_latency_ms`, `payload_size_bytes` |
 
@@ -184,7 +186,19 @@ err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 
 For status-based results, explicitly allow the statuses that mean a write occurred; omit `skipped`, `already_*` and `blocked`. Reuse the same rules on every endpoint exposing the same write tools, including stdio, authenticated HTTP and stateless HTTP, and on either MCP library. Each wrapped server needs its own `EventRules`; configuring one endpoint does not configure the others. These predicates control only declared events; `mcp_tool_called` still records each completed call.
 
-## Unmet demand: request_capability
+## Send feedback: submit_feedback
+
+Enable `FeedbackRequests: &rudderstackai.FeedbackRequestOptions{Capabilities: []string{"bulk_export", "edit_permissions"}}` in either `rudderstackai.Options` or `ruddermcpgo.Options`. Nil leaves the tool out; an empty capabilities list is allowed and "other" is always added. Setting both `FeedbackRequests` and `CapabilityRequests` returns a configuration error at wrap time, including rewrapping.
+
+The injected `submit_feedback` tool has title and annotations title "Send feedback". Its `readOnlyHint`, `destructiveHint` and `idempotentHint` are false. `openWorldHint` is true only with `CaptureContent`, so clients can confirm before free text leaves. It invites one call per problem when the user asks to send feedback, a capability is missing, a tool fails or its result or description is wrong; it also accepts positive feedback. Resolved retries, transient errors and the agent's own mistakes should not be reported. The owner may read it; nobody replies.
+
+Arguments are `category` (required: `bug_report`, `feature_request`, `documentation_issue`, `access_issue`, `performance_issue`, `positive_feedback`, `other`), optional `tool_name` from the server's current tools/list (including injected tools), and optional `capability` for `feature_request` only. Unknown capabilities map to "other"; omitting capability leaves it out of the event. With `CaptureContent: true`, `feedback` is also required: plain text with at least one graphic non-space character and at most 2,000 Unicode code points. Without capture, `feedback` is absent from the schema and refused if supplied. The capture description tells agents to describe the problem in their own words without pasting customer data, payloads, credentials or personal data.
+
+Unknown arguments, non-string values, invalid categories or tool names, capability on another category, and invalid feedback return an MCP tool error and send no event. Success replies "Sent to the server owner. Tell the user it was sent; nobody replies." The SDK sends `mcp_feedback_submitted` with the usual MCP identity fields, `feedback_category`, optional `feedback_tool_name`, and optional `capability`. With capture, `feedback_text` follows the same masking and `Redact` hook as `call_reason` / `capability_detail`, capped at 2,000 characters and withheld if masking fails or leaves sensitive content. Injected calls do not also send `mcp_tool_called`. A server's own `submit_feedback` is preserved and handled normally, with no SDK feedback event.
+
+## Unmet demand: request_capability (deprecated)
+
+`CapabilityRequests` and the injected `request_capability` tool are deprecated; use `FeedbackRequests` with category `feature_request`. Existing behavior remains available.
 
 The injected tool has both `title` and `annotations.title` set to "Request a missing capability", with `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: false`, and `openWorldHint: false` in its annotations because every call records an event, making it an additive write.
 
