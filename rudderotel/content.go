@@ -61,31 +61,55 @@ func cleanAttributes(attrs []attribute.KeyValue, capture, all bool) []attribute.
 			continue
 		}
 		if content {
-			switch kv.Value.Type() {
-			case attribute.STRING:
-				v, ok := hook.Tracing.Redact(kv.Value.AsString())
-				if !ok {
-					continue
-				}
-				kv.Value = attribute.StringValue(v)
-			case attribute.STRINGSLICE:
-				values := slices.Clone(kv.Value.AsStringSlice())
-				keep := true
-				for i, v := range values {
-					masked, ok := hook.Tracing.Redact(v)
-					if !ok {
-						keep = false
-						break
-					}
-					values[i] = masked
-				}
-				if !keep {
-					continue
-				}
-				kv.Value = attribute.StringSliceValue(values)
+			value, ok := redactValue(kv.Value)
+			if !ok {
+				continue
 			}
+			kv.Value = value
 		}
 		out = append(out, kv)
 	}
 	return out
+}
+
+// redactValue rebuilds string-containing values without changing the caller's
+// attributes. Withholding any nested string withholds the entire value.
+func redactValue(value attribute.Value) (attribute.Value, bool) {
+	switch value.Type() {
+	case attribute.STRING:
+		masked, ok := hook.Tracing.Redact(value.AsString())
+		return attribute.StringValue(masked), ok
+	case attribute.STRINGSLICE:
+		values := slices.Clone(value.AsStringSlice())
+		for i, v := range values {
+			masked, ok := hook.Tracing.Redact(v)
+			if !ok {
+				return attribute.Value{}, false
+			}
+			values[i] = masked
+		}
+		return attribute.StringSliceValue(values), true
+	case attribute.SLICE:
+		values := value.AsSlice()
+		for i, v := range values {
+			masked, ok := redactValue(v)
+			if !ok {
+				return attribute.Value{}, false
+			}
+			values[i] = masked
+		}
+		return attribute.SliceValue(values...), true
+	case attribute.MAP:
+		values := value.AsMap()
+		for i, kv := range values {
+			masked, ok := redactValue(kv.Value)
+			if !ok {
+				return attribute.Value{}, false
+			}
+			values[i].Value = masked
+		}
+		return attribute.MapValue(values...), true
+	default:
+		return value, true
+	}
 }

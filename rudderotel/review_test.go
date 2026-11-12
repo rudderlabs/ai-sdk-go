@@ -35,6 +35,10 @@ func TestOTLPPrivacyAllAttributeLocations(t *testing.T) {
 				attribute.String("service.name", "safe"), attribute.String("gen_ai.input.messages", "a@b.com"),
 				attribute.StringSlice("gen_ai.tool.call.arguments", []string{"a@b.com", "hello"}),
 				attribute.String("input.value", "withhold"), attribute.StringSlice("output.value", []string{"hello", "withhold"}),
+				{Key: "gen_ai.tool.call.result", Value: attribute.MapValue(attribute.KeyValue{
+					Key: "nested", Value: attribute.SliceValue(attribute.StringValue("hello"), attribute.StringValue("withhold")),
+				})},
+				{Key: "gen_ai.retrieval.documents", Value: attribute.SliceValue(attribute.MapValue(attribute.String("text", "withhold")))},
 				attribute.String("url.full", "secret"), attribute.String("http.request.header.authorization", "secret"),
 			}
 			recorder := tracetest.NewSpanRecorder()
