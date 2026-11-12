@@ -502,6 +502,7 @@ type Interaction struct {
 	callCount              int
 	successfulCallSequence int
 	lastCall, lastOK       *recordedCall
+	acceptedCall           *recordedCall // its length cap no longer decides the outcome (AcceptOutput)
 	lastFailedCallType     string
 	isTask                 bool
 	seen                   map[string]*recordedCall
@@ -1105,7 +1106,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		mergeCallTwin(twin, r)
 		// A merge does not advance callCount, so discard a generic app hint that
 		// would otherwise hide the newly learned provider classification.
-		if twin == i.lastCall && i.hint != nil && i.hint.errorType == "app_error" && first(twin.errorType, finishErrors[twin.finishReason]) != "" {
+		if twin == i.lastCall && i.hint != nil && i.hint.errorType == "app_error" && first(twin.errorType, i.finishErrorLocked(twin)) != "" {
 			i.hint = nil
 		}
 		i.noteCallOutcomeLocked(twin)
@@ -2585,7 +2586,7 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	if status == "" {
 		finished := ""
 		if last != nil {
-			finished = finishErrors[last.finishReason]
+			finished = i.finishErrorLocked(last)
 		}
 		switch {
 		case last != nil && last.errorType != "":
@@ -3052,7 +3053,7 @@ func (i *Interaction) providerFailureLocked() (ResponseStatus, string) {
 		return "", ""
 	}
 	if i.lastCall != nil {
-		errorType := first(i.lastCall.errorType, finishErrors[i.lastCall.finishReason])
+		errorType := first(i.lastCall.errorType, i.finishErrorLocked(i.lastCall))
 		if errorType != "" && errorType != "app_error" {
 			return statusForErrorType(errorType), errorType
 		}
@@ -3080,6 +3081,27 @@ func (i *Interaction) onBeforeEnd(fn func()) {
 	if !i.ended {
 		i.beforeEnd = append(i.beforeEnd, fn)
 	}
+}
+
+// AcceptOutput marks the latest call's output as accepted although it stopped at the output
+// token cap, so that cap no longer makes the answer incomplete or turns a later app_error into
+// length. The call keeps its finish_reason. A later call that hits the cap counts again.
+func (i *Interaction) AcceptOutput() {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.acceptedCall = i.lastCall
+	// An adapter may have reported the same cap as a hint for this call.
+	if i.hint != nil && i.hint.errorType == "length" && i.hint.calls == i.callCount {
+		i.hint = nil
+	}
+}
+
+// finishErrorLocked is the error type c's finish reason gives the answer.
+func (i *Interaction) finishErrorLocked(c *recordedCall) string {
+	if t := finishErrors[c.finishReason]; t != "length" || c != i.acceptedCall {
+		return t
+	}
+	return ""
 }
 
 // SetConfidence sets the app's confidence; invalid levels are ignored with a warning.
