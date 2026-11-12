@@ -295,3 +295,121 @@ func TestTypedContainersNeverEncodeBytes(t *testing.T) {
 		t.Fatalf("struct lost: %s", got)
 	}
 }
+
+type textKey string
+
+func (k textKey) MarshalText() ([]byte, error) { return []byte("k-" + string(k)), nil }
+
+type badKey struct{ A int }
+
+type selfRef struct {
+	Name string
+	Next *selfRef
+}
+
+type inner struct {
+	Inside []byte
+	Shown  string
+}
+
+type outer struct {
+	inner    // unexported embedded struct: its exported fields are promoted by encoding/json
+	*selfRef // embedded pointer
+	Ch       chan int
+	Fn       func()
+	C        complex128
+	Any      any
+	hidden   []byte
+}
+
+func leaks(t *testing.T, v any) string {
+	t.Helper()
+	c := captureCallContent(nil, "", []GenAIToolCall{{Name: "t", Arguments: v}})
+	if c == nil {
+		return ""
+	}
+	b, _ := json.Marshal(c.outputToolCalls)
+	return string(b)
+}
+
+func TestTypedMapKeys(t *testing.T) {
+	secret := []byte("PRIVATE")
+	cases := []struct {
+		name string
+		in   any
+		want string
+	}{
+		{"int keys", map[int][]byte{1: secret}, `"arguments":{}`},
+		{"int8 keys", map[int8]any{2: secret, 3: "x"}, `"3":"x"`},
+		{"uint keys", map[uint16]string{7: "v"}, `"7":"v"`},
+		{"named string keys", map[textKey]string{"a": "v"}, `"a":"v"`},
+		{"text marshaler keys", map[textKeyPtr]string{{"b"}: "v"}, `"k-b":"v"`},
+		{"unsupported float keys", map[float64][]byte{1.5: secret}, ``},
+		{"unsupported struct keys", map[badKey]string{{1}: "v"}, ``},
+		{"unsupported bool keys", map[bool]string{true: "v"}, ``},
+		{"interface holding bytes", map[string]any{"a": any(secret)}, `"arguments":{}`},
+		{"slice of byte-named type", map[string]any{"a": []namedByte{1, 2}}, `"arguments":{}`},
+		{"nil map and slice", map[string]any{"a": map[int]string(nil), "b": []string(nil)}, `"a":null`},
+	}
+	for _, c := range cases {
+		got := leaks(t, c.in)
+		for _, bad := range []string{"PRIVATE", "UFJJVkFURQ"} {
+			if strings.Contains(got, bad) {
+				t.Errorf("%s: leaked %s in %s", c.name, bad, got)
+			}
+		}
+		if c.want != "" && !strings.Contains(got, c.want) {
+			t.Errorf("%s: %s lacks %s", c.name, got, c.want)
+		}
+	}
+}
+
+type textKeyPtr struct{ s string }
+
+func (k textKeyPtr) MarshalText() ([]byte, error) { return []byte("k-" + k.s), nil }
+
+type namedByte byte
+
+func TestTypedCyclesAndDepth(t *testing.T) {
+	loop := &selfRef{Name: "loop"}
+	loop.Next = loop
+	cyclicMap := map[string]any{"a": 1}
+	cyclicMap["self"] = cyclicMap
+	cyclicSlice := []any{1}
+	cyclicSlice = append(cyclicSlice, cyclicSlice)
+	ptrMap := map[string]*selfRef{}
+	ptrMap["p"] = loop
+	var deep any = "bottom"
+	for n := 0; n < 5000; n++ {
+		deep = []any{deep}
+	}
+	var deepTyped any = "bottom"
+	for n := 0; n < 5000; n++ {
+		deepTyped = map[string]any{"d": deepTyped}
+	}
+	for name, v := range map[string]any{
+		"self pointer": loop, "cyclic map": cyclicMap, "cyclic slice": cyclicSlice, "typed map of cyclic": ptrMap,
+		"deep slices": deep, "deep maps": deepTyped,
+	} {
+		got := leaks(t, map[string]any{"v": v, "ok": "kept"})
+		if !strings.Contains(got, `"ok":"kept"`) {
+			t.Errorf("%s: sibling lost: %.200s", name, got)
+		}
+	}
+	// A shared (non-cyclic) value is not a cycle.
+	shared := &selfRef{Name: "s"}
+	if got := leaks(t, []any{shared, shared}); strings.Count(got, `"Name":"s"`) != 2 {
+		t.Errorf("shared value dropped: %s", got)
+	}
+}
+
+func TestTypedStructShapes(t *testing.T) {
+	v := outer{inner: inner{Inside: []byte("PRIVATE"), Shown: "yes"}, Ch: make(chan int), Fn: func() {}, C: 1 + 2i, Any: []byte("PRIVATE"), hidden: []byte("PRIVATE")}
+	got := leaks(t, map[string]any{"s": v, "p": &v})
+	if strings.Contains(got, "PRIVATE") || strings.Contains(got, "UFJJVkFURQ") {
+		t.Fatalf("leaked: %s", got)
+	}
+	if !strings.Contains(got, `"Shown":"yes"`) {
+		t.Fatalf("embedded fields not promoted: %s", got)
+	}
+}

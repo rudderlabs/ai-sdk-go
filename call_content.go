@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -216,71 +217,151 @@ func isBytes(v any) bool {
 	return false
 }
 
+// maxWalkDepth is the nesting a walk follows before it drops the value: a backstop for cycles
+// that cycle detection cannot see.
+const maxWalkDepth = 64
+
+type visit struct {
+	ptr uintptr
+	typ reflect.Type
+	n   int
+}
+
+// walk is one traversal of a value: the containers on the current path (to drop a cycle) and the
+// depth reached.
+type walk struct {
+	path  map[visit]bool
+	depth int
+}
+
+// enter marks a pointer, map or slice as on the path; false when it is already there (a cycle) or
+// the walk is too deep. Every true must be followed by leave.
+func (w *walk) enter(rv reflect.Value) (visit, bool) {
+	if w.depth >= maxWalkDepth {
+		return visit{}, false
+	}
+	var key visit
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Slice:
+		if rv.IsNil() || (rv.Kind() == reflect.Slice && rv.Len() == 0) {
+			w.depth++
+			return key, true
+		}
+		key = visit{rv.Pointer(), rv.Type(), 0}
+		if rv.Kind() == reflect.Slice {
+			key.n = rv.Len()
+		}
+		if w.path[key] {
+			return key, false
+		}
+		w.path[key] = true
+	}
+	w.depth++
+	return key, true
+}
+
+func (w *walk) leave(key visit) {
+	w.depth--
+	if key.ptr != 0 {
+		delete(w.path, key)
+	}
+}
+
 // stripBinary removes inline binary from any value: byte arrays are deleted (from their object or
 // array), a data: URI string becomes data:<media type>, and an object that looks like media (a
 // mime_type, mimeType, media_type, mediaType or source_type key, or a media type) loses its data,
-// bytes, base64 and b64_json keys. Values other than plain JSON are encoded first.
+// bytes, base64 and b64_json keys. Typed values (structs, map[string][]byte...) are walked to
+// plain JSON values with byte slices dropped, so they are never encoded as base64. A cyclic or
+// too deeply nested value is dropped (nil).
 func stripBinary(v any) any {
+	out, _ := (&walk{path: map[visit]bool{}}).strip(v)
+	return out
+}
+
+// strip returns the stripped value; keep is false when the value is bytes or cannot be sent.
+func (w *walk) strip(v any) (out any, keep bool) {
 	switch x := v.(type) {
 	case string:
 		if m := dataURIPrefix.FindStringSubmatch(x); m != nil {
-			return "data:" + m[1]
+			return "data:" + m[1], true
 		}
-		return x
+		return x, true
+	case nil, bool, int, int64, float64, json.Number:
+		return v, true
 	case []byte:
-		return nil
-	case []any:
-		out := make([]any, 0, len(x))
-		for _, e := range x {
-			if !isBytes(e) {
-				out = append(out, stripBinary(e))
-			}
-		}
-		return out
-	case map[string]any:
-		media := false
-		for k := range x {
-			if mediaKeys[k] {
-				media = true
-			}
-		}
-		if t, ok := x["type"].(string); ok && mediaTypes[t] {
+		return nil, false
+	}
+	// Plain containers and typed values alike go through the reflective walk; it never panics.
+	return w.typed(reflect.ValueOf(v))
+}
+
+// stripMap applies the media-object rules to an already generic map.
+func stripMap(x map[string]any) map[string]any {
+	media := false
+	for k := range x {
+		if mediaKeys[k] {
 			media = true
 		}
-		out := make(map[string]any, len(x))
-		for k, e := range x {
-			if isBytes(e) || (media && payloadKeys[k]) {
-				continue
-			}
-			out[k] = stripBinary(e)
+	}
+	if t, ok := x["type"].(string); ok && mediaTypes[t] {
+		media = true
+	}
+	if media {
+		for k := range payloadKeys {
+			delete(x, k)
 		}
-		return out
-	case nil, bool, int, int64, float64, json.Number:
-		return v
 	}
-	// A typed value (a struct, []GenAIPart, map[string][]byte...): walked to plain JSON values
-	// with its byte slices dropped, so they are never encoded as base64.
-	c, ok := typedValue(reflect.ValueOf(v))
-	if !ok {
-		return nil
-	}
-	switch c.(type) {
-	case string, []any, map[string]any:
-		return stripBinary(c)
-	}
-	return c
+	return x
 }
 
 var (
-	rawMessageType = reflect.TypeOf(json.RawMessage(nil))
-	marshalerType  = reflect.TypeOf((*json.Marshaler)(nil)).Elem()
-	textType       = reflect.TypeOf((*encoding.TextMarshaler)(nil)).Elem()
+	rawMessageType = reflect.TypeFor[json.RawMessage]()
+	jsonNumberType = reflect.TypeFor[json.Number]()
+	marshalerType  = reflect.TypeFor[json.Marshaler]()
+	textType       = reflect.TypeFor[encoding.TextMarshaler]()
 )
 
-// typedValue converts a typed Go value to plain JSON values. ok is false for a byte slice or array
-// (never sent) and for a value that cannot be encoded. A json.RawMessage that is valid JSON is
-// decoded; types with their own marshaler are encoded by it.
-func typedValue(rv reflect.Value) (out any, ok bool) {
+// mapKey is a map key as encoding/json writes it: a string kind as is, else a TextMarshaler's text,
+// else an integer in decimal. ok is false for a key type json cannot encode.
+func mapKey(k reflect.Value) (string, bool) {
+	if k.Kind() == reflect.String {
+		return k.String(), true
+	}
+	if k.Type().Implements(textType) {
+		if k.Kind() == reflect.Pointer && k.IsNil() {
+			return "", false
+		}
+		text, err := k.Interface().(encoding.TextMarshaler).MarshalText()
+		return string(text), err == nil
+	}
+	switch k.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(k.Int(), 10), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return strconv.FormatUint(k.Uint(), 10), true
+	}
+	return "", false
+}
+
+func validMapKey(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return true
+	}
+	return t.Implements(textType)
+}
+
+// typed converts a Go value to plain JSON values. keep is false for a byte slice or array (never
+// sent), a cycle, a value nested too deeply and a value json could not encode (channels, funcs,
+// complex numbers, maps with unsupported key types). A json.RawMessage that is valid JSON is
+// decoded; types with their own marshaler are encoded by it. A panic drops the value.
+func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			out, keep = nil, false
+		}
+	}()
 	if !rv.IsValid() {
 		return nil, true
 	}
@@ -290,7 +371,7 @@ func typedValue(rv reflect.Value) (out any, ok bool) {
 		if json.Unmarshal(rv.Bytes(), &decoded) != nil {
 			return nil, false
 		}
-		return stripBinary(decoded), true
+		return w.strip(decoded)
 	}
 	if t.Implements(marshalerType) || t.Implements(textType) || (rv.CanAddr() && reflect.PointerTo(t).Implements(marshalerType)) {
 		if (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) && rv.IsNil() {
@@ -298,14 +379,23 @@ func typedValue(rv reflect.Value) (out any, ok bool) {
 		}
 		return jsonSafe(rv.Interface())
 	}
+	key, ok := w.enter(rv)
+	if !ok {
+		return nil, false
+	}
+	defer w.leave(key)
 	switch rv.Kind() {
 	case reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
 			return nil, true
 		}
-		return typedValue(rv.Elem())
+		return w.typed(rv.Elem())
 	case reflect.String:
-		return rv.String(), true
+		if t == jsonNumberType {
+			return json.Number(rv.String()), true
+		}
+		str, _ := w.strip(rv.String())
+		return str, true
 	case reflect.Bool:
 		return rv.Bool(), true
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -324,50 +414,79 @@ func typedValue(rv reflect.Value) (out any, ok bool) {
 		}
 		list := make([]any, 0, rv.Len())
 		for n := 0; n < rv.Len(); n++ {
-			if e, ok := typedValue(rv.Index(n)); ok {
+			if e, ok := w.typed(rv.Index(n)); ok && !isBytes(e) {
 				list = append(list, e)
 			}
 		}
 		return list, true
 	case reflect.Map:
-		if t.Key().Kind() != reflect.String {
-			return jsonSafe(rv.Interface())
+		if !validMapKey(t.Key()) {
+			return nil, false
 		}
 		if rv.IsNil() {
 			return nil, true
 		}
 		m := make(map[string]any, rv.Len())
-		for _, k := range rv.MapKeys() {
-			if e, ok := typedValue(rv.MapIndex(k)); ok {
-				m[k.String()] = e
+		for it := rv.MapRange(); it.Next(); {
+			name, ok := mapKey(it.Key())
+			if !ok {
+				return nil, false
 			}
-		}
-		return m, true
-	case reflect.Struct:
-		m := map[string]any{}
-		for n := 0; n < t.NumField(); n++ {
-			f := t.Field(n)
-			if !f.IsExported() {
-				continue
-			}
-			name, opts, _ := strings.Cut(f.Tag.Get("json"), ",")
-			if name == "-" && opts == "" {
-				continue
-			}
-			if name == "" {
-				name = f.Name
-			}
-			fv := rv.Field(n)
-			if strings.Contains(opts, "omitempty") && fv.IsZero() {
-				continue
-			}
-			if e, ok := typedValue(fv); ok {
+			if e, ok := w.typed(it.Value()); ok && !isBytes(e) {
 				m[name] = e
 			}
 		}
-		return m, true
+		return stripMap(m), true
+	case reflect.Struct:
+		m := map[string]any{}
+		w.structFields(rv, m)
+		return stripMap(m), true
 	}
-	return jsonSafe(rv.Interface())
+	// Channels, funcs, complex numbers, unsafe pointers: json cannot encode them either.
+	return nil, false
+}
+
+// structFields adds a struct's exported fields as encoding/json names them; an untagged embedded
+// struct is flattened into the same object.
+func (w *walk) structFields(rv reflect.Value, m map[string]any) {
+	t := rv.Type()
+	for n := 0; n < t.NumField(); n++ {
+		f := t.Field(n)
+		name, opts, _ := strings.Cut(f.Tag.Get("json"), ",")
+		if name == "-" && opts == "" {
+			continue
+		}
+		fv := rv.Field(n)
+		if f.Anonymous && name == "" {
+			ev := fv
+			if ev.Kind() == reflect.Pointer {
+				if ev.IsNil() {
+					continue
+				}
+				ev = ev.Elem()
+			}
+			if ev.Kind() == reflect.Struct {
+				key, ok := w.enter(fv)
+				if ok {
+					w.structFields(ev, m)
+					w.leave(key)
+				}
+				continue
+			}
+		}
+		if !f.IsExported() {
+			continue
+		}
+		if name == "" {
+			name = f.Name
+		}
+		if strings.Contains(opts, "omitempty") && fv.IsZero() {
+			continue
+		}
+		if e, ok := w.typed(fv); ok && !isBytes(e) {
+			m[name] = e
+		}
+	}
 }
 
 // genAIMessagesValue is the messages as generic JSON: parts without a string type are skipped, and
