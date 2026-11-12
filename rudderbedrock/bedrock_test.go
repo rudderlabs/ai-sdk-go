@@ -203,8 +203,8 @@ func TestConverseToolResultLoop(t *testing.T) {
 }
 
 func TestToolResultValue(t *testing.T) {
-	if v := toolResultValue([]types.ToolResultContentBlock{&types.ToolResultContentBlockMemberText{Value: `{"a":1}`}}); fmt.Sprint(v) != "map[a:1]" {
-		t.Errorf("text JSON: %v", v)
+	if v := toolResultValue([]types.ToolResultContentBlock{&types.ToolResultContentBlockMemberText{Value: `{"a":1}`}}); v != `{"a":1}` {
+		t.Errorf("text stays a string: %v", v)
 	}
 	if v := toolResultValue([]types.ToolResultContentBlock{&types.ToolResultContentBlockMemberJson{Value: document.NewLazyDocument([]any{1})}}); fmt.Sprint(v) != "[1]" {
 		t.Errorf("json: %v", v)
@@ -214,8 +214,16 @@ func TestToolResultValue(t *testing.T) {
 		&types.ToolResultContentBlockMemberJson{Value: document.NewLazyDocument(map[string]any{"b": 2})},
 		&types.ToolResultContentBlockMemberImage{},
 	})
-	if b, _ := json.Marshal(two); string(b) != `[{"text":"a"},{"json":{"b":2}}]` {
+	if b, _ := json.Marshal(two); string(b) != `[{"content":"a","type":"text"},{"content":{"b":2},"type":"json"},{"modality":"image","type":"blob"}]` {
 		t.Errorf("list: %s", b)
+	}
+	media := toolResultValue([]types.ToolResultContentBlock{
+		&types.ToolResultContentBlockMemberImage{Value: types.ImageBlock{Format: types.ImageFormatPng, Source: &types.ImageSourceMemberBytes{Value: []byte{1, 2}}}},
+		&types.ToolResultContentBlockMemberDocument{Value: types.DocumentBlock{Source: &types.DocumentSourceMemberBytes{Value: []byte{3}}}},
+		&types.ToolResultContentBlockMemberVideo{Value: types.VideoBlock{Source: &types.VideoSourceMemberS3Location{Value: types.S3Location{Uri: aws.String("s3://b/v.mp4")}}}},
+	})
+	if b, _ := json.Marshal(media); string(b) != `[{"mime_type":"image/png","modality":"image","type":"blob"},{"modality":"document","type":"blob"},{"modality":"video","type":"uri","uri":"s3://b/v.mp4"}]` {
+		t.Errorf("media: %s", b)
 	}
 	if docValue(nil) != nil {
 		t.Error("nil document")

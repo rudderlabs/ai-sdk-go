@@ -60,3 +60,33 @@ func TestToolResultResponseKeepsNonTextParts(t *testing.T) {
 		t.Fatalf("got %v", s)
 	}
 }
+
+func TestSourcePartShapes(t *testing.T) {
+	cases := map[string]string{
+		`{"type":"document","source":{"type":"file","file_id":"file_1","media_type":"application/pdf"}}`:                                                                            `[{"type":"file","modality":"document","file_id":"file_1","mime_type":"application/pdf"}]`,
+		`{"type":"image","source":{"type":"file","file_id":"file_2","media_type":"image/png"}}`:                                                                                     `[{"type":"file","modality":"image","file_id":"file_2","mime_type":"image/png"}]`,
+		`{"type":"document","source":{"type":"text","media_type":"text/plain","data":"hello"}}`:                                                                                     `[{"type":"text","content":"hello"}]`,
+		`{"type":"document","source":{"type":"content","content":[{"type":"text","text":"a"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAAA"}}]}}`: `[{"type":"text","content":"a"},{"type":"blob","modality":"image","mime_type":"image/png"}]`,
+		`{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"AAAA"}}`:                                                                               `[{"type":"blob","modality":"document","mime_type":"application/pdf"}]`,
+		`{"type":"image","source":{"type":"base64","media_type":"audio/wav","data":"AAAA"}}`:                                                                                        `[{"type":"blob","modality":"audio","mime_type":"audio/wav"}]`,
+		`{"type":"image","source":{"type":"file","file_id":"file_3"}}`:                                                                                                              `[{"type":"file","modality":"image","file_id":"file_3"}]`,
+		`{"type":"document","source":{"type":"mystery"}}`:                                                                                                                           `[{"type":"document"}]`,
+	}
+	for in, want := range cases {
+		b := mapOf(t, in)
+		got, _ := json.Marshal(blockParts(b))
+		var g, w any
+		_ = json.Unmarshal(got, &g)
+		_ = json.Unmarshal([]byte(want), &w)
+		if !reflect.DeepEqual(g, w) {
+			t.Errorf("%s: got %s want %s", in, got, want)
+		}
+	}
+}
+
+func TestToolResultMapsSourceBlocks(t *testing.T) {
+	content := mapOf(t, `{"c":[{"type":"document","source":{"type":"text","data":"x"}},{"type":"document","source":{"type":"text","data":"y"}}]}`)["c"]
+	if got := toolResultResponse(content); got != "xy" {
+		t.Fatalf("got %v", got)
+	}
+}

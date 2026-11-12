@@ -34,7 +34,7 @@ func TestChatInputMessages(t *testing.T) {
 		{"role":"user","content":""}
 	]}`)))
 	want := `[{"role":"system","parts":[{"content":"be brief","type":"text"}]},` +
-		`{"role":"user","parts":[{"content":"hi","type":"text"},{"mime_type":"image/png","modality":"image","type":"blob"},{"modality":"image","type":"uri","uri":"https://x/y.png"},{"mime_type":"wav","modality":"audio","type":"blob"}]},` +
+		`{"role":"user","parts":[{"content":"hi","type":"text"},{"mime_type":"image/png","modality":"image","type":"blob"},{"modality":"image","type":"uri","uri":"https://x/y.png"},{"mime_type":"audio/wav","modality":"audio","type":"blob"}]},` +
 		`{"role":"assistant","parts":[{"arguments":{"a":1},"id":"c1","name":"f","type":"tool_call"}]},` +
 		`{"role":"assistant","parts":[{"arguments":{"b":2},"name":"old","type":"tool_call"}]},` +
 		`{"role":"tool","parts":[{"id":"c1","response":"ok","type":"tool_call_response"}]},` +
@@ -75,5 +75,29 @@ func TestComputerCallOutputScreenshot(t *testing.T) {
 	resp := got[0].Parts[0]["response"].([]part)
 	if resp[0]["type"] != "blob" || resp[0]["mime_type"] != "image/png" || resp[0]["uri"] != nil {
 		t.Fatalf("%v", resp)
+	}
+}
+
+func TestFileAndAudioParts(t *testing.T) {
+	got := asJSON(t, responsesInputMessages(req(t, `{"input":[{"role":"user","content":[
+		{"type":"input_image","file_id":"file-img"},
+		{"type":"input_file","file_id":"file-doc"},
+		{"type":"input_file","file_data":"data:application/pdf;base64,AAAA"},
+		{"type":"input_file","file_data":"AAAABBBB"},
+		{"type":"input_file","file_url":"https://x/a.pdf"},
+		{"type":"file","file":{"file_id":"file-nested"}},
+		{"type":"input_audio","input_audio":{"data":"AAAA","format":"mp3"}}
+	]},{"type":"function_call_output","call_id":"c","output":[{"type":"input_file","file_id":"f2"}]}]}`)))
+	want := `[{"role":"user","parts":[` +
+		`{"file_id":"file-img","modality":"image","type":"file"},` +
+		`{"file_id":"file-doc","modality":"document","type":"file"},` +
+		`{"mime_type":"application/pdf","modality":"document","type":"blob"},` +
+		`{"modality":"document","type":"blob"},` +
+		`{"modality":"document","type":"uri","uri":"https://x/a.pdf"},` +
+		`{"file_id":"file-nested","modality":"document","type":"file"},` +
+		`{"mime_type":"audio/mpeg","modality":"audio","type":"blob"}]},` +
+		`{"role":"tool","parts":[{"id":"c","response":[{"file_id":"f2","modality":"document","type":"file"}],"type":"tool_call_response"}]}]`
+	if got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
 	}
 }

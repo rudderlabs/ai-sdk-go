@@ -529,13 +529,22 @@ func (r *run) step(ctx context.Context, s obj) error {
 
 // snapshot is the saved pause snapshot an interaction or task option `resume` names.
 func (r *run) snapshot(o obj) *rudderstackai.PausedInteraction {
-	name := str(o["resume"])
-	if name == "" {
+	var raw []byte
+	switch v := o["resume"].(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		raw = r.saved[v]
+	case obj:
+		// A hand-written snapshot, passed as is.
+		raw, _ = json.Marshal(v)
+	default:
 		return nil
 	}
 	var p rudderstackai.PausedInteraction
-	if err := json.Unmarshal(r.saved[name], &p); err != nil {
-		r.t.Fatalf("resume %s: %v", name, err)
+	if err := json.Unmarshal(raw, &p); err != nil {
+		r.t.Fatalf("resume: %v", err)
 	}
 	return &p
 }

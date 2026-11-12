@@ -531,16 +531,6 @@ func WithFallbackUsed(used bool) Option { return func(c *options) { c.details.Fa
 // WithBYOK records whether calls use the end customer's provider key.
 func WithBYOK(byok bool) Option { return func(c *options) { c.details.BYOK = &byok } }
 
-// modalityOf maps a MIME type to image, audio or video; anything else is a file.
-func modalityOf(mime any) string {
-	kind, _, _ := strings.Cut(kit.Str(mime), "/")
-	switch kind {
-	case "image", "audio", "video":
-		return kind
-	}
-	return "file"
-}
-
 // partMeta are part fields that qualify another field instead of being a part kind.
 var partMeta = map[string]bool{"thought": true, "thoughtSignature": true, "videoMetadata": true, "mediaResolution": true}
 
@@ -567,10 +557,10 @@ func inputPart(v any) (parts []rudderstackai.GenAIPart, response rudderstackai.G
 		return nil, kit.ToolResponsePart(fr["id"], fr["response"])
 	}
 	if d := kit.Map(part["inlineData"]); d != nil {
-		return []rudderstackai.GenAIPart{kit.BlobPart(modalityOf(d["mimeType"]), d["mimeType"])}, nil
+		return []rudderstackai.GenAIPart{kit.BlobPart(kit.Modality(d["mimeType"]), d["mimeType"])}, nil
 	}
 	if f := kit.Map(part["fileData"]); f != nil {
-		return kit.URIPart(modalityOf(f["mimeType"]), f["fileUri"], f["mimeType"]), nil
+		return kit.URIPart(kit.Modality(f["mimeType"]), f["fileUri"], f["mimeType"]), nil
 	}
 	keys := make([]string, 0, len(part))
 	for k := range part {

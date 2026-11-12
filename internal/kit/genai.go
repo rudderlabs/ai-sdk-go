@@ -121,6 +121,55 @@ func OtherPart(typ any) []rudderstackai.GenAIPart {
 
 var dataURI = regexp.MustCompile(`(?i)^data:([^;,]*)`)
 
+// Modality is image, audio or video from a media type (image/png); anything else is a document.
+func Modality(mimeType any) string {
+	m, _ := mimeType.(string)
+	top, _, _ := strings.Cut(m, "/")
+	switch top {
+	case "image", "audio", "video":
+		return top
+	}
+	return "document"
+}
+
+// AudioMime is audio/<format> for an audio format name (mp3 is audio/mpeg); "" for none.
+func AudioMime(format any) string {
+	f, _ := format.(string)
+	if f == "" {
+		return ""
+	}
+	f = strings.ToLower(f)
+	if f == "mp3" {
+		f = "mpeg"
+	}
+	return "audio/" + f
+}
+
+// FileRefPart is a file the provider holds, by its ID.
+func FileRefPart(modality string, fileID, mimeType any) []rudderstackai.GenAIPart {
+	id, ok := fileID.(string)
+	if !ok || id == "" {
+		return nil
+	}
+	p := rudderstackai.GenAIPart{"type": "file", "modality": modality, "file_id": id}
+	if m, ok := mimeType.(string); ok && m != "" {
+		p["mime_type"] = m
+	}
+	return []rudderstackai.GenAIPart{p}
+}
+
+// ResponseOf is a tool result built from parts: text only is one string, anything else the parts.
+func ResponseOf(parts []rudderstackai.GenAIPart) any {
+	var b strings.Builder
+	for _, p := range parts {
+		if p["type"] != "text" {
+			return parts
+		}
+		b.WriteString(Str(p["content"]))
+	}
+	return b.String()
+}
+
 // ToolCalls are the tool calls the model requested, as output_tool_calls; JSON-string arguments
 // are parsed by the SDK.
 func ToolCalls(calls []rudderstackai.ToolCall) []rudderstackai.GenAIToolCall {

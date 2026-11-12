@@ -166,26 +166,32 @@ func docValue(d document.Interface) any {
 	return v
 }
 
-// toolResultValue: a single json block is its value, a single text block parsed JSON or text.
+// toolResultValue is a tool result as sent: a single json block is its value, text only is one
+// string, anything else the list of parts (media as blobs, never bytes).
 func toolResultValue(content []types.ToolResultContentBlock) any {
 	if len(content) == 1 {
-		switch b := content[0].(type) {
-		case *types.ToolResultContentBlockMemberJson:
-			return docValue(b.Value)
-		case *types.ToolResultContentBlockMemberText:
-			return kit.ParseToolValue(b.Value)
+		if j, ok := content[0].(*types.ToolResultContentBlockMemberJson); ok {
+			return docValue(j.Value)
 		}
 	}
-	out := make([]any, 0, len(content))
+	var parts []rudderstackai.GenAIPart
 	for _, block := range content {
 		switch b := block.(type) {
 		case *types.ToolResultContentBlockMemberJson:
-			out = append(out, map[string]any{"json": docValue(b.Value)})
+			parts = append(parts, rudderstackai.GenAIPart{"type": "json", "content": docValue(b.Value)})
 		case *types.ToolResultContentBlockMemberText:
-			out = append(out, map[string]any{"text": b.Value})
+			parts = append(parts, kit.TextPart(b.Value)...)
+		case *types.ToolResultContentBlockMemberImage:
+			parts = append(parts, imagePart(b.Value)...)
+		case *types.ToolResultContentBlockMemberVideo:
+			parts = append(parts, videoPart(b.Value)...)
+		case *types.ToolResultContentBlockMemberDocument:
+			parts = append(parts, documentPart(b.Value)...)
+		default:
+			parts = append(parts, kit.OtherPart(otherName(block))...)
 		}
 	}
-	return out
+	return kit.ResponseOf(parts)
 }
 
 // recordToolResults settles earlier tool calls from the toolResult blocks sent back.
@@ -220,6 +226,34 @@ func mediaPart(modality string, s3 *types.S3Location, mime string) []rudderstack
 	return []rudderstackai.GenAIPart{kit.BlobPart(modality, mime)}
 }
 
+func imagePart(b types.ImageBlock) []rudderstackai.GenAIPart {
+	var s3 *types.S3Location
+	if src, ok := b.Source.(*types.ImageSourceMemberS3Location); ok {
+		s3 = &src.Value
+	}
+	mime := ""
+	if b.Format != "" {
+		mime = "image/" + string(b.Format)
+	}
+	return mediaPart("image", s3, mime)
+}
+
+func videoPart(b types.VideoBlock) []rudderstackai.GenAIPart {
+	var s3 *types.S3Location
+	if src, ok := b.Source.(*types.VideoSourceMemberS3Location); ok {
+		s3 = &src.Value
+	}
+	return mediaPart("video", s3, "")
+}
+
+func documentPart(b types.DocumentBlock) []rudderstackai.GenAIPart {
+	var s3 *types.S3Location
+	if src, ok := b.Source.(*types.DocumentSourceMemberS3Location); ok {
+		s3 = &src.Value
+	}
+	return mediaPart("document", s3, "")
+}
+
 // blockParts maps one Converse content block to GenAI parts, or returns a tool result to send as
 // its own tool message.
 func blockParts(block types.ContentBlock) (parts []rudderstackai.GenAIPart, response rudderstackai.GenAIPart) {
@@ -240,27 +274,11 @@ func blockParts(block types.ContentBlock) (parts []rudderstackai.GenAIPart, resp
 		}
 		return kit.OtherPart("reasoningContent"), nil
 	case *types.ContentBlockMemberImage:
-		var s3 *types.S3Location
-		if src, ok := b.Value.Source.(*types.ImageSourceMemberS3Location); ok {
-			s3 = &src.Value
-		}
-		mime := ""
-		if b.Value.Format != "" {
-			mime = "image/" + string(b.Value.Format)
-		}
-		return mediaPart("image", s3, mime), nil
+		return imagePart(b.Value), nil
 	case *types.ContentBlockMemberVideo:
-		var s3 *types.S3Location
-		if src, ok := b.Value.Source.(*types.VideoSourceMemberS3Location); ok {
-			s3 = &src.Value
-		}
-		return mediaPart("video", s3, ""), nil
+		return videoPart(b.Value), nil
 	case *types.ContentBlockMemberDocument:
-		var s3 *types.S3Location
-		if src, ok := b.Value.Source.(*types.DocumentSourceMemberS3Location); ok {
-			s3 = &src.Value
-		}
-		return mediaPart("file", s3, ""), nil
+		return documentPart(b.Value), nil
 	}
 	return kit.OtherPart(otherName(block)), nil
 }

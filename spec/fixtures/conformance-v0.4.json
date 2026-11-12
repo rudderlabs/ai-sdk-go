@@ -51346,6 +51346,863 @@
           ]
         }
       ]
+    },
+    {
+      "name": "per_call_content_openai_chat_media",
+      "description": "RudderStack per-call content: Chat Completions media parts: audio gets audio/<format> (mp3 is audio/mpeg), a file_id is a file part, inline file data and data: image URLs become blob parts without bytes, an https image stays a uri part.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_openai_chat",
+            "feature": "parity",
+            "intent": "refund_request",
+            "input_method": "text",
+            "trace_id": "trace-1"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "What are these?"
+                      },
+                      {
+                        "type": "input_audio",
+                        "input_audio": {
+                          "data": "SECRETB64",
+                          "format": "mp3"
+                        }
+                      },
+                      {
+                        "type": "file",
+                        "file": {
+                          "file_id": "file-1"
+                        }
+                      },
+                      {
+                        "type": "file",
+                        "file": {
+                          "file_data": "data:application/pdf;base64,SECRETB64"
+                        }
+                      },
+                      {
+                        "type": "image_url",
+                        "image_url": {
+                          "url": "data:image/png;base64,SECRETB64"
+                        }
+                      },
+                      {
+                        "type": "image_url",
+                        "image_url": {
+                          "url": "https://example.com/a.png"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "op": "set_outcome",
+              "value": "resolved"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_openai_chat",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "input_method": "text",
+            "intent": "refund_request"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_openai_chat",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop",
+            "call_index": 1,
+            "input_messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "type": "text",
+                    "content": "What are these?"
+                  },
+                  {
+                    "type": "blob",
+                    "modality": "audio",
+                    "mime_type": "audio/mpeg"
+                  },
+                  {
+                    "type": "file",
+                    "modality": "document",
+                    "file_id": "file-1"
+                  },
+                  {
+                    "type": "blob",
+                    "modality": "document",
+                    "mime_type": "application/pdf"
+                  },
+                  {
+                    "type": "blob",
+                    "modality": "image",
+                    "mime_type": "image/png"
+                  },
+                  {
+                    "type": "uri",
+                    "modality": "image",
+                    "uri": "https://example.com/a.png"
+                  }
+                ]
+              }
+            ],
+            "output_text": "Mock answer: Where is my refund?"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_openai_chat",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "intent": "refund_request",
+            "outcome": "resolved",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "trace_id": "trace-1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ],
+      "per_call_content": true
+    },
+    {
+      "name": "per_call_content_anthropic_media",
+      "description": "RudderStack per-call content: Anthropic media blocks: documents are modality document; a file source is a file part with file_id, a text source is text, a content source maps its blocks, base64 sources are blobs without bytes.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "replies": {
+        "anthropic.messages": [
+          {
+            "json": {
+              "id": "msg_1",
+              "type": "message",
+              "role": "assistant",
+              "model": "claude-haiku-4-5",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Mock answer: Where is my refund?"
+                }
+              ],
+              "stop_reason": "end_turn",
+              "stop_sequence": null,
+              "usage": {
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_anthropic_create",
+            "feature": "parity"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "anthropic.messages",
+              "params": {
+                "model": "claude-haiku-4-5",
+                "max_tokens": 100,
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": [
+                      {
+                        "type": "document",
+                        "source": {
+                          "type": "base64",
+                          "media_type": "application/pdf",
+                          "data": "SECRETB64"
+                        }
+                      },
+                      {
+                        "type": "document",
+                        "source": {
+                          "type": "file",
+                          "file_id": "file-9"
+                        }
+                      },
+                      {
+                        "type": "image",
+                        "source": {
+                          "type": "file",
+                          "file_id": "file-8"
+                        }
+                      },
+                      {
+                        "type": "document",
+                        "source": {
+                          "type": "text",
+                          "media_type": "text/plain",
+                          "data": "plain words"
+                        }
+                      },
+                      {
+                        "type": "document",
+                        "source": {
+                          "type": "content",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "inline words"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "type": "text",
+                        "text": "Summarise"
+                      }
+                    ]
+                  }
+                ],
+                "system": "You are a support assistant."
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_anthropic_create",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "anthropic"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_anthropic_create",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "anthropic",
+            "model": "claude-haiku-4-5",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "response_id": "msg_1",
+            "finish_reason": "end_turn",
+            "call_index": 1,
+            "input_messages": [
+              {
+                "role": "system",
+                "parts": [
+                  {
+                    "type": "text",
+                    "content": "You are a support assistant."
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "type": "blob",
+                    "modality": "document",
+                    "mime_type": "application/pdf"
+                  },
+                  {
+                    "type": "file",
+                    "modality": "document",
+                    "file_id": "file-9"
+                  },
+                  {
+                    "type": "file",
+                    "modality": "image",
+                    "file_id": "file-8"
+                  },
+                  {
+                    "type": "text",
+                    "content": "plain words"
+                  },
+                  {
+                    "type": "text",
+                    "content": "inline words"
+                  },
+                  {
+                    "type": "text",
+                    "content": "Summarise"
+                  }
+                ]
+              }
+            ],
+            "output_text": "Mock answer: Where is my refund?"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "anthropic"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_anthropic_create",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-4-5",
+            "primary_provider": "anthropic",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "end_turn",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-4-5",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "anthropic"
+            }
+          }
+        }
+      ],
+      "per_call_content": true
+    },
+    {
+      "name": "per_call_content_binary_never_sent",
+      "description": "RudderStack per-call content: tool results and parts never carry bytes: byte-array objects are removed, data: URI strings become data:<media type>, and base64 payload keys (data, bytes, base64, b64_json) of media-shaped objects are removed; plain data keys stay.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "per_call_content": true,
+      "replies": {},
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "u1",
+          "properties": {
+            "conversation_id": "conv_binary",
+            "interaction_id": "$int1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "u1",
+          "properties": {
+            "conversation_id": "conv_binary",
+            "interaction_id": "$int1",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 10,
+            "output_tokens": 2,
+            "total_tokens": 12,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "bin-1",
+            "call_index": 1,
+            "input_messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "type": "text",
+                    "content": "Show the chart"
+                  }
+                ]
+              },
+              {
+                "role": "tool",
+                "parts": [
+                  {
+                    "type": "tool_call_response",
+                    "id": "t1",
+                    "response": {
+                      "image": {
+                        "type": "image",
+                        "source_type": "base64",
+                        "mime_type": "image/png"
+                      },
+                      "inline": {
+                        "inlineData": {
+                          "mimeType": "image/png"
+                        }
+                      },
+                      "url": "data:image/png",
+                      "list": [
+                        {
+                          "type": "media",
+                          "mediaType": "image/png"
+                        }
+                      ],
+                      "keep": {
+                        "data": "hello",
+                        "rows": 2
+                      },
+                      "numbers": [
+                        1,
+                        2,
+                        3
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "type": "blob",
+                    "modality": "image",
+                    "mime_type": "image/jpeg"
+                  },
+                  {
+                    "type": "blob",
+                    "modality": "audio",
+                    "mime_type": "audio/wav"
+                  }
+                ]
+              }
+            ],
+            "output_text": "ok"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "u1",
+          "properties": {
+            "conversation_id": "conv_binary",
+            "interaction_id": "$int1",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ],
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "u1",
+            "conversation_id": "conv_binary"
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "response_id": "bin-1",
+              "input_messages": [
+                {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "type": "text",
+                      "content": "Show the chart"
+                    }
+                  ]
+                },
+                {
+                  "role": "tool",
+                  "parts": [
+                    {
+                      "type": "tool_call_response",
+                      "id": "t1",
+                      "response": {
+                        "bytes": {
+                          "0": 83,
+                          "1": 69,
+                          "2": 67
+                        },
+                        "buffer": {
+                          "type": "Buffer",
+                          "data": [
+                            1,
+                            2,
+                            3
+                          ]
+                        },
+                        "image": {
+                          "type": "image",
+                          "source_type": "base64",
+                          "data": "SECRETB64",
+                          "mime_type": "image/png"
+                        },
+                        "inline": {
+                          "inlineData": {
+                            "data": "SECRETB64",
+                            "mimeType": "image/png"
+                          }
+                        },
+                        "url": "data:image/png;base64,SECRETB64",
+                        "list": [
+                          {
+                            "type": "media",
+                            "data": "SECRETB64",
+                            "mediaType": "image/png"
+                          }
+                        ],
+                        "keep": {
+                          "data": "hello",
+                          "rows": 2
+                        },
+                        "numbers": [
+                          1,
+                          2,
+                          3
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "type": "uri",
+                      "modality": "image",
+                      "uri": "data:image/jpeg;base64,SECRETB64"
+                    },
+                    {
+                      "type": "blob",
+                      "modality": "audio",
+                      "mime_type": "audio/wav",
+                      "content": "SECRETB64"
+                    }
+                  ]
+                }
+              ],
+              "output_text": "ok"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "per_call_content_call_index_pending_call_resume",
+      "description": "RudderStack per-call content: a pending call in a pause snapshot keeps its call_index (5) and sends it when the resumed run ends; the next call continues at 6. resume may be an inline snapshot object instead of a saved name.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "per_call_content": true,
+      "replies": {},
+      "expected": [
+        {
+          "event": "ai_llm_response_received",
+          "userId": "u1",
+          "properties": {
+            "conversation_id": "conv_pending_resume",
+            "interaction_id": "pending-run",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 3,
+            "output_tokens": 1,
+            "total_tokens": 4,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "call_index": 5
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "u1",
+          "properties": {
+            "conversation_id": "conv_pending_resume",
+            "interaction_id": "pending-run",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 10,
+            "output_tokens": 2,
+            "total_tokens": 12,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "response_id": "p-next",
+            "call_index": 6
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "u1",
+          "properties": {
+            "conversation_id": "conv_pending_resume",
+            "interaction_id": "pending-run",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 2,
+            "tool_call_count": 0,
+            "total_input_tokens": 13,
+            "total_output_tokens": 3,
+            "total_tokens": 16,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 2,
+                "input_tokens": 13,
+                "output_tokens": 3,
+                "total_tokens": 16,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "pause_count": 1,
+            "total_paused_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ],
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "resume": {
+              "interaction_id": "pending-run",
+              "conversation_id": "conv_pending_resume",
+              "trigger": "user",
+              "user_id": "u1",
+              "pause_count": 1,
+              "total_paused_ms": 0,
+              "paused_at": 1,
+              "call_sequence": 5,
+              "pending_calls": [
+                {
+                  "provider": "openai",
+                  "model": "gpt-4.1-mini",
+                  "call_event_pending": true,
+                  "call_index": 5,
+                  "input_tokens": 3,
+                  "output_tokens": 1,
+                  "matched": true
+                }
+              ]
+            }
+          },
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1-mini",
+              "input_tokens": 10,
+              "output_tokens": 2,
+              "response_id": "p-next"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

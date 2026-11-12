@@ -26,9 +26,15 @@ func openaiParts(content any) []part {
 		case "image_url":
 			out = append(out, kit.URIPart("image", kit.Map(p["image_url"])["url"], nil)...)
 		case "input_image":
-			out = append(out, kit.URIPart("image", p["image_url"], nil)...)
+			if id, ok := p["file_id"].(string); ok && id != "" {
+				out = append(out, kit.FileRefPart("image", id, nil)...)
+			} else {
+				out = append(out, kit.URIPart("image", p["image_url"], nil)...)
+			}
 		case "input_audio":
-			out = append(out, kit.BlobPart("audio", kit.Map(p["input_audio"])["format"]))
+			out = append(out, kit.BlobPart("audio", kit.AudioMime(kit.Map(p["input_audio"])["format"])))
+		case "file", "input_file":
+			out = append(out, openaiFilePart(p)...)
 		case "computer_screenshot":
 			// A computer-use tool result: the screenshot as an image part, never its bytes.
 			out = append(out, kit.URIPart("image", p["image_url"], nil)...)
@@ -40,6 +46,27 @@ func openaiParts(content any) []part {
 		}
 	}
 	return out
+}
+
+// openaiFilePart maps a file input: by file_id, URL, or inline file_data (kind only, never bytes).
+func openaiFilePart(p map[string]any) []part {
+	f := p
+	if nested := kit.Map(p["file"]); nested != nil {
+		f = nested
+	}
+	if id, ok := f["file_id"].(string); ok && id != "" {
+		return kit.FileRefPart("document", id, nil)
+	}
+	if u, ok := f["file_url"].(string); ok && u != "" {
+		return kit.URIPart("document", u, nil)
+	}
+	if d, ok := f["file_data"].(string); ok && d != "" {
+		if parts := kit.URIPart("document", d, nil); len(parts) > 0 && parts[0]["type"] == "blob" {
+			return parts
+		}
+		return []part{kit.BlobPart("document", nil)}
+	}
+	return kit.OtherPart(p["type"])
 }
 
 // textOrParts is a tool result's content: text as a string, anything else as its parts.
@@ -54,15 +81,7 @@ func textOrParts(content any) any {
 		// A computer_call_output carries one typed object, not a list of parts.
 		return openaiParts([]any{m})
 	}
-	parts := openaiParts(content)
-	var b strings.Builder
-	for _, p := range parts {
-		if p["type"] != "text" {
-			return parts
-		}
-		b.WriteString(kit.Str(p["content"]))
-	}
-	return b.String()
+	return kit.ResponseOf(openaiParts(content))
 }
 
 func roleOf(role any) string {

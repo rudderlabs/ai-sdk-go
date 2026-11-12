@@ -229,3 +229,36 @@ func TestCallContentNotMaskedForEndedInteraction(t *testing.T) {
 		t.Fatalf("redact hook ran %d times for an ended interaction", calls)
 	}
 }
+
+func TestStripBinary(t *testing.T) {
+	got := stripBinary(map[string]any{
+		"type": "image", "mime_type": "image/png", "data": "AAAA", "bytes": []byte{1}, "name": "x",
+		"raw":  map[string]any{"0": 1, "1": 255},
+		"buf":  map[string]any{"type": "Buffer", "data": []any{1, 2}},
+		"url":  "DATA:image/png;base64,AAAA",
+		"keep": map[string]any{"data": "kept", "n": 1},
+		"list": []any{[]byte{1}, "ok", map[string]any{"0": 1}},
+	}).(map[string]any)
+	if _, ok := got["data"]; ok || got["name"] != "x" || got["url"] != "data:image/png" {
+		t.Fatalf("%v", got)
+	}
+	for _, k := range []string{"bytes", "raw", "buf"} {
+		if _, ok := got[k]; ok {
+			t.Fatalf("%s kept: %v", k, got)
+		}
+	}
+	if got["keep"].(map[string]any)["data"] != "kept" {
+		t.Fatalf("%v", got["keep"])
+	}
+	if l := got["list"].([]any); len(l) != 1 || l[0] != "ok" {
+		t.Fatalf("%v", l)
+	}
+}
+
+func TestToolArgumentsAreStripped(t *testing.T) {
+	c := captureCallContent(nil, "", []GenAIToolCall{{Name: "t", Arguments: `{"image":{"media_type":"image/png","data":"AAAA"}}`}})
+	args := c.outputToolCalls[0].(map[string]any)["arguments"].(map[string]any)["image"].(map[string]any)
+	if _, ok := args["data"]; ok {
+		t.Fatalf("%v", args)
+	}
+}

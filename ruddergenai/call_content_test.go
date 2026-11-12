@@ -30,7 +30,7 @@ func TestInputMessages(t *testing.T) {
 		{Role: "user", Parts: []rudderstackai.GenAIPart{
 			{"type": "text", "content": "Hi"},
 			{"type": "blob", "modality": "image", "mime_type": "image/png"},
-			{"type": "uri", "modality": "file", "uri": "gs://b/f.pdf", "mime_type": "application/pdf"},
+			{"type": "uri", "modality": "document", "uri": "gs://b/f.pdf", "mime_type": "application/pdf"},
 		}},
 		{Role: "assistant", Parts: []rudderstackai.GenAIPart{
 			{"type": "reasoning", "content": "thinking"},

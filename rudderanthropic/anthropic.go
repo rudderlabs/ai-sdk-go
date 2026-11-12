@@ -152,13 +152,34 @@ func toolCall(b map[string]any) rudderstackai.ToolCall {
 	return tc
 }
 
+// mediaModality is the media type's modality, else the block's own when no type is given.
+func mediaModality(block string, mimeType any) string {
+	if m, _ := mimeType.(string); m != "" {
+		return kit.Modality(m)
+	}
+	return block
+}
+
 // sourcePart is an image or document block: inline data keeps its kind only.
 func sourcePart(modality string, b map[string]any) []rudderstackai.GenAIPart {
 	src := kit.Map(b["source"])
-	if src["type"] == "url" {
+	switch src["type"] {
+	case "url":
 		return kit.URIPart(modality, src["url"], src["media_type"])
+	case "file":
+		return kit.FileRefPart(mediaModality(modality, src["media_type"]), src["file_id"], src["media_type"])
+	case "text":
+		return kit.TextPart(src["data"])
+	case "content":
+		var parts []rudderstackai.GenAIPart
+		for _, v := range kit.List(src["content"]) {
+			parts = append(parts, blockParts(kit.Map(v))...)
+		}
+		return parts
+	case "base64":
+		return []rudderstackai.GenAIPart{kit.BlobPart(mediaModality(modality, src["media_type"]), src["media_type"])}
 	}
-	return []rudderstackai.GenAIPart{kit.BlobPart(modality, src["media_type"])}
+	return kit.OtherPart(b["type"])
 }
 
 // blockParts maps one content block to parts; tool_result blocks are split out by the caller.
@@ -188,14 +209,7 @@ func toolResultResponse(content any) any {
 	for _, v := range list {
 		parts = append(parts, blockParts(kit.Map(v))...)
 	}
-	var text strings.Builder
-	for _, p := range parts {
-		if p["type"] != "text" {
-			return parts
-		}
-		text.WriteString(kit.Str(p["content"]))
-	}
-	return text.String()
+	return kit.ResponseOf(parts)
 }
 
 // inputMessages maps system and messages to GenAI messages; a tool_result block becomes a tool message.

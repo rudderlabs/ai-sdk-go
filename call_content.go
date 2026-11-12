@@ -2,6 +2,8 @@ package rudderstackai
 
 import (
 	"encoding/json"
+	"math"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -158,6 +160,114 @@ func dataURIMime(uri string) string {
 	return rest
 }
 
+var (
+	dataURIPrefix = regexp.MustCompile(`(?i)^data:([a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+)?(;[^,]*)?,`)
+	payloadKeys   = map[string]bool{"data": true, "bytes": true, "base64": true, "b64_json": true}
+	mediaKeys     = map[string]bool{"mime_type": true, "mimeType": true, "media_type": true, "mediaType": true, "source_type": true}
+	mediaTypes    = map[string]bool{"image": true, "audio": true, "video": true, "document": true, "file": true, "media": true, "blob": true, "image-data": true, "file-data": true, "input_audio": true, "input_image": true, "input_file": true}
+	digitsOnly    = regexp.MustCompile(`^\d+$`)
+)
+
+func isByte(v any) bool {
+	var f float64
+	switch n := v.(type) {
+	case int:
+		f = float64(n)
+	case int64:
+		f = float64(n)
+	case float64:
+		f = n
+	case json.Number:
+		f, _ = n.Float64()
+	default:
+		return false
+	}
+	return f >= 0 && f <= 255 && f == math.Trunc(f)
+}
+
+// isBytes: a native byte slice, a {"0": 1, "1": 2} byte object or a {"type": "Buffer", "data": [...]}.
+func isBytes(v any) bool {
+	switch x := v.(type) {
+	case []byte:
+		return true
+	case map[string]any:
+		if x["type"] == "Buffer" {
+			if data, ok := x["data"].([]any); ok {
+				for _, b := range data {
+					if !isByte(b) {
+						return false
+					}
+				}
+				return true
+			}
+		}
+		if len(x) == 0 {
+			return false
+		}
+		for k, e := range x {
+			if !digitsOnly.MatchString(k) || !isByte(e) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+// stripBinary removes inline binary from any value: byte arrays are deleted (from their object or
+// array), a data: URI string becomes data:<media type>, and an object that looks like media (a
+// mime_type, mimeType, media_type, mediaType or source_type key, or a media type) loses its data,
+// bytes, base64 and b64_json keys. Values other than plain JSON are encoded first.
+func stripBinary(v any) any {
+	switch x := v.(type) {
+	case string:
+		if m := dataURIPrefix.FindStringSubmatch(x); m != nil {
+			return "data:" + m[1]
+		}
+		return x
+	case []byte:
+		return nil
+	case []any:
+		out := make([]any, 0, len(x))
+		for _, e := range x {
+			if !isBytes(e) {
+				out = append(out, stripBinary(e))
+			}
+		}
+		return out
+	case map[string]any:
+		media := false
+		for k := range x {
+			if mediaKeys[k] {
+				media = true
+			}
+		}
+		if t, ok := x["type"].(string); ok && mediaTypes[t] {
+			media = true
+		}
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			if isBytes(e) || (media && payloadKeys[k]) {
+				continue
+			}
+			out[k] = stripBinary(e)
+		}
+		return out
+	case nil, bool, int, int64, float64, json.Number:
+		return v
+	}
+	// A typed value (a struct, []GenAIPart, a named map): its JSON form.
+	c, ok := jsonSafe(v)
+	if !ok {
+		return nil
+	}
+	switch c.(type) {
+	case string, []any, map[string]any:
+		return stripBinary(c)
+	}
+	return c
+}
+
 // genAIMessagesValue is the messages as generic JSON: parts without a string type are skipped, and
 // a value that cannot be encoded drops its part.
 func genAIMessagesValue(messages []GenAIMessage) []any {
@@ -171,8 +281,8 @@ func genAIMessagesValue(messages []GenAIMessage) []any {
 			if t, _ := p["type"].(string); t == "" {
 				continue
 			}
-			if c, ok := jsonSafe(map[string]any(p)); ok {
-				parts = append(parts, inlineFree(c.(map[string]any)))
+			if c, ok := stripBinary(map[string]any(p)).(map[string]any); ok {
+				parts = append(parts, inlineFree(c))
 			}
 		}
 		out = append(out, map[string]any{"role": m.Role, "parts": parts})
@@ -207,11 +317,7 @@ func captureCallContent(inputMessages []GenAIMessage, outputText string, outputT
 		}
 		call := map[string]any{"name": t.Name}
 		if t.Arguments != nil {
-			args, ok := jsonSafe(parseToolArguments(t.Arguments))
-			if !ok {
-				continue
-			}
-			call["arguments"] = args
+			call["arguments"] = stripBinary(parseToolArguments(t.Arguments))
 		}
 		calls = append(calls, call)
 	}
