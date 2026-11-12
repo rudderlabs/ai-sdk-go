@@ -482,26 +482,24 @@ type Interaction struct {
 	// started is the start of the current segment: the run, or its latest resume.
 	started time.Time
 	// pausedAt is when the current pause started; zero while running.
-	pausedAt         time.Time
-	pausing          bool
-	pauseGuard       atomic.Bool   // checked before mu, including callback reentry
-	pendingMu        sync.Mutex    // orders pauseGuard release against pendingEnd
-	pendingEnd       *EndOptions   // wrapper end that arrived mid-pause; sent when the pause finishes
-	pendingDone      chan struct{} // closed once pendingEnd is delivered; RunTask's flush waits on it
-	pendingRunning   int           // queued ends being delivered; pendingDone stays until zero
-	pauseCount       int
-	pausedTotal      time.Duration
-	adapterAnalytics analytics.Client
-	intent, outcome  string
-	traceID          string
-	restored         bool // from a snapshot: the request context never supplies the trace ID
-	integration      string
-	ended            bool
-	firstToken       time.Duration
-	calls            []*recordedCall
-	callCount        int
-	// callSeq is the calls reported so far across pauses: the base of call_index.
-	callSeq                int
+	pausedAt               time.Time
+	pausing                bool
+	pauseGuard             atomic.Bool   // checked before mu, including callback reentry
+	pendingMu              sync.Mutex    // orders pauseGuard release against pendingEnd
+	pendingEnd             *EndOptions   // wrapper end that arrived mid-pause; sent when the pause finishes
+	pendingDone            chan struct{} // closed once pendingEnd is delivered; RunTask's flush waits on it
+	pendingRunning         int           // queued ends being delivered; pendingDone stays until zero
+	pauseCount             int
+	pausedTotal            time.Duration
+	adapterAnalytics       analytics.Client
+	intent, outcome        string
+	traceID                string
+	restored               bool // from a snapshot: the request context never supplies the trace ID
+	integration            string
+	ended                  bool
+	firstToken             time.Duration
+	calls                  []*recordedCall
+	callCount              int
 	successfulCallSequence int
 	lastCall, lastOK       *recordedCall
 	lastFailedCallType     string
@@ -529,6 +527,9 @@ type Interaction struct {
 	// callErrors are errors wrapped calls failed with, newest last, so the app returning one
 	// keeps its call's error_type.
 	callErrors []callError
+
+	// callSeq is the calls reported so far across pauses: the base of call_index.
+	callSeq int
 }
 
 type callError struct {
@@ -938,7 +939,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	// Masked before the lock, so an event never holds unmasked content and the redact hook runs
 	// outside it; sent and dropped with the call event.
 	var content *callContent
-	if c.emitLLMCalls && i.captureContent {
+	if c.emitLLMCalls && i.capturesCallContent() {
 		content = captureCallContent(call.InputMessages, call.OutputText, call.OutputToolCalls)
 	}
 	i.mu.Lock()
@@ -2068,6 +2069,9 @@ func pendingCall(c *recordedCall) map[string]any {
 	p["from_span"], p["twin_matched"], p["usage_unknown"] = c.fromSpan, c.twinMatched, c.usageUnknown
 	p["credits_explicit"] = c.creditsExplicit
 	p["report_sequence"] = c.reportSequence
+	if c.callIndex > 0 {
+		p["call_index"] = c.callIndex
+	}
 	if !c.startedAt.IsZero() {
 		p["started_at"] = c.startedAt.Format(time.RFC3339Nano)
 	}
@@ -2191,6 +2195,7 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	for _, p := range snapshot.PendingCalls {
 		c := &recordedCall{}
 		c.callEventPending = pendingBool(p, "call_event_pending")
+		c.callIndex = int(pendingNumber(p, "call_index"))
 		c.fromSpan, c.twinMatched, c.usageUnknown = pendingBool(p, "from_span"), pendingBool(p, "twin_matched"), pendingBool(p, "usage_unknown")
 		c.creditsExplicit = pendingBool(p, "credits_explicit")
 		c.startedAt, _ = time.Parse(time.RFC3339Nano, pendingText(p, "started_at"))

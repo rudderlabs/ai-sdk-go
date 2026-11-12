@@ -4,9 +4,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
+
+// maxCapturedRunes is the masking cap on one string (32,000 code points); output_text is cut to it.
+const maxCapturedRunes = 32_000
 
 // End is how a provider stream ended.
 type End int
@@ -66,7 +70,9 @@ type Observer struct {
 	tools    []*streamTool
 	toolKeys map[string]*streamTool
 	text     strings.Builder
-	keepText bool
+	// textRunes counts the code points collected, to stop at maxCapturedRunes.
+	textRunes int
+	keepText  bool
 	// capture: the call's output is sent as output_text and output_tool_calls.
 	capture  bool
 	first    bool
@@ -148,7 +154,11 @@ func (o *Observer) NoteToolArgs(key, chunk string) {
 func (o *Observer) NoteText(s string) {
 	if (o.keepText || o.capture) && s != "" {
 		o.mu.Lock()
-		o.text.WriteString(s)
+		// Content capture alone keeps no more than the masking cap: the rest is cut anyway.
+		if o.keepText || o.textRunes < maxCapturedRunes {
+			o.text.WriteString(s)
+			o.textRunes += utf8.RuneCountInString(s)
+		}
 		o.mu.Unlock()
 	}
 }

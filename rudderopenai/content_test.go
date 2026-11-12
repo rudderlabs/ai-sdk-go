@@ -64,3 +64,16 @@ func TestResponsesInputMessages(t *testing.T) {
 		t.Fatal(str)
 	}
 }
+
+func TestComputerCallOutputScreenshot(t *testing.T) {
+	got := responsesInputMessages(map[string]any{"input": []any{
+		map[string]any{"type": "computer_call_output", "call_id": "c1", "output": map[string]any{"type": "computer_screenshot", "image_url": "data:image/png;base64,AAAA"}},
+	}})
+	if len(got) != 1 || got[0].Role != "tool" {
+		t.Fatalf("%v", got)
+	}
+	resp := got[0].Parts[0]["response"].([]part)
+	if resp[0]["type"] != "blob" || resp[0]["mime_type"] != "image/png" || resp[0]["uri"] != nil {
+		t.Fatalf("%v", resp)
+	}
+}

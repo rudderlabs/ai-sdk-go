@@ -3,10 +3,12 @@ package kit
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -208,5 +210,20 @@ func TestObserverText(t *testing.T) {
 	o.NoteText(" world")
 	if got := o.text.String(); got != "Hello world" {
 		t.Fatalf("text = %q", got)
+	}
+}
+
+func TestObserverOutputTextStopsAtMaskingCap(t *testing.T) {
+	hook.Reset()
+	if err := rudderstackai.Configure(rudderstackai.WithLLMCallEvents(true), rudderstackai.WithCaptureContent(true)); err != nil {
+		t.Fatal(err)
+	}
+	_, o, _ := observer(t, true)
+	chunk := strings.Repeat("a", 10_000)
+	for n := 0; n < 100; n++ {
+		o.NoteText(chunk)
+	}
+	if got := o.text.Len(); got > 40_000 {
+		t.Fatalf("buffered %d bytes", got)
 	}
 }

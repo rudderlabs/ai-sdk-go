@@ -39,7 +39,7 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 	}
 	for _, records := range [][]map[string]any{s.PendingCalls, s.PendingTools} {
 		for _, p := range records {
-			for _, key := range []string{"call_count", "error_count", "input_tokens", "output_tokens", "reasoning_tokens", "cached_input_tokens", "cache_write_tokens", "cache_write_1h_tokens", "server_tool_call_count", "report_sequence"} {
+			for _, key := range []string{"call_count", "error_count", "input_tokens", "output_tokens", "reasoning_tokens", "cached_input_tokens", "cache_write_tokens", "cache_write_1h_tokens", "server_tool_call_count", "report_sequence", "call_index"} {
 				if v, ok := p[key]; ok && !validSnapshotInteger(v) {
 					return false
 				}

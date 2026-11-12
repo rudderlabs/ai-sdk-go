@@ -121,11 +121,6 @@ func OtherPart(typ any) []rudderstackai.GenAIPart {
 
 var dataURI = regexp.MustCompile(`(?i)^data:([^;,]*)`)
 
-// MediaPart is a URL or data: URI as a part: inline data keeps its kind only (a blob).
-func MediaPart(modality string, url any) []rudderstackai.GenAIPart {
-	return URIPart(modality, url, nil)
-}
-
 // ToolCalls are the tool calls the model requested, as output_tool_calls; JSON-string arguments
 // are parsed by the SDK.
 func ToolCalls(calls []rudderstackai.ToolCall) []rudderstackai.GenAIToolCall {

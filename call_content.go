@@ -9,12 +9,12 @@ import (
 
 // Per-call content of ai_llm_response_received (SDK-6798): input messages, output text and the
 // tool calls the model requested, in the OpenTelemetry GenAI shapes. Opt-in: WithLLMCallEvents
-// and content capture together. Identical in Node.js and Python.
+// and content capture together.
 
 // GenAIPart is one part of a [GenAIMessage]: {"type": "text", "content": "..."}, a "tool_call"
 // (id, name, arguments), a "tool_call_response" (id, response), a "uri" (modality, uri,
 // mime_type), a "blob" (modality, mime_type; never the bytes) or any other type name.
-type GenAIPart = map[string]any
+type GenAIPart map[string]any
 
 // GenAIMessage is one message in the OpenTelemetry GenAI gen_ai.input.messages shape.
 type GenAIMessage struct {

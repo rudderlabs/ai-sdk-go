@@ -24,11 +24,17 @@ func openaiParts(content any) []part {
 		case "refusal":
 			out = append(out, kit.TextPart(p["refusal"])...)
 		case "image_url":
-			out = append(out, kit.MediaPart("image", kit.Map(p["image_url"])["url"])...)
+			out = append(out, kit.URIPart("image", kit.Map(p["image_url"])["url"], nil)...)
 		case "input_image":
-			out = append(out, kit.MediaPart("image", p["image_url"])...)
+			out = append(out, kit.URIPart("image", p["image_url"], nil)...)
 		case "input_audio":
 			out = append(out, kit.BlobPart("audio", kit.Map(p["input_audio"])["format"]))
+		case "computer_screenshot":
+			// A computer-use tool result: the screenshot as an image part, never its bytes.
+			out = append(out, kit.URIPart("image", p["image_url"], nil)...)
+			if p["image_url"] == nil {
+				out = append(out, kit.OtherPart(typ)...)
+			}
 		default:
 			out = append(out, kit.OtherPart(typ)...)
 		}
@@ -43,6 +49,10 @@ func textOrParts(content any) any {
 	}
 	if _, ok := content.(string); ok {
 		return content
+	}
+	if m, ok := content.(map[string]any); ok {
+		// A computer_call_output carries one typed object, not a list of parts.
+		return openaiParts([]any{m})
 	}
 	parts := openaiParts(content)
 	var b strings.Builder

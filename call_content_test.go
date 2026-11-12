@@ -186,3 +186,46 @@ func TestDataURIPartBecomesBlob(t *testing.T) {
 		t.Fatalf("%v", p)
 	}
 }
+
+func TestCallIndexPersistsInPendingCall(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		r := setupAI(t, WithLLMCallEvents(true))
+		client := &pauseReentrantClient{recorder: r}
+		_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+		i.RecordCall(LLMCall{Provider: "openai", Model: "closing", ResponseID: "0"})
+		// Accepted while the pause finishes: carried in the snapshot, not emitted yet.
+		client.reenter = func() {
+			i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "1", CallCount: 2})
+			i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "2"})
+		}
+		s, ok := i.Pause(PauseOptions{})
+		if !ok {
+			t.Fatal("pause")
+		}
+		var indexes []int
+		for _, p := range s.PendingCalls {
+			indexes = append(indexes, int(pendingNumber(p, "call_index")))
+		}
+		if len(indexes) != 2 || indexes[0] != 2 || indexes[1] != 4 {
+			t.Fatalf("snapshot call_index %v", indexes)
+		}
+		i = round3Resume(t, i, s, restore)
+		if len(i.calls) != 2 || i.calls[0].callIndex != 2 || i.calls[1].callIndex != 4 {
+			t.Fatalf("restore=%v: %+v", restore, i.calls)
+		}
+	}
+}
+
+func TestCallContentNotMaskedForEndedInteraction(t *testing.T) {
+	calls := 0
+	setupAI(t, WithLLMCallEvents(true), WithCaptureContent(true), WithRedactHook(func(s string) (string, error) {
+		calls++
+		return s, nil
+	}))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.End(EndOptions{})
+	i.RecordCall(LLMCall{Provider: "openai", Model: "m", OutputText: "late"})
+	if calls != 0 {
+		t.Fatalf("redact hook ran %d times for an ended interaction", calls)
+	}
+}

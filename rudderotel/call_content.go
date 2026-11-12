@@ -251,7 +251,7 @@ func openInferenceMessage(a map[string]attribute.Value, base string, n int) rudd
 		typ := asStringAny(rawAttr(a, c+".type"))
 		switch typ {
 		case "image":
-			blocks = append(blocks, kit.MediaPart("image", rawAttr(a, c+".image.image.url"))...)
+			blocks = append(blocks, kit.URIPart("image", rawAttr(a, c+".image.image.url"), nil)...)
 		case "", "text":
 			blocks = append(blocks, kit.TextPart(rawAttr(a, c+".text"))...)
 		default:
