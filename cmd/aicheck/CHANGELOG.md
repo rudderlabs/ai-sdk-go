@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.6.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.5.0...cmd/aicheck/v0.6.0) (2026-11-12)
+
+
+### Features
+
+* add TrackClassification for app-sent classifications ([#58](https://github.com/rudderlabs/ai-sdk-go/issues/58)) ([6af69de](https://github.com/rudderlabs/ai-sdk-go/commit/6af69de122b9064760a6ec82817a10fe758293a4))
+* **mcp:** add OAuth client and remembered client name to MCP events ([#53](https://github.com/rudderlabs/ai-sdk-go/issues/53)) ([dbe17bc](https://github.com/rudderlabs/ai-sdk-go/commit/dbe17bc8153c4ad10c97a12f5871bdc1bf5f2cc7))
+* **mcp:** add opt-in submit_feedback tool and deprecate request_capability ([#64](https://github.com/rudderlabs/ai-sdk-go/issues/64)) ([79ac495](https://github.com/rudderlabs/ai-sdk-go/commit/79ac495dda7937fa9228cbe8961348b06010a73e))
+* **spec:** add per-call content and wrapper span contract ([#56](https://github.com/rudderlabs/ai-sdk-go/issues/56)) ([48bbbf2](https://github.com/rudderlabs/ai-sdk-go/commit/48bbbf2b7bd4a4ca2b7c5ac146080a98d6ca516f))
+
+
+### Bug Fixes
+
+* **mcp:** keep client-controlled text out of MCP events ([#59](https://github.com/rudderlabs/ai-sdk-go/issues/59)) ([41e40a3](https://github.com/rudderlabs/ai-sdk-go/commit/41e40a3cfee0a9931bb1aaa6d5085b81d16b3371))
+
 ## [0.5.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.4.0...cmd/aicheck/v0.5.0) (2026-11-05)
 
 

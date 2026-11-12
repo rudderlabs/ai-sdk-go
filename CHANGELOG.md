@@ -12,6 +12,32 @@
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
 - SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events.
 
+## [0.8.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.7.0...v0.8.0) (2026-11-12)
+
+
+### Features
+
+* add TrackClassification for app-sent classifications ([#58](https://github.com/rudderlabs/ai-sdk-go/issues/58)) ([6af69de](https://github.com/rudderlabs/ai-sdk-go/commit/6af69de122b9064760a6ec82817a10fe758293a4))
+* **mcp:** add OAuth client and remembered client name to MCP events ([#53](https://github.com/rudderlabs/ai-sdk-go/issues/53)) ([dbe17bc](https://github.com/rudderlabs/ai-sdk-go/commit/dbe17bc8153c4ad10c97a12f5871bdc1bf5f2cc7))
+* **mcp:** add opt-in submit_feedback tool and deprecate request_capability ([#64](https://github.com/rudderlabs/ai-sdk-go/issues/64)) ([79ac495](https://github.com/rudderlabs/ai-sdk-go/commit/79ac495dda7937fa9228cbe8961348b06010a73e))
+* **rudderotel:** consume OpenTelemetry spans for analytics ([#57](https://github.com/rudderlabs/ai-sdk-go/issues/57)) ([8c835ff](https://github.com/rudderlabs/ai-sdk-go/commit/8c835ffdacd0129cc22bd72f06996de7e26d8682))
+* **spec:** add per-call content and wrapper span contract ([#56](https://github.com/rudderlabs/ai-sdk-go/issues/56)) ([48bbbf2](https://github.com/rudderlabs/ai-sdk-go/commit/48bbbf2b7bd4a4ca2b7c5ac146080a98d6ca516f))
+
+
+### Bug Fixes
+
+* **mcp:** give the request_capability tool a title and full annotations ([#51](https://github.com/rudderlabs/ai-sdk-go/issues/51)) ([846118d](https://github.com/rudderlabs/ai-sdk-go/commit/846118d7ac05e45dfe45756facaeebe8c1df7747))
+* **mcp:** keep client-controlled text out of MCP events ([#59](https://github.com/rudderlabs/ai-sdk-go/issues/59)) ([41e40a3](https://github.com/rudderlabs/ai-sdk-go/commit/41e40a3cfee0a9931bb1aaa6d5085b81d16b3371))
+* **rudderotel:** mask strings inside structured content attributes ([#63](https://github.com/rudderlabs/ai-sdk-go/issues/63)) ([db256b1](https://github.com/rudderlabs/ai-sdk-go/commit/db256b1f1b6aececd87701df9491212ff914c147))
+
+
+### Miscellaneous
+
+* **deps:** bump step-security/harden-runner from 2.22.2 to 2.22.3 in the github-actions-version group ([#49](https://github.com/rudderlabs/ai-sdk-go/issues/49)) ([b5ee6c7](https://github.com/rudderlabs/ai-sdk-go/commit/b5ee6c761dfa7cce675672c0c6108ad3b71b7d0a))
+* **release:** bump core requirement of examples and conformance modules ([#61](https://github.com/rudderlabs/ai-sdk-go/issues/61)) ([abbb286](https://github.com/rudderlabs/ai-sdk-go/commit/abbb28636715ca77ab9cf50c94ee4c4181feb944))
+* **release:** bump integration core requirements with each core release ([#60](https://github.com/rudderlabs/ai-sdk-go/issues/60)) ([e5045b8](https://github.com/rudderlabs/ai-sdk-go/commit/e5045b898d09d8ab068d28331e786245adf320ec))
+* **rudderotel:** cover error text and attribute locations in tracing conformance ([#62](https://github.com/rudderlabs/ai-sdk-go/issues/62)) ([546dff0](https://github.com/rudderlabs/ai-sdk-go/commit/546dff02e69ecb1d91b58b2f3a5da43fb6948c0d))
+
 ## [0.7.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.6.0...v0.7.0) (2026-11-05)
 
 
