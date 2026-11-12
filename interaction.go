@@ -3016,6 +3016,10 @@ func (i *Interaction) AcceptOutput() {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.acceptedCall = i.lastCall
+	// An adapter may have reported the same cap as a hint for this call.
+	if i.hint != nil && i.hint.errorType == "length" && i.hint.calls == i.callCount {
+		i.hint = nil
+	}
 }
 
 // finishErrorLocked is the error type c's finish reason gives the answer.
