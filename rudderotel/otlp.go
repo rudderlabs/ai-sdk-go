@@ -33,6 +33,14 @@ func anyValue(v attribute.Value) object {
 			value = "-Infinity"
 		}
 		return object{"doubleValue": value}
+	case attribute.SLICE:
+		values := make([]object, 0, len(v.AsSlice()))
+		for _, x := range v.AsSlice() {
+			values = append(values, anyValue(x))
+		}
+		return object{"arrayValue": object{"values": values}}
+	case attribute.MAP:
+		return object{"kvlistValue": object{"values": keyValues(v.AsMap())}}
 	case attribute.STRINGSLICE, attribute.BOOLSLICE, attribute.INT64SLICE, attribute.FLOAT64SLICE:
 		values := []object{}
 		switch v.Type() {
@@ -169,5 +177,8 @@ func collectValue(v object, out *[]object) {
 		for _, item := range a["values"].([]object) {
 			collectValue(item, out)
 		}
+	}
+	if kvs, ok := v["kvlistValue"].(object); ok {
+		collectStrings(kvs["values"].([]object), out)
 	}
 }

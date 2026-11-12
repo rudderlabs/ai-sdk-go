@@ -84,55 +84,61 @@ func fixtureAttributes(m map[string]any) []attribute.KeyValue {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	attrs := []attribute.KeyValue{}
+	attrs := make([]attribute.KeyValue, 0, len(keys))
 	for _, k := range keys {
-		switch v := m[k].(type) {
-		case string:
-			attrs = append(attrs, attribute.String(k, v))
-		case bool:
-			attrs = append(attrs, attribute.Bool(k, v))
-		case float64:
-			if math.Trunc(v) == v {
-				attrs = append(attrs, attribute.Int64(k, int64(v)))
-			} else {
-				attrs = append(attrs, attribute.Float64(k, v))
-			}
-		case []any:
-			if len(v) == 0 {
-				attrs = append(attrs, attribute.StringSlice(k, nil))
-				continue
-			}
-			switch v[0].(type) {
-			case string:
-				values := []string{}
-				for _, x := range v {
-					values = append(values, x.(string))
-				}
-				attrs = append(attrs, attribute.StringSlice(k, values))
-			case bool:
-				values := []bool{}
-				for _, x := range v {
-					values = append(values, x.(bool))
-				}
-				attrs = append(attrs, attribute.BoolSlice(k, values))
-			case float64:
-				ints, floats := []int64{}, []float64{}
-				integral := true
-				for _, x := range v {
-					f := x.(float64)
-					floats = append(floats, f)
-					ints = append(ints, int64(f))
-					integral = integral && math.Trunc(f) == f
-				}
-				if integral {
-					attrs = append(attrs, attribute.Int64Slice(k, ints))
-				} else {
-					attrs = append(attrs, attribute.Float64Slice(k, floats))
-				}
-			}
-		}
+		attrs = append(attrs, attribute.KeyValue{Key: attribute.Key(k), Value: fixtureValue(m[k])})
 	}
 	return attrs
+}
+
+func fixtureValue(v any) attribute.Value {
+	switch v := v.(type) {
+	case string:
+		return attribute.StringValue(v)
+	case bool:
+		return attribute.BoolValue(v)
+	case float64:
+		if math.Trunc(v) == v {
+			return attribute.Int64Value(int64(v))
+		}
+		return attribute.Float64Value(v)
+	case []any:
+		values := make([]attribute.Value, len(v))
+		strings, bools, ints, floats := []string{}, []bool{}, []int64{}, []float64{}
+		integral := true
+		for i, x := range v {
+			values[i] = fixtureValue(x)
+			switch x := x.(type) {
+			case string:
+				strings = append(strings, x)
+			case bool:
+				bools = append(bools, x)
+			case float64:
+				ints = append(ints, int64(x))
+				floats = append(floats, x)
+				integral = integral && math.Trunc(x) == x
+			}
+		}
+		// Keep homogeneous primitive arrays in their original OTel types;
+		// summary fields such as finish reasons expect STRINGSLICE.
+		switch {
+		case len(strings) == len(v):
+			return attribute.StringSliceValue(strings)
+		case len(bools) == len(v):
+			return attribute.BoolSliceValue(bools)
+		case len(floats) == len(v):
+			if integral {
+				return attribute.Int64SliceValue(ints)
+			}
+			return attribute.Float64SliceValue(floats)
+		default:
+			return attribute.SliceValue(values...)
+		}
+	case map[string]any:
+		return attribute.MapValue(fixtureAttributes(v)...)
+	default:
+		return attribute.Value{}
+	}
 }
 
 func startFixture(ctx context.Context, t *testing.T, f fixtureSpan, processors ...sdktrace.SpanProcessor) (trace.Span, *sdktrace.TracerProvider) {
