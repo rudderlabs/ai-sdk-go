@@ -166,6 +166,29 @@ func docValue(d document.Interface) any {
 	return v
 }
 
+// toolOutcomeValue is a tool result as the tool rules and tool_breakdown see it: a single json
+// block is its value, a single text block parsed JSON or text. Unchanged by per-call content.
+func toolOutcomeValue(content []types.ToolResultContentBlock) any {
+	if len(content) == 1 {
+		switch b := content[0].(type) {
+		case *types.ToolResultContentBlockMemberJson:
+			return docValue(b.Value)
+		case *types.ToolResultContentBlockMemberText:
+			return kit.ParseToolValue(b.Value)
+		}
+	}
+	out := make([]any, 0, len(content))
+	for _, block := range content {
+		switch b := block.(type) {
+		case *types.ToolResultContentBlockMemberJson:
+			out = append(out, map[string]any{"json": docValue(b.Value)})
+		case *types.ToolResultContentBlockMemberText:
+			out = append(out, map[string]any{"text": b.Value})
+		}
+	}
+	return out
+}
+
 // toolResultValue is a tool result as sent: a single json block is its value, text only is one
 // string, anything else the list of parts (media as blobs, never bytes).
 func toolResultValue(content []types.ToolResultContentBlock) any {
@@ -203,7 +226,7 @@ func recordToolResults(i *rudderstackai.Interaction, messages []types.Message) {
 				continue
 			}
 			failed := r.Value.Status == types.ToolResultStatusError
-			kit.RecordToolResult(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolResultValue(r.Value.Content)}, len(r.Value.Content) > 0)
+			kit.RecordToolResult(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolOutcomeValue(r.Value.Content)}, len(r.Value.Content) > 0)
 		}
 	}
 }

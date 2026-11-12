@@ -230,6 +230,25 @@ func TestToolResultValue(t *testing.T) {
 	}
 }
 
+// The tool outcome path is unchanged: a single text block is parsed JSON, several blocks
+// are {json}/{text} maps and media is skipped.
+func TestToolOutcomeValueUnchanged(t *testing.T) {
+	if v := toolOutcomeValue([]types.ToolResultContentBlock{&types.ToolResultContentBlockMemberText{Value: `{"a":1}`}}); fmt.Sprint(v) != "map[a:1]" {
+		t.Errorf("single text block is parsed: %v", v)
+	}
+	if v := toolOutcomeValue([]types.ToolResultContentBlock{&types.ToolResultContentBlockMemberText{Value: "plain"}}); v != "plain" {
+		t.Errorf("plain text: %v", v)
+	}
+	list := toolOutcomeValue([]types.ToolResultContentBlock{
+		&types.ToolResultContentBlockMemberText{Value: "a"},
+		&types.ToolResultContentBlockMemberJson{Value: document.NewLazyDocument(map[string]any{"b": 2})},
+		&types.ToolResultContentBlockMemberImage{},
+	})
+	if b, _ := json.Marshal(list); string(b) != `[{"text":"a"},{"json":{"b":2}}]` {
+		t.Errorf("list: %s", b)
+	}
+}
+
 func TestFinishReasons(t *testing.T) {
 	for in, want := range map[types.StopReason]string{
 		"end_turn": "stop", "stop_sequence": "stop", "tool_use": "tool_calls", "max_tokens": "length",
