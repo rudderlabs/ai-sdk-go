@@ -22,12 +22,16 @@ func TestLazyGoogleStreamCapturesOwnerAtStart(t *testing.T) {
 	// interaction context to switch at entry. Ended owners are resolved at entry.
 	ctx = rudderstackai.WithValues(ctx, rudderstackai.ContextValues{UserID: "bob", Analytics: bobClient})
 	client := newClient(t, genai.BackendGeminiAPI, ruddergenai.HTTPClient(nil))
-	stream := client.Models.GenerateContentStream(ctx, model, genai.Text("Bob secret"), nil)
+	llm.Script("google.stream", sseReply(reply([]any{m{"text": "Bob reply"}}, m{"promptTokenCount": 3, "candidatesTokenCount": 2}, "STOP")))
+	// genai v1.72.0 sends the request before returning its iterator. Defer the
+	// SDK call explicitly so both the module and workspace test lazy ownership.
+	stream := func(yield func(*genai.GenerateContentResponse, error) bool) {
+		client.Models.GenerateContentStream(ctx, model, genai.Text("Bob secret"), nil)(yield)
+	}
 	alice.End(rudderstackai.EndOptions{})
 	if err := rudderstackai.Configure(rudderstackai.WithCaptureContent(false)); err != nil {
 		t.Fatal(err)
 	}
-	llm.Script("google.stream", sseReply(reply([]any{m{"text": "Bob reply"}}, m{"promptTokenCount": 3, "candidatesTokenCount": 2}, "STOP")))
 	for _, err := range stream {
 		if err != nil {
 			t.Fatal(err)
