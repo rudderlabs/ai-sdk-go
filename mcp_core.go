@@ -325,7 +325,9 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	}
 	// Remembered details enrich request events only; client-seen keeps its existing sources.
 	seenClient := client
-	if !knownClient(client) {
+	// With a fallback configured, a blank initialize must resolve afresh. Remembered
+	// clients still enrich later requests and retain their behavior without a fallback.
+	if !knownClient(client) && (!r.Initialize || opts.ClientInfoFallback == nil) {
 		if key := clientKey(id); key != (rememberedClientKey{}) {
 			st.Lock()
 			// Keep expired entries' sequence until eviction so stale initializes cannot revive them.

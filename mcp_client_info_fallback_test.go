@@ -129,3 +129,81 @@ func TestMCPClientInfoFallbackSessionPrecedence(t *testing.T) {
 		t.Errorf("client = %v", p)
 	}
 }
+
+func TestMCPClientInfoFallbackInitialize(t *testing.T) {
+	for _, scenario := range []string{"remembered_blank", "remembered_missing", "later_real", "title_only", "no_fallback", "client_info"} {
+		t.Run(scenario, func(t *testing.T) {
+			calls := 0
+			opts := Options{
+				Identify: func(context.Context, *auth.TokenInfo) (Identity, error) {
+					return Identity{UserID: "user", OAuthClientID: "app"}, nil
+				},
+				ClientInfoFallback: func(context.Context, *auth.TokenInfo) (string, string) {
+					calls++
+					return "fallback", "2"
+				},
+			}
+			if scenario == "no_fallback" {
+				opts.ClientInfoFallback = nil
+			}
+			initialize := func(client *mcp.Implementation, wantName, wantVersion string) {
+				t.Helper()
+				s := workspaceServer(t.Name(), nil)
+				r := wrap(t, s, opts)
+				w, _ := instances.get(s)
+				_, err := w.receiving(func(context.Context, string, mcp.Request) (mcp.Result, error) {
+					return &mcp.InitializeResult{ProtocolVersion: "2025-06-18"}, nil
+				})(context.Background(), "initialize", &mcp.ServerRequest[*mcp.InitializeParams]{
+					Params: &mcp.InitializeParams{ClientInfo: client},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				p := r.props(t, "mcp_client_seen")
+				if str(p["client_name"]) != wantName || str(p["client_version"]) != wantVersion {
+					t.Errorf("client-seen = %v, want %q/%q", p, wantName, wantVersion)
+				}
+			}
+			if scenario != "later_real" && scenario != "title_only" {
+				initialize(&mcp.Implementation{Name: "A", Version: "1"}, "A", "1")
+			}
+			client := &mcp.Implementation{}
+			wantName, wantVersion, wantCalls := "fallback", "2", 1
+			switch scenario {
+			case "remembered_missing":
+				client = nil
+			case "title_only":
+				client.Title = "Only A Title"
+			case "no_fallback":
+				wantName, wantVersion, wantCalls = "", "", 0
+			case "client_info":
+				opts.ClientInfo = func(context.Context, *auth.TokenInfo) (string, string) { return "resolver", "3" }
+				wantName, wantVersion, wantCalls = "resolver", "3", 0
+			}
+			initialize(client, wantName, wantVersion)
+			if scenario == "later_real" {
+				initialize(&mcp.Implementation{Name: "real", Version: "4"}, "real", "4")
+				s := workspaceServer(t.Name(), nil)
+				r := wrap(t, s, opts)
+				w, _ := instances.get(s)
+				_, err := w.receiving(func(context.Context, string, mcp.Request) (mcp.Result, error) {
+					return &mcp.CallToolResult{}, nil
+				})(context.Background(), "tools/call", &mcp.CallToolRequest{
+					Params: &mcp.CallToolParamsRaw{Name: "tool", Arguments: json.RawMessage(`{}`)},
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if p := r.props(t, "mcp_tool_called"); p["client_name"] != "real" || p["client_version"] != "4" {
+					t.Errorf("later request client = %v, want real/4", p)
+				}
+				if len(r.named("mcp_client_seen")) != 0 {
+					t.Error("remembered client emitted client-seen")
+				}
+			}
+			if calls != wantCalls {
+				t.Errorf("fallback calls = %d, want %d", calls, wantCalls)
+			}
+		})
+	}
+}

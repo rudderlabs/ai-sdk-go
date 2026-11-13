@@ -123,3 +123,79 @@ func TestClientInfoFallbackSessionPrecedence(t *testing.T) {
 		t.Errorf("client = %v", p)
 	}
 }
+
+func TestClientInfoFallbackInitialize(t *testing.T) {
+	for _, scenario := range []string{"remembered_blank", "remembered_missing", "later_real", "title_only", "no_fallback", "client_info"} {
+		t.Run(scenario, func(t *testing.T) {
+			calls := 0
+			opts := Options{
+				Identify: func(context.Context) (rudderstackai.Identity, error) {
+					return rudderstackai.Identity{UserID: "user", OAuthClientID: "app"}, nil
+				},
+				ClientInfoFallback: func(context.Context) (string, string) {
+					calls++
+					return "fallback", "2"
+				},
+			}
+			if scenario == "no_fallback" {
+				opts.ClientInfoFallback = nil
+			}
+			initialize := func(client map[string]any, wantName, wantVersion string) {
+				t.Helper()
+				s := workspaceServer(t.Name(), nil)
+				r := wrap(t, s, opts)
+				response := s.HandleMessage(context.Background(), []byte(mustJSON(map[string]any{
+					"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{
+						"protocolVersion": "2025-06-18", "capabilities": map[string]any{}, "clientInfo": client,
+					},
+				})))
+				if _, failed := response.(mcp.JSONRPCError); failed {
+					t.Fatal(response)
+				}
+				p := r.props(t, "mcp_client_seen")
+				if stringProperty(p, "client_name") != wantName || stringProperty(p, "client_version") != wantVersion {
+					t.Errorf("client-seen = %v, want %q/%q", p, wantName, wantVersion)
+				}
+			}
+			if scenario != "later_real" && scenario != "title_only" {
+				initialize(map[string]any{"name": "A", "version": "1"}, "A", "1")
+			}
+			client := map[string]any{}
+			wantName, wantVersion, wantCalls := "fallback", "2", 1
+			switch scenario {
+			case "remembered_missing":
+				client = nil
+			case "title_only":
+				client["title"] = "Only A Title"
+			case "no_fallback":
+				wantName, wantVersion, wantCalls = "", "", 0
+			case "client_info":
+				opts.ClientInfo = func(context.Context) (string, string) { return "resolver", "3" }
+				wantName, wantVersion, wantCalls = "resolver", "3", 0
+			}
+			initialize(client, wantName, wantVersion)
+			if scenario == "later_real" {
+				initialize(map[string]any{"name": "real", "version": "4"}, "real", "4")
+				s := workspaceServer(t.Name(), nil)
+				r := wrap(t, s, opts)
+				response := s.HandleMessage(context.Background(), []byte(mustJSON(map[string]any{
+					"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": map[string]any{
+						"name": "list_destinations", "arguments": map[string]any{"workspace_id": "w"},
+					},
+				})))
+				if _, failed := response.(mcp.JSONRPCError); failed {
+					t.Fatal(response)
+				}
+				if p := r.props(t, "mcp_tool_called"); p["client_name"] != "real" || p["client_version"] != "4" {
+					t.Errorf("later request client = %v, want real/4", p)
+				}
+				if len(r.named("mcp_client_seen")) != 0 {
+					t.Error("remembered client emitted client-seen")
+				}
+			}
+			if calls != wantCalls {
+				t.Errorf("fallback calls = %d, want %d", calls, wantCalls)
+			}
+		})
+	}
+}
