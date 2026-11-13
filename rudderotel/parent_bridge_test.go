@@ -109,3 +109,63 @@ func TestSDKSpanInheritsOTelTraceState(t *testing.T) {
 		}
 	}
 }
+
+func TestWrapperOTelParentBridgeRejectsPartialContexts(t *testing.T) {
+	state, err := trace.ParseTraceState("vendor=value")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		config trace.SpanContextConfig
+	}{
+		{"empty", trace.SpanContextConfig{}},
+		{"trace only", trace.SpanContextConfig{TraceID: trace.TraceID{1}, TraceState: state}},
+		{"span only", trace.SpanContextConfig{SpanID: trace.SpanID{2}, TraceState: state}},
+		{"remote parent", trace.SpanContextConfig{TraceID: trace.TraceID{1}, SpanID: trace.SpanID{2}, TraceState: state, Remote: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, events := testProvider(t, Options{Simple: true})
+			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+				t.Fatal(err)
+			}
+			sc := trace.NewSpanContext(tc.config)
+			ctx := trace.ContextWithRemoteSpanContext(context.Background(), sc)
+			ctx, owner := rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: "u", Classify: rudderstackai.Ptr(false)})
+			defer owner.End(rudderstackai.EndOptions{})
+			_, wrapper := hook.Tracing.BeginWrapper(ctx, owner, time.Now())
+			// A retry activates its original wrapper in the new attempt's context.
+			retryCtx := hook.Tracing.ActivateWrapper(ctx, wrapper)
+			_, child := rudderstackai.StartSpan(retryCtx, rudderstackai.SpanOptions{Name: "retry child", Operation: "execute_tool"})
+			child.End(nil)
+			hook.Tracing.FinishRaw(wrapper, "openai", "m", 202, time.Now(), nil)
+			hook.Tracing.FinishRaw(wrapper, "openai", "m", 202, time.Now(), nil)
+			spans := spanEvents(events())
+			if len(spans) != 2 {
+				t.Fatalf("spans=%d, want child and one wrapper", len(spans))
+			}
+			parent := spans[1]["properties"].(object)
+			if sc.IsValid() {
+				if parent["trace_id"] != sc.TraceID().String() || parent["parent_span_id"] != sc.SpanID().String() {
+					t.Fatalf("valid remote parent lost: %v", parent)
+				}
+			} else if parent["parent_span_id"] != nil || parent["trace_id"] == sc.TraceID().String() {
+				t.Fatalf("partial context became a parent: %v", parent)
+			}
+			if p := spans[0]["properties"].(object); p["parent_span_id"] != parent["span_id"] || p["trace_id"] != parent["trace_id"] {
+				t.Fatalf("reactivation did not give the SDK wrapper precedence: %v", p)
+			}
+			for _, event := range spans {
+				p := event["properties"].(object)
+				s := p["otlp"].(object)["resourceSpans"].([]any)[0].(object)["scopeSpans"].([]any)[0].(object)["spans"].([]any)[0].(object)
+				if sc.IsValid() {
+					if s["traceState"] != "vendor=value" {
+						t.Fatalf("remote trace state lost: %v", s)
+					}
+				} else if _, present := s["traceState"]; present {
+					t.Fatalf("partial context leaked trace state: %v", s)
+				}
+			}
+		})
+	}
+}
