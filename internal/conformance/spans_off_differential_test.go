@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,20 +20,12 @@ import (
 func TestSpansOffOriginMainDifferential(t *testing.T) {
 	path := filepath.Join("testdata", "spans-off-origin-main.json")
 	expected := map[string]json.RawMessage{}
-	recording := os.Getenv("SDK6799_RECORD_MAIN") == "1"
-	if recording {
-		head, err := exec.Command("git", "rev-parse", "HEAD").Output()
-		if err != nil || strings.TrimSpace(string(head)) != "a5132d5eea5b3df5a73120600f5c30b664dbf5fa" {
-			t.Fatal("goldens must be recorded from origin/main")
-		}
-	} else {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := json.Unmarshal(raw, &expected); err != nil {
-			t.Fatal(err)
-		}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &expected); err != nil {
+		t.Fatal(err)
 	}
 	seen := 0
 	for _, sc := range differentialScenarios(t) {
@@ -65,10 +56,6 @@ func TestSpansOffOriginMainDifferential(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if recording {
-				expected[sc.Name] = got
-				return
-			}
 			want, ok := expected[sc.Name]
 			if !ok {
 				t.Fatal("missing origin/main recording")
@@ -92,10 +79,6 @@ func TestSpansOffOriginMainDifferential(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if recording {
-					expected[name] = got
-					return
-				}
 				want, ok := expected[name]
 				if !ok {
 					t.Fatal("missing origin/main recording")
@@ -117,18 +100,6 @@ func TestSpansOffOriginMainDifferential(t *testing.T) {
 		t.Fatalf("cases=%d recordings=%d", seen, len(expected))
 	}
 	t.Logf("%d origin/main scenarios compared", seen)
-	if recording {
-		raw, err := json.MarshalIndent(expected, "", "  ")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, append(raw, '\n'), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 func hasProviderCall(steps []obj) bool {
 	for _, s := range steps {

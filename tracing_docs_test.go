@@ -12,12 +12,12 @@ func TestTracingDocsEventBudgetAndPendingSpanGuarantee(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(b)
-	for _, phrase := range []string{"event the SDK builds", "analytics client may add", "Flush", "every still-pending wrapper span", "blocked"} {
+	for _, phrase := range []string{"event the SDK builds", "analytics client may add", "Flush", "every still-pending wrapper span", "blocked", "rudderotel.Options.MaxEventBytes", "core spans use the 32,000-byte default", "close, cancellation, or flush"} {
 		if !strings.Contains(text, phrase) {
 			t.Errorf("tracing docs missing %q", phrase)
 		}
 	}
-	for _, phrase := range []string{"measures the whole Go analytics message", "remains pending."} {
+	for _, phrase := range []string{"measures the whole Go analytics message", "remains pending.", "Limits.MaxEventBytes", "ended with its interaction", "interaction ending with an unread stream"} {
 		if strings.Contains(text, phrase) {
 			t.Errorf("tracing docs retain incorrect claim %q", phrase)
 		}

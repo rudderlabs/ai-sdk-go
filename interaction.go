@@ -949,6 +949,9 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	i.mu.Lock()
 	capture := i.captureContent && !i.untracked && (!i.ended || call.wrapperSpan != nil)
 	i.mu.Unlock()
+	if call.wrapperSpan != nil {
+		capture = call.wrapperSpan.capture
+	}
 	if capture && (c.emitLLMCalls || call.wrapperSpan != nil) {
 		content = captureCallContent(call.InputMessages, call.OutputText, call.OutputToolCalls)
 	}

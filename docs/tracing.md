@@ -60,8 +60,9 @@ or `WithOnError` failure cannot undo admission. Span setup, capture, normalizati
 failures are contained and reported through `WithOnError` or warnings; provider work continues.
 SDK retries and usage-parameter fallback share one
 span with duration covering the retries. Raw HTTP response access uses the same middleware and
-emits once. Streaming spans finish once on completion, early close, cancellation, errors or an
-interaction ending with an unread stream. Context cancellation finishes even an unread stream's
+emits once. Streaming spans finish once on completion, early close, cancellation or errors.
+Ending an interaction leaves an unread wrapper stream pending until close, cancellation, or flush.
+Context cancellation finishes even an unread stream's
 span and records the cancelled call, including when the provider decoder is blocked.
 With spans disabled, product bookkeeping follows the provider's read/Close path. At the latest, core `Flush` or `Shutdown` finishes every still-pending wrapper span exactly once
 as unread/cancelled, with unknown usage, including a streaming response that arrives after its
@@ -115,7 +116,7 @@ uses the same attribute set as Node.
   runtime exception class fixtures use native Go errors. `MaxTurnsExceededError`,
   `LengthFinishReasonError` and `ContentFilterFinishReasonError` have no existing Go Agent SDK or
   response-parser exception equivalent and are skipped by the classification fixture driver.
-- A never-read stream must be closed, cancelled or ended with its interaction to settle. Go has
+- An unread wrapper stream settles on close, cancellation, or flush (`Flush` or `Shutdown`). Go has
   no deterministic iterator finalization when an open stream is simply abandoned.
 
 ## Setup
@@ -288,8 +289,9 @@ currently bypass these privacy protections.
 Oversized events repeatedly shorten the longest OTLP attribute string in resource, span, event,
 then link traversal order. Cuts preserve UTF-8, retain at least 256 bytes before the
 `...[truncated]` suffix, and set `truncated: true`. An event still too large is dropped with a
-diagnostic. The `max_event_bytes` budget (32,000 by default; `Limits.MaxEventBytes` in Go) covers the
-event the SDK builds: properties, context and identity. The analytics client may add its own
+diagnostic. Exporter spans configure this budget with `rudderotel.Options.MaxEventBytes` (32,000 bytes by
+default); core spans use the 32,000-byte default. The budget covers the event the SDK builds:
+properties, context and identity. The analytics client may add its own
 small envelope fields, including type, channel, library, integrations and timestamps. The SDK-built
 event uses `originalTimestamp`; the data plane normalizes it to `timestamp`. OTel's Go attribute types are
 preserved, including floating-point values. Attribute order can differ across SDKs.

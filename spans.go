@@ -267,6 +267,10 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 		s.mu.Unlock()
 		return
 	}
+	// Register completion before the pending entry disappears, so a concurrent
+	// drain always sees either the span or its in-flight mapping and enqueue.
+	done := hook.Track()
+	defer done()
 	s.ended = true
 	pendingWrapperSpans.mu.Lock()
 	delete(pendingWrapperSpans.spans, s)
@@ -367,6 +371,10 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 }
 func init() {
 	hook.Tracing.EmitSpans = func() bool { return cfg().emitSpans }
+	hook.Tracing.WrapperCaptureContent = func(value any) bool {
+		s, _ := value.(*Span)
+		return s != nil && s.capture
+	}
 	hook.Tracing.WrapperMetadata = func(value any, provider, model string) {
 		s, _ := value.(*Span)
 		if s == nil {

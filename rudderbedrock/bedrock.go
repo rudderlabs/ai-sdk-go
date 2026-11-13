@@ -429,7 +429,7 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	c := &kit.Call{Span: span, Details: rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, t.cfg.details)), Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
 	hook.Tracing.WrapperMetadata(c.Span, c.Provider, c.Model)
 	safe(func() {
-		if kit.CapturesCallContent(i) {
+		if c.CapturesContent() {
 			c.InputMessages = inputMessages(system, messages)
 		}
 		recordToolResults(i, messages)
@@ -512,7 +512,7 @@ func recordResponse(c *kit.Call, out *bedrockruntime.ConverseOutput, responseID 
 		}
 		call.OutputText = text.String()
 	}
-	if kit.CapturesCallContent(c.Interaction) {
+	if c.CapturesContent() {
 		call.OutputToolCalls = kit.ToolCalls(tools)
 	}
 	if c.RecordCall(call) && len(tools) > 0 {

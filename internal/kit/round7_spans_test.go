@@ -41,7 +41,9 @@ func TestTerminalStreamWinsOverCancellation(t *testing.T) {
 					cancel()
 				}
 				limit := time.Now().Add(time.Second)
-				for len(r.named("ai_otel_span")) == 0 && time.Now().Before(limit) {
+				// Cancellation records the span before its product call; wait for both
+				// before asserting the terminal usage.
+				for (len(r.named("ai_otel_span")) == 0 || (terminal && len(r.named("ai_llm_response_received")) == 0)) && time.Now().Before(limit) {
 					time.Sleep(time.Millisecond)
 				}
 				spans := r.named("ai_otel_span")

@@ -42,6 +42,15 @@ type Call struct {
 	InputMessages []rudderstackai.GenAIMessage
 }
 
+// CapturesContent uses the policy captured at span start, including late responses.
+// Without a span, product content follows the interaction's current lifecycle.
+func (c *Call) CapturesContent() bool {
+	if c.Span != nil {
+		return hook.Tracing.WrapperCaptureContent(c.Span)
+	}
+	return CapturesCallContent(c.Interaction)
+}
+
 // StreamHandler sees each server-sent event of a streamed response and how the stream ended.
 type StreamHandler interface {
 	// OnEvent gets each event's name (may be empty) and data.
@@ -207,7 +216,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		if s.OnRequest != nil {
 			s.OnRequest(c)
 		}
-		if s.InputMessages != nil && CapturesCallContent(i) {
+		if s.InputMessages != nil && c.CapturesContent() {
 			c.InputMessages = s.InputMessages(c.Request)
 		}
 		if msgs, ok := body["messages"]; ok {

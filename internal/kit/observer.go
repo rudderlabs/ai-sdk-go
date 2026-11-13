@@ -89,7 +89,7 @@ func NewObserver(c *Call) *Observer {
 		Details: c.Details, StartedAt: c.StartedAt,
 		Interaction: c.Interaction, Ephemeral: c.Ephemeral, Provider: c.Provider, Integration: c.Integration,
 		Model: c.Model, RequestedModel: c.Model, toolKeys: map[string]*streamTool{},
-		keepText: KeepsText(c.Interaction), capture: CapturesCallContent(c.Interaction),
+		keepText: KeepsText(c.Interaction), capture: c.CapturesContent(),
 		InputMessages: c.InputMessages,
 	}
 	if c.Span == nil {

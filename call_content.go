@@ -144,13 +144,14 @@ func maskPlainValue(v any) (any, bool) {
 // (any case) becomes a blob with the part's mime_type, else the URI's media type.
 func inlineFree(part map[string]any) map[string]any {
 	switch part["type"] {
-	case "blob":
+	case "blob", "image-data", "file-data":
 		delete(part, "content")
 	case "uri":
 		uri, _ := part["uri"].(string)
 		if len(uri) >= 5 && strings.EqualFold(uri[:5], "data:") {
 			delete(part, "uri")
 			part["type"] = "blob"
+			delete(part, "content")
 			if m, _ := part["mime_type"].(string); m == "" {
 				delete(part, "mime_type")
 				if m := dataURIMime(uri); m != "" {
@@ -492,6 +493,9 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 			w.omitted = true
 			return nil, false
 		}
+		if !w.legacy {
+			m = inlineFree(m)
+		}
 		return stripMap(m), true
 	case reflect.Struct:
 		m := map[string]any{}
@@ -499,6 +503,9 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		if !w.legacy && isBytes(m) {
 			w.omitted = true
 			return nil, false
+		}
+		if !w.legacy {
+			m = inlineFree(m)
 		}
 		return stripMap(m), true
 	}
