@@ -29,26 +29,24 @@ func TestSpanDateString(t *testing.T) {
 }
 
 func TestWalkerContainerDepthBoundary(t *testing.T) {
-	for _, depth := range []int{40, 64, 65} {
+	// As on main, each map and its interface-valued child count as separate hops.
+	for _, depth := range []int{31, 32, 33, 40, 64, 65} {
 		var v any = "leaf"
 		for range depth {
 			v = map[string]any{"child": v}
 		}
 		got := stripBinary(v)
-		for n := 0; n < depth; n++ {
+		for n := 0; n < min(depth, 32); n++ {
 			m, ok := got.(map[string]any)
 			if !ok {
-				if depth == 65 && n == 64 {
-					break
-				}
 				t.Fatalf("depth %d truncated at %d: %v", depth, n, got)
 			}
 			got = m["child"]
 		}
-		if depth <= 64 && got != "leaf" {
+		if depth < 32 && got != "leaf" {
 			t.Fatalf("depth %d lost leaf: %v", depth, got)
 		}
-		if depth == 65 && got != nil {
+		if depth >= 32 && got != nil {
 			t.Fatalf("depth limit not applied: %v", got)
 		}
 	}

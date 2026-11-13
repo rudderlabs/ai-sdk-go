@@ -226,6 +226,9 @@ func anyValue(v any) object {
 	case int64:
 		return object{"intValue": strconv.FormatInt(x, 10)}
 	case uint64:
+		if x > math.MaxInt64 {
+			return anyValue(float64(x))
+		}
 		return object{"intValue": strconv.FormatUint(x, 10)}
 	case json.Number:
 		if n, e := x.Int64(); e == nil {

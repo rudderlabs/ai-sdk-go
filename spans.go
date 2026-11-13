@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -77,7 +78,7 @@ func activeSDKSpan(ctx context.Context) *Span {
 		s.mu.Lock()
 		ended := s.ended
 		s.mu.Unlock()
-		if !ended {
+		if !ended && (s.interaction == nil || !s.interaction.Ended()) {
 			return s
 		}
 		s = s.parent
@@ -85,6 +86,9 @@ func activeSDKSpan(ctx context.Context) *Span {
 	return nil
 }
 func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
+	if i != nil && i.Ended() {
+		i = nil
+	}
 	c := cfg()
 	s := &Span{started: started, interaction: i, attributes: map[string]any{}, capture: c.captureContent, client: c.analytics}
 	parent := activeSDKSpan(ctx)
@@ -171,6 +175,9 @@ func StartSpan(ctx context.Context, options SpanOptions) (out context.Context, s
 		return ctx, &Span{ended: true}
 	}
 	i := FromContext(ctx)
+	if i != nil && i.Ended() {
+		i = nil
+	}
 	if isUntracked(ctx) || (i != nil && i.untracked) {
 		return ctx, &Span{ended: true}
 	}
@@ -204,12 +211,32 @@ func (s *Span) End(err error) {
 	s.finish(s.name, s.operation, "manual", nil, err, false, time.Time{})
 }
 func beginWrapperSpan(ctx context.Context, i *Interaction, started time.Time) (context.Context, *Span) {
-	if !cfg().emitSpans || isUntracked(ctx) || i == nil || i.untracked || i.Ended() {
+	if !cfg().emitSpans || isUntracked(ctx) || (i != nil && !i.Ended() && i.untracked) {
 		return ctx, nil
 	}
 	s := newSDKSpan(ctx, i, started)
-	ctx = context.WithValue(ctx, keyInteraction, i)
+	ctx = context.WithValue(ctx, keyInteraction, s.interaction)
+	pendingWrapperSpans.mu.Lock()
+	pendingWrapperSpans.spans[s] = wrapperMetadata{}
+	pendingWrapperSpans.mu.Unlock()
 	return context.WithValue(ctx, sdkSpanKey{}, s), s
+}
+
+type wrapperMetadata struct{ provider, model string }
+
+// Only wrapper spans are drained by Flush; manual spans remain caller-owned.
+var pendingWrapperSpans = struct {
+	mu    sync.Mutex
+	spans map[*Span]wrapperMetadata
+}{spans: make(map[*Span]wrapperMetadata)}
+
+func finishPendingWrapperSpans() {
+	pendingWrapperSpans.mu.Lock()
+	spans := maps.Clone(pendingWrapperSpans.spans)
+	pendingWrapperSpans.mu.Unlock()
+	for s, metadata := range spans {
+		hook.Tracing.FinishRaw(s, metadata.provider, metadata.model, 0, time.Now(), errors.New("cancelled"))
+	}
 }
 
 func (s *Span) finish(name, operation, source string, a map[string]any, err error, masked bool, ended time.Time) {
@@ -226,6 +253,9 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 		return
 	}
 	s.ended = true
+	pendingWrapperSpans.mu.Lock()
+	delete(pendingWrapperSpans.spans, s)
+	pendingWrapperSpans.mu.Unlock()
 	attrs := maps.Clone(s.attributes)
 	s.mu.Unlock()
 	if attrs == nil {
@@ -321,6 +351,17 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 	s.finish(strings.TrimSpace("chat "+first(call.RequestedModel, call.Model)), "chat", "wrapper", a, err, true, call.EndedAt)
 }
 func init() {
+	hook.Tracing.WrapperMetadata = func(value any, provider, model string) {
+		s, _ := value.(*Span)
+		if s == nil {
+			return
+		}
+		pendingWrapperSpans.mu.Lock()
+		if _, pending := pendingWrapperSpans.spans[s]; pending {
+			pendingWrapperSpans.spans[s] = wrapperMetadata{provider: provider, model: model}
+		}
+		pendingWrapperSpans.mu.Unlock()
+	}
 	hook.Tracing.FinishRaw = func(value any, provider, model string, status int, ended time.Time, err error) {
 		s, _ := value.(*Span)
 		if s == nil {

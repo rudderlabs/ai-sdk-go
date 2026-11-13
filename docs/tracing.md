@@ -47,7 +47,9 @@ parent belonging to the same interaction; the core still has no OTel dependency.
 or a task with `NoParent: true` uses the active OTel parent, or its own fresh interaction trace.
 Span identity is captured from the owning interaction when the span starts. Standalone manual
 spans capture identity, track context and the analytics client from their start context;
-without identity they use the product-event fallback `anonymousId: "ai_system"`. A call settling after
+without identity they use the product-event fallback `anonymousId: "ai_system"`.
+A new span ignores an ended interaction and its spans as owners or parents, and captures the
+current `WithValues` identity and analytics client. A call settling after
 its interaction ended still emits its span with the original interaction, trace and parent; its late
 product call stays dropped.
 
@@ -60,9 +62,10 @@ SDK retries and usage-parameter fallback share one
 span with duration covering the retries. Raw HTTP response access uses the same middleware and
 emits once. Streaming spans finish once on completion, early close, cancellation, errors or an
 interaction ending with an unread stream. Context cancellation finishes even an unread stream's
-span and records the cancelled call. With spans disabled, product bookkeeping follows the
-provider's read/Close path. A stream left open without any completion, close,
-cancellation or interaction end remains pending.
+span and records the cancelled call, including when the provider decoder is blocked.
+With spans disabled, product bookkeeping follows the provider's read/Close path. At the latest, core `Flush` or `Shutdown` finishes every still-pending wrapper span exactly once
+as unread/cancelled, with unknown usage, including a streaming response that arrives after its
+interaction ended and is never read, closed or aborted. Manual spans remain caller-owned.
 
 With `WithLLMCallEvents(true)`, retained call events carry the wrapper's `span_id`; delayed
 pending events preserve it through pause/JSON restoration. Overflow aggregates omit it. Two
@@ -285,9 +288,10 @@ currently bypass these privacy protections.
 Oversized events repeatedly shorten the longest OTLP attribute string in resource, span, event,
 then link traversal order. Cuts preserve UTF-8, retain at least 256 bytes before the
 `...[truncated]` suffix, and set `truncated: true`. An event still too large is dropped with a
-diagnostic. The byte budget (32,000 by default) measures the whole Go analytics message,
-including track context and identity. Its timestamp field is
-`originalTimestamp`; the data plane normalizes it to `timestamp`. OTel's Go attribute types are
+diagnostic. The `max_event_bytes` budget (32,000 by default; `Limits.MaxEventBytes` in Go) covers the
+event the SDK builds: properties, context and identity. The analytics client may add its own
+small envelope fields, including type, channel, library, integrations and timestamps. The SDK-built
+event uses `originalTimestamp`; the data plane normalizes it to `timestamp`. OTel's Go attribute types are
 preserved, including floating-point values. Attribute order can differ across SDKs.
 
 ## Lifecycle and diagnostics

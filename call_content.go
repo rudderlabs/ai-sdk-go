@@ -214,10 +214,9 @@ func isBytes(v any) bool {
 const maxWalkDepth = 64
 
 type visit struct {
-	ptr   uintptr
-	typ   reflect.Type
-	n     int
-	depth bool
+	ptr uintptr
+	typ reflect.Type
+	n   int
 }
 
 // walk is one traversal of a value: the containers on the current path (to drop a cycle) and the
@@ -231,21 +230,17 @@ type walk struct {
 // enter marks a pointer, map or slice as on the path; false when it is already there (a cycle) or
 // the walk is too deep. Every true must be followed by leave.
 func (w *walk) enter(rv reflect.Value) (visit, bool) {
-	container := rv.Kind() == reflect.Map || rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array || rv.Kind() == reflect.Struct
-	if container && w.depth >= maxWalkDepth {
+	if w.depth >= maxWalkDepth {
 		return visit{}, false
 	}
 	var key visit
 	switch rv.Kind() {
 	case reflect.Pointer, reflect.Map, reflect.Slice:
 		if rv.IsNil() || (rv.Kind() == reflect.Slice && rv.Len() == 0) {
-			if container {
-				w.depth++
-				key.depth = true
-			}
+			w.depth++
 			return key, true
 		}
-		key = visit{ptr: rv.Pointer(), typ: rv.Type()}
+		key = visit{rv.Pointer(), rv.Type(), 0}
 		if rv.Kind() == reflect.Slice {
 			key.n = rv.Len()
 		}
@@ -254,19 +249,13 @@ func (w *walk) enter(rv reflect.Value) (visit, bool) {
 		}
 		w.path[key] = true
 	}
-	if container {
-		w.depth++
-		key.depth = true
-	}
+	w.depth++
 	return key, true
 }
 
 func (w *walk) leave(key visit) {
-	if key.depth {
-		w.depth--
-	}
+	w.depth--
 	if key.ptr != 0 {
-		key.depth = false
 		delete(w.path, key)
 	}
 }

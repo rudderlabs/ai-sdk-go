@@ -201,6 +201,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	model, _ := body["model"].(string)
 	details := rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, s.Details))
 	c := &Call{Span: span, Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
+	hook.Tracing.WrapperMetadata(c.Span, c.Provider, c.Model)
 	current = c
 	safe(func() {
 		if s.OnRequest != nil {
@@ -296,6 +297,12 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 			resp.Body = body
 			return resp, nil
 		}
+		if c.Span != nil {
+			safe(func() {
+				hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), errors.New("stream observer setup failed"))
+			})
+			return resp, nil
+		}
 	}
 	reply := peekBody(resp)
 	safe(func() {
@@ -325,7 +332,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 			}
 			hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), extractionErr)
 		}
-		if ephemeral {
+		if ephemeral && (recorded || c.Span != nil) {
 			EndEphemeral(i, "")
 		}
 	})
@@ -448,16 +455,18 @@ func safe(fn func()) {
 // stream ended: EOF completes it, an early Close cancels it (unless the terminal event arrived),
 // a read error fails it.
 type sseBody struct {
-	src    io.ReadCloser
-	reader *bufio.Reader
-	h      StreamHandler
-	i      *rudderstackai.Interaction
-	ctx    context.Context
-	buf    bytes.Buffer
-	event  string
-	data   []string
-	once   sync.Once
-	mu     sync.Mutex
+	src      io.ReadCloser
+	reader   *bufio.Reader
+	h        StreamHandler
+	i        *rudderstackai.Interaction
+	ctx      context.Context
+	buf      bytes.Buffer
+	event    string
+	data     []string
+	once     sync.Once
+	mu       sync.Mutex
+	readMu   sync.Mutex
+	finished bool
 	// With a filter, an event's lines are held until its blank line decides whether it is shown.
 	filter EventFilter
 	held   bytes.Buffer
@@ -468,10 +477,17 @@ type sseBody struct {
 }
 
 func (b *sseBody) Read(p []byte) (int, error) {
+	b.readMu.Lock()
+	defer b.readMu.Unlock()
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for b.buf.Len() == 0 {
-		line, err := b.reader.ReadBytes('\n')
+		// Provider reads may block even after context cancellation.
+		line, err := func() ([]byte, error) {
+			b.mu.Unlock()
+			defer b.mu.Lock()
+			return b.reader.ReadBytes('\n')
+		}()
 		if len(line) > 0 {
 			b.takeSafely(line)
 		}
@@ -492,7 +508,7 @@ func (b *sseBody) Read(p []byte) (int, error) {
 // takeSafely takes a line; a panic in the SDK's parsing stops observing the stream, and the app
 // still gets every byte.
 func (b *sseBody) takeSafely(line []byte) {
-	if b.broken {
+	if b.broken || b.finished {
 		b.buf.Write(line)
 		return
 	}
@@ -557,6 +573,7 @@ func (b *sseBody) parse(line []byte) {
 
 func (b *sseBody) end(err error) {
 	b.once.Do(func() {
+		b.finished = true
 		if b.stopCancellation != nil {
 			b.stopCancellation()
 		}
@@ -584,7 +601,9 @@ func (b *sseBody) end(err error) {
 }
 
 func (b *sseBody) Close() error {
+	b.mu.Lock()
 	b.once.Do(func() {
+		b.finished = true
 		if b.stopCancellation != nil {
 			b.stopCancellation()
 		}
@@ -596,6 +615,7 @@ func (b *sseBody) Close() error {
 		}
 		safe(func() { b.h.Finish(Cancelled, "") })
 	})
+	b.mu.Unlock()
 	return b.src.Close()
 }
 

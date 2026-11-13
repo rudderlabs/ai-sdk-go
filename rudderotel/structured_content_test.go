@@ -37,7 +37,8 @@ func TestStructuredContentRedaction(t *testing.T) {
 		},
 		"deep": func(text string) attribute.Value {
 			v := attribute.StringValue(text)
-			for range 20 {
+			// Each map, slice and interface hop counts toward the core limit.
+			for range 12 {
 				v = attribute.MapValue(attribute.KeyValue{Key: "nested", Value: attribute.SliceValue(v)})
 			}
 			return v
@@ -123,7 +124,7 @@ func structuredExpected(name string) object {
 		return obj(kv("bool", object{"boolValue": false}), kv("bools", arr(object{"boolValue": true}, object{"boolValue": false})), kv("first", str("first")), kv("float", object{"doubleValue": 1.5}), kv("floats", arr(object{"doubleValue": 1.5}, object{"doubleValue": 2.5})), kv("integer", object{"intValue": "7"}), kv("ints", arr(object{"intValue": "1"}, object{"intValue": "2"})), kv("nested", arr(str("masked"))))
 	default:
 		v := str("masked")
-		for range 20 {
+		for range 12 {
 			v = obj(kv("nested", arr(v)))
 		}
 		return v

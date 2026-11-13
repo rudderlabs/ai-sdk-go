@@ -11,6 +11,7 @@ import (
 // Interaction is opaque here to avoid an import cycle; integrations use *Interaction.
 var Tracing struct {
 	ParentContext   func(context.Context) (traceID, spanID, traceState string)
+	WrapperMetadata func(any, string, string)
 	FinishRaw       func(any, string, string, int, time.Time, error)
 	ActivateWrapper func(context.Context, any) context.Context
 	BeginWrapper    func(context.Context, any, time.Time) (context.Context, any)

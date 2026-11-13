@@ -274,6 +274,7 @@ func Flush(ctx context.Context) (finished bool) {
 	}
 	safely(func() {
 		finished = waitBackgroundUntil(ctx) && hook.WaitTracked(ctx)
+		finishPendingWrapperSpans()
 		clients := rememberedClients()
 		if c := cfg().analytics; c != nil {
 			clients = append(clients, c)
