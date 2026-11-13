@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderanthropic/v0.5.0...rudderanthropic/v0.6.0) (2026-11-13)
+
+
+### Features
+
+* add per-call input and output text to ai_llm_response_received ([#65](https://github.com/rudderlabs/ai-sdk-go/issues/65)) ([0294667](https://github.com/rudderlabs/ai-sdk-go/commit/029466731c2bfe5e1da6d75a7e34d8f8ffce2f23))
+* emit wrapper and manual spans with WithEmitSpans ([#72](https://github.com/rudderlabs/ai-sdk-go/issues/72)) ([9b6e3c7](https://github.com/rudderlabs/ai-sdk-go/commit/9b6e3c785d0db8e651cd6a63a9173433e55ddb5d))
+
 ## [0.5.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderanthropic/v0.4.0...rudderanthropic/v0.5.0) (2026-11-12)
 
 
