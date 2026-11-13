@@ -344,7 +344,8 @@ Integration options: `WithProvider` and `WithAnalytics` on every integration but
 err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID)) // go get github.com/rudderlabs/ai-sdk-go/rudderotel
 ```
 
-A value you set always wins. No span is created or exported ([trace_id](docs/configuration.md#trace_id)).
+A value you set always wins. Setting a product trace ID does not itself create or export a span
+([trace_id](docs/configuration.md#trace_id)); `WithEmitSpans(true)` separately enables SDK spans.
 
 ## OpenTelemetry span input
 
@@ -422,10 +423,10 @@ No API was removed.
 
 ## Known limitations
 
-- Integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients only. There are no OpenAI Agents SDK, Claude Agent SDK, LangChain, LangGraph or Vercel AI SDK integrations (they have no Go version), and no OpenTelemetry span processor or exporter.
+- Provider integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients. There are no OpenAI Agents SDK, Claude Agent SDK, LangChain, LangGraph or Vercel AI SDK integrations (they have no Go version). The optional `rudderotel` module provides an OpenTelemetry span processor and exporter.
 - Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `Interaction.Pause` or `EndOptions`.
 - Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint. A cancelled Chat Completions stream keeps 0 tokens (usage arrives only at the end).
-- Retries: genai retries, and openai-go / anthropic-sdk-go connection-error retries outside an interaction, are recorded per attempt ([Retries](docs/integrations.md#retries)).
+- Retries: with `WithEmitSpans(true)`, SDK retries share one invocation span within a bounded one-second retry grace; failed attempts settle when that grace expires. See [tracing](docs/tracing.md#go-platform-limits) and [Retries](docs/integrations.md#retries).
 - Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
 - MCP: only servers are tracked, on go-sdk and mcp-go. Neither library exposes the server name (nor the go-sdk the JSON-RPC request ID): they are read through reflection, tested against the versions above, falling back to `unknown`. Only streamable HTTP is detected as a transport. mcp-go has no hook for elicitations a handler answers through `InputRequests` on 2025-06-18. State is in memory per server name, per process ([details](docs/mcp.md#limits)).
 

@@ -144,6 +144,11 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 			return
 		}
 		hook.Recovered(r, "kit.Intercept")
+		if current != nil && current.Span != nil {
+			safe(func() {
+				hook.Tracing.FinishRaw(current.Span, current.Provider, current.Model, current.HTTPStatus, time.Now(), errors.New("span observation failed"))
+			})
+		}
 		if sent {
 			resp, err = got, gotErr
 			return
@@ -277,12 +282,31 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		if h != nil {
 			body := &sseBody{src: resp.Body, h: h, i: i, ctx: req.Context(), reader: bufio.NewReader(resp.Body)}
 			body.filter, _ = h.(EventFilter)
+			if c.Span != nil {
+				body.mu.Lock()
+				body.stopCancellation = context.AfterFunc(req.Context(), func() {
+					// Serialize cancellation with parsing, retaining every observed attribute.
+					// This also settles an unread stream without waiting for Read or Close.
+					body.mu.Lock()
+					defer body.mu.Unlock()
+					safe(func() { body.end(req.Context().Err()) })
+				})
+				body.mu.Unlock()
+			}
 			resp.Body = body
 			return resp, nil
 		}
 	}
 	reply := peekBody(resp)
 	safe(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				hook.Recovered(r, "kit.response")
+				safe(func() {
+					hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), errors.New("response extraction failed"))
+				})
+			}
+		}()
 		var decoded map[string]any
 		parseErr := json.Unmarshal(reply, &decoded)
 		// A no-content response has nothing to decode. Other parse failures still
@@ -295,7 +319,11 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		}
 		recorded := s.OnResponse != nil && decoded != nil && s.OnResponse(c, decoded, resp)
 		if !recorded && c.Span != nil {
-			hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), nil)
+			var extractionErr error
+			if decoded == nil && resp.StatusCode != http.StatusNoContent {
+				extractionErr = errors.New("response is null")
+			}
+			hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), extractionErr)
 		}
 		if ephemeral {
 			EndEphemeral(i, "")
@@ -435,7 +463,8 @@ type sseBody struct {
 	held   bytes.Buffer
 	hide   bool
 	// broken: parsing panicked; the rest of the stream passes through unobserved.
-	broken bool
+	broken           bool
+	stopCancellation func() bool
 }
 
 func (b *sseBody) Read(p []byte) (int, error) {
@@ -528,6 +557,9 @@ func (b *sseBody) parse(line []byte) {
 
 func (b *sseBody) end(err error) {
 	b.once.Do(func() {
+		if b.stopCancellation != nil {
+			b.stopCancellation()
+		}
 		if errors.Is(err, io.EOF) {
 			// A last event without its blank line still counts.
 			if !b.broken {
@@ -553,6 +585,9 @@ func (b *sseBody) end(err error) {
 
 func (b *sseBody) Close() error {
 	b.once.Do(func() {
+		if b.stopCancellation != nil {
+			b.stopCancellation()
+		}
 		complete := false
 		safe(func() { complete = b.h.Complete() })
 		if complete {

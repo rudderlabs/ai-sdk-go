@@ -98,7 +98,7 @@ func TestRawResponseLifecycle(t *testing.T) {
 		wantError  bool
 	}{
 		{"unmapped object", `{"queued":true}`, 202, false},
-		{"null", `null`, 200, false},
+		{"null", `null`, 200, true},
 		{"no content", "", 204, false},
 		{"malformed", `{"broken":`, 200, true},
 		{"wrong JSON shape", `[]`, 200, true},

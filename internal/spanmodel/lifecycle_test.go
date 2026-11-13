@@ -160,3 +160,30 @@ func TestOTelMapperKeepsTraceIdentityFallback(t *testing.T) {
 		t.Fatal("OTel identity fallback changed")
 	}
 }
+
+func TestSpanByteBudgetIncludesTrackContextAndIdentity(t *testing.T) {
+	hook.Reset()
+	t.Cleanup(hook.Reset)
+	s := wrapperSpan()
+	s.Attributes["gen_ai.output.messages"] = strings.Repeat("x", 32000)
+	capture := true
+	options := spanmodel.Options{CaptureContent: &capture, ContentMasked: true, SDKIdentity: true,
+		UserID: strings.Repeat("u", 2000), AnonymousID: strings.Repeat("a", 1000),
+		MessageContext: map[string]any{"traits": map[string]any{"description": strings.Repeat("t", 2000)}}}
+	track, err := spanmodel.ToTrack(s, options)
+	if err != nil || track == nil {
+		t.Fatalf("map: %v", err)
+	}
+	encoded, err := json.Marshal(track)
+	if err != nil || len(encoded) > spanmodel.DefaultMaxEventBytes || track.Properties["truncated"] != true {
+		t.Fatalf("whole event bytes=%d truncated=%v err=%v", len(encoded), track.Properties["truncated"], err)
+	}
+	if track.UserId != options.UserID || track.Context.Extra["traits"] == nil {
+		t.Fatal("identity/context lost")
+	}
+	options.MessageContext["oversized"] = strings.Repeat("z", 32000)
+	track, err = spanmodel.ToTrack(s, options)
+	if err != nil || track != nil {
+		t.Fatal("untruncatable track context exceeded budget")
+	}
+}

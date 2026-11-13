@@ -45,17 +45,23 @@ span inherits its parent's trace. Importing `rudderotel` registers an optional b
 SDK span inherit an active OTel trace, parent span ID and trace state when there is no active SDK
 parent belonging to the same interaction; the core still has no OTel dependency. A new interaction
 or a task with `NoParent: true` uses the active OTel parent, or its own fresh interaction trace.
-Span identity is captured from the owning interaction when the span starts. A call settling after
+Span identity is captured from the owning interaction when the span starts. Standalone manual
+spans capture identity, track context and the analytics client from their start context;
+without identity they use the product-event fallback `anonymousId: "ai_system"`. A call settling after
 its interaction ended still emits its span with the original interaction, trace and parent; its late
 product call stays dropped.
 
 Accepted call admission and totals finish before span transport. Spans go directly to the
 analytics client's `Enqueue`, using the same normalized OTLP mapper, masking, sensitive attribute
 stripping and truncation as the OTel exporter; product-event sampling does not apply. A transport
-or `WithOnError` failure cannot undo admission. SDK retries and usage-parameter fallback share one
+or `WithOnError` failure cannot undo admission. Span setup, capture, normalization and transport
+failures are contained and reported through `WithOnError` or warnings; provider work continues.
+SDK retries and usage-parameter fallback share one
 span with duration covering the retries. Raw HTTP response access uses the same middleware and
 emits once. Streaming spans finish once on completion, early close, cancellation, errors or an
-interaction ending with an unread stream; a stream left open without any completion, close,
+interaction ending with an unread stream. Context cancellation finishes even an unread stream's
+span and records the cancelled call. With spans disabled, product bookkeeping follows the
+provider's read/Close path. A stream left open without any completion, close,
 cancellation or interaction end remains pending.
 
 With `WithLLMCallEvents(true)`, retained call events carry the wrapper's `span_id`; delayed
@@ -72,8 +78,11 @@ call can emit two spans. Cross-source span deduplication is not currently applie
 
 Provider middleware records a failed span when a downstream handler panics, then re-panics with
 its original value unchanged. Manual spans use an explicit lifecycle: call `End(err)`; errors
-record their Go concrete type, and error text follows the content policy. Raw successful responses
-finish their span with HTTP status without inventing a product call. Normal wrapper completion
+record their Go concrete type, and error text follows the content policy. Raw responses that the
+middleware cannot map finish only their span with HTTP status, without parsed usage or content
+or an invented product call. Raw access to a mapped JSON response still supplies the usage and
+content the middleware parses. Invalid JSON, JSON `null` and response extraction failures finish
+with error status while preserving product-event behavior. Normal wrapper completion
 uses the same attribute set as Node.
 
 ## Go platform limits
@@ -83,7 +92,8 @@ uses the same attribute set as Node.
 - OpenAI and Anthropic integrations run at HTTP middleware, below SDK response decoding.
   Wrapper failures carry the normalized error category, matching Node; the provider SDK
   constructs its Go error after middleware returns. Decoding failures after a successful HTTP
-  response cannot change the already completed HTTP span.
+  response cannot change the already completed HTTP span, except invalid JSON and JSON `null`
+  are detected by the middleware and finish with error status.
 - Google GenAI's Go SDK does not execute Node's automatic function calling (AFC) callback loop or
   expose its `automaticFunctionCallingHistory`. Each Go `GenerateContent`/stream request emits
   one span. Node AFC emits one span per outer request, joining only the last call. Applications
@@ -92,9 +102,10 @@ uses the same attribute set as Node.
 - Node-only LangChain, OpenAI Agents and Claude Agent SDK integrations, and bound-stream
   completion APIs, have no existing Go wrapper.
 - HTTP middleware has no hook for the outer SDK method's promise settlement. Retry grouping uses
-  per-invocation request identity, retry headers, response-body probes and the existing one-second
-  cancellation grace. Ending an interaction while an attempt is held can settle its span before a later retry; cancellation of
-  a per-attempt context followed by a retry after that grace can split spans. These boundary
+  per-invocation request identity, retry headers and response-body probes. With spans enabled,
+  every failed attempt has a bounded one-second retry grace, even without context cancellation.
+  This settles calls with no configured retries or an exhausted retry budget. Ending an interaction
+  while an attempt is held, or a retry arriving after that grace, can split spans. These boundary
   cases cannot reproduce Node's
   outer-method duration and late-settlement behavior from HTTP middleware alone.
 - Go has no native tuple or set type; portable tuple/set fixtures use arrays/slices. Foreign
@@ -274,7 +285,8 @@ currently bypass these privacy protections.
 Oversized events repeatedly shorten the longest OTLP attribute string in resource, span, event,
 then link traversal order. Cuts preserve UTF-8, retain at least 256 bytes before the
 `...[truncated]` suffix, and set `truncated: true`. An event still too large is dropped with a
-diagnostic. The budget measures the Go analytics message, whose timestamp field is
+diagnostic. The byte budget (32,000 by default) measures the whole Go analytics message,
+including track context and identity. Its timestamp field is
 `originalTimestamp`; the data plane normalizes it to `timestamp`. OTel's Go attribute types are
 preserved, including floating-point values. Attribute order can differ across SDKs.
 

@@ -157,12 +157,21 @@ func validSDKSpanID(id string) bool {
 
 // StartSpan starts a manual span. End records err without changing or wrapping it.
 // When EmitSpans is disabled, it returns ctx and a no-op handle.
-func StartSpan(ctx context.Context, options SpanOptions) (context.Context, *Span) {
+func StartSpan(ctx context.Context, options SpanOptions) (out context.Context, span *Span) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	defer func() {
+		if r := recover(); r != nil {
+			report(KindInternal, "span.start", recovered(r))
+			out, span = ctx, &Span{ended: true}
+		}
+	}()
+	if !cfg().emitSpans {
+		return ctx, &Span{ended: true}
+	}
 	i := FromContext(ctx)
-	if !cfg().emitSpans || isUntracked(ctx) || (i != nil && i.untracked) {
+	if isUntracked(ctx) || (i != nil && i.untracked) {
 		return ctx, &Span{ended: true}
 	}
 	s := newSDKSpan(ctx, i, time.Now())
@@ -204,6 +213,10 @@ func beginWrapperSpan(ctx context.Context, i *Interaction, started time.Time) (c
 }
 
 func (s *Span) finish(name, operation, source string, a map[string]any, err error, masked bool, ended time.Time) {
+	safely(func() { s.finishUnsafe(name, operation, source, a, err, masked, ended) })
+}
+
+func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, err error, masked bool, ended time.Time) {
 	if s == nil {
 		return
 	}
@@ -325,7 +338,8 @@ func init() {
 		return context.WithValue(ctx, sdkSpanKey{}, s)
 	}
 	hook.Tracing.BeginWrapper = func(ctx context.Context, i any, started time.Time) (context.Context, any) {
-		ctx, s := beginWrapperSpan(ctx, i.(*Interaction), started)
+		var s *Span
+		safely(func() { ctx, s = beginWrapperSpan(ctx, i.(*Interaction), started) })
 		if s == nil {
 			return ctx, nil
 		}
