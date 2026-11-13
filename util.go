@@ -416,6 +416,7 @@ func errorTypeOf(err error) string {
 func closedList(values []string) []string {
 	out := []string{}
 	for _, v := range values {
+		v = strings.TrimSpace(v)
 		if v != "" && !slices.Contains(out, v) {
 			out = append(out, v)
 		}

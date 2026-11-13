@@ -2,10 +2,73 @@ package rudderstackai
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+func TestConfiguredMCPLabelsTrimmed(t *testing.T) {
+	const whitespace = "\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"
+	for _, tc := range []struct {
+		name, whitespace string
+		feedback         bool
+	}{
+		{"capability/spaces", " ", false},
+		{"capability/unicode-white-space", whitespace, false},
+		{"feedback/spaces", " ", true},
+		{"feedback/unicode-white-space", whitespace, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := func(label string) []string {
+				return []string{tc.whitespace + label + tc.whitespace, tc.whitespace + label, tc.whitespace, " other "}
+			}
+			s := workspaceServer("configured-labels", nil)
+			opts := Options{RequestContext: RequestContextOptions{Enabled: true, Intents: labels("debug_delivery")}}
+			if tc.feedback {
+				opts.FeedbackRequests = &FeedbackRequestOptions{Capabilities: labels("bulk_export")}
+			} else {
+				opts.CapabilityRequests = &CapabilityRequestOptions{Capabilities: labels("bulk_export")}
+			}
+			r := wrap(t, s, opts)
+			cs := connect(t, s, "2025-06-18", nil)
+			tools, err := cs.ListTools(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			checked := map[string]bool{}
+			for _, tool := range tools.Tools {
+				props := tool.InputSchema.(map[string]any)["properties"].(map[string]any)
+				var enum any
+				var want []string
+				switch tool.Name {
+				case "list_destinations":
+					contextProps := props[requestContext].(map[string]any)["properties"].(map[string]any)
+					enum = contextProps["intent"].(map[string]any)["enum"]
+					want = []string{"debug_delivery", "other"}
+				case capabilityTool, feedbackTool:
+					enum = props["capability"].(map[string]any)["enum"]
+					want = []string{"bulk_export", "other"}
+				default:
+					continue
+				}
+				checked[tool.Name] = true
+				if got := toStrings(enum); !slices.Equal(got, want) {
+					t.Errorf("%s enum = %q, want %q", tool.Name, got, want)
+				}
+			}
+			if len(checked) != 2 {
+				t.Errorf("checked tools = %v, want intent and capability enums", checked)
+			}
+			callTool(t, cs, "list_destinations", map[string]any{
+				"workspace_id": "w", requestContext: map[string]any{"intent": "debug_delivery"},
+			}, nil)
+			if got := r.props(t, "mcp_tool_called")["intent"]; got != "debug_delivery" {
+				t.Errorf("intent = %v, want debug_delivery", got)
+			}
+		})
+	}
+}
 
 func TestNativeRequestContextWithoutListing(t *testing.T) {
 	for _, late := range []bool{false, true} {
