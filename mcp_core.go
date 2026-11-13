@@ -585,7 +585,7 @@ func (rc *reqCtx) reportedContext(v any) map[string]any {
 	if !ok {
 		return out
 	}
-	if intent := str(m["intent"]); opts.intents != nil && intent != "" {
+	if intent := strings.TrimSpace(str(m["intent"])); opts.intents != nil && intent != "" {
 		if slices.Contains(opts.intents, intent) {
 			out["intent"] = intent
 		} else {
