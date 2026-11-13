@@ -608,6 +608,7 @@ func (rc *reqCtx) Capability(args map[string]json.RawMessage) string {
 	capability := "other"
 	var c string
 	_ = json.Unmarshal(args["capability"], &c)
+	c = strings.TrimSpace(c)
 	if c != "" && slices.Contains(rc.opts.capabilities, c) {
 		capability = c
 	}
@@ -674,6 +675,7 @@ func (rc *reqCtx) Feedback(args map[string]json.RawMessage) (string, bool) {
 		p["feedback_tool_name"] = name
 	}
 	if capability, given := values["capability"]; given {
+		capability = strings.TrimSpace(capability)
 		if !slices.Contains(rc.opts.feedbackCapabilities, capability) {
 			capability = "other"
 		}
