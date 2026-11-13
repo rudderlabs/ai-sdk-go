@@ -337,6 +337,14 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 			st.Unlock()
 		}
 	}
+	if !knownClient(client) && opts.ClientInfoFallback != nil {
+		var name, version string
+		if callback("Options.ClientInfoFallback", func() error { name, version = opts.ClientInfoFallback(r.Ctx, tok); return nil }) {
+			client = &mcpbridge.Client{Name: name, Version: version}
+			// Like ClientInfo, the fallback supplies client-seen as well as request events.
+			seenClient = client
+		}
+	}
 	interactionID, traceID := joinIDs(r.Meta)
 	base := map[string]any{}
 	put(base, "mcp_session_id", capID(r.SessionID))
