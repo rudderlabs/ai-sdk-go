@@ -325,7 +325,9 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	}
 	// Remembered details enrich request events only; client-seen keeps its existing sources.
 	seenClient := client
-	if !knownClient(client) {
+	// With a fallback configured, a blank initialize must resolve afresh. Remembered
+	// clients still enrich later requests and retain their behavior without a fallback.
+	if !knownClient(client) && (!r.Initialize || opts.ClientInfoFallback == nil) {
 		if key := clientKey(id); key != (rememberedClientKey{}) {
 			st.Lock()
 			// Keep expired entries' sequence until eviction so stale initializes cannot revive them.
@@ -335,6 +337,14 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 				}
 			}
 			st.Unlock()
+		}
+	}
+	if !knownClient(client) && opts.ClientInfoFallback != nil {
+		var name, version string
+		if callback("Options.ClientInfoFallback", func() error { name, version = opts.ClientInfoFallback(r.Ctx, tok); return nil }) {
+			client = &mcpbridge.Client{Name: name, Version: version}
+			// Like ClientInfo, the fallback supplies client-seen as well as request events.
+			seenClient = client
 		}
 	}
 	interactionID, traceID := joinIDs(r.Meta)

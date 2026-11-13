@@ -112,6 +112,11 @@ type Options struct {
 	// ClientInfo resolves client name and version only when initialize, per-call metadata
 	// and session state provide none, before remembered clients. Panics are swallowed.
 	ClientInfo func(ctx context.Context, token *auth.TokenInfo) (name, version string)
+	// ClientInfoFallback resolves client name and version only when initialize, per-call
+	// metadata, session state and ClientInfo provide none. Remembered clients take
+	// precedence only on non-initialize requests. Panics are swallowed. Its result feeds
+	// mcp_client_seen under the same conditions as ClientInfo.
+	ClientInfoFallback func(ctx context.Context, token *auth.TokenInfo) (name, version string)
 	// ClassifyToolError classifies an isError result. Only spec MCP error categories are used;
 	// panics and other values fall back to status and argument validation.
 	ClassifyToolError func(toolName string, result *mcp.CallToolResult) string

@@ -59,6 +59,11 @@ type Options struct {
 	// ClientInfo resolves a client only when initialize, metadata and session state
 	// provide none, before remembered clients. Panics are swallowed.
 	ClientInfo func(ctx context.Context) (name, version string)
+	// ClientInfoFallback resolves a client only when initialize, metadata, session state
+	// and ClientInfo provide none. Remembered clients take precedence only on
+	// non-initialize requests. Panics are swallowed. Its result feeds mcp_client_seen
+	// under the same conditions as ClientInfo.
+	ClientInfoFallback func(ctx context.Context) (name, version string)
 	// ClassifyToolError classifies isError results using spec MCP categories.
 	ClassifyToolError func(toolName string, result *mcp.CallToolResult) string
 	// EventRules declares tool events. Names starting with "ai_" or "mcp_" are rejected.
@@ -108,6 +113,11 @@ func (o Options) root() rudderstackai.Options {
 	}
 	if o.ClientInfo != nil {
 		r.ClientInfo = func(ctx context.Context, _ *auth.TokenInfo) (string, string) { return o.ClientInfo(ctx) }
+	}
+	if o.ClientInfoFallback != nil {
+		r.ClientInfoFallback = func(ctx context.Context, _ *auth.TokenInfo) (string, string) {
+			return o.ClientInfoFallback(ctx)
+		}
 	}
 	return r
 }
@@ -479,6 +489,7 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 		r.ProtocolVersion = header.Get("Mcp-Protocol-Version")
 	}
 	if method == "initialize" {
+		r.Initialize = true
 		r.InitializeClient = env.Params.ClientInfo
 	}
 	c := &call{c: t.srv.Begin(r), method: method, sequence: sequence, classify: t.opts.Load().ClassifyToolError}

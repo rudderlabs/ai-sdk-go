@@ -256,6 +256,7 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 		r.ProtocolVersion = extra.Header.Get("Mcp-Protocol-Version")
 	}
 	if method == "initialize" {
+		r.Initialize = true
 		if init, ok := params.(*mcp.InitializeParams); ok && init.ClientInfo != nil {
 			r.InitializeClient = &mcpbridge.Client{Name: init.ClientInfo.Name, Title: init.ClientInfo.Title, Version: init.ClientInfo.Version}
 		}
