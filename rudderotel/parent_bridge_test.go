@@ -3,11 +3,55 @@ package rudderotel
 import (
 	"context"
 	"testing"
+	"time"
 
 	"go.opentelemetry.io/otel/trace"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
+
+func TestForeignSDKParentFallsBackToOTel(t *testing.T) {
+	for _, task := range []bool{false, true} {
+		for _, wrapper := range []bool{false, true} {
+			t.Run("task="+strconvBool(task)+"/wrapper="+strconvBool(wrapper), func(t *testing.T) {
+				provider, _, events := testProvider(t, Options{Simple: true})
+				if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+					t.Fatal(err)
+				}
+				ctx, alice := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{AnonymousID: "alice"})
+				defer alice.End(rudderstackai.EndOptions{})
+				ctx, sdkParent := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{Name: "alice"})
+				defer sdkParent.End(nil)
+				ctx, otelParent := provider.Tracer("test").Start(ctx, "external", trace.WithNewRoot())
+				defer otelParent.End()
+				check := func(ctx context.Context, i *rudderstackai.Interaction) error {
+					if wrapper {
+						_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
+						hook.Tracing.FinishRaw(s, "openai", "m", 200, time.Now(), nil)
+					} else {
+						_, s := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{Name: "child"})
+						s.End(nil)
+					}
+					p := spanEvents(events())[0]["properties"].(object)
+					if p["trace_id"] != otelParent.SpanContext().TraceID().String() || p["parent_span_id"] != otelParent.SpanContext().SpanID().String() {
+						t.Fatalf("foreign SDK parent beat active OTel parent: %v", p)
+					}
+					return nil
+				}
+				if task {
+					if err := rudderstackai.RunTask(ctx, "unrelated", rudderstackai.TaskOptions{NoParent: true, Flush: rudderstackai.Ptr(false)}, check); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					ctx, bob := rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: "bob"})
+					defer bob.End(rudderstackai.EndOptions{})
+					_ = check(ctx, bob)
+				}
+			})
+		}
+	}
+}
 
 func TestSDKSpanInheritsOTelParent(t *testing.T) {
 	for _, interaction := range []bool{false, true} {

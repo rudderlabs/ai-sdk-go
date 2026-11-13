@@ -33,17 +33,21 @@ return err // the original error, unchanged
 `invoke_agent`. Manual spans use `rudderstack.span_source: manual`. The handle exposes immutable
 `TraceID` and `SpanID`, `SetAttributes(map[string]any)` and idempotent `End(error)`. When disabled,
 the returned context is unchanged and the handle is a no-op. Pass the returned context to nested
-work; the nearest active SDK span becomes its parent. Ended spans are skipped. Provider middleware
-makes its wrapper span active on the context passed downstream; independent concurrent requests
-and streams keep independent contexts. No interaction root span is created.
+work; the nearest active SDK span becomes its parent only within the same interaction. Ended
+spans are skipped. Provider middleware makes its wrapper span active on the context passed
+downstream; independent concurrent requests and streams keep independent contexts. No interaction
+root span is created.
 
 A root span gets a random nonzero W3C trace ID (32 lowercase hex digits), shared per interaction
 and saved as `sdk_trace_id` across pause/resume. The application's `TraceID`, `SetTraceID` and
 `WithTraceIDFrom` continue to control the product interaction's `trace_id` independently. A nested
 span inherits its parent's trace. Importing `rudderotel` registers an optional bridge that lets an
 SDK span inherit an active OTel trace, parent span ID and trace state when there is no active SDK
-parent; the core still has no OTel dependency. A call settling after its interaction ended still emits its
-span with the original interaction, trace and parent; its late product call stays dropped.
+parent belonging to the same interaction; the core still has no OTel dependency. A new interaction
+or a task with `NoParent: true` uses the active OTel parent, or its own fresh interaction trace.
+Span identity is captured from the owning interaction when the span starts. A call settling after
+its interaction ended still emits its span with the original interaction, trace and parent; its late
+product call stays dropped.
 
 Accepted call admission and totals finish before span transport. Spans go directly to the
 analytics client's `Enqueue`, using the same normalized OTLP mapper, masking, sensitive attribute

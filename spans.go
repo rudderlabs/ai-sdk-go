@@ -105,7 +105,7 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
 			}
 		}
 	}
-	if parent := activeSDKSpan(ctx); parent != nil {
+	if parent := activeSDKSpan(ctx); parent != nil && parent.interaction == i {
 		s.parent = parent
 		s.parentID = parent.SpanID
 		s.TraceID = parent.TraceID
@@ -176,6 +176,7 @@ func beginWrapperSpan(ctx context.Context, i *Interaction, started time.Time) (c
 		return ctx, nil
 	}
 	s := newSDKSpan(ctx, i, started)
+	ctx = context.WithValue(ctx, keyInteraction, i)
 	return context.WithValue(ctx, sdkSpanKey{}, s), s
 }
 
@@ -284,12 +285,12 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 	s.finish(strings.TrimSpace("chat "+first(call.RequestedModel, call.Model)), "chat", "wrapper", a, err, true, call.EndedAt)
 }
 func init() {
-	hook.Tracing.FinishRaw = func(value any, provider, model string, status int, ended time.Time) {
+	hook.Tracing.FinishRaw = func(value any, provider, model string, status int, ended time.Time, err error) {
 		s, _ := value.(*Span)
 		if s == nil {
 			return
 		}
-		s.finish(strings.TrimSpace("chat "+model), "chat", "wrapper", map[string]any{"gen_ai.provider.name": provider, "gen_ai.request.model": model, "gen_ai.response.model": model, "http.response.status_code": status}, nil, true, ended)
+		s.finish(strings.TrimSpace("chat "+model), "chat", "wrapper", map[string]any{"gen_ai.provider.name": provider, "gen_ai.request.model": model, "gen_ai.response.model": model, "http.response.status_code": status}, err, true, ended)
 	}
 
 	hook.Tracing.ActivateWrapper = func(ctx context.Context, value any) context.Context {
@@ -297,6 +298,7 @@ func init() {
 		if s == nil {
 			return ctx
 		}
+		ctx = context.WithValue(ctx, keyInteraction, s.interaction)
 		return context.WithValue(ctx, sdkSpanKey{}, s)
 	}
 	hook.Tracing.BeginWrapper = func(ctx context.Context, i any, started time.Time) (context.Context, any) {

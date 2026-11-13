@@ -282,10 +282,18 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	reply := peekBody(resp)
 	safe(func() {
 		var decoded map[string]any
-		_ = json.Unmarshal(reply, &decoded)
+		parseErr := json.Unmarshal(reply, &decoded)
+		// A no-content response has nothing to decode. Other parse failures still
+		// leave the original body and product-event behavior to the provider SDK.
+		if parseErr != nil && resp.StatusCode != http.StatusNoContent {
+			if c.Span != nil {
+				hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), parseErr)
+			}
+			return
+		}
 		recorded := s.OnResponse != nil && decoded != nil && s.OnResponse(c, decoded, resp)
 		if !recorded && c.Span != nil {
-			hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now())
+			hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), nil)
 		}
 		if ephemeral {
 			EndEphemeral(i, "")
