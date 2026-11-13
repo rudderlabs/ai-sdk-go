@@ -442,7 +442,9 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	}
 	defer func() {
 		if value := recover(); value != nil {
-			safe(func() { c.EndedAt = time.Now(); failed(c, sc, kit.PanicErrorType(value)) })
+			if c.Span != nil {
+				safe(func() { c.EndedAt = time.Now(); failed(c, sc, kit.PanicErrorType(value)) })
+			}
 			panic(value)
 		}
 	}()
@@ -586,6 +588,9 @@ func (s *streamCall) endLocked(how kit.End, errorType string) {
 	s.ended = true
 	if s.stopCancellation != nil {
 		s.stopCancellation()
+	}
+	if s.call.Span != nil && s.obs.Complete() {
+		how, errorType = kit.Completed, ""
 	}
 	safe(func() { s.obs.Finish(how, errorType) })
 }

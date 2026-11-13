@@ -85,6 +85,7 @@ func TestManualSpansNestingErrorsAndDisabled(t *testing.T) {
 }
 
 func TestPortableContentContainers(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
 	type payload struct {
 		Text  string `json:"text"`
 		Bytes []byte `json:"bytes"`
@@ -168,6 +169,7 @@ func TestSpanContentMaskOnceAndOverflow(t *testing.T) {
 }
 
 func TestPrimitiveMapKeyStringParity(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
 	got := stripBinary(map[any]any{1e21: "large", 1e-7: "small", math.Inf(1): "infinite", math.Copysign(0, -1): "zero", true: "bool"})
 	want := `{"0":"zero","1e+21":"large","1e-7":"small","Infinity":"infinite","true":"bool"}`
 	if mustJSON(got) != want {

@@ -48,3 +48,37 @@ func TestGoogleSDKRetriesOneInvocationSpan(t *testing.T) {
 		})
 	}
 }
+
+func TestGoogleSpansOffRetriesMatchMain(t *testing.T) {
+	for _, inside := range []bool{false, true} {
+		t.Run(fmt.Sprint(inside), func(t *testing.T) {
+			rec := setup(t, rudderstackai.WithEmitSpans(false), rudderstackai.WithLLMCallEvents(true))
+			llm.Script("google.generate", testkit.Reply{Status: 503, JSON: []byte(`{"error":{"code":503,"message":"busy"}}`)}, jsonReply(reply([]any{m{"text": "ok"}}, m{"promptTokenCount": 2, "candidatesTokenCount": 1}, "STOP")))
+			client := newClient(t, genai.BackendGeminiAPI, ruddergenai.HTTPClient(nil))
+			ctx := context.Background()
+			var owner *rudderstackai.Interaction
+			if inside {
+				ctx, owner = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: "alice"})
+			}
+			_, err := client.Models.GenerateContent(ctx, model, genai.Text("hello"), &genai.GenerateContentConfig{HTTPOptions: &genai.HTTPOptions{RetryOptions: &genai.HTTPRetryOptions{Attempts: rudderstackai.Ptr(int32(2)), InitialDelay: rudderstackai.Ptr(0.001)}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if owner != nil {
+				owner.End(rudderstackai.EndOptions{})
+			}
+			calls := 0
+			for _, event := range rec.events(t) {
+				if event.Event == "ai_llm_response_received" {
+					calls++
+				}
+				if event.Event == "ai_otel_span" {
+					t.Fatal("disabled span")
+				}
+			}
+			if calls != 2 {
+				t.Fatalf("calls=%d, origin/main records 2", calls)
+			}
+		})
+	}
+}

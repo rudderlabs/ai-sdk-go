@@ -42,7 +42,7 @@ func openaiCall(ctx context.Context, step obj) (openai.Client, []option.RequestO
 		tracking = append(tracking, rudderopenai.WithProvider(p))
 	}
 	clientOpts := []option.RequestOption{
-		option.WithBaseURL(llm.URL + "/v1"), option.WithAPIKey("sk-test"), option.WithMaxRetries(0),
+		option.WithBaseURL(llm.URL + "/v1"), option.WithAPIKey("sk-test"), option.WithMaxRetries(int(num(step["retry_attempts"]))),
 		option.WithUnsafeAllowHTTP(), // the mock listens on loopback HTTP
 		rudderopenai.WithTracking(tracking...),
 	}

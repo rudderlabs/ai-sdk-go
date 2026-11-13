@@ -53,6 +53,7 @@ func TestWalkerContainerDepthBoundary(t *testing.T) {
 }
 
 func TestWalkerCyclicListEdgesRemoved(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
 	a := []any{"keep", nil, func() {}}
 	a[1] = a
 	got := stripBinary(a)

@@ -230,12 +230,27 @@ var pendingWrapperSpans = struct {
 	spans map[*Span]wrapperMetadata
 }{spans: make(map[*Span]wrapperMetadata)}
 
-func finishPendingWrapperSpans() {
+func finishPendingWrapperSpans(ctx context.Context) bool {
 	pendingWrapperSpans.mu.Lock()
 	spans := maps.Clone(pendingWrapperSpans.spans)
 	pendingWrapperSpans.mu.Unlock()
+	var wg sync.WaitGroup
 	for s, metadata := range spans {
-		hook.Tracing.FinishRaw(s, metadata.provider, metadata.model, 0, time.Now(), errors.New("cancelled"))
+		done := hook.Track()
+		wg.Go(func() {
+			defer done()
+			safely(func() {
+				hook.Tracing.FinishRaw(s, metadata.provider, metadata.model, 0, time.Now(), errors.New("cancelled"))
+			})
+		})
+	}
+	settled := make(chan struct{})
+	go func() { wg.Wait(); close(settled) }()
+	select {
+	case <-settled:
+		return ctx.Err() == nil
+	case <-ctx.Done():
+		return false
 	}
 }
 
@@ -351,6 +366,7 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 	s.finish(strings.TrimSpace("chat "+first(call.RequestedModel, call.Model)), "chat", "wrapper", a, err, true, call.EndedAt)
 }
 func init() {
+	hook.Tracing.EmitSpans = func() bool { return cfg().emitSpans }
 	hook.Tracing.WrapperMetadata = func(value any, provider, model string) {
 		s, _ := value.(*Span)
 		if s == nil {

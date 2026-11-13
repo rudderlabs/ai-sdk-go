@@ -291,6 +291,10 @@ func evaluator(spec any) rudderstackai.EvaluateFunc {
 }
 
 func runScenario(t *testing.T, sc scenario) {
+	// This shared fixture pins the normalization introduced with emitSpans.
+	if sc.Name == "per_call_content_binary_never_sent" {
+		sc.Config["emit_spans"] = true
+	}
 	rec := &recorder{}
 	configure(t, sc.Config, rec)
 	llm.Reset()

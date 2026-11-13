@@ -132,7 +132,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		r := recover()
 		if inNext {
 			if r != nil {
-				if current != nil {
+				if current != nil && current.Span != nil {
 					current.EndedAt = time.Now()
 					s.failed(current, PanicErrorType(r))
 				}
@@ -167,7 +167,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	}
 	stream := s.IsStream != nil && s.IsStream(req, body)
 	n, numbered := retryNumber(req)
-	if s.RetryUnnumbered {
+	if s.RetryUnnumbered && hook.Tracing.EmitSpans() {
 		n, numbered = 1, true
 	}
 	var key attemptKey
@@ -281,7 +281,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		var h StreamHandler
 		safe(func() { h = s.NewStream(c, resp) })
 		if h != nil {
-			body := &sseBody{src: resp.Body, h: h, i: i, ctx: req.Context(), reader: bufio.NewReader(resp.Body)}
+			body := &sseBody{src: resp.Body, h: h, i: i, ctx: req.Context(), reader: bufio.NewReader(resp.Body), preferTerminal: c.Span != nil}
 			body.filter, _ = h.(EventFilter)
 			if c.Span != nil {
 				body.mu.Lock()
@@ -318,13 +318,13 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		parseErr := json.Unmarshal(reply, &decoded)
 		// A no-content response has nothing to decode. Other parse failures still
 		// leave the original body and product-event behavior to the provider SDK.
-		if parseErr != nil && resp.StatusCode != http.StatusNoContent {
+		if parseErr != nil && (resp.StatusCode != http.StatusNoContent || c.Span == nil) {
 			if c.Span != nil {
 				hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), parseErr)
 			}
 			return
 		}
-		recorded := s.OnResponse != nil && decoded != nil && s.OnResponse(c, decoded, resp)
+		recorded := s.OnResponse != nil && (decoded != nil || c.Span == nil) && s.OnResponse(c, decoded, resp)
 		if !recorded && c.Span != nil {
 			var extractionErr error
 			if decoded == nil && resp.StatusCode != http.StatusNoContent {
@@ -414,7 +414,7 @@ func readBody(req *http.Request) (body map[string]any, raw []byte) {
 	raw, _ = io.ReadAll(req.Body)
 	_ = req.Body.Close()
 	req.Body = io.NopCloser(bytes.NewReader(raw))
-	if req.GetBody == nil {
+	if req.GetBody == nil || !hook.Tracing.EmitSpans() {
 		req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(raw)), nil }
 	}
 	if json.Unmarshal(raw, &body) != nil || body == nil {
@@ -474,6 +474,7 @@ type sseBody struct {
 	// broken: parsing panicked; the rest of the stream passes through unobserved.
 	broken           bool
 	stopCancellation func() bool
+	preferTerminal   bool
 }
 
 func (b *sseBody) Read(p []byte) (int, error) {
@@ -576,6 +577,14 @@ func (b *sseBody) end(err error) {
 		b.finished = true
 		if b.stopCancellation != nil {
 			b.stopCancellation()
+		}
+		complete := false
+		if b.preferTerminal {
+			safe(func() { complete = b.h.Complete() })
+		}
+		if complete {
+			safe(func() { b.h.Finish(Completed, "") })
+			return
 		}
 		if errors.Is(err, io.EOF) {
 			// A last event without its blank line still counts.

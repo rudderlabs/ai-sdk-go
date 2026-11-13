@@ -81,8 +81,8 @@ type Observer struct {
 	finished bool
 }
 
-// NewObserver starts the bookkeeping of a streamed call. If the interaction ends while the
-// stream is still open, the call is recorded then (cancelled unless it completed).
+// NewObserver starts the bookkeeping of a streamed call. With spans enabled, the
+// captured invocation settles with the stream, even if its interaction ends first.
 func NewObserver(c *Call) *Observer {
 	o := &Observer{
 		call:    c,
@@ -92,13 +92,15 @@ func NewObserver(c *Call) *Observer {
 		keepText: KeepsText(c.Interaction), capture: CapturesCallContent(c.Interaction),
 		InputMessages: c.InputMessages,
 	}
-	OnBeforeEnd(c.Interaction, func() {
-		if o.Done {
-			o.Finish(Completed, "")
-			return
-		}
-		o.Finish(Cancelled, "")
-	})
+	if c.Span == nil {
+		OnBeforeEnd(c.Interaction, func() {
+			if o.Done {
+				o.Finish(Completed, "")
+				return
+			}
+			o.Finish(Cancelled, "")
+		})
+	}
 	return o
 }
 

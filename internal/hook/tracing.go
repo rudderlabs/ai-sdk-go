@@ -10,6 +10,7 @@ import (
 // Tracing is the core's integration API for span inputs. It contains no OTel types.
 // Interaction is opaque here to avoid an import cycle; integrations use *Interaction.
 var Tracing struct {
+	EmitSpans       func() bool
 	ParentContext   func(context.Context) (traceID, spanID, traceState string)
 	WrapperMetadata func(any, string, string)
 	FinishRaw       func(any, string, string, int, time.Time, error)

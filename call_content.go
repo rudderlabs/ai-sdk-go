@@ -1,6 +1,7 @@
 package rudderstackai
 
 import (
+	"encoding"
 	"encoding/json"
 	"math"
 	"reflect"
@@ -104,7 +105,12 @@ func capStrings(v any, hit *bool) any {
 
 // maskValue sends every nested string through the redaction path (built-ins, then the hook). A
 // withheld string drops the whole value: ok is false.
-func maskValue(v any) (any, bool) { return maskPlainValue(stripBinary(v)) }
+func maskValue(v any) (any, bool) {
+	if cfg().emitSpans {
+		v = stripBinary(v)
+	}
+	return maskPlainValue(v)
+}
 
 func maskPlainValue(v any) (any, bool) {
 	switch x := v.(type) {
@@ -225,6 +231,7 @@ type walk struct {
 	path    map[visit]bool
 	depth   int
 	omitted bool
+	legacy  bool
 }
 
 // enter marks a pointer, map or slice as on the path; false when it is already there (a cycle) or
@@ -267,6 +274,10 @@ func (w *walk) leave(key visit) {
 // plain JSON values with byte slices dropped, so they are never encoded as base64. A cyclic or
 // too deeply nested value is dropped (nil).
 func stripBinary(v any) any {
+	if !cfg().emitSpans {
+		out, _ := (&walk{path: map[visit]bool{}, legacy: true}).strip(v)
+		return out
+	}
 	out, _ := normalizeSpanValue(v)
 	return out
 }
@@ -315,6 +326,8 @@ func stripMap(x map[string]any) map[string]any {
 var (
 	rawMessageType = reflect.TypeFor[json.RawMessage]()
 	jsonNumberType = reflect.TypeFor[json.Number]()
+	marshalerType  = reflect.TypeFor[json.Marshaler]()
+	textType       = reflect.TypeFor[encoding.TextMarshaler]()
 )
 
 // Primitive map keys use Node String() conventions; other keys are dropped.
@@ -384,7 +397,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	}
 	w.omitted = false
 	t := rv.Type()
-	if t == reflect.TypeFor[time.Time]() {
+	if !w.legacy && t == reflect.TypeFor[time.Time]() {
 		return rv.Interface().(time.Time).UTC().Format("2006-01-02T15:04:05.000Z"), true
 	}
 	if t == rawMessageType {
@@ -393,6 +406,12 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 			return nil, false
 		}
 		return w.strip(decoded)
+	}
+	if w.legacy && (t.Implements(marshalerType) || t.Implements(textType) || (rv.CanAddr() && reflect.PointerTo(t).Implements(marshalerType))) {
+		if (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) && rv.IsNil() {
+			return nil, true
+		}
+		return jsonSafe(rv.Interface())
 	}
 	key, ok := w.enter(rv)
 	if !ok {
@@ -420,7 +439,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		return rv.Uint(), true
 	case reflect.Float32, reflect.Float64:
 		f := rv.Float()
-		return f, true
+		return f, !w.legacy || (!math.IsNaN(f) && !math.IsInf(f, 0))
 	case reflect.Slice, reflect.Array:
 		if t.Elem().Kind() == reflect.Uint8 {
 			return nil, false
@@ -439,28 +458,37 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 				continue
 			}
 			e, ok := w.typed(rv.Index(n))
-			if !ok && !w.omitted {
+			if !ok && !w.omitted && !w.legacy {
 				list = append(list, nil)
-			} else if ok && !isBytes(e) {
+			} else if ok && !w.isBytes(e) {
 				list = append(list, e)
 			}
 		}
 		return list, true
 	case reflect.Map:
+		if w.legacy && !legacyValidMapKey(t.Key()) {
+			return nil, false
+		}
 		if rv.IsNil() {
 			return nil, true
 		}
 		m := make(map[string]any, rv.Len())
 		for it := rv.MapRange(); it.Next(); {
 			name, ok := mapKey(it.Key())
+			if w.legacy {
+				name, ok = legacyMapKey(it.Key())
+			}
 			if !ok {
+				if w.legacy {
+					return nil, false
+				}
 				continue
 			}
-			if e, ok := w.typed(it.Value()); ok && !isBytes(e) {
+			if e, ok := w.typed(it.Value()); ok && !w.isBytes(e) {
 				m[name] = e
 			}
 		}
-		if isBytes(m) {
+		if !w.legacy && isBytes(m) {
 			w.omitted = true
 			return nil, false
 		}
@@ -468,7 +496,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	case reflect.Struct:
 		m := map[string]any{}
 		w.structFields(rv, m)
-		if isBytes(m) {
+		if !w.legacy && isBytes(m) {
 			w.omitted = true
 			return nil, false
 		}
@@ -515,7 +543,7 @@ func (w *walk) structFields(rv reflect.Value, m map[string]any) {
 		if strings.Contains(opts, "omitempty") && fv.IsZero() {
 			continue
 		}
-		if e, ok := w.typed(fv); ok && !isBytes(e) {
+		if e, ok := w.typed(fv); ok && !w.isBytes(e) {
 			m[name] = e
 		}
 	}
@@ -718,4 +746,55 @@ func trimInputMessages(messages []any, over int) ([]any, bool) {
 		}
 	}
 	return copied, true
+}
+
+// Legacy product normalization remains exactly as before emitSpans was introduced.
+func (w *walk) isBytes(v any) bool {
+	if isBytes(v) {
+		return true
+	}
+	if !w.legacy {
+		return false
+	}
+	m, ok := v.(map[string]any)
+	if !ok || len(m) == 0 {
+		return false
+	}
+	for k, value := range m {
+		if k == "" || !isByte(value) {
+			return false
+		}
+		for _, c := range k {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+func legacyValidMapKey(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return true
+	}
+	return t.Implements(textType)
+}
+func legacyMapKey(k reflect.Value) (string, bool) {
+	if k.Kind() == reflect.String {
+		return k.String(), true
+	}
+	if k.Type().Implements(textType) {
+		if k.Kind() == reflect.Pointer && k.IsNil() {
+			return "", false
+		}
+		value, err := k.Interface().(encoding.TextMarshaler).MarshalText()
+		return string(value), err == nil
+	}
+	switch k.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(k.Int(), 10), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return strconv.FormatUint(k.Uint(), 10), true
+	}
+	return "", false
 }

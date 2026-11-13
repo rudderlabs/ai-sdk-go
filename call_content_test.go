@@ -232,6 +232,7 @@ func TestCallContentNotMaskedForEndedInteraction(t *testing.T) {
 }
 
 func TestStripBinary(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
 	got := stripBinary(map[string]any{
 		"type": "image", "mime_type": "image/png", "data": "AAAA", "bytes": []byte{1}, "name": "x",
 		"raw":  map[string]any{"0": 1, "1": 255},
@@ -333,6 +334,7 @@ func leaks(t *testing.T, v any) string {
 }
 
 func TestTypedMapKeys(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
 	secret := []byte("PRIVATE")
 	cases := []struct {
 		name string

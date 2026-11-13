@@ -111,7 +111,12 @@ func TestNullResponseFinishesErrorSpanPreservesProductEvents(t *testing.T) {
 			}
 			ctx, owner := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
 			defer owner.End(rudderstackai.EndOptions{})
-			spec := Spec{Provider: "openai", Integration: "round5", OnResponse: func(*Call, map[string]any, *http.Response) bool { t.Fatal("null reached extraction"); return false }}
+			spec := Spec{Provider: "openai", Integration: "round5", OnResponse: func(*Call, map[string]any, *http.Response) bool {
+				if emit {
+					t.Fatal("null reached extraction")
+				}
+				return false
+			}}
 			resp, err := spec.Intercept(reviewRequest(ctx), func(*http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`null`))}, nil
 			})

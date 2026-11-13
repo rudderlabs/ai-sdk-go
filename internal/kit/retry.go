@@ -110,7 +110,9 @@ func keyFor(ctx context.Context, s *Spec, req *http.Request, raw []byte) attempt
 	k := attemptKey{spec: scope, request: sha256.Sum256(append([]byte(req.Method+" "+req.URL.String()+"\n"), raw...))}
 	// Stainless clones the request while retaining its per-invocation body factory.
 	// reflect.Value retains that factory's identity without inspecting closure internals.
-	if req.GetBody != nil {
+	if !hook.Tracing.EmitSpans() {
+		k.spec = s
+	} else if req.GetBody != nil {
 		k.invocation = reflect.ValueOf(req.GetBody)
 	} else {
 		k.requestOwner = req
@@ -132,9 +134,19 @@ func resume(k attemptKey, n int) *attempt {
 			releasedLocked(k)
 		}
 	}
+	var stale []*attempt
+	if !hook.Tracing.EmitSpans() && k.interaction != nil {
+		for key := range retried.byInteraction[k.interaction] {
+			stale = append(stale, retried.m[key])
+			releasedLocked(key)
+		}
+	}
 	retried.mu.Unlock()
 	if prev != nil {
 		prev.claimed()
+	}
+	for _, a := range stale {
+		a.settle()
 	}
 	return prev
 }
