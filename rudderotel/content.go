@@ -44,11 +44,6 @@ func contentAttribute(key string) bool {
 	return slices.Contains(contentKeys, key) || hasPrefix(key, contentPrefixes)
 }
 
-func contentEvent(name string) bool {
-	return name == "gen_ai.choice" || name == "gen_ai.client.inference.operation.details" ||
-		(strings.HasPrefix(name, "gen_ai.") && strings.HasSuffix(name, ".message") && len(name) > len("gen_ai..message"))
-}
-
 func cleanAttributes(attrs []attribute.KeyValue, capture, all bool) []attribute.KeyValue {
 	out := make([]attribute.KeyValue, 0, len(attrs))
 	for _, kv := range attrs {

@@ -83,6 +83,26 @@ func loadSchemas(path string) (map[string]*jsonschema.Schema, error) {
 func ValidateEvent(event string, properties map[string]any) error {
 	schemaOnce.Do(func() {
 		schemas, schemaErr = loadSchemas(filepath.Join(RepoRoot(), "spec", "ai-events-v0.4.schema.json"))
+		if schemaErr != nil {
+			return
+		}
+		path := filepath.Join(RepoRoot(), "spec", "ai-otel-span-v0.1.schema.json")
+		b, err := os.ReadFile(path)
+		if err != nil {
+			schemaErr = err
+			return
+		}
+		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(b))
+		if err != nil {
+			schemaErr = err
+			return
+		}
+		c := jsonschema.NewCompiler()
+		url := "https://rudderstack.com/schemas/ai-otel-span-v0.1.schema.json"
+		if schemaErr = c.AddResource(url, doc); schemaErr != nil {
+			return
+		}
+		schemas["ai_otel_span"], schemaErr = c.Compile(url + "#/properties/properties")
 	})
 	if schemaErr != nil {
 		return schemaErr

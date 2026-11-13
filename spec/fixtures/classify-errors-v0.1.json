@@ -1,0 +1,369 @@
+{
+  "fixture_version": 1,
+  "description": "Public classifyError / classify_error and interaction error_type parity table. Construct exception objects with these attributes; recursively construct cause.",
+  "cases": [
+    {
+      "name": "HTTP 429",
+      "error": {
+        "status": 429
+      },
+      "expected": "rate_limit"
+    },
+    {
+      "name": "HTTP 408",
+      "error": {
+        "status": 408
+      },
+      "expected": "timeout"
+    },
+    {
+      "name": "HTTP 504",
+      "error": {
+        "status": 504
+      },
+      "expected": "timeout"
+    },
+    {
+      "name": "HTTP 401",
+      "error": {
+        "status": 401
+      },
+      "expected": "auth_error"
+    },
+    {
+      "name": "HTTP 403",
+      "error": {
+        "status": 403
+      },
+      "expected": "auth_error"
+    },
+    {
+      "name": "HTTP 400",
+      "error": {
+        "status": 400
+      },
+      "expected": "invalid_request"
+    },
+    {
+      "name": "HTTP 422",
+      "error": {
+        "status": 422
+      },
+      "expected": "invalid_request"
+    },
+    {
+      "name": "HTTP 500",
+      "error": {
+        "status": 500
+      },
+      "expected": "api_error"
+    },
+    {
+      "name": "ThrottlingException",
+      "error": {
+        "name": "ThrottlingException"
+      },
+      "expected": "rate_limit"
+    },
+    {
+      "name": "TimeoutError",
+      "error": {
+        "name": "TimeoutError"
+      },
+      "expected": "timeout"
+    },
+    {
+      "name": "AbortError",
+      "error": {
+        "name": "AbortError"
+      },
+      "expected": "cancelled"
+    },
+    {
+      "name": "CancelledError",
+      "error": {
+        "name": "CancelledError"
+      },
+      "expected": "cancelled"
+    },
+    {
+      "name": "AccessDeniedException",
+      "error": {
+        "name": "AccessDeniedException"
+      },
+      "expected": "auth_error"
+    },
+    {
+      "name": "APIConnectionError",
+      "error": {
+        "name": "APIConnectionError"
+      },
+      "expected": "connection_error"
+    },
+    {
+      "name": "APIError",
+      "error": {
+        "name": "APIError"
+      },
+      "expected": "api_error"
+    },
+    {
+      "name": "Error",
+      "error": {
+        "name": "Error"
+      },
+      "expected": "app_error"
+    },
+    {
+      "name": "MaxTurnsExceededError",
+      "error": {
+        "name": "MaxTurnsExceededError"
+      },
+      "expected": "max_turns"
+    },
+    {
+      "name": "LengthFinishReasonError",
+      "error": {
+        "name": "LengthFinishReasonError"
+      },
+      "expected": "length"
+    },
+    {
+      "name": "ContentFilterFinishReasonError",
+      "error": {
+        "name": "ContentFilterFinishReasonError"
+      },
+      "expected": "content_filter"
+    },
+    {
+      "name": "quota code",
+      "error": {
+        "code": "insufficient_quota"
+      },
+      "expected": "rate_limit"
+    },
+    {
+      "name": "context code",
+      "error": {
+        "status": 400,
+        "code": "context_length_exceeded"
+      },
+      "expected": "context_limit"
+    },
+    {
+      "name": "context message",
+      "error": {
+        "status": 400,
+        "message": "prompt is too long"
+      },
+      "expected": "context_limit"
+    },
+    {
+      "name": "retry cause",
+      "error": {
+        "name": "RetryError",
+        "cause": {
+          "status": 429
+        }
+      },
+      "expected": "rate_limit"
+    },
+    {
+      "name": "application cause",
+      "error": {
+        "name": "Error",
+        "cause": {
+          "name": "Error"
+        }
+      },
+      "expected": "app_error"
+    },
+    {
+      "name": "unknown provider code",
+      "error": {
+        "code": "provider_specific_failure",
+        "name": "APIError"
+      },
+      "expected": "api_error"
+    },
+    {
+      "name": "unknown nested provider code",
+      "error": {
+        "error": {
+          "code": "provider_specific_failure"
+        }
+      },
+      "expected": "api_error"
+    },
+    {
+      "name": "unknown body provider code",
+      "error": {
+        "body": {
+          "error": {
+            "code": "provider_specific_failure"
+          }
+        }
+      },
+      "expected": "api_error"
+    },
+    {
+      "name": "body context window",
+      "error": {
+        "status": 400,
+        "body": {
+          "message": "The context window was exceeded"
+        }
+      },
+      "expected": "context_limit"
+    },
+    {
+      "name": "nested body context window",
+      "error": {
+        "status": 400,
+        "body": {
+          "error": {
+            "message": "The context window was exceeded"
+          }
+        }
+      },
+      "expected": "context_limit"
+    },
+    {
+      "name": "body context limit",
+      "error": {
+        "status": 422,
+        "body": {
+          "error": {
+            "message": "The context limit was exceeded"
+          }
+        }
+      },
+      "expected": "context_limit"
+    },
+    {
+      "name": "six-deep cause",
+      "error": {
+        "cause": {
+          "cause": {
+            "cause": {
+              "cause": {
+                "cause": {
+                  "cause": {
+                    "status": 429
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "expected": "rate_limit"
+    },
+    {
+      "name": "six-deep lastError",
+      "error": {
+        "lastError": {
+          "lastError": {
+            "lastError": {
+              "lastError": {
+                "lastError": {
+                  "lastError": {
+                    "status": 429
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "expected": "rate_limit"
+    },
+    {
+      "name": "unknown code without provider evidence",
+      "error": {
+        "code": "provider_specific_failure"
+      },
+      "expected": "app_error"
+    },
+    {
+      "name": "unknown code with HTTP status",
+      "error": {
+        "status": 500,
+        "code": "provider_specific_failure"
+      },
+      "expected": "api_error"
+    },
+    {
+      "name": "body provider code overrides native ENOENT",
+      "error": {
+        "code": "ENOENT",
+        "body": {
+          "error": {
+            "code": "rate_limit_exceeded"
+          }
+        }
+      },
+      "expected": "rate_limit"
+    },
+    {
+      "name": "native ENOENT",
+      "error": {
+        "name": "Error",
+        "code": "ENOENT",
+        "errno": -2
+      },
+      "expected": "app_error"
+    },
+    {
+      "name": "native ERR_INVALID_ARG_TYPE",
+      "error": {
+        "name": "TypeError",
+        "code": "ERR_INVALID_ARG_TYPE"
+      },
+      "expected": "app_error"
+    },
+    {
+      "name": "OSError with errno",
+      "error": {
+        "name": "OSError",
+        "errno": 5
+      },
+      "expected": "app_error"
+    },
+    {
+      "name": "FileNotFoundError with code and errno",
+      "error": {
+        "name": "FileNotFoundError",
+        "code": "ENOENT",
+        "errno": 2
+      },
+      "expected": "app_error"
+    },
+    {
+      "name": "TypeError with unknown code",
+      "error": {
+        "name": "TypeError",
+        "code": "runtime_failure"
+      },
+      "expected": "app_error"
+    },
+    {
+      "name": "ValueError with unknown code",
+      "error": {
+        "name": "ValueError",
+        "code": "runtime_failure"
+      },
+      "expected": "app_error"
+    },
+    {
+      "name": "RuntimeError with code and errno",
+      "error": {
+        "name": "RuntimeError",
+        "code": "runtime_failure",
+        "errno": 1
+      },
+      "expected": "app_error"
+    }
+  ],
+  "max_chain_errors": 100
+}

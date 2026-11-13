@@ -19,6 +19,7 @@ type config struct {
 	analytics           analytics.Client
 	captureContent      bool
 	emitLLMCalls        bool
+	emitSpans           bool
 	emitTaskStarted     bool
 	toolBreakdown       bool
 	identityFromCookies bool

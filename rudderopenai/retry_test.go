@@ -2,6 +2,7 @@ package rudderopenai_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/openai/openai-go/v3"
@@ -30,7 +31,7 @@ func retryPrices() rudderstackai.ConfigOption {
 func TestRetryThenSuccessIsOneCall(t *testing.T) {
 	for name, inside := range map[string]bool{"interaction": true, "no interaction": false} {
 		t.Run(name, func(t *testing.T) {
-			rec, llm := setup(t, retryPrices())
+			rec, llm := setup(t, retryPrices(), rudderstackai.WithEmitSpans(true))
 			client := retryingClient(llm)
 			llm.Script("openai.chat", reply(t, throttledReply), reply(t, throttledReply), reply(t, retriedAnswer))
 			call := func(ctx context.Context) error {
@@ -50,6 +51,11 @@ func TestRetryThenSuccessIsOneCall(t *testing.T) {
 				t.Fatalf("requests = %d, want 3", got)
 			}
 			events := rec.events(t)
+			span := one(t, events, "ai_otel_span")
+			callEvent := one(t, events, "ai_llm_response_received")
+			if span["span_id"] != callEvent["span_id"] {
+				t.Fatal("retry span join lost")
+			}
 			if c := one(t, events, "ai_llm_response_received"); c["error_type"] != nil {
 				t.Errorf("call: %v", c)
 			}
@@ -111,5 +117,25 @@ func TestFailedCallThenNewCall(t *testing.T) {
 	p := one(t, rec.events(t), "ai_response_received")
 	if p["response_status"] != "success" || num(p["llm_call_count"]) != 2 {
 		t.Errorf("ai_response_received: %v", p)
+	}
+}
+
+func TestRawResponseEmitSpan(t *testing.T) {
+	rec, llm := setup(t, rudderstackai.WithEmitSpans(true))
+	llm.Script("openai.chat", reply(t, retriedAnswer))
+	client := retryingClient(llm)
+	var raw *http.Response
+	_, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{}, body(chatBody), option.WithResponseInto(&raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw == nil || raw.StatusCode != 200 {
+		t.Fatal("raw response missing")
+	}
+	events := rec.events(t)
+	span := one(t, events, "ai_otel_span")
+	call := one(t, events, "ai_llm_response_received")
+	if span["span_id"] != call["span_id"] {
+		t.Fatal("raw-response join lost")
 	}
 }

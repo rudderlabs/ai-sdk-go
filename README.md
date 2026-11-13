@@ -301,6 +301,7 @@ An analytics-go client (v4.5.1, the minimum) sends its queue on `Flush`; a custo
 | `ai_user_action`                                        | `TrackAction`: feedback, copy, share, report, regenerate                     |
 | `ai_interaction_classified`                             | After a classified answer, with `intent` and `outcome`; or from `TrackClassification` |
 | `ai_interaction_scored`                                 | One per score: from your evaluator, or `TrackScore`                          |
+| `ai_otel_span` | One per wrapped provider invocation or manual span, with `WithEmitSpans(true)` |
 | `ai_llm_response_received`                              | One per model call, only with `WithLLMCallEvents(true)`                      |
 | Your declared tool events                               | One per call of a tool listed in `WithEventRules` (or MCP `Options.EventRules`) |
 | `mcp_client_seen`, `mcp_tool_called`, `mcp_elicitation_completed`, `mcp_resource_read`, `mcp_prompt_used` | MCP server requests ([mcp.md](docs/mcp.md#events)) |
@@ -324,6 +325,7 @@ Every event's properties stay within 30,000 serialized bytes (RudderStack reject
 | `WithRedactHook(fn)`             | none    | Your masking, run after the built-ins                                                         |
 | `WithIdentityFromCookies(on)`    | on      | Read identity from RudderStack JavaScript SDK cookies                                         |
 | `WithToolBreakdown(on)`          | off     | Add `tool_breakdown` to `ai_response_received`                                                |
+| `WithEmitSpans(on)` | off | Emit wrapper and manual `ai_otel_span` events; independent of call events. |
 | `WithLLMCallEvents(on)`          | off     | Also send `ai_llm_response_received` per model call                                           |
 | `WithEventRules(rules)`          | none    | Declared tool events                                                                          |
 | `WithClassifier(*opts)`          | none    | Intent classification; nil turns it off                                                       |
@@ -459,3 +461,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [RELEASING.md](RELEASING.md). Report 
 ## License
 
 [MIT](LICENSE.md)
+
+Wrapper and manual spans are opt-in with `rudderstackai.WithEmitSpans(true)`, independently of
+`WithLLMCallEvents`. See [tracing](docs/tracing.md) for `StartSpan`, call `span_id` joins, privacy,
+and Go platform limits.

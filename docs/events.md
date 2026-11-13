@@ -2,7 +2,7 @@
 
 Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md), including opt-in `mcp_feedback_submitted` through `FeedbackRequests`. `mcp_capability_requested` / `request_capability` are deprecated; use `FeedbackRequests`. The JSON Schema is [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json), shared with the Node.js and Python SDKs; a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
 
-Every event's `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget first shrinks a call's `input_messages` (oldest after the system prompt, then the longest strings), then loses its captured text (`output_text`, `output_tool_calls`, `response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process.
+Product events' `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget first shrinks a call's `input_messages` (oldest after the system prompt, then the longest strings), then loses its captured text (`output_text`, `output_tool_calls`, `response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process. Tracing `ai_otel_span` events use a separate 32,000-byte whole-message budget and the [tracing](tracing.md) truncation policy.
 
 - [Common fields](#common-fields)
 - [ai_user_prompt_created](#ai_user_prompt_created)
@@ -273,6 +273,11 @@ What each integration observes:
 | Manual          | `RecordToolCalls`, `RecordToolCallCount`                                                | `ToolCall.Error`, `RecordToolResult`                                          |
 
 ## ai_llm_response_received
+
+With `WithEmitSpans(true)`, a retained wrapper call carries `span_id`, matching its
+`ai_otel_span`. Pending events keep the ID across pause and JSON restoration without replaying
+spans. Two invocations with the same response ID each emit a span; the deduplicated call event
+keeps the first invocation's ID. Overflow aggregates omit `span_id`.
 
 Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is recorded. Totals belong on `ai_response_received`; do not add these to it.
 

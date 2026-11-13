@@ -51819,7 +51819,7 @@
     },
     {
       "name": "per_call_content_binary_never_sent",
-      "description": "RudderStack per-call content: tool results and parts never carry bytes: byte-array objects are removed, data: URI strings become data:<media type>, and base64 payload keys (data, bytes, base64, b64_json) of media-shaped objects are removed; plain data keys stay.",
+      "description": "RudderStack per-call content: tool results and parts never carry bytes: serialized byte-buffer objects are removed and ordinary numeric-keyed objects are kept, data: URI strings become data:<media type>, and base64 payload keys (data, bytes, base64, b64_json) of media-shaped objects are removed; plain data keys stay.",
       "config": {
         "emit_llm_calls": true,
         "capture_content": true
@@ -51873,6 +51873,11 @@
                     "type": "tool_call_response",
                     "id": "t1",
                     "response": {
+                        "bytes": {
+                          "0": 83,
+                          "1": 69,
+                          "2": 67
+                        },
                       "image": {
                         "type": "image",
                         "source_type": "base64",
@@ -52201,6 +52206,193 @@
               "response_id": "p-next"
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "openai_emit_spans_join",
+      "description": "emit_spans is independent of product calls and adds a joined span_id to retained provider call events.",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": true
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_openai_chat",
+            "feature": "parity",
+            "intent": "refund_request",
+            "input_method": "text",
+            "trace_id": "trace-1"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "set_outcome",
+              "value": "resolved"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_openai_chat",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "input_method": "text",
+            "intent": "refund_request"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_otel_span",
+          "userId": "user_1",
+          "properties": {
+            "interaction_id": "$int1",
+            "conversation_id": "conv_openai_chat",
+            "trace_id": "$trace1",
+            "span_id": "$span1",
+            "parent_span_id": null,
+            "span_name": "chat gpt-4.1-mini",
+            "span_kind": "client",
+            "status_code": "ok",
+            "duration_ms": "<number>",
+            "gen_ai": {
+              "provider_name": "openai",
+              "operation_name": "chat",
+              "request_model": "gpt-4.1-mini",
+              "response_model": "gpt-4.1-mini",
+              "input_tokens": 25,
+              "output_tokens": 12,
+              "finish_reasons": [
+                "stop"
+              ],
+              "conversation_id": "conv_openai_chat"
+            },
+            "span_source": "wrapper"
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_openai_chat",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "provider": "openai",
+            "model": "gpt-4.1-mini",
+            "input_tokens": 25,
+            "output_tokens": 12,
+            "total_tokens": 37,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "response_id": "chatcmpl-1",
+            "finish_reason": "stop",
+            "span_id": "$span1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_openai_chat",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "intent": "refund_request",
+            "outcome": "resolved",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "trace_id": "trace-1"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
         }
       ]
     }

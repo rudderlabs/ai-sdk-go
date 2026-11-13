@@ -425,7 +425,8 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	if i == nil {
 		return call(ctx)
 	}
-	c := &kit.Call{Details: rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, t.cfg.details)), Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
+	ctx, span := hook.Tracing.BeginWrapper(ctx, i, started)
+	c := &kit.Call{Span: span, Details: rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, t.cfg.details)), Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
 	safe(func() {
 		if kit.CapturesCallContent(i) {
 			c.InputMessages = inputMessages(system, messages)

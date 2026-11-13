@@ -20,6 +20,8 @@ import (
 
 // Call is one intercepted model request.
 type Call struct {
+	Span         any
+	HTTPStatus   int
 	Details      rudderstackai.CallDetails
 	FirstTokenAt time.Time
 	Interaction  *rudderstackai.Interaction
@@ -168,10 +170,17 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	if i == nil {
 		return next(req)
 	}
+	var span any
+	if prev != nil {
+		span = prev.call.Span
+		ctx = hook.Tracing.ActivateWrapper(ctx, span)
+	} else {
+		ctx, span = hook.Tracing.BeginWrapper(ctx, i, started)
+	}
 	req = req.WithContext(context.WithValue(ctx, trackedKey{s.Integration}, true))
 	model, _ := body["model"].(string)
 	details := rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, s.Details))
-	c := &Call{Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
+	c := &Call{Span: span, Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
 	safe(func() {
 		if s.OnRequest != nil {
 			s.OnRequest(c)
@@ -221,6 +230,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		s.failed(c, t)
 		return resp, err
 	}
+	c.HTTPStatus = resp.StatusCode
 	if resp.StatusCode >= 400 {
 		raw := peekBody(resp)
 		c.EndedAt = time.Now() // after the body read, as for successful responses
@@ -256,10 +266,11 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	reply := peekBody(resp)
 	safe(func() {
 		var decoded map[string]any
-		if json.Unmarshal(reply, &decoded) != nil {
-			return
+		_ = json.Unmarshal(reply, &decoded)
+		recorded := s.OnResponse != nil && decoded != nil && s.OnResponse(c, decoded, resp)
+		if !recorded && c.Span != nil {
+			c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, Integration: c.Integration, UsageUnknown: true})
 		}
-		recorded := s.OnResponse != nil && s.OnResponse(c, decoded, resp)
 		if ephemeral && recorded {
 			EndEphemeral(i, "")
 		}
@@ -533,7 +544,7 @@ func (c *Call) RecordCall(call rudderstackai.LLMCall) bool {
 	call.CallPurpose = c.Details.CallPurpose
 	call.FallbackUsed, call.BYOK = c.Details.FallbackUsed, c.Details.BYOK
 	call.InputMessages = c.InputMessages
-	return c.Interaction.RecordCall(call)
+	return hook.Tracing.RecordWrapper(c.Interaction, call, c.Span, c.HTTPStatus)
 }
 
 // ContextLimit reports whether a rejected request exceeded the model's context window.
@@ -543,7 +554,7 @@ func ContextLimit(code, message string) bool {
 		return true
 	}
 	message = strings.ToLower(message)
-	for _, part := range []string{"maximum context length", "context window", "prompt is too long", "input is too long", "exceeds the maximum number of tokens"} {
+	for _, part := range []string{"maximum context length", "context window", "context limit", "prompt is too long", "input is too long", "exceeds the maximum number of tokens"} {
 		if strings.Contains(message, part) {
 			return true
 		}

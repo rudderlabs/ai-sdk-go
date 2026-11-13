@@ -66,19 +66,6 @@ func stringArray(v attribute.Value) []string {
 	return nil
 }
 
-func spanOrResource(s sdktrace.ReadOnlySpan, keys ...string) string {
-	a, r := attributes(s.Attributes()), attributes(s.Resource().Attributes())
-	for _, k := range keys {
-		if v := firstString(a, k); v != "" {
-			return v
-		}
-		if v := firstString(r, k); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // IsAISpan is the default export filter: GenAI, OpenInference, or legacy ai.operationId.
 func IsAISpan(s sdktrace.ReadOnlySpan) bool {
 	for _, kv := range s.Attributes() {
@@ -88,26 +75,4 @@ func IsAISpan(s sdktrace.ReadOnlySpan) bool {
 		}
 	}
 	return false
-}
-
-func genAISummary(a map[string]attribute.Value) map[string]any {
-	g := map[string]any{}
-	for key, keys := range map[string][]string{
-		"provider_name": {"gen_ai.provider.name", "gen_ai.system"}, "operation_name": {"gen_ai.operation.name"},
-		"request_model": {"gen_ai.request.model"}, "response_model": {"gen_ai.response.model"}, "conversation_id": {"gen_ai.conversation.id"},
-	} {
-		if v := firstString(a, keys...); v != "" {
-			g[key] = v
-		}
-	}
-	if n, ok := count(a, "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens"); ok {
-		g["input_tokens"] = n
-	}
-	if n, ok := count(a, "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens"); ok {
-		g["output_tokens"] = n
-	}
-	if v := stringArray(a["gen_ai.response.finish_reasons"]); v != nil {
-		g["finish_reasons"] = v
-	}
-	return g
 }

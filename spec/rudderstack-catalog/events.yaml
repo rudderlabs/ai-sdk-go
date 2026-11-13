@@ -56,7 +56,7 @@ spec:
     - id: mcp_feedback_submitted
       name: mcp_feedback_submitted
       event_type: track
-      description: Opt-in. The agent called submit_feedback to report a problem, a missing capability or what worked well. Refused calls send nothing.
+      description: Opt-in. The agent called the injected submit_feedback tool to report a problem, a missing capability or what worked well. Refused calls send nothing. Supersedes mcp_capability_requested.
     - id: mcp_resource_read
       name: mcp_resource_read
       event_type: track
