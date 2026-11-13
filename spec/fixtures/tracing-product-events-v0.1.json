@@ -4111,6 +4111,10 @@
                     "type": "tool_call_response",
                     "id": "call_1",
                     "response": {
+                      "bytes": {
+                        "0": 83,
+                        "1": 69
+                      },
                       "image": {
                         "type": "image",
                         "source_type": "base64",

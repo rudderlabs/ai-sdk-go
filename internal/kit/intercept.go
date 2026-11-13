@@ -20,6 +20,8 @@ import (
 
 // Call is one intercepted model request.
 type Call struct {
+	Span         any
+	HTTPStatus   int
 	Details      rudderstackai.CallDetails
 	FirstTokenAt time.Time
 	Interaction  *rudderstackai.Interaction
@@ -38,6 +40,15 @@ type Call struct {
 	// InputMessages is the request as GenAI messages. An integration's OnRequest sets it, and only
 	// when [CapturesCallContent]; RecordCall and the stream Observer pass it on.
 	InputMessages []rudderstackai.GenAIMessage
+}
+
+// CapturesContent uses the policy captured at span start, including late responses.
+// Without a span, product content follows the interaction's current lifecycle.
+func (c *Call) CapturesContent() bool {
+	if c.Span != nil {
+		return hook.Tracing.WrapperCaptureContent(c.Span)
+	}
+	return CapturesCallContent(c.Interaction)
 }
 
 // StreamHandler sees each server-sent event of a streamed response and how the stream ended.
@@ -78,6 +89,10 @@ type Prepared struct {
 
 // Spec describes one provider API for [Intercept].
 type Spec struct {
+	// RetryUnnumbered groups retries of SDKs that reuse a request without attempt headers.
+	RetryUnnumbered bool
+	// RetryScope is a stable, comparable owner when a Spec is built per transport entry.
+	RetryScope  any
 	Details     rudderstackai.CallDetails
 	Provider    string
 	Integration string
@@ -115,6 +130,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	var sent, inNext bool
 	var got *http.Response
 	var gotErr error
+	var current *Call
 	next := func(r *http.Request) (*http.Response, error) {
 		sent, inNext = true, true
 		got, gotErr = send(r)
@@ -122,14 +138,26 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		return got, gotErr
 	}
 	defer func() {
+		r := recover()
 		if inNext {
+			if r != nil {
+				if current != nil && current.Span != nil {
+					current.EndedAt = time.Now()
+					s.failed(current, PanicErrorType(r))
+				}
+				panic(r)
+			}
 			return
 		}
-		r := recover()
 		if r == nil {
 			return
 		}
 		hook.Recovered(r, "kit.Intercept")
+		if current != nil && current.Span != nil {
+			safe(func() {
+				hook.Tracing.FinishRaw(current.Span, current.Provider, current.Model, current.HTTPStatus, time.Now(), errors.New("span observation failed"))
+			})
+		}
 		if sent {
 			resp, err = got, gotErr
 			return
@@ -148,6 +176,9 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	}
 	stream := s.IsStream != nil && s.IsStream(req, body)
 	n, numbered := retryNumber(req)
+	if s.RetryUnnumbered && hook.Tracing.EmitSpans() {
+		n, numbered = 1, true
+	}
 	var key attemptKey
 	var prev *attempt
 	if numbered {
@@ -168,15 +199,24 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	if i == nil {
 		return next(req)
 	}
+	var span any
+	if prev != nil {
+		span = prev.call.Span
+		ctx = hook.Tracing.ActivateWrapper(ctx, span)
+	} else {
+		ctx, span = hook.Tracing.BeginWrapper(ctx, i, started)
+	}
 	req = req.WithContext(context.WithValue(ctx, trackedKey{s.Integration}, true))
 	model, _ := body["model"].(string)
 	details := rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, s.Details))
-	c := &Call{Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
+	c := &Call{Span: span, Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
+	hook.Tracing.WrapperMetadata(c.Span, c.Provider, c.Model)
+	current = c
 	safe(func() {
 		if s.OnRequest != nil {
 			s.OnRequest(c)
 		}
-		if s.InputMessages != nil && CapturesCallContent(i) {
+		if s.InputMessages != nil && c.CapturesContent() {
 			c.InputMessages = s.InputMessages(c.Request)
 		}
 		if msgs, ok := body["messages"]; ok {
@@ -212,15 +252,18 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		c.EndedAt = time.Now()
 		t := ErrorTypeOfTransport(err)
 		safe(func() { NoteCallError(i, err, t) })
-		// A connection error carries no body to tell a retry by: inside an interaction it waits
-		// for the retry, the next call or the end; a call outside one is recorded now.
-		if numbered && !ephemeral && req.Context().Err() == nil {
-			safe((&attempt{spec: s, call: c, errorType: t, key: key}).hold)
+		// Keep the invocation span across connection failures too. A per-attempt timeout
+		// can expire before the SDK retries; give it the same grace as an unread response.
+		if numbered && (!ephemeral || span != nil) && (req.Context().Err() == nil || (span != nil && errors.Is(err, context.DeadlineExceeded))) {
+			a := &attempt{spec: s, call: c, errorType: t, key: key}
+			a.closed.Store(true)
+			safe(a.hold)
 			return resp, err
 		}
 		s.failed(c, t)
 		return resp, err
 	}
+	c.HTTPStatus = resp.StatusCode
 	if resp.StatusCode >= 400 {
 		raw := peekBody(resp)
 		c.EndedAt = time.Now() // after the body read, as for successful responses
@@ -247,20 +290,58 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		var h StreamHandler
 		safe(func() { h = s.NewStream(c, resp) })
 		if h != nil {
-			body := &sseBody{src: resp.Body, h: h, i: i, ctx: req.Context(), reader: bufio.NewReader(resp.Body)}
+			body := &sseBody{src: resp.Body, h: h, i: i, ctx: req.Context(), reader: bufio.NewReader(resp.Body), preferTerminal: c.Span != nil}
 			body.filter, _ = h.(EventFilter)
+			if c.Span != nil {
+				body.mu.Lock()
+				body.stopCancellation = context.AfterFunc(req.Context(), func() {
+					// Serialize cancellation with parsing, retaining every observed attribute.
+					// This also settles an unread stream without waiting for Read or Close.
+					body.mu.Lock()
+					defer body.mu.Unlock()
+					safe(func() { body.end(req.Context().Err()) })
+				})
+				body.mu.Unlock()
+			}
 			resp.Body = body
+			return resp, nil
+		}
+		if c.Span != nil {
+			safe(func() {
+				hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), errors.New("stream observer setup failed"))
+			})
 			return resp, nil
 		}
 	}
 	reply := peekBody(resp)
 	safe(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				hook.Recovered(r, "kit.response")
+				safe(func() {
+					hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), errors.New("response extraction failed"))
+				})
+			}
+		}()
 		var decoded map[string]any
-		if json.Unmarshal(reply, &decoded) != nil {
+		parseErr := json.Unmarshal(reply, &decoded)
+		// A no-content response has nothing to decode. Other parse failures still
+		// leave the original body and product-event behavior to the provider SDK.
+		if parseErr != nil && (resp.StatusCode != http.StatusNoContent || c.Span == nil) {
+			if c.Span != nil {
+				hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), parseErr)
+			}
 			return
 		}
-		recorded := s.OnResponse != nil && s.OnResponse(c, decoded, resp)
-		if ephemeral && recorded {
+		recorded := s.OnResponse != nil && (decoded != nil || c.Span == nil) && s.OnResponse(c, decoded, resp)
+		if !recorded && c.Span != nil {
+			var extractionErr error
+			if decoded == nil && resp.StatusCode != http.StatusNoContent {
+				extractionErr = errors.New("response is null")
+			}
+			hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now(), extractionErr)
+		}
+		if ephemeral && (recorded || c.Span != nil) {
 			EndEphemeral(i, "")
 		}
 	})
@@ -269,7 +350,8 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 
 func (s *Spec) failed(c *Call, errorType string) {
 	safe(func() {
-		c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
+		// Only spans need unknown usage; with spans off it would hold the call event like main never did.
+		c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, UsageUnknown: c.Span != nil})
 		if c.Ephemeral {
 			EndEphemeral(c.Interaction, errorType)
 		}
@@ -342,7 +424,9 @@ func readBody(req *http.Request) (body map[string]any, raw []byte) {
 	raw, _ = io.ReadAll(req.Body)
 	_ = req.Body.Close()
 	req.Body = io.NopCloser(bytes.NewReader(raw))
-	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(raw)), nil }
+	if req.GetBody == nil || !hook.Tracing.EmitSpans() {
+		req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(raw)), nil }
+	}
 	if json.Unmarshal(raw, &body) != nil || body == nil {
 		return map[string]any{}, raw
 	}
@@ -381,29 +465,40 @@ func safe(fn func()) {
 // stream ended: EOF completes it, an early Close cancels it (unless the terminal event arrived),
 // a read error fails it.
 type sseBody struct {
-	src    io.ReadCloser
-	reader *bufio.Reader
-	h      StreamHandler
-	i      *rudderstackai.Interaction
-	ctx    context.Context
-	buf    bytes.Buffer
-	event  string
-	data   []string
-	once   sync.Once
-	mu     sync.Mutex
+	src      io.ReadCloser
+	reader   *bufio.Reader
+	h        StreamHandler
+	i        *rudderstackai.Interaction
+	ctx      context.Context
+	buf      bytes.Buffer
+	event    string
+	data     []string
+	once     sync.Once
+	mu       sync.Mutex
+	readMu   sync.Mutex
+	finished bool
 	// With a filter, an event's lines are held until its blank line decides whether it is shown.
 	filter EventFilter
 	held   bytes.Buffer
 	hide   bool
 	// broken: parsing panicked; the rest of the stream passes through unobserved.
-	broken bool
+	broken           bool
+	stopCancellation func() bool
+	preferTerminal   bool
 }
 
 func (b *sseBody) Read(p []byte) (int, error) {
+	b.readMu.Lock()
+	defer b.readMu.Unlock()
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for b.buf.Len() == 0 {
-		line, err := b.reader.ReadBytes('\n')
+		// Provider reads may block even after context cancellation.
+		line, err := func() ([]byte, error) {
+			b.mu.Unlock()
+			defer b.mu.Lock()
+			return b.reader.ReadBytes('\n')
+		}()
 		if len(line) > 0 {
 			b.takeSafely(line)
 		}
@@ -424,7 +519,7 @@ func (b *sseBody) Read(p []byte) (int, error) {
 // takeSafely takes a line; a panic in the SDK's parsing stops observing the stream, and the app
 // still gets every byte.
 func (b *sseBody) takeSafely(line []byte) {
-	if b.broken {
+	if b.broken || b.finished {
 		b.buf.Write(line)
 		return
 	}
@@ -489,6 +584,18 @@ func (b *sseBody) parse(line []byte) {
 
 func (b *sseBody) end(err error) {
 	b.once.Do(func() {
+		b.finished = true
+		if b.stopCancellation != nil {
+			b.stopCancellation()
+		}
+		complete := false
+		if b.preferTerminal {
+			safe(func() { complete = b.h.Complete() })
+		}
+		if complete {
+			safe(func() { b.h.Finish(Completed, "") })
+			return
+		}
 		if errors.Is(err, io.EOF) {
 			// A last event without its blank line still counts.
 			if !b.broken {
@@ -513,7 +620,12 @@ func (b *sseBody) end(err error) {
 }
 
 func (b *sseBody) Close() error {
+	b.mu.Lock()
 	b.once.Do(func() {
+		b.finished = true
+		if b.stopCancellation != nil {
+			b.stopCancellation()
+		}
 		complete := false
 		safe(func() { complete = b.h.Complete() })
 		if complete {
@@ -522,6 +634,7 @@ func (b *sseBody) Close() error {
 		}
 		safe(func() { b.h.Finish(Cancelled, "") })
 	})
+	b.mu.Unlock()
 	return b.src.Close()
 }
 
@@ -533,7 +646,7 @@ func (c *Call) RecordCall(call rudderstackai.LLMCall) bool {
 	call.CallPurpose = c.Details.CallPurpose
 	call.FallbackUsed, call.BYOK = c.Details.FallbackUsed, c.Details.BYOK
 	call.InputMessages = c.InputMessages
-	return c.Interaction.RecordCall(call)
+	return hook.Tracing.RecordWrapper(c.Interaction, call, c.Span, c.HTTPStatus)
 }
 
 // ContextLimit reports whether a rejected request exceeded the model's context window.
@@ -543,10 +656,18 @@ func ContextLimit(code, message string) bool {
 		return true
 	}
 	message = strings.ToLower(message)
-	for _, part := range []string{"maximum context length", "context window", "prompt is too long", "input is too long", "exceeds the maximum number of tokens"} {
+	for _, part := range []string{"maximum context length", "context window", "context limit", "prompt is too long", "input is too long", "exceeds the maximum number of tokens"} {
 		if strings.Contains(message, part) {
 			return true
 		}
 	}
 	return false
+}
+
+// PanicErrorType categorizes a provider panic while preserving its original value for re-panic.
+func PanicErrorType(value any) string {
+	if err, ok := value.(error); ok {
+		return ErrorTypeOfTransport(err)
+	}
+	return "api_error"
 }

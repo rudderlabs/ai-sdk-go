@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -32,7 +33,7 @@ type attempt struct {
 	mu     sync.Mutex
 	// stop cancels the context watch of an ephemeral attempt.
 	stop func() bool
-	// grace is the wait for a retry after the context ended.
+	// grace bounds the wait for a retry even when the request context never ends.
 	grace *time.Timer
 	// done releases Flush, which waits for a held attempt outside an interaction.
 	done func()
@@ -51,13 +52,15 @@ func (a *attempt) release() {
 // attemptKey matches a retry to its failed attempt: same middleware, same open interaction
 // (nil for a call outside one), same request.
 type attemptKey struct {
-	spec        *Spec
-	interaction *rudderstackai.Interaction
-	request     [sha256.Size]byte
+	spec         any
+	invocation   reflect.Value
+	requestOwner *http.Request
+	interaction  *rudderstackai.Interaction
+	request      [sha256.Size]byte
 }
 
-// retried holds the failed attempts, indexed by interaction so a new call settles its own in
-// O(its attempts). At most hook.MaxMapEntries are held; past it an attempt is recorded at once.
+// retried holds failed attempts by invocation and interaction. At most hook.MaxMapEntries
+// are held; past it an attempt is recorded at once.
 var retried = struct {
 	mu            sync.Mutex
 	m             map[attemptKey]*attempt
@@ -100,15 +103,28 @@ func retryNumber(req *http.Request) (n int, ok bool) {
 }
 
 func keyFor(ctx context.Context, s *Spec, req *http.Request, raw []byte) attemptKey {
-	k := attemptKey{spec: s, request: sha256.Sum256(append([]byte(req.Method+" "+req.URL.String()+"\n"), raw...))}
+	scope := s.RetryScope
+	if scope == nil {
+		scope = s
+	}
+	k := attemptKey{spec: scope, request: sha256.Sum256(append([]byte(req.Method+" "+req.URL.String()+"\n"), raw...))}
+	// Stainless clones the request while retaining its per-invocation body factory.
+	// reflect.Value retains that factory's identity without inspecting closure internals.
+	if !hook.Tracing.EmitSpans() {
+		k.spec = s
+	} else if req.GetBody != nil {
+		k.invocation = reflect.ValueOf(req.GetBody)
+	} else {
+		k.requestOwner = req
+	}
 	if i := rudderstackai.FromContext(ctx); i != nil && !i.Ended() {
 		k.interaction = i
 	}
 	return k
 }
 
-// resume takes the failed attempt a retry repeats, and settles every other attempt held for the
-// same interaction: a new call means the SDK is done with them.
+// resume takes only the failed attempt belonging to this retry
+// invocation. Other invocations remain held until their own completion or interaction end.
 func resume(k attemptKey, n int) *attempt {
 	retried.mu.Lock()
 	var prev *attempt
@@ -119,7 +135,7 @@ func resume(k attemptKey, n int) *attempt {
 		}
 	}
 	var stale []*attempt
-	if k.interaction != nil {
+	if !hook.Tracing.EmitSpans() && k.interaction != nil {
 		for key := range retried.byInteraction[k.interaction] {
 			stale = append(stale, retried.m[key])
 			releasedLocked(key)
@@ -137,6 +153,11 @@ func resume(k attemptKey, n int) *attempt {
 
 // claimed stops the watches of an attempt that is retried or replaced.
 func (a *attempt) claimed() {
+	a.stopWatches()
+	a.release()
+}
+
+func (a *attempt) stopWatches() {
 	a.mu.Lock()
 	if a.stop != nil {
 		a.stop()
@@ -145,7 +166,6 @@ func (a *attempt) claimed() {
 		a.grace.Stop()
 	}
 	a.mu.Unlock()
-	a.release()
 }
 
 // take removes a from the held attempts; false when a retry or another settle got it first.
@@ -162,6 +182,7 @@ func (a *attempt) take() bool {
 // settle records a held attempt as the failed call it turned out to be.
 func (a *attempt) settle() {
 	defer a.release()
+	a.stopWatches()
 	t := a.errorType
 	if err := a.call.HTTPRequest.Context().Err(); err != nil {
 		t = ErrorTypeOfTransport(err) // the SDK returned the context error instead of retrying
@@ -169,9 +190,8 @@ func (a *attempt) settle() {
 	a.spec.failed(a.call, t)
 }
 
-// hold keeps a until it is read, retried or settled: before an interaction ends, at the next call
-// in it, or, for a call outside one, when the context ends first (no retry follows; the SDK may
-// return without touching the body).
+// hold keeps a until it is read, retried, or settled at interaction/context end.
+// With spans enabled, the retry grace also bounds holds on contexts that never end.
 func (a *attempt) hold() {
 	retried.mu.Lock()
 	old := retried.m[a.key]
@@ -187,16 +207,20 @@ func (a *attempt) hold() {
 		old.claimed()
 		old.settle()
 	}
+	a.mu.Lock()
 	if a.call.Ephemeral {
-		a.mu.Lock()
 		// Tracked from now, not from the context watch: Flush right after the SDK returns must
 		// still wait for the attempt the watch is about to settle.
 		a.done = hook.Track()
 		a.stop = context.AfterFunc(a.call.HTTPRequest.Context(), a.contextDone)
-		a.mu.Unlock()
-		return
 	}
-	OnBeforeEnd(a.call.Interaction, a.settleIfTaken)
+	if a.call.Span != nil {
+		a.grace = time.AfterFunc(retryGrace, a.settleIfTaken)
+	}
+	a.mu.Unlock()
+	if !a.call.Ephemeral {
+		OnBeforeEnd(a.call.Interaction, a.settleIfTaken)
+	}
 }
 
 // contextDone settles an ephemeral attempt whose context ended. Once the SDK closed the response
@@ -205,10 +229,9 @@ func (a *attempt) hold() {
 func (a *attempt) contextDone() {
 	if a.closed.Load() {
 		a.mu.Lock()
-		a.grace = time.AfterFunc(retryGrace, func() {
-			defer a.release()
-			a.settleIfTaken()
-		})
+		if a.grace == nil {
+			a.grace = time.AfterFunc(retryGrace, a.settleIfTaken)
+		}
 		a.mu.Unlock()
 		return
 	}

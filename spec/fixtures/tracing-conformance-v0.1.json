@@ -3,6 +3,244 @@
   "schema_version": "0.1",
   "cases": [
     {
+      "name": "SDK wrapper span source uses tracing integration",
+      "options": {},
+      "compare": "exact",
+      "span": {
+        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "spanId": "00f067aa0ba902b7",
+        "name": "chat gpt-5",
+        "kind": "client",
+        "startTimeUnixNano": "1760000000000000000",
+        "endTimeUnixNano": "1760000002500250001",
+        "resource": {
+          "service.name": "chat-api",
+          "telemetry.sdk.language": "fixture"
+        },
+        "scope": {
+          "name": "fixture-instrumentation",
+          "version": "1.0.0"
+        },
+        "attributes": {
+          "gen_ai.operation.name": "chat",
+          "rudderstack.span_source": "wrapper",
+          "rudderstack.interaction_id": "7d1f0b6e-2c4a-4e8b-9f3d-5a6b7c8d9e0f"
+        }
+      },
+      "expected": {
+        "event": "ai_otel_span",
+        "anonymousId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "messageId": "4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
+        "timestamp": "2025-10-09T08:53:22.500Z",
+        "properties": {
+          "schema_version": "0.1",
+          "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+          "span_id": "00f067aa0ba902b7",
+          "parent_span_id": null,
+          "span_name": "chat gpt-5",
+          "span_kind": "client",
+          "start_time": "2025-10-09T08:53:20.000Z",
+          "end_time": "2025-10-09T08:53:22.500Z",
+          "duration_ms": 2500.25,
+          "status_code": "unset",
+          "interaction_id": "7d1f0b6e-2c4a-4e8b-9f3d-5a6b7c8d9e0f",
+          "gen_ai": {
+            "operation_name": "chat"
+          },
+          "truncated": false,
+          "otlp": {
+            "resourceSpans": [
+              {
+                "resource": {
+                  "attributes": [
+                    {
+                      "key": "service.name",
+                      "value": {
+                        "stringValue": "chat-api"
+                      }
+                    },
+                    {
+                      "key": "telemetry.sdk.language",
+                      "value": {
+                        "stringValue": "fixture"
+                      }
+                    }
+                  ]
+                },
+                "scopeSpans": [
+                  {
+                    "scope": {
+                      "name": "fixture-instrumentation",
+                      "version": "1.0.0"
+                    },
+                    "spans": [
+                      {
+                        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                        "spanId": "00f067aa0ba902b7",
+                        "name": "chat gpt-5",
+                        "kind": 3,
+                        "startTimeUnixNano": "1760000000000000000",
+                        "endTimeUnixNano": "1760000002500250001",
+                        "attributes": [
+                          {
+                            "key": "gen_ai.operation.name",
+                            "value": {
+                              "stringValue": "chat"
+                            }
+                          },
+                          {
+                            "key": "rudderstack.span_source",
+                            "value": {
+                              "stringValue": "wrapper"
+                            }
+                          },
+                          {
+                            "key": "rudderstack.interaction_id",
+                            "value": {
+                              "stringValue": "7d1f0b6e-2c4a-4e8b-9f3d-5a6b7c8d9e0f"
+                            }
+                          }
+                        ],
+                        "events": [],
+                        "links": [],
+                        "status": {
+                          "code": 0
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "SDK manual span source with nesting and error",
+      "options": {
+        "captureContent": true
+      },
+      "compare": "exact",
+      "span": {
+        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "spanId": "00f067aa0ba902b7",
+        "name": "lookup",
+        "kind": "internal",
+        "startTimeUnixNano": "1760000000000000000",
+        "endTimeUnixNano": "1760000002500250001",
+        "resource": {
+          "service.name": "chat-api",
+          "telemetry.sdk.language": "fixture"
+        },
+        "scope": {
+          "name": "fixture-instrumentation",
+          "version": "1.0.0"
+        },
+        "parentSpanId": "0000000000000001",
+        "attributes": {
+          "gen_ai.operation.name": "retrieval",
+          "rudderstack.span_source": "manual",
+          "rudderstack.interaction_id": "7d1f0b6e-2c4a-4e8b-9f3d-5a6b7c8d9e0f"
+        },
+        "status": {
+          "code": "error",
+          "message": "failed a@example.com"
+        }
+      },
+      "expected": {
+        "event": "ai_otel_span",
+        "anonymousId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "messageId": "4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
+        "timestamp": "2025-10-09T08:53:22.500Z",
+        "properties": {
+          "schema_version": "0.1",
+          "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+          "span_id": "00f067aa0ba902b7",
+          "parent_span_id": "0000000000000001",
+          "span_name": "lookup",
+          "span_kind": "internal",
+          "start_time": "2025-10-09T08:53:20.000Z",
+          "end_time": "2025-10-09T08:53:22.500Z",
+          "duration_ms": 2500.25,
+          "status_code": "error",
+          "status_message": "failed [email]",
+          "interaction_id": "7d1f0b6e-2c4a-4e8b-9f3d-5a6b7c8d9e0f",
+          "gen_ai": {
+            "operation_name": "retrieval"
+          },
+          "truncated": false,
+          "otlp": {
+            "resourceSpans": [
+              {
+                "resource": {
+                  "attributes": [
+                    {
+                      "key": "service.name",
+                      "value": {
+                        "stringValue": "chat-api"
+                      }
+                    },
+                    {
+                      "key": "telemetry.sdk.language",
+                      "value": {
+                        "stringValue": "fixture"
+                      }
+                    }
+                  ]
+                },
+                "scopeSpans": [
+                  {
+                    "scope": {
+                      "name": "fixture-instrumentation",
+                      "version": "1.0.0"
+                    },
+                    "spans": [
+                      {
+                        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                        "spanId": "00f067aa0ba902b7",
+                        "parentSpanId": "0000000000000001",
+                        "name": "lookup",
+                        "kind": 1,
+                        "startTimeUnixNano": "1760000000000000000",
+                        "endTimeUnixNano": "1760000002500250001",
+                        "attributes": [
+                          {
+                            "key": "gen_ai.operation.name",
+                            "value": {
+                              "stringValue": "retrieval"
+                            }
+                          },
+                          {
+                            "key": "rudderstack.span_source",
+                            "value": {
+                              "stringValue": "manual"
+                            }
+                          },
+                          {
+                            "key": "rudderstack.interaction_id",
+                            "value": {
+                              "stringValue": "7d1f0b6e-2c4a-4e8b-9f3d-5a6b7c8d9e0f"
+                            }
+                          }
+                        ],
+                        "events": [],
+                        "links": [],
+                        "status": {
+                          "code": 2,
+                          "message": "failed [email]"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
       "name": "genai chat span with every summary field and identity",
       "options": {},
       "compare": "exact",

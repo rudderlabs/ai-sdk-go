@@ -115,7 +115,7 @@ func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		provider = providerOf(req)
 	}
 	model := modelOf(req.URL.Path)
-	spec := &kit.Spec{Details: t.o.details,
+	spec := &kit.Spec{Details: t.o.details, RetryUnnumbered: true, RetryScope: t,
 		Provider:      provider,
 		Integration:   integration,
 		Analytics:     t.o.analytics,
@@ -276,7 +276,7 @@ func recordResponse(c *kit.Call, body map[string]any) {
 			tools = append(tools, rudderstackai.ToolCall{Name: codeExecution})
 		}
 	}
-	if kit.CapturesCallContent(c.Interaction) {
+	if c.CapturesContent() {
 		call.OutputToolCalls = kit.ToolCalls(tools)
 	}
 	if !c.RecordCall(call) {

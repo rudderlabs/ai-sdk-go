@@ -2,6 +2,7 @@ package rudderanthropic_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -20,7 +21,7 @@ var overloaded = testkit.Reply{Status: 529, Headers: map[string]string{"Retry-Af
 // Node.js and Python wrap messages.create: a retried call is one call, priced once
 // (Node examples/provider-retries).
 func TestRetryThenSuccessIsOneCall(t *testing.T) {
-	llm, rec := setup(t, rudderstackai.WithLLMCallEvents(true), rudderstackai.WithPrices(map[string]rudderstackai.ModelPrice{
+	llm, rec := setup(t, rudderstackai.WithEmitSpans(true), rudderstackai.WithLLMCallEvents(true), rudderstackai.WithPrices(map[string]rudderstackai.ModelPrice{
 		"claude-haiku-4-5": {TokenPrice: rudderstackai.TokenPrice{InputPerMtok: 1, OutputPerMtok: 5}},
 	}))
 	llm.Script("anthropic.messages", overloaded, jsonReply(t, map[string]any{
@@ -40,6 +41,9 @@ func TestRetryThenSuccessIsOneCall(t *testing.T) {
 		t.Fatalf("requests = %d, want 2", got)
 	}
 	events := rec.events(t)
+	if len(events["ai_otel_span"]) != 1 || events["ai_otel_span"][0]["span_id"] != events["ai_llm_response_received"][0]["span_id"] {
+		t.Fatal("SDK retries must share one joined span")
+	}
 	if got := len(events["ai_llm_response_received"]); got != 1 {
 		t.Fatalf("ai_llm_response_received: %d", got)
 	}
@@ -90,4 +94,22 @@ func TestRetryWaitCancelled(t *testing.T) {
 	}
 	eq(t, got[0], "response_status", "cancelled")
 	eq(t, got[0], "llm_call_count", 1)
+}
+
+func TestRawResponseEmitSpan(t *testing.T) {
+	llm, rec := setup(t, rudderstackai.WithEmitSpans(true), rudderstackai.WithLLMCallEvents(true))
+	llm.Script("anthropic.messages", jsonReply(t, map[string]any{"id": "msg_raw", "type": "message", "role": "assistant", "model": "claude-haiku-4-5", "content": []any{map[string]any{"type": "text", "text": "Hello"}}, "stop_reason": "end_turn", "usage": map[string]any{"input_tokens": 1, "output_tokens": 1}}))
+	client := anthropic.NewClient(option.WithBaseURL(llm.URL), option.WithAPIKey("sk-test"), option.WithMaxRetries(0), rudderanthropic.WithTracking())
+	var raw *http.Response
+	_, err := client.Messages.New(context.Background(), anthropic.MessageNewParams{}, body(t, request(nil)), option.WithResponseInto(&raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw == nil || raw.StatusCode != 200 {
+		t.Fatal("raw response missing")
+	}
+	events := rec.events(t)
+	if len(events["ai_otel_span"]) != 1 || len(events["ai_llm_response_received"]) != 1 || events["ai_otel_span"][0]["span_id"] != events["ai_llm_response_received"][0]["span_id"] {
+		t.Fatal("raw response must emit one joined span")
+	}
 }

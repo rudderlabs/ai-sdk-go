@@ -300,6 +300,37 @@ func TestConverseErrors(t *testing.T) {
 	}
 }
 
+func TestFailedConverseEmitsBeforeNextCallWithSpansOff(t *testing.T) {
+	rec := setup(t)
+	llm.ScriptBedrock("bedrock.converse", testkit.BedrockReply{Error: &testkit.BedrockError{Code: "InternalServerException", Status: 500, Message: "no"}})
+	llm.ScriptBedrock("bedrock.converse", testkit.BedrockReply{RequestID: "success", Response: raw(`{"output":{"message":{"role":"assistant","content":[{"text":"ok"}]}},"stopReason":"end_turn","usage":{"inputTokens":1,"outputTokens":1}}`)})
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "user_1"})
+	defer i.End(rudderstackai.EndOptions{})
+	c := client()
+	_, err := c.Converse(ctx, &bedrockruntime.ConverseInput{ModelId: aws.String(model), Messages: []types.Message{userText("first")}})
+	if err == nil {
+		t.Fatal("expected first Converse to fail")
+	}
+	_, err = c.Converse(ctx, &bedrockruntime.ConverseInput{ModelId: aws.String(model), Messages: []types.Message{userText("second")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Inspect the enqueue order while the interaction is still open: neither event may be held
+	// until End, and the failed call must stay ahead of the successful call.
+	var calls []analytics.Track
+	for _, event := range rec.events(t) {
+		if event.Event == "ai_llm_response_received" {
+			calls = append(calls, event)
+		}
+	}
+	if len(calls) != 2 {
+		t.Fatalf("calls before End=%d", len(calls))
+	}
+	if calls[0].Properties["error_type"] != "api_error" || calls[1].Properties["error_type"] != nil {
+		t.Fatalf("call order/status: first=%v second=%v", calls[0].Properties["error_type"], calls[1].Properties["error_type"])
+	}
+}
+
 func TestClassifyError(t *testing.T) {
 	for _, tc := range []struct {
 		err  error

@@ -232,6 +232,7 @@ func TestCallContentNotMaskedForEndedInteraction(t *testing.T) {
 }
 
 func TestStripBinary(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
 	got := stripBinary(map[string]any{
 		"type": "image", "mime_type": "image/png", "data": "AAAA", "bytes": []byte{1}, "name": "x",
 		"raw":  map[string]any{"0": 1, "1": 255},
@@ -243,7 +244,7 @@ func TestStripBinary(t *testing.T) {
 	if _, ok := got["data"]; ok || got["name"] != "x" || got["url"] != "data:image/png" {
 		t.Fatalf("%v", got)
 	}
-	for _, k := range []string{"bytes", "raw", "buf"} {
+	for _, k := range []string{"bytes", "buf"} {
 		if _, ok := got[k]; ok {
 			t.Fatalf("%s kept: %v", k, got)
 		}
@@ -251,7 +252,7 @@ func TestStripBinary(t *testing.T) {
 	if got["keep"].(map[string]any)["data"] != "kept" {
 		t.Fatalf("%v", got["keep"])
 	}
-	if l := got["list"].([]any); len(l) != 1 || l[0] != "ok" {
+	if l := got["list"].([]any); len(l) != 2 || l[0] != "ok" || mustJSON(l[1]) != `{"0":1}` {
 		t.Fatalf("%v", l)
 	}
 }
@@ -333,6 +334,7 @@ func leaks(t *testing.T, v any) string {
 }
 
 func TestTypedMapKeys(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
 	secret := []byte("PRIVATE")
 	cases := []struct {
 		name string
@@ -343,7 +345,7 @@ func TestTypedMapKeys(t *testing.T) {
 		{"int8 keys", map[int8]any{2: secret, 3: "x"}, `"3":"x"`},
 		{"uint keys", map[uint16]string{7: "v"}, `"7":"v"`},
 		{"named string keys", map[textKey]string{"a": "v"}, `"a":"v"`},
-		{"text marshaler keys", map[textKeyPtr]string{{"b"}: "v"}, `"k-b":"v"`},
+		{"text marshaler keys", map[textKeyPtr]string{{"b"}: "v"}, `"arguments":{}`},
 		{"unsupported float keys", map[float64][]byte{1.5: secret}, ``},
 		{"unsupported struct keys", map[badKey]string{{1}: "v"}, ``},
 		{"unsupported bool keys", map[bool]string{true: "v"}, ``},

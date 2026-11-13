@@ -21,6 +21,11 @@ func (h *harness) attemptPost(ctx context.Context, n int) (*http.Response, error
 	if err != nil {
 		return nil, err
 	}
+	if n == 0 || h.retryRequest == nil {
+		h.retryRequest = req
+	} else {
+		req.GetBody = h.retryRequest.GetBody
+	}
 	req.Header.Set(retryCountHeader, strconv.Itoa(n))
 	return h.client.Do(req)
 }

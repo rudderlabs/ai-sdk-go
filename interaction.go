@@ -108,6 +108,8 @@ type InteractionOptions struct {
 
 // LLMCall is one model call (or several aggregated ones) reported into an interaction.
 type LLMCall struct {
+	wrapperSpan *Span
+	httpStatus  int
 	// Credits overrides the configured credit pricing hook. Nil means unknown.
 	Credits *float64
 	// CallPurpose, FallbackUsed and BYOK are app-set call details.
@@ -357,6 +359,7 @@ type PausedInteraction struct {
 	ParentInteractionID string     `json:"parent_interaction_id,omitempty"`
 	Intent              string     `json:"intent,omitempty"`
 	TraceID             string     `json:"trace_id,omitempty"`
+	SDKTraceID          string     `json:"sdk_trace_id,omitempty"`
 	Outcome             string     `json:"outcome,omitempty"`
 	Integration         string     `json:"integration,omitempty"`
 	// SeenResponseIDs retains provider/response ID pairs already counted. Since v0.4.
@@ -399,6 +402,7 @@ func resumeFrom(o *InteractionOptions) bool {
 }
 
 type recordedCall struct {
+	spanID                                           string
 	startedAt, endedAt                               time.Time
 	fromSpan, twinMatched, usageUnknown              bool
 	callEventPending                                 bool
@@ -494,6 +498,7 @@ type Interaction struct {
 	adapterAnalytics       analytics.Client
 	intent, outcome        string
 	traceID                string
+	sdkTraceID             string
 	restored               bool // from a snapshot: the request context never supplies the trace ID
 	integration            string
 	ended                  bool
@@ -940,11 +945,18 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	// Masked before the lock, so an event never holds unmasked content and the redact hook runs
 	// outside it; sent and dropped with the call event.
 	var content *callContent
-	if c.emitLLMCalls && i.capturesCallContent() {
+
+	i.mu.Lock()
+	capture := i.captureContent && !i.untracked && (!i.ended || call.wrapperSpan != nil)
+	i.mu.Unlock()
+	if call.wrapperSpan != nil {
+		capture = call.wrapperSpan.capture
+	}
+	if capture && (c.emitLLMCalls || call.wrapperSpan != nil) {
 		content = captureCallContent(call.InputMessages, call.OutputText, call.OutputToolCalls)
 	}
 	i.mu.Lock()
-	defer i.unlock()
+	defer i.unlockSpan(func() { finishWrapperSpan(call.wrapperSpan, call, content) })
 	if i.ended {
 		debugf("call reported after interaction ended", "interaction_id", i.id)
 		return false
@@ -1098,6 +1110,12 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		serverToolCallCount: serverToolCalls, serverToolCostUSD: serverToolCost, costUSD: cost,
 		finishReason: call.FinishReason, errorType: call.ErrorType, responseID: call.ResponseID,
 		content: content,
+		spanID: func() string {
+			if call.wrapperSpan != nil {
+				return call.wrapperSpan.SpanID
+			}
+			return ""
+		}(),
 	}
 	// Select after the credit callback, which may itself record another report.
 	if twin := i.callTwinLocked(r); twin != nil {
@@ -1129,6 +1147,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	} else {
 		// Calls past the cap only keep totals: no content.
 		r.content = nil
+		r.spanID = ""
 		i.capLocked()
 		i.foldCallLocked(r)
 	}
@@ -1242,6 +1261,9 @@ func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
 }
 
 func mergeCallTwin(kept, later *recordedCall) {
+	if kept.spanID == "" {
+		kept.spanID = later.spanID
+	}
 	kept.twinMatched = true
 	// The adapter's view of the call wins; a span fills in what it lacks.
 	if later.fromSpan {
@@ -1685,7 +1707,9 @@ func (i *Interaction) flushLocked() {
 
 // unlock releases i.mu, then sends what flushLocked built: Enqueue blocks when the RudderStack
 // client's queue is full, and that must hold up only the caller, never the interaction.
-func (i *Interaction) unlock() {
+func (i *Interaction) unlock() { i.unlockSpan(nil) }
+
+func (i *Interaction) unlockSpan(sendSpan func()) {
 	out := i.outbox
 	i.outbox = nil
 	capped := i.capPending
@@ -1693,6 +1717,9 @@ func (i *Interaction) unlock() {
 	errors := i.buildErrors
 	i.buildErrors = nil
 	i.mu.Unlock()
+	if sendSpan != nil {
+		sendSpan()
+	}
 	for _, e := range out {
 		if e.pinned {
 			emitAIRates(e.client, e.event, i.userID, i.anonymousID, e.props, i.msgContext, e.integration, e.at, e.rates)
@@ -1790,6 +1817,7 @@ func (i *Interaction) callEventLocked(c *recordedCall) map[string]any {
 	if c.callIndex > 0 {
 		p["call_index"] = c.callIndex
 	}
+	put(p, "span_id", c.spanID)
 	if content := c.content; content != nil {
 		if content.inputMessages != nil {
 			p["input_messages"] = content.inputMessages
@@ -1984,7 +2012,7 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		UserID: i.userID, AnonymousID: i.anonymousID, Feature: i.feature, Surface: i.surface,
 		AccountID: i.accountID, OnBehalfOf: i.onBehalfOf, TriggerSource: i.triggerSource, TaskName: i.taskName,
 		AgentVersion: i.agentVersion, Variant: i.variant, Confidence: i.confidence,
-		TriggerEventID: i.triggerEventID, ParentInteractionID: i.parent, Intent: i.intent, TraceID: i.traceID,
+		TriggerEventID: i.triggerEventID, ParentInteractionID: i.parent, Intent: i.intent, TraceID: i.traceID, SDKTraceID: i.sdkTraceID,
 		Outcome: i.outcome, Integration: i.integration, LastFailedCallType: i.lastFailedCallType,
 	}
 	if i.callCount > 0 {
@@ -2065,6 +2093,7 @@ func pendingBool(p map[string]any, key string) bool   { b, _ := p[key].(bool); r
 
 func pendingCall(c *recordedCall) map[string]any {
 	p := map[string]any{}
+	put(p, "span_id", c.spanID)
 	// Preserve event deferral and twin identity across a JSON round trip.
 	p["call_event_pending"] = c.callEventPending
 	p["from_span"], p["twin_matched"], p["usage_unknown"] = c.fromSpan, c.twinMatched, c.usageUnknown
@@ -2193,10 +2222,14 @@ func pendingTool(c *recordedTool) map[string]any {
 
 func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	i.lastFailedCallType = snapshot.LastFailedCallType
+	if validSDKTrace(snapshot.SDKTraceID) {
+		i.sdkTraceID = snapshot.SDKTraceID
+	}
 	for _, p := range snapshot.PendingCalls {
 		c := &recordedCall{}
 		c.callEventPending = pendingBool(p, "call_event_pending")
 		c.callIndex = int(pendingNumber(p, "call_index"))
+		c.spanID = pendingText(p, "span_id")
 		c.fromSpan, c.twinMatched, c.usageUnknown = pendingBool(p, "from_span"), pendingBool(p, "twin_matched"), pendingBool(p, "usage_unknown")
 		c.creditsExplicit = pendingBool(p, "credits_explicit")
 		c.startedAt, _ = time.Parse(time.RFC3339Nano, pendingText(p, "started_at"))
@@ -3018,7 +3051,7 @@ func (i *Interaction) keepMessages(messages any) {
 func (i *Interaction) capturesCallContent() bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return !i.ended && !i.untracked && i.captureContent && cfg().emitLLMCalls
+	return !i.ended && !i.untracked && i.captureContent && (cfg().emitLLMCalls || cfg().emitSpans)
 }
 
 func (i *Interaction) keepsText() bool {

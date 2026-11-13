@@ -19,6 +19,7 @@ type config struct {
 	analytics           analytics.Client
 	captureContent      bool
 	emitLLMCalls        bool
+	emitSpans           bool
 	emitTaskStarted     bool
 	toolBreakdown       bool
 	identityFromCookies bool
@@ -292,6 +293,9 @@ func resetForTest() {
 	clients.order = nil
 	clients.mu.Unlock()
 	resetOpenForTest()
+	pendingWrapperSpans.mu.Lock()
+	clear(pendingWrapperSpans.spans)
+	pendingWrapperSpans.mu.Unlock()
 	shuttingDown.Store(false)
 	reported.mu.Lock()
 	reported.last = map[string]time.Time{}

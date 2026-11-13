@@ -301,6 +301,7 @@ An analytics-go client (v4.5.1, the minimum) sends its queue on `Flush`; a custo
 | `ai_user_action`                                        | `TrackAction`: feedback, copy, share, report, regenerate                     |
 | `ai_interaction_classified`                             | After a classified answer, with `intent` and `outcome`; or from `TrackClassification` |
 | `ai_interaction_scored`                                 | One per score: from your evaluator, or `TrackScore`                          |
+| `ai_otel_span` | One per wrapped provider invocation or manual span, with `WithEmitSpans(true)` |
 | `ai_llm_response_received`                              | One per model call, only with `WithLLMCallEvents(true)`                      |
 | Your declared tool events                               | One per call of a tool listed in `WithEventRules` (or MCP `Options.EventRules`) |
 | `mcp_client_seen`, `mcp_tool_called`, `mcp_elicitation_completed`, `mcp_resource_read`, `mcp_prompt_used` | MCP server requests ([mcp.md](docs/mcp.md#events)) |
@@ -324,6 +325,7 @@ Every event's properties stay within 30,000 serialized bytes (RudderStack reject
 | `WithRedactHook(fn)`             | none    | Your masking, run after the built-ins                                                         |
 | `WithIdentityFromCookies(on)`    | on      | Read identity from RudderStack JavaScript SDK cookies                                         |
 | `WithToolBreakdown(on)`          | off     | Add `tool_breakdown` to `ai_response_received`                                                |
+| `WithEmitSpans(on)` | off | Emit wrapper and manual `ai_otel_span` events; independent of call events. |
 | `WithLLMCallEvents(on)`          | off     | Also send `ai_llm_response_received` per model call                                           |
 | `WithEventRules(rules)`          | none    | Declared tool events                                                                          |
 | `WithClassifier(*opts)`          | none    | Intent classification; nil turns it off                                                       |
@@ -331,6 +333,8 @@ Every event's properties stay within 30,000 serialized bytes (RudderStack reject
 | `WithServerFeedback(on)`         | on      | Off: `TrackAction` sends nothing (the client app sends `ai_user_action`)                      |
 | `WithTraceIDFrom(fn)`            | none    | Where `trace_id` comes from, for example `rudderotel.TraceID`                                 |
 | `WithSampleRates(map)`           | none    | Send that share of each listed event, keyed on `interaction_id`; kept events carry `sample_rate` ([Sampling](docs/configuration.md#sampling)) |
+
+Go resolves one package instance for each import path in a build, including when dependencies use vendoring. Import aliases and repeated wrapping share invocation recognition, so they emit one span. Independently renamed forks use different package identities and internal context keys; cross-fork wrapper recognition is a platform limit. Lazy Go iterators retain the explicit context passed by the caller, and resolve active interaction ownership and capture policy when provider work starts.
 
 Integration options: `WithProvider` and `WithAnalytics` on every integration but Bedrock (`WithAnalytics` only), and `rudderopenai.WithStreamUsage(bool)` (streamed Chat Completions ask for usage, with a resend when a host rejects it; true always asks, false never). `EstimateCost(provider, model, input, output, cached, cacheWrite, opts ...CostOptions)` prices one call from the registered table, with `CostOptions{CacheWrite1hTokens, ServiceTier, ServerToolCalls}`. Per-interaction options, client precedence, cost rules, warehouse column types and the API reference: [docs/configuration.md](docs/configuration.md).
 
@@ -342,7 +346,8 @@ Integration options: `WithProvider` and `WithAnalytics` on every integration but
 err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID)) // go get github.com/rudderlabs/ai-sdk-go/rudderotel
 ```
 
-A value you set always wins. No span is created or exported ([trace_id](docs/configuration.md#trace_id)).
+A value you set always wins. Setting a product trace ID does not itself create or export a span
+([trace_id](docs/configuration.md#trace_id)); `WithEmitSpans(true)` separately enables SDK spans.
 
 ## OpenTelemetry span input
 
@@ -420,10 +425,10 @@ No API was removed.
 
 ## Known limitations
 
-- Integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients only. There are no OpenAI Agents SDK, Claude Agent SDK, LangChain, LangGraph or Vercel AI SDK integrations (they have no Go version), and no OpenTelemetry span processor or exporter.
+- Provider integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients. There are no OpenAI Agents SDK, Claude Agent SDK, LangChain, LangGraph or Vercel AI SDK integrations (they have no Go version). The optional `rudderotel` module provides an OpenTelemetry span processor and exporter.
 - Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `Interaction.Pause` or `EndOptions`.
 - Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint. A cancelled Chat Completions stream keeps 0 tokens (usage arrives only at the end).
-- Retries: genai retries, and openai-go / anthropic-sdk-go connection-error retries outside an interaction, are recorded per attempt ([Retries](docs/integrations.md#retries)).
+- Retries: with `WithEmitSpans(true)`, SDK retries share one invocation span within a bounded one-second retry grace; failed attempts settle when that grace expires. See [tracing](docs/tracing.md#go-platform-limits) and [Retries](docs/integrations.md#retries).
 - Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
 - MCP: only servers are tracked, on go-sdk and mcp-go. Neither library exposes the server name (nor the go-sdk the JSON-RPC request ID): they are read through reflection, tested against the versions above, falling back to `unknown`. Only streamable HTTP is detected as a transport. mcp-go has no hook for elicitations a handler answers through `InputRequests` on 2025-06-18. State is in memory per server name, per process ([details](docs/mcp.md#limits)).
 
@@ -459,3 +464,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [RELEASING.md](RELEASING.md). Report 
 ## License
 
 [MIT](LICENSE.md)
+
+Wrapper and manual spans are opt-in with `rudderstackai.WithEmitSpans(true)`, independently of
+`WithLLMCallEvents`. See [tracing](docs/tracing.md) for `StartSpan`, call `span_id` joins, privacy,
+and Go platform limits.

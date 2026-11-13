@@ -27,6 +27,8 @@ func init() {
 	hook.Tracing.Analytics = func() analytics.Client { return cfg().analytics }
 	hook.Tracing.CaptureContent = func() bool { return cfg().captureContent }
 	hook.Tracing.Redact = redactText
+	hook.Tracing.StripBinary = stripBinary
+	hook.Tracing.NormalizeValue = normalizeSpanValue
 	hook.Tracing.RememberClient = rememberClient
 	hook.Tracing.Wait = waitBackgroundUntil
 	hook.Tracing.FlushClient = func(ctx context.Context, client analytics.Client) bool {

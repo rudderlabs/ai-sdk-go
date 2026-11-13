@@ -23,6 +23,10 @@ Process-wide settings, per-interaction options, identity, pricing, classificatio
 
 ## Configure
 
+`WithEmitSpans(true)` enables wrapper and manual `ai_otel_span` events (default false). It is
+independent of `WithLLMCallEvents`; span content still follows `WithCaptureContent`.
+See [tracing](tracing.md) for nesting, transport and platform limits.
+
 ```go
 err := rudderstackai.Configure(
 	rudderstackai.WithAnalytics(client), // analytics.Client from github.com/rudderlabs/analytics-go/v4
@@ -40,6 +44,7 @@ err := rudderstackai.Configure(
 | --------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `WithAnalytics(client)`                 | none    | Default RudderStack client. Nil clears it.                                                                                    |
 | `WithCaptureContent(on)`                | off     | Send `prompt_text`, `response_text`, `action_details.feedback_text`, score `explanation` and, with call events, per-call `input_messages`, `output_text` and `output_tool_calls`, [masked](#privacy-and-masking). |
+| `WithEmitSpans(on)` | off | Emit wrapper and manual spans; independent of call events. |
 | `WithLLMCallEvents(on)`                 | off     | Also send one [`ai_llm_response_received`](events.md#ai_llm_response_received) per model call.                                |
 | `WithTaskStartedEvents(on)`             | off     | Also send [`ai_task_started`](events.md#ai_task_started) when a `RunTask` run starts (not when it resumes).                   |
 | `WithToolBreakdown(on)`                 | off     | Add [`tool_breakdown`](events.md#tool_breakdown) to `ai_response_received`.                                                   |

@@ -274,6 +274,9 @@ func Flush(ctx context.Context) (finished bool) {
 	}
 	safely(func() {
 		finished = waitBackgroundUntil(ctx) && hook.WaitTracked(ctx)
+		finished = finishPendingWrapperSpans(ctx) && finished
+		// A normal completion may have taken ownership during the pending drain.
+		finished = hook.WaitTracked(ctx) && finished
 		clients := rememberedClients()
 		if c := cfg().analytics; c != nil {
 			clients = append(clients, c)
@@ -308,11 +311,32 @@ var shuttingDown atomic.Bool
 // hooks.
 func Shutdown(ctx context.Context) bool {
 	shuttingDown.Store(true)
-	safely(func() {
-		for _, i := range takeOpen() {
-			i.End(EndOptions{Status: StatusIncomplete, endReason: endReasonShutdown})
+	endOpen := func() {
+		safely(func() {
+			for _, i := range takeOpen() {
+				i.End(EndOptions{Status: StatusIncomplete, endReason: endReasonShutdown})
+			}
+		})
+	}
+	if cfg().emitSpans {
+		if ctx == nil {
+			ctx = context.Background()
 		}
-	})
+		if _, ok := ctx.Deadline(); !ok {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, defaultFlushTimeout)
+			defer cancel()
+		}
+		done := make(chan struct{})
+		release := hook.Track()
+		go func() { defer release(); endOpen(); close(done) }()
+		select {
+		case <-done:
+		case <-ctx.Done():
+		}
+	} else {
+		endOpen()
+	}
 	return Flush(ctx)
 }
 

@@ -182,6 +182,7 @@ func configure(t *testing.T, c obj, rec *recorder) {
 		rudderstackai.WithAnalytics(rec),
 		rudderstackai.WithCaptureContent(boolOr(c["capture_content"], false)),
 		rudderstackai.WithLLMCallEvents(boolOr(c["emit_llm_calls"], false)),
+		rudderstackai.WithEmitSpans(boolOr(c["emit_spans"], false)),
 		rudderstackai.WithTaskStartedEvents(boolOr(c["emit_task_started"], false)),
 		rudderstackai.WithToolBreakdown(boolOr(c["tool_breakdown"], false)),
 		rudderstackai.WithIdentityFromCookies(boolOr(c["identity_from_cookies"], true)),
@@ -290,6 +291,10 @@ func evaluator(spec any) rudderstackai.EvaluateFunc {
 }
 
 func runScenario(t *testing.T, sc scenario) {
+	// This shared fixture pins the normalization introduced with emitSpans.
+	if sc.Name == "per_call_content_binary_never_sent" {
+		sc.Config["emit_spans"] = true
+	}
 	rec := &recorder{}
 	configure(t, sc.Config, rec)
 	llm.Reset()
@@ -719,7 +724,7 @@ func normalise(msgs []analytics.Track, exactCallTiming, perCallContent bool) []o
 	counters := map[string]int{}
 	symbol := func(v any, kind string) any {
 		s, ok := v.(string)
-		if !ok || !uuidV4.MatchString(s) {
+		if !ok || (!uuidV4.MatchString(s) && kind != "trace" && kind != "span") {
 			return v
 		}
 		// a one-shot interaction's conversation_id is its interaction_id
@@ -745,7 +750,7 @@ func normalise(msgs []analytics.Track, exactCallTiming, perCallContent bool) []o
 		if m.UserId != "" {
 			e["userId"] = m.UserId
 		}
-		if m.AnonymousId != "" {
+		if m.AnonymousId != "" && m.Event != "ai_otel_span" {
 			e["anonymousId"] = m.AnonymousId
 		}
 		props := jsonRoundTrip(map[string]any(m.Properties)).(obj)
@@ -757,6 +762,27 @@ func normalise(msgs []analytics.Track, exactCallTiming, perCallContent bool) []o
 		}
 		if value, has := props["conversation_id"]; has {
 			props["conversation_id"] = symbol(value, "conv")
+		}
+		if v, ok := props["span_id"]; ok {
+			props["span_id"] = symbol(v, "span")
+		}
+		if m.Event == "ai_otel_span" {
+			encoded := obj0(objs0(obj0(objs0(obj0(props["otlp"])["resourceSpans"])[0])["scopeSpans"])[0])
+			span := objs0(encoded["spans"])[0]
+			for _, kv := range objs0(span["attributes"]) {
+				if kv["key"] == "rudderstack.span_source" {
+					props["span_source"] = obj0(kv["value"])["stringValue"]
+				}
+			}
+			props["trace_id"] = symbol(props["trace_id"], "trace")
+			delete(props, "schema_version")
+			delete(props, "start_time")
+			delete(props, "end_time")
+			delete(props, "truncated")
+			delete(props, "otlp")
+			if v, ok := props["duration_ms"]; ok {
+				props["duration_ms"] = measured(v)
+			}
 		}
 		if !perCallContent && m.Event == "ai_llm_response_received" {
 			delete(props, "call_index")
@@ -789,7 +815,9 @@ func normalise(msgs []analytics.Track, exactCallTiming, perCallContent bool) []o
 			delete(wl, "name")
 			delete(wl, "version")
 		}
-		e["context"] = ctx
+		if m.Event != "ai_otel_span" {
+			e["context"] = ctx
+		}
 		out = append(out, e)
 	}
 	return out

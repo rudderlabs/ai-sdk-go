@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
@@ -27,13 +28,20 @@ func bedrockClient(url string, step obj) *bedrockruntime.Client {
 	if step["wrap_twice"] == true {
 		opts = append(opts, rudderbedrock.WithTracking())
 	}
+	var retryer aws.Retryer = aws.NopRetryer{}
+	if step["retry_attempts"] != nil {
+		retryer = retry.NewStandard(func(o *retry.StandardOptions) {
+			o.MaxAttempts = 2
+			o.Backoff = retry.BackoffDelayerFunc(func(int, error) (time.Duration, error) { return time.Millisecond, nil })
+		})
+	}
 	return bedrockruntime.New(bedrockruntime.Options{
 		Region:       "us-east-1",
 		BaseEndpoint: aws.String(url),
 		Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
 			return aws.Credentials{AccessKeyID: "test", SecretAccessKey: "test"}, nil
 		}),
-		Retryer:    aws.NopRetryer{},
+		Retryer:    retryer,
 		HTTPClient: testkit.HTTPClient(),
 	}, opts...)
 }

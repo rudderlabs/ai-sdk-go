@@ -1,0 +1,67 @@
+{
+  "fixture_version": 1,
+  "description": "Fresh Claude turn with one small CLI title call folded into the main model row. Shared by Node and Python.",
+  "messages": [
+    {
+      "type": "assistant",
+      "session_id": "sdk-6031-title",
+      "uuid": "00000000-0000-0000-0000-000000000001",
+      "parent_tool_use_id": null,
+      "message": {
+        "id": "turn-1",
+        "model": "claude-sonnet-4-5",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Hello"
+          }
+        ],
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 100,
+          "cache_read_input_tokens": 0,
+          "cache_creation_input_tokens": 0
+        }
+      }
+    },
+    {
+      "type": "result",
+      "subtype": "success",
+      "session_id": "sdk-6031-title",
+      "uuid": "00000000-0000-0000-0000-000000000002",
+      "is_error": false,
+      "num_turns": 1,
+      "duration_ms": 100,
+      "duration_api_ms": 90,
+      "total_cost_usd": 0.0048,
+      "stop_reason": "end_turn",
+      "result": "Hello",
+      "permission_denials": [],
+      "usage": {
+        "input_tokens": 1000,
+        "output_tokens": 100,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0
+      },
+      "modelUsage": {
+        "claude-sonnet-4-5": {
+          "inputTokens": 1050,
+          "outputTokens": 110,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 0,
+          "costUSD": 0.0048,
+          "provider": "firstParty",
+          "webSearchRequests": 0,
+          "contextWindow": 200000,
+          "maxOutputTokens": 32000
+        }
+      }
+    }
+  ],
+  "restored_usage_threshold": {
+    "comparison": ">",
+    "first_call_input_cache_multiplier": 1,
+    "description": "Main-model modelUsage input+cache minus all same-model turn calls must exceed the first main call input+cache; prior history carries another prompt/context, while one small title call fits this allowance."
+  }
+}

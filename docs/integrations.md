@@ -192,9 +192,13 @@ Tool calls streamed before a failure still count. A provider that reports usage 
 
 openai-go and anthropic-sdk-go retry inside the client, below the tracking middleware. As in Node.js and Python, one SDK method call is one model call, priced once: an attempt the client retries is not recorded, and the final attempt's outcome is. When retries run out, the answer has one failed call. When the context ends while the client waits to retry, the call is recorded as `cancelled` or `timeout`.
 
-A failed attempt counts as retried when the client sends it again or closes its response unread, which is how both clients behave. Two cases still record each attempt: a connection error (no response) outside an interaction, and a retried failed response that a middleware added before `WithTracking` (outside it) reads.
+With `WithEmitSpans(true)`, Google GenAI retries and connection-error retries also retain one
+invocation span. Failed attempts settle after a bounded one-second retry grace even if their
+context never ends; a retry arriving later can start another span.
 
-genai retries below the tracking transport and has no attempt number, so each attempt it retries is recorded as its own failed call. The AWS SDK retries below the Bedrock tracker, so a Bedrock operation is recorded once, with the final outcome. `ClassifierClient` calls turn retries off.
+A failed attempt counts as retried when the client sends it again or closes its response unread, which is how both clients behave. With spans disabled, a connection error (no response) outside an interaction is recorded per attempt. A retried failed response that a middleware added before `WithTracking` (outside it) reads is also recorded per attempt.
+
+genai retries below the tracking transport and has no attempt number. The transport groups retries using per-invocation request identity; successful retries record one final call. With spans disabled, a connection error outside an interaction is recorded per attempt. The AWS SDK retries below the Bedrock tracker, so a Bedrock operation is recorded once, with the final outcome. `ClassifierClient` calls turn retries off.
 
 ## Classifier clients
 

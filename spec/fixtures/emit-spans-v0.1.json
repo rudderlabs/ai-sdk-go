@@ -1,0 +1,791 @@
+{
+  "fixture_version": 1,
+  "span_schema_version": "0.1",
+  "event_spec_version": "0.4.0",
+  "description": "Language-neutral wrapper/manual span scenarios. Deterministic clock and W3C IDs are inputs; expected spans are in emission order, expected_call_span_ids joins retained product calls (null means omitted). Portable container descriptors are runtime values, never wire content. See FIXTURE-FORMAT.md.",
+  "scenarios": [
+    {
+      "name": "flags-spans-false-calls-false",
+      "config": {
+        "emit_spans": false,
+        "emit_llm_calls": false,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "openai",
+          "model": "m",
+          "advance_ms": 25
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": []
+      },
+      "expected_spans": [],
+      "expected_call_span_ids": []
+    },
+    {
+      "name": "flags-spans-false-calls-true",
+      "config": {
+        "emit_spans": false,
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "openai",
+          "model": "m",
+          "advance_ms": 25
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": []
+      },
+      "expected_spans": [],
+      "expected_call_span_ids": [
+        null
+      ]
+    },
+    {
+      "name": "flags-spans-true-calls-false",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": false,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "openai",
+          "model": "m",
+          "advance_ms": 25
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "chat m",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 25,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "rudderstack.span_source": "wrapper",
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "m",
+            "gen_ai.response.model": "m"
+          }
+        }
+      ],
+      "expected_call_span_ids": []
+    },
+    {
+      "name": "flags-spans-true-calls-true",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "openai",
+          "model": "m",
+          "advance_ms": 25
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "chat m",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 25,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "rudderstack.span_source": "wrapper",
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "m",
+            "gen_ai.response.model": "m"
+          }
+        }
+      ],
+      "expected_call_span_ids": [
+        "0000000000000001"
+      ]
+    },
+    {
+      "name": "anthropic-wrapper",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "anthropic",
+          "model": "m",
+          "advance_ms": 25
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "chat m",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 25,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "rudderstack.span_source": "wrapper",
+            "gen_ai.provider.name": "anthropic",
+            "gen_ai.request.model": "m",
+            "gen_ai.response.model": "m"
+          }
+        }
+      ],
+      "expected_call_span_ids": [
+        "0000000000000001"
+      ]
+    },
+    {
+      "name": "aws.bedrock-wrapper",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "aws.bedrock",
+          "model": "m",
+          "advance_ms": 25
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "chat m",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 25,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "rudderstack.span_source": "wrapper",
+            "gen_ai.provider.name": "aws.bedrock",
+            "gen_ai.request.model": "m",
+            "gen_ai.response.model": "m"
+          }
+        }
+      ],
+      "expected_call_span_ids": [
+        "0000000000000001"
+      ]
+    },
+    {
+      "name": "gcp.gemini-wrapper",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "gcp.gemini",
+          "model": "m",
+          "advance_ms": 25
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "chat m",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 25,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "rudderstack.span_source": "wrapper",
+            "gen_ai.provider.name": "gcp.gemini",
+            "gen_ai.request.model": "m",
+            "gen_ai.response.model": "m"
+          }
+        }
+      ],
+      "expected_call_span_ids": [
+        "0000000000000001"
+      ]
+    },
+    {
+      "name": "manual-operations",
+      "config": {
+        "emit_spans": true
+      },
+      "steps": [
+        {
+          "kind": "span",
+          "name": "execute_tool",
+          "operation": "execute_tool",
+          "advance_ms": 10
+        },
+        {
+          "kind": "span",
+          "name": "retrieval",
+          "operation": "retrieval",
+          "advance_ms": 10
+        },
+        {
+          "kind": "span",
+          "name": "invoke_agent",
+          "operation": "invoke_agent",
+          "advance_ms": 10
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001",
+          "0000000000000002",
+          "0000000000000003"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "execute_tool",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 10,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "rudderstack.span_source": "manual"
+          }
+        },
+        {
+          "span_name": "retrieval",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000002",
+          "parent_span_id": null,
+          "duration_ms": 10,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "retrieval",
+            "rudderstack.span_source": "manual"
+          }
+        },
+        {
+          "span_name": "invoke_agent",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000003",
+          "parent_span_id": null,
+          "duration_ms": 10,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "rudderstack.span_source": "manual"
+          }
+        }
+      ],
+      "expected_call_span_ids": []
+    },
+    {
+      "name": "nested-manual-and-chat",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "kind": "span",
+          "name": "invoke_agent",
+          "operation": "invoke_agent",
+          "advance_ms": 10,
+          "steps": [
+            {
+              "kind": "span",
+              "name": "retrieval",
+              "operation": "retrieval",
+              "advance_ms": 10
+            },
+            {
+              "kind": "chat",
+              "provider": "openai",
+              "model": "m",
+              "advance_ms": 25
+            }
+          ]
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001",
+          "0000000000000002",
+          "0000000000000003"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "retrieval",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000002",
+          "parent_span_id": "0000000000000001",
+          "duration_ms": 10,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "retrieval",
+            "rudderstack.span_source": "manual"
+          }
+        },
+        {
+          "span_name": "chat m",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000003",
+          "parent_span_id": "0000000000000001",
+          "duration_ms": 25,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "rudderstack.span_source": "wrapper",
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "m",
+            "gen_ai.response.model": "m"
+          }
+        },
+        {
+          "span_name": "invoke_agent",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 45,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "invoke_agent",
+            "rudderstack.span_source": "manual"
+          }
+        }
+      ],
+      "expected_call_span_ids": [
+        "0000000000000003"
+      ]
+    },
+    {
+      "name": "wrapper-error",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "openai",
+          "model": "m",
+          "advance_ms": 25,
+          "error": "APIError"
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "chat m",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 25,
+          "status_code": "error",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "rudderstack.span_source": "wrapper",
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "m",
+            "gen_ai.response.model": "m"
+          }
+        }
+      ],
+      "expected_call_span_ids": [
+        "0000000000000001"
+      ]
+    },
+    {
+      "name": "manual-error",
+      "config": {
+        "emit_spans": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "kind": "span",
+          "name": "execute_tool",
+          "operation": "execute_tool",
+          "advance_ms": 10,
+          "error": "failed a@example.com"
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "execute_tool",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 10,
+          "status_code": "error",
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "rudderstack.span_source": "manual"
+          },
+          "status_message": "failed [email]"
+        }
+      ],
+      "expected_call_span_ids": []
+    },
+    {
+      "name": "google-afc",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "gcp.gemini",
+          "model": "m",
+          "advance_ms": 25,
+          "afc_turns": 2
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "chat m",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 25,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "rudderstack.span_source": "wrapper",
+            "gen_ai.provider.name": "gcp.gemini",
+            "gen_ai.request.model": "m",
+            "gen_ai.response.model": "m"
+          }
+        }
+      ],
+      "expected_call_span_ids": [
+        "0000000000000001"
+      ]
+    },
+    {
+      "name": "sdk-retries",
+      "config": {
+        "emit_spans": true,
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "kind": "chat",
+          "provider": "openai",
+          "model": "m",
+          "advance_ms": 25,
+          "attempt_durations_ms": [
+            30,
+            40,
+            25
+          ]
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "chat m",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 95,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "chat",
+            "rudderstack.span_source": "wrapper",
+            "gen_ai.provider.name": "openai",
+            "gen_ai.request.model": "m",
+            "gen_ai.response.model": "m"
+          }
+        }
+      ],
+      "expected_call_span_ids": [
+        "0000000000000001"
+      ]
+    },
+    {
+      "name": "portable-containers",
+      "config": {
+        "emit_spans": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "kind": "span",
+          "name": "retrieval",
+          "operation": "retrieval",
+          "advance_ms": 10,
+          "attributes": {
+            "input.value": {
+              "$container": "map",
+              "entries": [
+                [
+                  1,
+                  "a@example.com"
+                ],
+                [
+                  {
+                    "$container": "bigint",
+                    "value": "2"
+                  },
+                  "two"
+                ],
+                [
+                  true,
+                  {
+                    "$container": "set",
+                    "values": [
+                      "keep",
+                      {
+                        "$container": "bytes",
+                        "values": [
+                          1,
+                          2
+                        ]
+                      }
+                    ]
+                  }
+                ],
+                [
+                  {
+                    "key": "object"
+                  },
+                  "drop"
+                ],
+                [
+                  {
+                    "$container": "symbol"
+                  },
+                  "drop"
+                ],
+                [
+                  "cycle",
+                  {
+                    "$container": "cycle",
+                    "value": {
+                      "text": "keep"
+                    },
+                    "self_key": "self"
+                  }
+                ],
+                [
+                  "class",
+                  {
+                    "$container": "class",
+                    "fields": {
+                      "text": "a@example.com",
+                      "bytes": {
+                        "$container": "bytes",
+                        "values": [
+                          3
+                        ]
+                      }
+                    }
+                  }
+                ],
+                [
+                  "numeric",
+                  {
+                    "$container": "map",
+                    "entries": [
+                      [
+                        1,
+                        7
+                      ],
+                      [
+                        2,
+                        8
+                      ]
+                    ]
+                  }
+                ]
+              ]
+            }
+          }
+        }
+      ],
+      "clock": {
+        "start_ms": 1760000000000
+      },
+      "ids": {
+        "trace_ids": [
+          "1234567890abcdef1234567890abcdef"
+        ],
+        "span_ids": [
+          "0000000000000001"
+        ]
+      },
+      "expected_spans": [
+        {
+          "span_name": "retrieval",
+          "trace_id": "1234567890abcdef1234567890abcdef",
+          "span_id": "0000000000000001",
+          "parent_span_id": null,
+          "duration_ms": 10,
+          "status_code": "ok",
+          "attributes": {
+            "gen_ai.operation.name": "retrieval",
+            "rudderstack.span_source": "manual",
+            "input.value": {
+              "1": "[email]",
+              "2": "two",
+              "true": [
+                "keep"
+              ],
+              "cycle": {
+                "text": "keep"
+              },
+              "class": {
+                "text": "[email]"
+              },
+              "numeric": {
+                "1": 7,
+                "2": 8
+              }
+            }
+          }
+        }
+      ],
+      "expected_call_span_ids": []
+    }
+  ]
+}

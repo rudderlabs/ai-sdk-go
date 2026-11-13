@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 // maxCapturedRunes is the masking cap on one string (32,000 code points); output_text is cut to it.
@@ -32,6 +33,7 @@ type streamTool struct {
 // Observer is the common bookkeeping of one streamed call: usage, tools and text seen so far,
 // recorded once when the stream ends. Integrations fill its fields as events arrive.
 type Observer struct {
+	call           *Call
 	Details        rudderstackai.CallDetails
 	FirstTokenAt   time.Time
 	Interaction    *rudderstackai.Interaction
@@ -79,23 +81,26 @@ type Observer struct {
 	finished bool
 }
 
-// NewObserver starts the bookkeeping of a streamed call. If the interaction ends while the
-// stream is still open, the call is recorded then (cancelled unless it completed).
+// NewObserver starts the bookkeeping of a streamed call. With spans enabled, the
+// captured invocation settles with the stream, even if its interaction ends first.
 func NewObserver(c *Call) *Observer {
 	o := &Observer{
+		call:    c,
 		Details: c.Details, StartedAt: c.StartedAt,
 		Interaction: c.Interaction, Ephemeral: c.Ephemeral, Provider: c.Provider, Integration: c.Integration,
 		Model: c.Model, RequestedModel: c.Model, toolKeys: map[string]*streamTool{},
-		keepText: KeepsText(c.Interaction), capture: CapturesCallContent(c.Interaction),
+		keepText: KeepsText(c.Interaction), capture: c.CapturesContent(),
 		InputMessages: c.InputMessages,
 	}
-	OnBeforeEnd(c.Interaction, func() {
-		if o.Done {
-			o.Finish(Completed, "")
-			return
-		}
-		o.Finish(Cancelled, "")
-	})
+	if c.Span == nil {
+		OnBeforeEnd(c.Interaction, func() {
+			if o.Done {
+				o.Finish(Completed, "")
+				return
+			}
+			o.Finish(Cancelled, "")
+		})
+	}
 	return o
 }
 
@@ -285,5 +290,9 @@ func (o *Observer) RecordCall(call rudderstackai.LLMCall) bool {
 	call.CallPurpose = o.Details.CallPurpose
 	call.FallbackUsed, call.BYOK = o.Details.FallbackUsed, o.Details.BYOK
 	call.InputMessages = o.InputMessages
+	if o.call != nil {
+		call.EndedAt = time.Now()
+		return hook.Tracing.RecordWrapper(o.Interaction, call, o.call.Span, o.call.HTTPStatus)
+	}
 	return o.Interaction.RecordCall(call)
 }

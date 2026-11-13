@@ -73,7 +73,8 @@ func runProductEventsConformance(t *testing.T, path string) {
 			for model, p := range c.Config.Prices {
 				prices[model] = rudderstackai.ModelPrice{Provider: p.Provider, TokenPrice: rudderstackai.TokenPrice{InputPerMtok: p.InputPerMtok, OutputPerMtok: p.OutputPerMtok, CachedInputPerMtok: p.CachedInputPerMtok, CacheWritePerMtok: p.CacheWritePerMtok}}
 			}
-			config := []rudderstackai.ConfigOption{rudderstackai.WithPrices(prices), rudderstackai.WithCaptureContent(c.Config.CaptureContent), rudderstackai.WithLLMCallEvents(c.Config.EmitLLMCalls), rudderstackai.WithToolBreakdown(c.Config.ToolBreakdown)}
+			// These fixtures include the shared normalization introduced with emitSpans.
+			config := []rudderstackai.ConfigOption{rudderstackai.WithEmitSpans(true), rudderstackai.WithPrices(prices), rudderstackai.WithCaptureContent(c.Config.CaptureContent), rudderstackai.WithLLMCallEvents(c.Config.EmitLLMCalls), rudderstackai.WithToolBreakdown(c.Config.ToolBreakdown)}
 			if c.Config.Analytics != "processor_only" {
 				config = append(config, rudderstackai.WithAnalytics(r))
 			}

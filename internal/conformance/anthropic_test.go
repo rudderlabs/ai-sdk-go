@@ -25,7 +25,7 @@ func anthropicCall(ctx context.Context, r *run, s obj, helper bool) error {
 		tracking = append(tracking, rudderanthropic.WithProvider(p))
 	}
 	opts := []option.RequestOption{
-		option.WithBaseURL(llm.URL), option.WithAPIKey("sk-ant-test"), option.WithMaxRetries(0),
+		option.WithBaseURL(llm.URL), option.WithAPIKey("sk-ant-test"), option.WithMaxRetries(int(num(s["retry_attempts"]))),
 		rudderanthropic.WithTracking(tracking...),
 	}
 	if s["wrap_twice"] == true {

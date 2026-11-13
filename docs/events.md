@@ -2,7 +2,7 @@
 
 Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md), including opt-in `mcp_feedback_submitted` through `FeedbackRequests`. `mcp_capability_requested` / `request_capability` are deprecated; use `FeedbackRequests`. The JSON Schema is [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json), shared with the Node.js and Python SDKs; a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
 
-Every event's `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget first shrinks a call's `input_messages` (oldest after the system prompt, then the longest strings), then loses its captured text (`output_text`, `output_tool_calls`, `response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process.
+Product events' `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget first shrinks a call's `input_messages` (oldest after the system prompt, then the longest strings), then loses its captured text (`output_text`, `output_tool_calls`, `response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process. Tracing `ai_otel_span` events use a separate 32,000-byte whole-message budget and the [tracing](tracing.md) truncation policy.
 
 - [Common fields](#common-fields)
 - [ai_user_prompt_created](#ai_user_prompt_created)
@@ -274,6 +274,11 @@ What each integration observes:
 
 ## ai_llm_response_received
 
+With `WithEmitSpans(true)`, a retained wrapper call carries `span_id`, matching its
+`ai_otel_span`. Pending events keep the ID across pause and JSON restoration without replaying
+spans. Two invocations with the same response ID each emit a span; the deduplicated call event
+keeps the first invocation's ID. Overflow aggregates omit `span_id`.
+
 Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is recorded. Totals belong on `ai_response_received`; do not add these to it.
 
 ```json
@@ -300,7 +305,7 @@ Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is record
 
 Also, when known: `agent_name`, `requested_model`, `reasoning_tokens`, `cache_write_1h_tokens`, `server_tool_call_count`, `server_tool_cost_usd`, `error_type`. `provider` and `model` are `null` when unknown. `finish_reason` is as the integration reports it (Anthropic's `end_turn` and `max_tokens` are kept as sent; the others are normalised, see [integrations.md](integrations.md)).
 
-- `call_index` (SDK-6798): the 1-based order of the call in its interaction, across pauses and resumes. A report with `CallCount` n takes n places, so the next call starts n later; a call folded past `Limits.MaxCallsPerInteraction` keeps its own number. Always sent (it is not content). `span_id` is not sent yet.
+- `call_index` (SDK-6798): the 1-based order of the call in its interaction, across pauses and resumes. A report with `CallCount` n takes n places, so the next call starts n later; a call folded past `Limits.MaxCallsPerInteraction` keeps its own number. Always sent (it is not content). With `WithEmitSpans(true)`, retained wrapper call events also send `span_id`, matching that invocation's `ai_otel_span`.
 - With both `WithLLMCallEvents(true)` and content capture (opt-in, personal data): `input_messages` (everything sent on the call: system prompt, history, tool results, in the OpenTelemetry GenAI `[{ role, parts }]` shape), `input_truncated`, `output_text` and `output_tool_calls` (`[{ name, arguments? }]`, JSON-string arguments parsed). Sent by every provider module and by `rudderotel` product-event spans; with `RecordCall` set `LLMCall.InputMessages`, `OutputText` and `OutputToolCalls`. A failed or cut-off call still sends its input and the output that arrived; the schema has no flag for a cut-off output.
 - Messages use roles `system`, `user`, `assistant` and `tool`; parts are `text`, `reasoning`, `tool_call` (`id`, `name`, `arguments`), `tool_call_response` (`id`, `response`), `uri` (`modality`, `uri`) and `file` (`modality`, `mime_type`?, `file_id`) and `blob` (`modality`, `mime_type`, never the bytes; `data:` URIs become blobs). Tool definitions are not sent.
 - Masking is the same as `prompt_text` (built-ins, then your redact hook) on every string in messages and tool arguments. A string over 32,000 code points is shortened first (`input_truncated` true); if the hook fails or drops a string, the whole field (`input_messages` with `input_truncated`, `output_text` or `output_tool_calls`) is left out.

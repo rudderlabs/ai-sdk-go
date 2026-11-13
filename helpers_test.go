@@ -14,6 +14,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	analytics "github.com/rudderlabs/analytics-go/v4"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 const schemaURL = "https://rudderstack.com/schemas/ai-events/0.4.0"
@@ -61,6 +63,9 @@ func loadSchemas() {
 // events use declared_tool_event when they carry an interaction's conversation_id, else
 // mcp_declared_tool_event.
 func validateEvent(event string, props map[string]any) error {
+	if event == "ai_otel_span" {
+		return testkit.ValidateEvent(event, props)
+	}
 	schemaOnce.Do(loadSchemas)
 	if schemaErr != nil {
 		return schemaErr

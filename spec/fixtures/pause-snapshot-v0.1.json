@@ -27,5 +27,15 @@
       "z",
       ""
     ]
-  ]
+  ],
+  "sdk_span_snapshot": {
+    "sdk_trace_id": "1234567890abcdef1234567890abcdef",
+    "pending_calls": [
+      {
+        "span_id": "0000000000000001",
+        "call_event_pending": true
+      }
+    ],
+    "expected_replayed_spans": 0
+  }
 }

@@ -71,13 +71,14 @@ func (s *chatStream) seen() []string {
 
 // harness is a chat-completions style Spec in front of an httptest server.
 type harness struct {
-	spec     *Spec
-	srv      *httptest.Server
-	client   *http.Client
-	rec      *recorder
-	stream   atomic.Pointer[chatStream]
-	accepted atomic.Int32
-	bodies   chan map[string]any
+	retryRequest *http.Request
+	spec         *Spec
+	srv          *httptest.Server
+	client       *http.Client
+	rec          *recorder
+	stream       atomic.Pointer[chatStream]
+	accepted     atomic.Int32
+	bodies       chan map[string]any
 }
 
 func newHarness(t *testing.T, handler http.HandlerFunc) *harness {

@@ -425,9 +425,11 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	if i == nil {
 		return call(ctx)
 	}
-	c := &kit.Call{Details: rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, t.cfg.details)), Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
+	ctx, span := hook.Tracing.BeginWrapper(ctx, i, started)
+	c := &kit.Call{Span: span, Details: rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, t.cfg.details)), Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
+	hook.Tracing.WrapperMetadata(c.Span, c.Provider, c.Model)
 	safe(func() {
-		if kit.CapturesCallContent(i) {
+		if c.CapturesContent() {
 			c.InputMessages = inputMessages(system, messages)
 		}
 		recordToolResults(i, messages)
@@ -438,6 +440,14 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 		sc = &streamCall{call: c, ctx: ctx}
 		ctx = context.WithValue(ctx, streamKey{}, sc)
 	}
+	defer func() {
+		if value := recover(); value != nil {
+			if c.Span != nil {
+				safe(func() { c.EndedAt = time.Now(); failed(c, sc, kit.PanicErrorType(value)) })
+			}
+			panic(value)
+		}
+	}()
 	out, md, err := call(ctx)
 	if err != nil {
 		safe(func() {
@@ -449,7 +459,23 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	}
 	if o, ok := out.Result.(*bedrockruntime.ConverseOutput); ok {
 		id, _ := awsmiddleware.GetRequestIDMetadata(md)
-		safe(func() { recordResponse(c, o, id) })
+		safe(func() {
+			defer func() {
+				if r := recover(); r != nil {
+					hook.Recovered(r, "rudderbedrock.extract")
+					hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, 0, time.Now(), errors.New("response extraction failed"))
+				}
+			}()
+			recordResponse(c, o, id)
+		})
+	}
+	if stream && c.Span != nil {
+		o, ok := out.Result.(*bedrockruntime.ConverseStreamOutput)
+		if !ok || o == nil || o.GetStream() == nil {
+			safe(func() {
+				hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, 0, time.Now(), errors.New("response has no stream"))
+			})
+		}
 	}
 	return out, md, err
 }
@@ -459,7 +485,7 @@ func failed(c *kit.Call, sc *streamCall, errorType string) {
 	if sc != nil && sc.end(kit.Errored, errorType) {
 		return
 	}
-	c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
+	c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, UsageUnknown: c.Span != nil})
 	if c.Ephemeral {
 		kit.EndEphemeral(c.Interaction, errorType)
 	}
@@ -486,7 +512,7 @@ func recordResponse(c *kit.Call, out *bedrockruntime.ConverseOutput, responseID 
 		}
 		call.OutputText = text.String()
 	}
-	if kit.CapturesCallContent(c.Interaction) {
+	if c.CapturesContent() {
 		call.OutputToolCalls = kit.ToolCalls(tools)
 	}
 	if c.RecordCall(call) && len(tools) > 0 {
@@ -503,9 +529,10 @@ type streamCall struct {
 	call *kit.Call
 	ctx  context.Context
 
-	mu    sync.Mutex
-	obs   *kit.Observer
-	ended bool
+	mu               sync.Mutex
+	obs              *kit.Observer
+	ended            bool
+	stopCancellation func() bool
 	// pending are decoded events the app may not have received yet: the SDK decodes up to
 	// readAhead events ahead (two unbuffered channels), so an event counts once two more decoded.
 	pending []smithy.Deserializable
@@ -515,6 +542,14 @@ const readAhead = 2
 
 // start begins observing a streamed response, before the SDK reads its first event.
 func (s *streamCall) start(resp *smithyhttp.Response) {
+	defer func() {
+		if r := recover(); r != nil {
+			hook.Recovered(r, "rudderbedrock.stream.setup")
+			safe(func() {
+				hook.Tracing.FinishRaw(s.call.Span, s.call.Provider, s.call.Model, 0, time.Now(), errors.New("stream observer setup failed"))
+			})
+		}
+	}()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	o := kit.NewObserver(s.call)
@@ -527,6 +562,11 @@ func (s *streamCall) start(resp *smithyhttp.Response) {
 		}
 	}
 	s.obs = o
+	if s.call.Span != nil {
+		s.stopCancellation = context.AfterFunc(s.ctx, func() {
+			safe(func() { s.end(kit.Errored, kit.ErrorTypeOfTransport(s.ctx.Err())) })
+		})
+	}
 	resp.Body = &trackedBody{ReadCloser: resp.Body, s: s}
 }
 
@@ -546,6 +586,12 @@ func (s *streamCall) endLocked(how kit.End, errorType string) {
 		return
 	}
 	s.ended = true
+	if s.stopCancellation != nil {
+		s.stopCancellation()
+	}
+	if s.call.Span != nil && s.obs.Complete() {
+		how, errorType = kit.Completed, ""
+	}
 	safe(func() { s.obs.Finish(how, errorType) })
 }
 

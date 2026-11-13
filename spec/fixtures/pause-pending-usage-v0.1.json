@@ -1,5 +1,5 @@
 {
-  "description": "Since v0.4. Usage accepted after pause capture is pending in the next segment and survives JSON restoration without replaying call events. Only usage and tool metadata are portable. report_count, successful_call_sequence and pending_compactions restore outside usage totals; overflow tools stay in the overflow list; rule_outcome replaces deferred when/properties evaluation.",
+  "description": "Since v0.4. Usage accepted after pause capture is pending in the next segment and survives JSON restoration without replaying call events. Only usage and tool metadata are portable. report_count, successful_call_sequence and pending_compactions restore outside usage totals; overflow tools stay in the overflow list; rule_outcome replaces deferred when/properties evaluation. Internal sdk_trace_id and pending span_id survive JSON restore without replaying spans.",
   "snapshot": {
     "interaction_id": "pending-run",
     "conversation_id": "pending-conversation",
@@ -40,7 +40,8 @@
         "server_tool_call_count": 2,
         "server_tool_cost_usd": 0.001,
         "last": true,
-        "last_ok": true
+        "last_ok": true,
+        "span_id": "0000000000000001"
       }
     ],
     "pending_tools": [
@@ -72,7 +73,8 @@
         "fired": false,
         "overflow": true
       }
-    ]
+    ],
+    "sdk_trace_id": "1234567890abcdef1234567890abcdef"
   },
   "expected": {
     "llm_call_count": 3,
