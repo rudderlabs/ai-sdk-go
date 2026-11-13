@@ -55,6 +55,13 @@ func TestRequestContextIntentTrimmed(t *testing.T) {
 		name, intent, want string
 	}{
 		{"matching", " debug_delivery ", "debug_delivery"},
+		{"next-line", "\u0085debug_delivery\u0085", "debug_delivery"},
+		{"ideographic-and-paragraph", "\u3000debug_delivery\u2029", "debug_delivery"},
+		{"bom-prefix", "\ufeffdebug_delivery", "other"},
+		{"file-separator-prefix", "\u001cdebug_delivery", "other"},
+		{"next-line-only", "\u0085", ""},
+		{"ideographic-whitespace", "\u3000 \t", ""},
+		{"bom-only", "\ufeff", "other"},
 		{"unknown", " unknown ", "other"},
 		{"whitespace", " \t\n\u2003 ", ""},
 		{"empty", "", ""},
