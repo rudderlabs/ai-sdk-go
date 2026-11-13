@@ -350,7 +350,8 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 
 func (s *Spec) failed(c *Call, errorType string) {
 	safe(func() {
-		c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, UsageUnknown: true})
+		// Only spans need unknown usage; with spans off it would hold the call event like main never did.
+		c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, UsageUnknown: c.Span != nil})
 		if c.Ephemeral {
 			EndEphemeral(c.Interaction, errorType)
 		}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -75,13 +76,30 @@ func TestSpansOffOriginMainDifferential(t *testing.T) {
 			name := "round7_edge_" + provider + "_" + edge
 			seen++
 			t.Run(name, func(t *testing.T) {
-				got, err := json.Marshal(differentialEdgeEvents(t, provider, edge))
+				beforeEnd, final := differentialEdgeEvents(t, provider, edge)
+				got, err := json.Marshal(final)
 				if err != nil {
 					t.Fatal(err)
 				}
 				want, ok := expected[name]
 				if !ok {
 					t.Fatal("missing origin/main recording")
+				}
+				// Main delivers completed non-stream calls while the interaction is open.
+				// Cancelled streams can retain unknown usage until interaction end.
+				// Its final recording's prefix must already exist before End/Flush.
+				var mainEvents []obj
+				if err := json.Unmarshal(want, &mainEvents); err != nil {
+					t.Fatal(err)
+				}
+				mainBeforeEnd := []obj{}
+				for _, event := range mainEvents {
+					if event["event"] != "ai_response_received" {
+						mainBeforeEnd = append(mainBeforeEnd, event)
+					}
+				}
+				if !strings.HasPrefix(edge, "stream_") && !reflect.DeepEqual(beforeEnd, mainBeforeEnd) {
+					t.Errorf("events before End/Flush differ from origin/main\nwant: %v\ngot: %v", mainBeforeEnd, beforeEnd)
 				}
 				var compact bytes.Buffer
 				if err := json.Compact(&compact, want); err != nil {

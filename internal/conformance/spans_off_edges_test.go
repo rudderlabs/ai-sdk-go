@@ -29,7 +29,7 @@ type differentialContent struct{ Value string }
 
 func (differentialContent) MarshalJSON() ([]byte, error) { panic("content getter") }
 
-func differentialEdgeEvents(t *testing.T, provider, edge string) []obj {
+func differentialEdgeEvents(t *testing.T, provider, edge string) (beforeEnd, final []obj) {
 	rec := &recorder{}
 	configure(t, obj{"emit_llm_calls": true, "capture_content": true}, rec)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -114,7 +114,8 @@ func differentialEdgeEvents(t *testing.T, provider, edge string) []obj {
 			_ = resp.Body.Close()
 		}
 	}
+	beforeEnd = normalise(rec.all(), false, true)
 	owner.End(rudderstackai.EndOptions{})
 	rudderstackai.Flush(context.Background())
-	return normalise(rec.all(), false, true)
+	return beforeEnd, normalise(rec.all(), false, true)
 }
