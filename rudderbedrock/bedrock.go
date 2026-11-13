@@ -485,7 +485,7 @@ func failed(c *kit.Call, sc *streamCall, errorType string) {
 	if sc != nil && sc.end(kit.Errored, errorType) {
 		return
 	}
-	c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, UsageUnknown: true})
+	c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, UsageUnknown: c.Span != nil})
 	if c.Ephemeral {
 		kit.EndEphemeral(c.Interaction, errorType)
 	}
