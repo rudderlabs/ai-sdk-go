@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -51,13 +52,15 @@ func (a *attempt) release() {
 // attemptKey matches a retry to its failed attempt: same middleware, same open interaction
 // (nil for a call outside one), same request.
 type attemptKey struct {
-	spec        *Spec
-	interaction *rudderstackai.Interaction
-	request     [sha256.Size]byte
+	spec         any
+	invocation   reflect.Value
+	requestOwner *http.Request
+	interaction  *rudderstackai.Interaction
+	request      [sha256.Size]byte
 }
 
-// retried holds the failed attempts, indexed by interaction so a new call settles its own in
-// O(its attempts). At most hook.MaxMapEntries are held; past it an attempt is recorded at once.
+// retried holds failed attempts by invocation and interaction. At most hook.MaxMapEntries
+// are held; past it an attempt is recorded at once.
 var retried = struct {
 	mu            sync.Mutex
 	m             map[attemptKey]*attempt
@@ -100,15 +103,26 @@ func retryNumber(req *http.Request) (n int, ok bool) {
 }
 
 func keyFor(ctx context.Context, s *Spec, req *http.Request, raw []byte) attemptKey {
-	k := attemptKey{spec: s, request: sha256.Sum256(append([]byte(req.Method+" "+req.URL.String()+"\n"), raw...))}
+	scope := s.RetryScope
+	if scope == nil {
+		scope = s
+	}
+	k := attemptKey{spec: scope, request: sha256.Sum256(append([]byte(req.Method+" "+req.URL.String()+"\n"), raw...))}
+	// Stainless clones the request while retaining its per-invocation body factory.
+	// reflect.Value retains that factory's identity without inspecting closure internals.
+	if req.GetBody != nil {
+		k.invocation = reflect.ValueOf(req.GetBody)
+	} else {
+		k.requestOwner = req
+	}
 	if i := rudderstackai.FromContext(ctx); i != nil && !i.Ended() {
 		k.interaction = i
 	}
 	return k
 }
 
-// resume takes the failed attempt a retry repeats, and settles every other attempt held for the
-// same interaction: a new call means the SDK is done with them.
+// resume takes only the failed attempt belonging to this retry
+// invocation. Other invocations remain held until their own completion or interaction end.
 func resume(k attemptKey, n int) *attempt {
 	retried.mu.Lock()
 	var prev *attempt
@@ -118,19 +132,9 @@ func resume(k attemptKey, n int) *attempt {
 			releasedLocked(k)
 		}
 	}
-	var stale []*attempt
-	if k.interaction != nil {
-		for key := range retried.byInteraction[k.interaction] {
-			stale = append(stale, retried.m[key])
-			releasedLocked(key)
-		}
-	}
 	retried.mu.Unlock()
 	if prev != nil {
 		prev.claimed()
-	}
-	for _, a := range stale {
-		a.settle()
 	}
 	return prev
 }
@@ -169,8 +173,8 @@ func (a *attempt) settle() {
 	a.spec.failed(a.call, t)
 }
 
-// hold keeps a until it is read, retried or settled: before an interaction ends, at the next call
-// in it, or, for a call outside one, when the context ends first (no retry follows; the SDK may
+// hold keeps a until it is read, retried or settled before an interaction ends,
+// or, for a call outside one, when the context ends first (no retry follows; the SDK may
 // return without touching the body).
 func (a *attempt) hold() {
 	retried.mu.Lock()

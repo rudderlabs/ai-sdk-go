@@ -3,6 +3,7 @@ package rudderotel
 import (
 	"math"
 	"strconv"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -70,7 +71,7 @@ func stringArray(v attribute.Value) []string {
 func IsAISpan(s sdktrace.ReadOnlySpan) bool {
 	for _, kv := range s.Attributes() {
 		k := string(kv.Key)
-		if hasPrefix(k, []string{"gen_ai."}) || k == "openinference.span.kind" || k == "ai.operationId" {
+		if strings.HasPrefix(k, "gen_ai.") || k == "openinference.span.kind" || k == "ai.operationId" {
 			return true
 		}
 	}

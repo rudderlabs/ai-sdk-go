@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"testing"
 	"time"
 )
@@ -141,6 +142,8 @@ func TestSharedEmitSpansFixture(t *testing.T) {
 			}
 			now := time.UnixMilli(sc.Clock.Start)
 			sequence := 0
+			responseSequence := 0
+			responseIDs := map[string]string{}
 			assign := func(s *Span) {
 				if s != nil && s.SpanID != "" {
 					if sequence >= len(sc.IDs.Spans) {
@@ -183,9 +186,17 @@ func TestSharedEmitSpansFixture(t *testing.T) {
 						}
 					}
 					now = now.Add(time.Duration(ms) * time.Millisecond)
-					call := LLMCall{Provider: step.Provider, Model: step.Model, InputTokens: 2, OutputTokens: 1, StartedAt: start, EndedAt: now, ResponseID: fmt.Sprintf("response-%d", sequence), FinishReason: "stop"}
+					responseSequence++
+					if s != nil {
+						responseIDs[s.SpanID] = fmt.Sprintf("response-%d", responseSequence)
+					}
+					call := LLMCall{Provider: step.Provider, Model: step.Model, InputTokens: 2, OutputTokens: 1, StartedAt: start, EndedAt: now, ResponseID: fmt.Sprintf("response-%d", responseSequence), FinishReason: "stop"}
 					if step.Error != "" {
-						call.ErrorType = "api_error"
+						call = LLMCall{Provider: step.Provider, Model: step.Model, StartedAt: start, EndedAt: now, ErrorType: "api_error", UsageUnknown: true}
+					}
+					if step.Error == "" {
+						call.InputMessages = []GenAIMessage{{Role: "user", Parts: []GenAIPart{{"type": "text", "content": "hello"}}}}
+						call.OutputText = "answer"
 					}
 					i.recordWrapperCall(call, s, 200)
 				}
@@ -202,11 +213,21 @@ func TestSharedEmitSpansFixture(t *testing.T) {
 				for k, v := range sc.Expected[n] {
 					if k == "attributes" {
 						got := spanAttributes(m.Properties)
-						for a, w := range v.(map[string]any) {
-							if mustJSON(got[a]) != mustJSON(w) {
-								t.Errorf("%s: %s want %s", a, mustJSON(got[a]), mustJSON(w))
+						want := maps.Clone(v.(map[string]any))
+						want["user.id"], want["rudderstack.interaction_id"], want["gen_ai.conversation.id"] = "u", "fixture-interaction", "fixture-conversation"
+						if want["rudderstack.span_source"] == "wrapper" && sc.Expected[n]["status_code"] != "error" {
+							want["gen_ai.response.id"] = responseIDs[m.Properties["span_id"].(string)]
+							want["gen_ai.usage.input_tokens"], want["gen_ai.usage.output_tokens"] = 2, 1
+							want["gen_ai.response.finish_reasons"] = []string{"stop"}
+							if sc.Config.Capture {
+								want["gen_ai.input.messages"] = []any{map[string]any{"role": "user", "parts": []any{map[string]any{"type": "text", "content": "hello"}}}}
+								want["gen_ai.output.messages"] = []any{map[string]any{"role": "assistant", "parts": []any{map[string]any{"type": "text", "content": "answer"}}}}
 							}
 						}
+						if mustJSON(got) != mustJSON(want) {
+							t.Errorf("full attributes: %s want %s", mustJSON(got), mustJSON(want))
+						}
+
 					} else if mustJSON(m.Properties[k]) != mustJSON(v) {
 						t.Errorf("%s: %s want %s", k, mustJSON(m.Properties[k]), mustJSON(v))
 					}

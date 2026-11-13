@@ -132,11 +132,12 @@ func cleanAttributes(a map[string]any, capture, all, masked bool) map[string]any
 		if content && !capture {
 			continue
 		}
-		if hook.Tracing.StripBinary != nil {
-			v = hook.Tracing.StripBinary(v)
-		}
-		if v == nil {
-			continue
+		if hook.Tracing.NormalizeValue != nil {
+			var keep bool
+			v, keep = hook.Tracing.NormalizeValue(v)
+			if !keep {
+				continue
+			}
 		}
 		if content && !masked {
 			var ok bool

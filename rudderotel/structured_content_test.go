@@ -1,11 +1,15 @@
 package rudderotel
 
 import (
+	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 
 	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
@@ -70,15 +74,32 @@ func TestStructuredContentRedaction(t *testing.T) {
 						{Key: key, Value: build("person@example.com")},
 						attribute.Int64("safe", 42),
 					}
-					got := cleanAttributes(attrs, true, all)
-					want := []attribute.KeyValue{attribute.Int64("safe", 42)}
+					source := tracetest.SpanStub{Attributes: attrs}
+					if all {
+						source.Attributes = nil
+						source.Events = []sdktrace.Event{{Name: "gen_ai.user.message", Attributes: attrs}}
+					}
+					track, err := SpanToTrack(source.Snapshot(), Options{CaptureContent: rudderstackai.Ptr(true)})
+					if err != nil {
+						t.Fatal(err)
+					}
+					otlp := track.Properties["otlp"].(object)
+					span := otlp["resourceSpans"].([]object)[0]["scopeSpans"].([]object)[0]["spans"].([]object)[0]
+					got := span["attributes"].([]object)
+					if all {
+						got = span["events"].([]object)[0]["attributes"].([]object)
+					}
+					wantValues := []object{{"key": "safe", "value": object{"intValue": "42"}}}
 					if !withhold {
-						want = append([]attribute.KeyValue{{Key: key, Value: build("masked")}}, want...)
+						wantValues = append([]object{{"key": string(key), "value": structuredExpected(name)}}, wantValues...)
 					}
-					if !reflect.DeepEqual(got, want) {
-						t.Errorf("got %v want %v", got, want)
+					gotJSON, _ := json.Marshal(got)
+					wantJSON, _ := json.Marshal(wantValues)
+					if string(gotJSON) != string(wantJSON) {
+						t.Errorf("got %s want %s", gotJSON, wantJSON)
 					}
-					if len(calls) == 0 || calls[len(calls)-1] != "[email]" {
+
+					if !slices.Contains(calls, "[email]") {
 						t.Errorf("nested string did not reach hook after built-in masking: %v", calls)
 					}
 					if !reflect.DeepEqual(attrs, original) {
@@ -87,5 +108,24 @@ func TestStructuredContentRedaction(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+
+func structuredExpected(name string) object {
+	str := func(s string) object { return object{"stringValue": s} }
+	arr := func(values ...object) object { return object{"arrayValue": object{"values": values}} }
+	kv := func(key string, v object) object { return object{"key": key, "value": v} }
+	obj := func(values ...object) object { return object{"kvlistValue": object{"values": values}} }
+	switch name {
+	case "slice":
+		return arr(str("first"), object{"intValue": "7"}, object{"boolValue": false}, object{}, object{"doubleValue": 1.5}, obj(kv("nested", arr(str("first"), str("masked")))))
+	case "map":
+		return obj(kv("bool", object{"boolValue": false}), kv("bools", arr(object{"boolValue": true}, object{"boolValue": false})), kv("first", str("first")), kv("float", object{"doubleValue": 1.5}), kv("floats", arr(object{"doubleValue": 1.5}, object{"doubleValue": 2.5})), kv("integer", object{"intValue": "7"}), kv("ints", arr(object{"intValue": "1"}, object{"intValue": "2"})), kv("nested", arr(str("masked"))))
+	default:
+		v := str("masked")
+		for range 20 {
+			v = obj(kv("nested", arr(v)))
+		}
+		return v
 	}
 }

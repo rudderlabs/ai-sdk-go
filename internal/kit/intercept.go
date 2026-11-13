@@ -80,6 +80,10 @@ type Prepared struct {
 
 // Spec describes one provider API for [Intercept].
 type Spec struct {
+	// RetryUnnumbered groups retries of SDKs that reuse a request without attempt headers.
+	RetryUnnumbered bool
+	// RetryScope is a stable, comparable owner when a Spec is built per transport entry.
+	RetryScope  any
 	Details     rudderstackai.CallDetails
 	Provider    string
 	Integration string
@@ -117,6 +121,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	var sent, inNext bool
 	var got *http.Response
 	var gotErr error
+	var current *Call
 	next := func(r *http.Request) (*http.Response, error) {
 		sent, inNext = true, true
 		got, gotErr = send(r)
@@ -124,10 +129,17 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		return got, gotErr
 	}
 	defer func() {
+		r := recover()
 		if inNext {
+			if r != nil {
+				if current != nil {
+					current.EndedAt = time.Now()
+					s.failed(current, PanicErrorType(r))
+				}
+				panic(r)
+			}
 			return
 		}
-		r := recover()
 		if r == nil {
 			return
 		}
@@ -150,6 +162,9 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	}
 	stream := s.IsStream != nil && s.IsStream(req, body)
 	n, numbered := retryNumber(req)
+	if s.RetryUnnumbered {
+		n, numbered = 1, true
+	}
 	var key attemptKey
 	var prev *attempt
 	if numbered {
@@ -181,6 +196,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	model, _ := body["model"].(string)
 	details := rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, s.Details))
 	c := &Call{Span: span, Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
+	current = c
 	safe(func() {
 		if s.OnRequest != nil {
 			s.OnRequest(c)
@@ -269,9 +285,9 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		_ = json.Unmarshal(reply, &decoded)
 		recorded := s.OnResponse != nil && decoded != nil && s.OnResponse(c, decoded, resp)
 		if !recorded && c.Span != nil {
-			c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, Integration: c.Integration, UsageUnknown: true})
+			hook.Tracing.FinishRaw(c.Span, c.Provider, c.Model, resp.StatusCode, time.Now())
 		}
-		if ephemeral && recorded {
+		if ephemeral {
 			EndEphemeral(i, "")
 		}
 	})
@@ -280,7 +296,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 
 func (s *Spec) failed(c *Call, errorType string) {
 	safe(func() {
-		c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
+		c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, UsageUnknown: true})
 		if c.Ephemeral {
 			EndEphemeral(c.Interaction, errorType)
 		}
@@ -353,7 +369,9 @@ func readBody(req *http.Request) (body map[string]any, raw []byte) {
 	raw, _ = io.ReadAll(req.Body)
 	_ = req.Body.Close()
 	req.Body = io.NopCloser(bytes.NewReader(raw))
-	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(raw)), nil }
+	if req.GetBody == nil {
+		req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(raw)), nil }
+	}
 	if json.Unmarshal(raw, &body) != nil || body == nil {
 		return map[string]any{}, raw
 	}
@@ -560,4 +578,12 @@ func ContextLimit(code, message string) bool {
 		}
 	}
 	return false
+}
+
+// PanicErrorType categorizes a provider panic while preserving its original value for re-panic.
+func PanicErrorType(value any) string {
+	if err, ok := value.(error); ok {
+		return ErrorTypeOfTransport(err)
+	}
+	return "api_error"
 }

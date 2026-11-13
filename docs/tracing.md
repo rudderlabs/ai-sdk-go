@@ -40,7 +40,9 @@ and streams keep independent contexts. No interaction root span is created.
 A root span gets a random nonzero W3C trace ID (32 lowercase hex digits), shared per interaction
 and saved as `sdk_trace_id` across pause/resume. The application's `TraceID`, `SetTraceID` and
 `WithTraceIDFrom` continue to control the product interaction's `trace_id` independently. A nested
-span inherits its parent's trace. A call settling after its interaction ended still emits its
+span inherits its parent's trace. Importing `rudderotel` registers an optional bridge that lets an
+SDK span inherit an active OTel trace, parent span ID and trace state when there is no active SDK
+parent; the core still has no OTel dependency. A call settling after its interaction ended still emits its
 span with the original interaction, trace and parent; its late product call stays dropped.
 
 Accepted call admission and totals finish before span transport. Spans go directly to the
@@ -54,7 +56,7 @@ cancellation or interaction end remains pending.
 
 With `WithLLMCallEvents(true)`, retained call events carry the wrapper's `span_id`; delayed
 pending events preserve it through pause/JSON restoration. Overflow aggregates omit it. Two
-separate invocations returning the same response ID emit two spans and the single call event
+separate invocations returning the same response ID or reusing an error value emit two spans and the single call event
 keeps the first invocation's ID. Span content follows `WithCaptureContent` even with call events
 off, and captured call content is masked once. Typed containers and structs are walked directly, without invoking custom serializers that could
 encode bytes before inspection: binary
@@ -64,35 +66,32 @@ are dropped, cycles are dropped, and other unrepresentable list entries keep nul
 Interim behavior: enabling wrapper spans and an OTel processor instrumenting the same provider
 call can emit two spans. Cross-source span deduplication is not currently applied.
 
+Provider middleware records a failed span when a downstream handler panics, then re-panics with
+its original value unchanged. Manual spans use an explicit lifecycle: call `End(err)`; errors
+record their Go concrete type, and error text follows the content policy. Raw successful responses
+finish their span with HTTP status without inventing a product call. Normal wrapper completion
+uses the same attribute set as Node.
+
 ## Go platform limits
 
-- The core module has no OTel API dependency. It cannot inspect an application's active OTel
-  context; a root SDK span has no OTel parent, even when the separate `rudderotel` module is used.
-  SDK span parents propagate through explicit `context.Context`, rather than Node's ambient
-  asynchronous context.
-- Go's `StartSpan` is an explicit lifecycle helper, rather than a callback wrapper: call
-  `End(err)` and return the original error. Provider middleware lets caller panics unwind and
-  does not recover them; non-error panic values are therefore not converted into exception
-  events. Errors passed to `End` record their Go concrete type; text is content-controlled.
-- OpenAI and Anthropic integration runs at HTTP middleware, below SDK response decoding. Raw
-  response access shares this path; Node's `.asResponse()` / `.withResponse()` method objects
-  have no Go counterpart. Wrapper failures carry the normalized error category, matching the Node wrapper span; the provider
-  SDK constructs its Go error after middleware returns. Decoding failures after a successful HTTP response cannot
-  change the already completed HTTP span.
+- SDK span parents propagate through explicit `context.Context`, rather than Node's ambient
+  asynchronous context. Pass the context returned by `StartSpan` to nested work.
+- OpenAI and Anthropic integrations run at HTTP middleware, below SDK response decoding.
+  Wrapper failures carry the normalized error category, matching Node; the provider SDK
+  constructs its Go error after middleware returns. Decoding failures after a successful HTTP
+  response cannot change the already completed HTTP span.
 - Google GenAI's Go SDK does not execute Node's automatic function calling (AFC) callback loop or
   expose its `automaticFunctionCallingHistory`. Each Go `GenerateContent`/stream request emits
   one span. Node AFC emits one span per outer request, joining only the last call. Applications
   managing a Go tool loop make separate requests; pass the manual span context explicitly to
   tools and subsequent requests.
-- Provider coverage is OpenAI Chat Completions and Responses, Anthropic Messages, Google GenAI
-  Gemini/Vertex GenerateContent and streaming, and Bedrock Converse/ConverseStream. There are no
-  additional Node emitSpans provider APIs to port. Node-only LangChain, OpenAI Agents and Claude
-  Agent SDK integrations, and bound-stream completion APIs, have no existing Go wrapper.
+- Node-only LangChain, OpenAI Agents and Claude Agent SDK integrations, and bound-stream
+  completion APIs, have no existing Go wrapper.
 - HTTP middleware has no hook for the outer SDK method's promise settlement. Retry grouping uses
-  retry headers, response-body probes and the existing one-second cancellation grace. Ending an
-  interaction while an attempt is held can settle its span before a later retry; cancellation of
-  a per-attempt context followed by a retry after that grace can split spans. The existing Go
-  product-event settlement rules are preserved. These boundary cases cannot reproduce Node's
+  per-invocation request identity, retry headers, response-body probes and the existing one-second
+  cancellation grace. Ending an interaction while an attempt is held can settle its span before a later retry; cancellation of
+  a per-attempt context followed by a retry after that grace can split spans. These boundary
+  cases cannot reproduce Node's
   outer-method duration and late-settlement behavior from HTTP middleware alone.
 - Go has no native tuple or set type; portable tuple/set fixtures use arrays/slices. Foreign
   runtime exception class fixtures use native Go errors. `MaxTurnsExceededError`,

@@ -439,6 +439,12 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 		sc = &streamCall{call: c, ctx: ctx}
 		ctx = context.WithValue(ctx, streamKey{}, sc)
 	}
+	defer func() {
+		if value := recover(); value != nil {
+			safe(func() { c.EndedAt = time.Now(); failed(c, sc, kit.PanicErrorType(value)) })
+			panic(value)
+		}
+	}()
 	out, md, err := call(ctx)
 	if err != nil {
 		safe(func() {
@@ -460,7 +466,7 @@ func failed(c *kit.Call, sc *streamCall, errorType string) {
 	if sc != nil && sc.end(kit.Errored, errorType) {
 		return
 	}
-	c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration})
+	c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, UsageUnknown: true})
 	if c.Ephemeral {
 		kit.EndEphemeral(c.Interaction, errorType)
 	}

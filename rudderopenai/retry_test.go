@@ -3,6 +3,9 @@ package rudderopenai_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/openai/openai-go/v3"
@@ -137,5 +140,65 @@ func TestRawResponseEmitSpan(t *testing.T) {
 	call := one(t, events, "ai_llm_response_received")
 	if span["span_id"] != call["span_id"] {
 		t.Fatal("raw-response join lost")
+	}
+}
+
+func TestConcurrentIdenticalSDKRetriesKeepInvocationSpans(t *testing.T) {
+	rec, _ := setup(t, rudderstackai.WithEmitSpans(true))
+	var started atomic.Int32
+	ready := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if req.Header.Get("X-Stainless-Retry-Count") == "0" {
+			if started.Add(1) == 2 {
+				close(ready)
+			}
+			<-ready
+			w.Header().Set("Retry-After-Ms", "1")
+			w.WriteHeader(503)
+			_, _ = w.Write([]byte(`{"error":{"message":"busy"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"same-response","model":"gpt-4.1-mini","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1}}`))
+	}))
+	defer server.Close()
+	client := openai.NewClient(option.WithBaseURL(server.URL+"/v1"), option.WithAPIKey("sk-test"), option.WithMaxRetries(1), option.WithUnsafeAllowHTTP(), rudderopenai.WithTracking())
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for range 2 {
+		wg.Go(func() {
+			_, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{}, body(chatBody))
+			errs <- err
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	spans, calls := []obj{}, []obj{}
+	for _, event := range rec.events(t) {
+		if event.name == "ai_otel_span" {
+			spans = append(spans, event.props)
+		}
+		if event.name == "ai_llm_response_received" {
+			calls = append(calls, event.props)
+		}
+	}
+	if len(spans) != 2 || len(calls) != 2 {
+		t.Fatalf("spans=%d calls=%d", len(spans), len(calls))
+	}
+	for _, call := range calls {
+		found := false
+		for _, span := range spans {
+			if call["span_id"] == span["span_id"] && call["interaction_id"] == span["interaction_id"] {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("call joined another invocation's span")
+		}
 	}
 }

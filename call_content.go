@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -213,32 +214,38 @@ func isBytes(v any) bool {
 const maxWalkDepth = 64
 
 type visit struct {
-	ptr uintptr
-	typ reflect.Type
-	n   int
+	ptr   uintptr
+	typ   reflect.Type
+	n     int
+	depth bool
 }
 
 // walk is one traversal of a value: the containers on the current path (to drop a cycle) and the
 // depth reached.
 type walk struct {
-	path  map[visit]bool
-	depth int
+	path    map[visit]bool
+	depth   int
+	omitted bool
 }
 
 // enter marks a pointer, map or slice as on the path; false when it is already there (a cycle) or
 // the walk is too deep. Every true must be followed by leave.
 func (w *walk) enter(rv reflect.Value) (visit, bool) {
-	if w.depth >= maxWalkDepth {
+	container := rv.Kind() == reflect.Map || rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array || rv.Kind() == reflect.Struct
+	if container && w.depth >= maxWalkDepth {
 		return visit{}, false
 	}
 	var key visit
 	switch rv.Kind() {
 	case reflect.Pointer, reflect.Map, reflect.Slice:
 		if rv.IsNil() || (rv.Kind() == reflect.Slice && rv.Len() == 0) {
-			w.depth++
+			if container {
+				w.depth++
+				key.depth = true
+			}
 			return key, true
 		}
-		key = visit{rv.Pointer(), rv.Type(), 0}
+		key = visit{ptr: rv.Pointer(), typ: rv.Type()}
 		if rv.Kind() == reflect.Slice {
 			key.n = rv.Len()
 		}
@@ -247,13 +254,19 @@ func (w *walk) enter(rv reflect.Value) (visit, bool) {
 		}
 		w.path[key] = true
 	}
-	w.depth++
+	if container {
+		w.depth++
+		key.depth = true
+	}
 	return key, true
 }
 
 func (w *walk) leave(key visit) {
-	w.depth--
+	if key.depth {
+		w.depth--
+	}
 	if key.ptr != 0 {
+		key.depth = false
 		delete(w.path, key)
 	}
 }
@@ -265,8 +278,13 @@ func (w *walk) leave(key visit) {
 // plain JSON values with byte slices dropped, so they are never encoded as base64. A cyclic or
 // too deeply nested value is dropped (nil).
 func stripBinary(v any) any {
-	out, _ := (&walk{path: map[visit]bool{}}).strip(v)
+	out, _ := normalizeSpanValue(v)
 	return out
+}
+
+func normalizeSpanValue(v any) (any, bool) {
+	out, keep := (&walk{path: map[visit]bool{}}).strip(v)
+	return out, keep && !isBytes(out)
 }
 
 // strip returns the stripped value; keep is false when the value is bytes or cannot be sent.
@@ -375,7 +393,11 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	if !rv.IsValid() {
 		return nil, true
 	}
+	w.omitted = false
 	t := rv.Type()
+	if t == reflect.TypeFor[time.Time]() {
+		return rv.Interface().(time.Time).UTC().Format("2006-01-02T15:04:05.000Z"), true
+	}
 	if t == rawMessageType {
 		var decoded any
 		if json.Unmarshal(rv.Bytes(), &decoded) != nil {
@@ -385,6 +407,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	}
 	key, ok := w.enter(rv)
 	if !ok {
+		w.omitted = true
 		return nil, false
 	}
 	defer w.leave(key)
@@ -408,7 +431,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		return rv.Uint(), true
 	case reflect.Float32, reflect.Float64:
 		f := rv.Float()
-		return f, !math.IsNaN(f) && !math.IsInf(f, 0)
+		return f, true
 	case reflect.Slice, reflect.Array:
 		if t.Elem().Kind() == reflect.Uint8 {
 			return nil, false
@@ -427,9 +450,9 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 				continue
 			}
 			e, ok := w.typed(rv.Index(n))
-			if !ok {
+			if !ok && !w.omitted {
 				list = append(list, nil)
-			} else if !isBytes(e) {
+			} else if ok && !isBytes(e) {
 				list = append(list, e)
 			}
 		}
@@ -448,10 +471,18 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 				m[name] = e
 			}
 		}
+		if isBytes(m) {
+			w.omitted = true
+			return nil, false
+		}
 		return stripMap(m), true
 	case reflect.Struct:
 		m := map[string]any{}
 		w.structFields(rv, m)
+		if isBytes(m) {
+			w.omitted = true
+			return nil, false
+		}
 		return stripMap(m), true
 	}
 	// Channels, funcs, complex numbers, unsafe pointers: json cannot encode them either.

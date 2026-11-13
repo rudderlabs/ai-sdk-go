@@ -30,6 +30,7 @@ type Span struct {
 	ended                                              bool
 	parent                                             *Span
 	parentID                                           string
+	traceState                                         string
 	started                                            time.Time
 	name, operation                                    string
 	attributes                                         map[string]any
@@ -108,12 +109,27 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
 		s.parent = parent
 		s.parentID = parent.SpanID
 		s.TraceID = parent.TraceID
+		s.traceState = parent.traceState
+	} else if hook.Tracing.ParentContext != nil {
+		traceID, spanID, state := hook.Tracing.ParentContext(ctx)
+		if validSDKTrace(traceID) && validSDKSpanID(spanID) {
+			s.TraceID, s.parentID, s.traceState = traceID, spanID, state
+			if i != nil {
+				i.mu.Lock()
+				i.sdkTraceID = traceID
+				i.mu.Unlock()
+			}
+		}
 	}
 	if s.TraceID == "" {
 		s.TraceID = randomSpanID(16)
 	}
 	s.SpanID = randomSpanID(8)
 	return s
+}
+
+func validSDKSpanID(id string) bool {
+	return len(id) == 16 && validSDKTrace(strings.Repeat("0", 16)+id)
 }
 
 // StartSpan starts a manual span. End records err without changing or wrapping it.
@@ -190,7 +206,7 @@ func (s *Span) finish(name, operation, source string, a map[string]any, err erro
 	if ended.Before(s.started) {
 		ended = s.started
 	}
-	n := spanmodel.Span{Name: name, Kind: 1, Context: spanmodel.Context{TraceID: s.TraceID, SpanID: s.SpanID}, Start: s.started, End: ended, StatusCode: 1, Attributes: attrs, Scope: spanmodel.Scope{Name: LibraryName, Version: Version}}
+	n := spanmodel.Span{Name: name, Kind: 1, Context: spanmodel.Context{TraceID: s.TraceID, SpanID: s.SpanID, TraceState: s.traceState}, Start: s.started, End: ended, StatusCode: 1, Attributes: attrs, Scope: spanmodel.Scope{Name: LibraryName, Version: Version}}
 	if operation == "chat" {
 		n.Kind = 3
 	}
@@ -241,12 +257,6 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 	if call.FinishReason != "" {
 		a["gen_ai.response.finish_reasons"] = []string{call.FinishReason}
 	}
-	if call.httpStatus > 0 {
-		a["http.response.status_code"] = call.httpStatus
-	}
-	if call.ErrorType != "" {
-		a["error.type"] = call.ErrorType
-	}
 	if content != nil {
 		if content.inputMessages != nil {
 			a["gen_ai.input.messages"] = content.inputMessages
@@ -274,6 +284,14 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 	s.finish(strings.TrimSpace("chat "+first(call.RequestedModel, call.Model)), "chat", "wrapper", a, err, true, call.EndedAt)
 }
 func init() {
+	hook.Tracing.FinishRaw = func(value any, provider, model string, status int, ended time.Time) {
+		s, _ := value.(*Span)
+		if s == nil {
+			return
+		}
+		s.finish(strings.TrimSpace("chat "+model), "chat", "wrapper", map[string]any{"gen_ai.provider.name": provider, "gen_ai.request.model": model, "gen_ai.response.model": model, "http.response.status_code": status}, nil, true, ended)
+	}
+
 	hook.Tracing.ActivateWrapper = func(ctx context.Context, value any) context.Context {
 		s, _ := value.(*Span)
 		if s == nil {
