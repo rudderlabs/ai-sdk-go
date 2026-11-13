@@ -95,6 +95,8 @@ func genAISummary(a map[string]any) map[string]any {
 				f = float64(n)
 			case int64:
 				f = float64(n)
+			case uint64:
+				f = float64(n)
 			case float64:
 				f = n
 			default:
@@ -139,7 +141,7 @@ func cleanAttributes(a map[string]any, capture, all, masked bool) map[string]any
 				continue
 			}
 		}
-		if content && !masked {
+		if content && (!masked || k == "exception.message") {
 			var ok bool
 			v, ok = mask(v)
 			if !ok {

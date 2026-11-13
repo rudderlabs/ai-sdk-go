@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
@@ -227,5 +228,66 @@ func TestStreamUnknownUsageAndCapturedTools(t *testing.T) {
 				t.Fatal("stream span lost captured tool calls")
 			}
 		})
+	}
+}
+
+func TestConnectionFailureRetryKeepsOneSpan(t *testing.T) {
+	for _, inside := range []bool{false, true} {
+		for _, unnumbered := range []bool{false, true} {
+			for _, failure := range []error{errors.New("connection reset by peer"), errors.New("connection refused"), context.DeadlineExceeded} {
+				t.Run(fmt.Sprintf("inside=%v/unnumbered=%v/%v", inside, unnumbered, failure), func(t *testing.T) {
+					r := reviewRecorder(t)
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					if inside {
+						var i *rudderstackai.Interaction
+						ctx, i = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: "alice", Classify: rudderstackai.Ptr(false)})
+						defer i.End(rudderstackai.EndOptions{})
+					}
+					original := reviewRequest(ctx)
+					var calls []*Call
+					spec := Spec{Provider: "openai", Integration: "review", RetryUnnumbered: unnumbered, OnRequest: func(c *Call) { calls = append(calls, c) }, OnResponse: func(c *Call, _ map[string]any, _ *http.Response) bool {
+						return c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, Integration: c.Integration, UsageUnknown: true})
+					}}
+					for n := range 2 {
+						req := original.Clone(ctx)
+						if n == 0 && failure == context.DeadlineExceeded {
+							attemptCtx, stop := context.WithDeadline(ctx, time.Now().Add(-time.Second))
+							defer stop()
+							req = req.WithContext(attemptCtx)
+						}
+						req.Body, _ = original.GetBody()
+						req.Header.Set(retryCountHeader, fmt.Sprint(n))
+						resp, err := spec.Intercept(req, func(*http.Request) (*http.Response, error) {
+							if n == 0 {
+								return nil, failure
+							}
+							return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+						})
+						if n == 0 {
+							if err != failure {
+								t.Fatal("transport error changed")
+							}
+							if len(r.named("ai_otel_span")) != 0 {
+								t.Fatal("failed attempt prematurely emitted span")
+							}
+						} else {
+							if err != nil {
+								t.Fatal(err)
+							}
+							_ = resp.Body.Close()
+						}
+					}
+					if len(calls) != 2 || calls[0].Span != calls[1].Span || calls[0].Interaction != calls[1].Interaction || !calls[0].StartedAt.Equal(calls[1].StartedAt) {
+						t.Fatal("retry lost invocation")
+					}
+					calls[1].Interaction.End(rudderstackai.EndOptions{})
+					spans, events := r.named("ai_otel_span"), r.named("ai_llm_response_received")
+					if len(spans) != 1 || len(events) != 1 || spans[0].Properties["span_id"] != events[0].Properties["span_id"] || spans[0].Properties["status_code"] != "ok" {
+						t.Fatalf("retry emitted duplicate or failed spans: %v", spans)
+					}
+				})
+			}
+		}
 	}
 }

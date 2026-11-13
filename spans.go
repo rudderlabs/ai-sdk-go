@@ -38,6 +38,7 @@ type Span struct {
 	client                                             analytics.Client
 	userID, anonymousID, interactionID, conversationID string
 	capture                                            bool
+	msgContext                                         map[string]any
 }
 type sdkSpanKey struct{}
 
@@ -84,48 +85,70 @@ func activeSDKSpan(ctx context.Context) *Span {
 	return nil
 }
 func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
-	s := &Span{started: started, interaction: i, attributes: map[string]any{}, capture: cfg().captureContent, client: cfg().analytics}
+	c := cfg()
+	s := &Span{started: started, interaction: i, attributes: map[string]any{}, capture: c.captureContent, client: c.analytics}
+	parent := activeSDKSpan(ctx)
+	if parent != nil && parent.interaction != i {
+		parent = nil
+	}
+	var msgContext map[string]any
+	var externalTrace, externalParent, externalState string
+	if parent == nil && hook.Tracing.ParentContext != nil {
+		externalTrace, externalParent, externalState = hook.Tracing.ParentContext(ctx)
+		if !validSDKTrace(externalTrace) || !validSDKSpanID(externalParent) {
+			externalTrace, externalParent, externalState = "", "", ""
+		}
+	}
 	if i != nil {
 		i.mu.Lock()
 		if i.sdkTraceID == "" {
-			i.sdkTraceID = randomSpanID(16)
+			i.sdkTraceID = externalTrace
+			if parent != nil {
+				i.sdkTraceID = parent.TraceID
+			}
+			if i.sdkTraceID == "" {
+				i.sdkTraceID = randomSpanID(16)
+			}
 		}
 		s.TraceID = i.sdkTraceID
 		s.userID, s.anonymousID, s.interactionID, s.conversationID = i.userID, i.anonymousID, i.id, i.conversationID
-		s.client = i.analytics()
-		s.capture = i.captureContent
+		s.client, s.capture = i.analytics(), i.captureContent
+		msgContext = i.msgContext
 		i.mu.Unlock()
 	} else {
-		if cv := valuesFrom(ctx); cv != nil {
-			id := resolveIdentity(identityInputs{}, cv, cfg())
-			s.userID, s.anonymousID = id.userID, id.anonymousID
+		cv := valuesFrom(ctx)
+		id := resolveIdentity(identityInputs{}, cv, c)
+		s.userID, s.anonymousID = id.userID, id.anonymousID
+		if cv != nil {
 			s.conversationID = cv.conversationID
+			msgContext = withSessionID(cv.context, id.sessionID)
 			if cv.analytics != nil {
 				s.client = cv.analytics
 			}
 		}
-	}
-	if parent := activeSDKSpan(ctx); parent != nil && parent.interaction == i {
-		s.parent = parent
-		s.parentID = parent.SpanID
-		s.TraceID = parent.TraceID
-		s.traceState = parent.traceState
-	} else if hook.Tracing.ParentContext != nil {
-		traceID, spanID, state := hook.Tracing.ParentContext(ctx)
-		if validSDKTrace(traceID) && validSDKSpanID(spanID) {
-			s.TraceID, s.parentID, s.traceState = traceID, spanID, state
-			if i != nil {
-				i.mu.Lock()
-				i.sdkTraceID = traceID
-				i.mu.Unlock()
-			}
+		s.TraceID = externalTrace
+		if parent != nil {
+			s.TraceID = parent.TraceID
 		}
 	}
 	if s.TraceID == "" {
 		s.TraceID = randomSpanID(16)
 	}
+	if parent != nil && parent.TraceID == s.TraceID {
+		s.parent, s.parentID, s.traceState = parent, parent.SpanID, parent.traceState
+	} else if externalTrace == s.TraceID {
+		s.parentID, s.traceState = externalParent, externalState
+	}
+	s.msgContext, _ = stripBinary(msgContext).(map[string]any)
 	s.SpanID = randomSpanID(8)
 	return s
+}
+
+func productAnonymousID(userID, anonymousID string) string {
+	if userID == "" && anonymousID == "" {
+		return systemAnonymousID
+	}
+	return anonymousID
 }
 
 func validSDKSpanID(id string) bool {
@@ -228,7 +251,7 @@ func (s *Span) finish(name, operation, source string, a map[string]any, err erro
 		if s.client == nil {
 			return
 		}
-		m, e := spanmodel.ToTrack(n, spanmodel.Options{CaptureContent: &s.capture, ContentMasked: masked, LibraryName: LibraryName, LibraryVersion: Version})
+		m, e := spanmodel.ToTrack(n, spanmodel.Options{CaptureContent: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version})
 		if e != nil {
 			report(KindInternal, "span.map", e)
 			return

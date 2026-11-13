@@ -3,6 +3,7 @@ package spanmodel
 import (
 	"encoding/json"
 	"log/slog"
+	"maps"
 	"time"
 	"unicode/utf8"
 
@@ -22,8 +23,11 @@ const (
 
 // Options controls the normalized mapper without an OTel runtime dependency.
 type Options struct {
-	CaptureContent              *bool
-	ContentMasked               bool
+	CaptureContent *bool
+	ContentMasked  bool
+	// SDKIdentity uses the identity captured by the SDK, without OTel fallbacks.
+	SDKIdentity                 bool
+	MessageContext              map[string]any
 	MaxEventBytes               int
 	EventName                   string
 	ExtraProperties             map[string]any
@@ -42,7 +46,8 @@ func ToTrack(s Span, options Options) (*analytics.Track, error) {
 	if options.CaptureContent != nil {
 		capture = *options.CaptureContent
 	}
-	otlp, candidates := ToOTLP(s, capture, options.ContentMasked)
+	s.Attributes = cleanAttributes(s.Attributes, capture, false, options.ContentMasked)
+	otlp, candidates := toOTLP(s, capture, options.ContentMasked, s.Attributes)
 	sc := s.Context
 	var parent any
 	if s.Parent.SpanID != "" {
@@ -91,22 +96,30 @@ func ToTrack(s Span, options Options) (*analytics.Track, error) {
 		UserID:      spanOrResource(s, "user.id", "traceloop.association.properties.user_id"),
 		AnonymousID: spanOrResource(s, AnonymousIDAttribute, "session.id", "traceloop.association.properties.session_id"),
 	}
-	if options.UserID != "" || options.AnonymousID != "" {
+	if options.SDKIdentity || options.UserID != "" || options.AnonymousID != "" {
 		id.UserID, id.AnonymousID = options.UserID, options.AnonymousID
 	}
-	if id.AnonymousID == "" {
+	if !options.SDKIdentity && id.AnonymousID == "" {
 		id.AnonymousID = sc.TraceID
 	}
 	event := options.EventName
 	if event == "" {
 		event = DefaultEventName
 	}
+	extraContext := maps.Clone(options.MessageContext)
+	if extraContext == nil {
+		extraContext = object{}
+	}
+	wrapper := object{"name": options.LibraryName, "version": options.LibraryVersion, "integration": "tracing"}
+	if outer, ok := extraContext["wrapperLibrary"]; ok {
+		wrapper["wrapperLibrary"] = outer
+	}
+	extraContext["wrapperLibrary"] = wrapper
 	m := &analytics.Track{Event: event, UserId: id.UserID, AnonymousId: id.AnonymousID,
 		MessageId: sc.TraceID + "-" + sc.SpanID, OriginalTimestamp: s.End.UTC().Truncate(time.Millisecond),
-		Properties: analytics.Properties(p), Context: &analytics.Context{Extra: object{"wrapperLibrary": object{
-			"name": options.LibraryName, "version": options.LibraryVersion, "integration": "tracing",
-		}}},
+		Properties: analytics.Properties(p), Context: &analytics.Context{Extra: extraContext},
 	}
+
 	maxBytes := options.MaxEventBytes
 	if maxBytes == 0 {
 		maxBytes = DefaultMaxEventBytes

@@ -142,3 +142,35 @@ func TestInvalidJSONPreservesEphemeralProductBehavior(t *testing.T) {
 		})
 	}
 }
+
+func TestStreamConsumerPanicDoesNotRunCleanup(t *testing.T) {
+	for _, emit := range []bool{false, true} {
+		t.Run(fmt.Sprint(emit), func(t *testing.T) {
+			reviewRecorder(t)
+			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(emit)); err != nil {
+				t.Fatal(err)
+			}
+			unblock := make(chan struct{})
+			defer close(unblock)
+			body := &failingStreamBody{readErr: io.EOF, closeErr: errors.New("cleanup failure"), block: unblock}
+			spec := Spec{Provider: "openai", Integration: "consumer", IsStream: func(*http.Request, map[string]any) bool { return true }, NewStream: func(c *Call, _ *http.Response) StreamHandler { return &chatStream{Observer: NewObserver(c)} }}
+			resp, err := spec.Intercept(reviewRequest(context.Background()), func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: body}, nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			consumer := errors.New("consumer failure")
+			done := make(chan any, 1)
+			go func() { defer func() { done <- recover() }(); _, _ = resp.Body.Read(make([]byte, 1)); panic(consumer) }()
+			select {
+			case got := <-done:
+				if got != consumer || body.closed {
+					t.Fatalf("consumer panic changed: %v closed=%v", got, body.closed)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("consumer panic delayed by cleanup")
+			}
+		})
+	}
+}

@@ -59,8 +59,8 @@ func TestSpanParentsStayWithinInteraction(t *testing.T) {
 					if event.AnonymousId == "alice" || event.AnonymousId == parent.TraceID {
 						t.Errorf("mapper joined interactions: %v", p)
 					}
-					if task && event.AnonymousId != child.TraceID {
-						t.Errorf("system task mapper fallback=%v want own trace %s", event.AnonymousId, child.TraceID)
+					if task && event.AnonymousId != systemAnonymousID {
+						t.Errorf("system task mapper fallback=%v want product fallback %s", event.AnonymousId, systemAnonymousID)
 					}
 					return nil
 				}

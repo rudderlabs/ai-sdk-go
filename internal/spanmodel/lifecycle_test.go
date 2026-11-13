@@ -119,3 +119,44 @@ func TestWrapperSpanBudgetTruncatesUnicodeAndDropsWhenTooSmall(t *testing.T) {
 		t.Fatalf("impossible budget must drop the span: %v, %v", dropped, err)
 	}
 }
+
+func TestSummaryUsesNormalizedBinaryStrippedAttributes(t *testing.T) {
+	hook.Reset()
+	t.Cleanup(hook.Reset)
+	for _, capture := range []bool{false, true} {
+		for _, masked := range []bool{false, true} {
+			s := wrapperSpan()
+			s.Attributes["gen_ai.response.finish_reasons"] = []any{"stop", []byte("PRIVATE"), map[string]any{"bytes": []byte("PRIVATE"), "reason": "tool_calls"}}
+			s.Attributes["gen_ai.usage.input_tokens"] = uint16(7)
+			track, err := spanmodel.ToTrack(s, spanmodel.Options{CaptureContent: &capture, ContentMasked: masked})
+			if err != nil || track == nil {
+				t.Fatalf("mapping: %v", err)
+			}
+			encoded, err := json.Marshal(track)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(encoded), "UFJJVkFURQ==") || strings.Contains(string(encoded), "bytesValue") {
+				t.Fatalf("binary leaked: %s", encoded)
+			}
+			g := track.Properties["gen_ai"].(map[string]any)
+			want := []any{"stop", map[string]any{"reason": "tool_calls"}}
+			if !reflect.DeepEqual(g["finish_reasons"], want) || g["input_tokens"] != 7 {
+				t.Fatalf("summary used raw attributes: %v", g)
+			}
+		}
+	}
+}
+
+func TestOTelMapperKeepsTraceIdentityFallback(t *testing.T) {
+	hook.Reset()
+	t.Cleanup(hook.Reset)
+	s := wrapperSpan()
+	track, err := spanmodel.ToTrack(s, spanmodel.Options{})
+	if err != nil || track == nil {
+		t.Fatalf("mapping: %v", err)
+	}
+	if track.UserId != "user" || track.AnonymousId != s.Context.TraceID {
+		t.Fatal("OTel identity fallback changed")
+	}
+}

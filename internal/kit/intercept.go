@@ -237,10 +237,12 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		c.EndedAt = time.Now()
 		t := ErrorTypeOfTransport(err)
 		safe(func() { NoteCallError(i, err, t) })
-		// A connection error carries no body to tell a retry by: inside an interaction it waits
-		// for the retry, the next call or the end; a call outside one is recorded now.
-		if numbered && !ephemeral && req.Context().Err() == nil {
-			safe((&attempt{spec: s, call: c, errorType: t, key: key}).hold)
+		// Keep the invocation span across connection failures too. A per-attempt timeout
+		// can expire before the SDK retries; give it the same grace as an unread response.
+		if numbered && (!ephemeral || span != nil) && (req.Context().Err() == nil || (span != nil && errors.Is(err, context.DeadlineExceeded))) {
+			a := &attempt{spec: s, call: c, errorType: t, key: key}
+			a.closed.Store(true)
+			safe(a.hold)
 			return resp, err
 		}
 		s.failed(c, t)

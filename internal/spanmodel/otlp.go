@@ -16,6 +16,10 @@ func dropped(o object, key string, n int) {
 
 // ToOTLP maps a normalized span through the shared privacy policy.
 func ToOTLP(s Span, capture, masked bool) (map[string]any, []map[string]any) {
+	return toOTLP(s, capture, masked, cleanAttributes(s.Attributes, capture, false, masked))
+}
+
+func toOTLP(s Span, capture, masked bool, attributes map[string]any) (map[string]any, []map[string]any) {
 	sc := s.Context
 	status := object{"code": s.StatusCode}
 	if capture && s.StatusMessage != "" {
@@ -26,7 +30,7 @@ func ToOTLP(s Span, capture, masked bool) (map[string]any, []map[string]any) {
 	encoded := object{
 		"traceId": sc.TraceID, "spanId": sc.SpanID, "name": s.Name, "kind": int(s.Kind),
 		"startTimeUnixNano": strconv.FormatInt(s.Start.UnixNano(), 10), "endTimeUnixNano": strconv.FormatInt(s.End.UnixNano(), 10),
-		"attributes": keyValues(cleanAttributes(s.Attributes, capture, false, masked), s.AttributeKeys), "status": status,
+		"attributes": keyValues(attributes, s.AttributeKeys), "status": status,
 	}
 	if s.Parent.SpanID != "" {
 		encoded["parentSpanId"] = s.Parent.SpanID
