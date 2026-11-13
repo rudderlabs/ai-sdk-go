@@ -4,7 +4,7 @@ go 1.26.11
 
 require (
 	github.com/openai/openai-go/v3 v3.70.0
-	github.com/rudderlabs/ai-sdk-go v0.8.0 // x-release-please-version
+	github.com/rudderlabs/ai-sdk-go v0.9.0 // x-release-please-version
 	github.com/rudderlabs/analytics-go/v4 v4.5.1
 )
 

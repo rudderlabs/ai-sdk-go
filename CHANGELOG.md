@@ -14,6 +14,21 @@
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
 - SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events.
 
+## [0.9.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.8.0...v0.9.0) (2026-11-13)
+
+
+### Features
+
+* add AcceptOutput so an accepted token cap does not decide the outcome ([#66](https://github.com/rudderlabs/ai-sdk-go/issues/66)) ([2e25ad9](https://github.com/rudderlabs/ai-sdk-go/commit/2e25ad9a2f11e742fb177a06a327793609678864))
+* add per-call input and output text to ai_llm_response_received ([#65](https://github.com/rudderlabs/ai-sdk-go/issues/65)) ([0294667](https://github.com/rudderlabs/ai-sdk-go/commit/029466731c2bfe5e1da6d75a7e34d8f8ffce2f23))
+* emit wrapper and manual spans with WithEmitSpans ([#72](https://github.com/rudderlabs/ai-sdk-go/issues/72)) ([9b6e3c7](https://github.com/rudderlabs/ai-sdk-go/commit/9b6e3c785d0db8e651cd6a63a9173433e55ddb5d))
+* **mcp:** add ClientInfoFallback, resolved after remembered clients ([#70](https://github.com/rudderlabs/ai-sdk-go/issues/70)) ([a5132d5](https://github.com/rudderlabs/ai-sdk-go/commit/a5132d5eea5b3df5a73120600f5c30b664dbf5fa))
+
+
+### Bug Fixes
+
+* **mcp:** trim intents and capability labels like Node and Python ([#71](https://github.com/rudderlabs/ai-sdk-go/issues/71)) ([2e7415c](https://github.com/rudderlabs/ai-sdk-go/commit/2e7415c4ad93b35d62b1dc4e64d272578a85ca81))
+
 ## [0.8.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.7.0...v0.8.0) (2026-11-12)
 
 

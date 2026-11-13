@@ -9,7 +9,7 @@ require (
 	github.com/mark3labs/mcp-go v1.5.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/openai/openai-go/v3 v3.94.0
-	github.com/rudderlabs/ai-sdk-go v0.8.0 // x-release-please-version
+	github.com/rudderlabs/ai-sdk-go v0.9.0 // x-release-please-version
 	github.com/rudderlabs/ai-sdk-go/rudderanthropic v0.1.0
 	github.com/rudderlabs/ai-sdk-go/rudderbedrock v0.1.0
 	github.com/rudderlabs/ai-sdk-go/ruddergenai v0.1.0
