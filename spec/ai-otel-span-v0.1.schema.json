@@ -88,7 +88,7 @@
           "type": "object",
           "properties": {
             "provider_name": { "type": "string" },
-            "operation_name": { "type": "string" },
+            "operation_name": { "type": "string", "examples": ["chat", "execute_tool", "retrieval", "invoke_agent"] },
             "request_model": { "type": "string" },
             "response_model": { "type": "string" },
             "input_tokens": { "type": "integer", "minimum": 0 },
@@ -145,7 +145,25 @@
                               "kind": { "type": "integer" },
                               "startTimeUnixNano": { "type": "string" },
                               "endTimeUnixNano": { "type": "string" },
-                              "attributes": { "type": "array" },
+                              "attributes": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": { "key": { "type": "string" }, "value": { "type": "object" } },
+                                  "allOf": [{
+                                    "if": { "required": ["key"], "properties": { "key": { "const": "rudderstack.span_source" } } },
+                                    "then": {
+                                      "required": ["value"],
+                                      "properties": {
+                                        "value": {
+                                          "required": ["stringValue"],
+                                          "properties": { "stringValue": { "enum": ["wrapper", "manual", "integration"] } }
+                                        }
+                                      }
+                                    }
+                                  }]
+                                }
+                              },
                               "events": { "type": "array" },
                               "links": { "type": "array" },
                               "status": { "type": "object" }

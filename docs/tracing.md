@@ -80,6 +80,55 @@ are dropped, cycles are dropped, and other unrepresentable list entries keep nul
 Interim behavior: enabling wrapper spans and an OTel processor instrumenting the same provider
 call can emit two spans. Cross-source span deduplication is not currently applied.
 
+## Framework trees with manual spans
+
+LangChain, OpenAI Agents SDK, Claude Agent SDK and Vercel AI SDK framework integration spans
+(`rudderstack.span_source: integration`) are unavailable in Go because Go has no integrations
+for those frameworks. This is a platform limit. Build the same agent/tool/model tree with
+manual spans and wrapped provider calls instead. Enable `WithEmitSpans(true)` and pass the
+context returned by `StartInteraction` and each `StartSpan` into every goroutine and call:
+
+```go
+// client is an OpenAI client configured with rudderopenai.WithTracking().
+err := rudderstackai.RunInteraction(ctx, opts, func(ctx context.Context, in *rudderstackai.Interaction) error {
+    ctx, agent := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{
+        Name: "assistant", Operation: "invoke_agent",
+    })
+    var wg sync.WaitGroup
+    errs := make(chan error, 2)
+    for _, name := range []string{"search", "lookup"} {
+        wg.Go(func() {
+            toolCtx, tool := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{
+                Name: name, Operation: "execute_tool",
+            })
+            // Use toolCtx for retrieval spans and other nested work too.
+            stream := client.Chat.Completions.NewStreaming(toolCtx, params)
+            for stream.Next() {
+                send(stream.Current())
+            }
+            err := stream.Err()
+            if closeErr := stream.Close(); err == nil {
+                err = closeErr
+            }
+            tool.End(err)
+            errs <- err
+        })
+    }
+    wg.Wait()
+    var result error
+    for range 2 {
+        result = errors.Join(result, <-errs)
+    }
+    agent.End(result)
+    return result
+})
+```
+
+Import `context`, `errors` and `sync` for this pattern. `send` must support concurrent calls.
+The two manual tool spans parent to the manual agent; each streamed wrapper span parents to
+its own tool. All share the interaction and trace. Keep parents open until workers and streams
+finish. An `errgroup.WithContext(ctx)` works the same way: pass its derived context into workers.
+
 Provider middleware records a failed span when a downstream handler panics, then re-panics with
 its original value unchanged. Manual spans use an explicit lifecycle: call `End(err)`; errors
 record their Go concrete type, and error text follows the content policy. Raw responses that the
@@ -103,8 +152,9 @@ uses the same attribute set as Node.
   one span. Node AFC emits one span per outer request, joining only the last call. Applications
   managing a Go tool loop make separate requests; pass the manual span context explicitly to
   tools and subsequent requests.
-- Node-only LangChain, OpenAI Agents and Claude Agent SDK integrations, and bound-stream
-  completion APIs, have no existing Go wrapper.
+- LangChain, OpenAI Agents SDK, Claude Agent SDK and Vercel AI SDK framework integrations have
+  no Go wrapper. Node supports all four; Python supports the first three. Their integration
+  fixture cases are explicitly skipped in Go. Bound-stream completion APIs also have no Go wrapper.
 - HTTP middleware has no hook for the outer SDK method's promise settlement. Retry grouping uses
   per-invocation request identity, retry headers and response-body probes. With spans enabled,
   every failed attempt has a bounded one-second retry grace, even without context cancellation.
