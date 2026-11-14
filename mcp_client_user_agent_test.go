@@ -58,16 +58,16 @@ func TestClientFromUserAgent(t *testing.T) {
 }
 
 func TestMCPUserAgentFallback(t *testing.T) {
-	for _, scenario := range []string{"known", "seen", "unknown", "app", "app_version_only", "empty", "blank", "panic", "absent", "metadata", "resolver"} {
+	for _, scenario := range []string{"known", "seen", "unknown", "app", "app_version_only", "empty", "blank", "panic", "absent", "metadata", "resolver", "title_only", "title_blank_labels", "title_unknown", "title_app", "title_empty"} {
 		t.Run(scenario, func(t *testing.T) {
 			ua, wantName, wantVersion := "claude-code/2.1.322 (cli)", "claude-code", "2.1.322"
 			calls := 0
 			opts := Options{}
-			if scenario == "app" || scenario == "app_version_only" || scenario == "empty" || scenario == "blank" || scenario == "panic" {
+			if scenario == "app" || scenario == "app_version_only" || scenario == "empty" || scenario == "blank" || scenario == "panic" || scenario == "title_app" || scenario == "title_empty" {
 				opts.ClientInfoFallback = func(context.Context, *auth.TokenInfo) (string, string) {
 					calls++
 					switch scenario {
-					case "app":
+					case "app", "title_app":
 						return "app-client", "3"
 					case "app_version_only":
 						return "", "3"
@@ -81,11 +81,11 @@ func TestMCPUserAgentFallback(t *testing.T) {
 				}
 			}
 			switch scenario {
-			case "app":
+			case "app", "title_app":
 				wantName, wantVersion = "app-client", "3"
 			case "app_version_only":
 				wantName, wantVersion = "", "3"
-			case "unknown":
+			case "unknown", "title_unknown":
 				ua, wantName, wantVersion = "jane.doe@example.com/9.9 secret-agent", "other", ""
 			case "absent":
 				ua, wantName, wantVersion = "", "", ""
@@ -104,10 +104,24 @@ func TestMCPUserAgentFallback(t *testing.T) {
 			if scenario == "metadata" {
 				meta["io.modelcontextprotocol/clientInfo"] = map[string]any{"name": "metadata", "version": "4"}
 			}
+			if strings.HasPrefix(scenario, "title_") {
+				info := map[string]any{"title": "Request Client Title"}
+				if scenario == "title_blank_labels" {
+					info["name"], info["version"] = " \t", "\n"
+				}
+				meta["io.modelcontextprotocol/clientInfo"] = info
+				meta["io.modelcontextprotocol/protocolVersion"] = "2026-07-28"
+				meta["io.modelcontextprotocol/clientCapabilities"] = map[string]any{}
+			}
 			w, _ := instances.get(s)
 			var header http.Header
 			if ua != "" {
 				header = http.Header{"User-Agent": []string{ua}}
+				if strings.HasPrefix(scenario, "title_") {
+					header.Set("Mcp-Protocol-Version", "2026-07-28")
+					header.Set("Mcp-Method", "tools/call")
+					header.Set("Mcp-Name", "list_destinations")
+				}
 			}
 			_, err := w.receiving(func(context.Context, string, mcp.Request) (mcp.Result, error) { return &mcp.CallToolResult{}, nil })(context.Background(), "tools/call", &mcp.CallToolRequest{
 				Params: &mcp.CallToolParamsRaw{Name: "list_destinations", Arguments: json.RawMessage(`{"workspace_id":"w"}`), Meta: mcp.Meta(meta)},
@@ -120,7 +134,7 @@ func TestMCPUserAgentFallback(t *testing.T) {
 				t.Errorf("fallback calls = %d, want 1", calls)
 			}
 			events := []string{"mcp_tool_called"}
-			if scenario == "seen" || scenario == "metadata" {
+			if scenario == "seen" || scenario == "metadata" || strings.HasPrefix(scenario, "title_") {
 				events = append(events, "mcp_client_seen")
 			} else if len(r.named("mcp_client_seen")) != 0 {
 				t.Error("ordinary request emitted client-seen")
@@ -139,6 +153,9 @@ func TestMCPUserAgentFallback(t *testing.T) {
 					if _, ok := p["client_version"]; ok {
 						t.Errorf("%s has unexpected client_version", event)
 					}
+				}
+				if event == "mcp_client_seen" && strings.HasPrefix(scenario, "title_") && p["client_title"] != "Request Client Title" {
+					t.Errorf("request title lost: %v", p)
 				}
 				if _, ok := p["mcp_session_id"]; ok {
 					t.Errorf("%s has stateless session ID", event)
