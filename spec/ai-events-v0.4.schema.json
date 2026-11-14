@@ -1201,7 +1201,7 @@
         "client_name": {
           "type": "string",
           "minLength": 1,
-          "description": "From clientInfo: the request's _meta on 2026-07-28, the initialize request on 2025-06-18."
+          "description": "From clientInfo: the request's _meta on 2026-07-28, the initialize request on 2025-06-18. MCP wrappers on HTTP fall back to the User-Agent: a known client's own clientInfo name, else `other` (spec/fixtures/mcp-client-user-agent-v0.1.json)."
         },
         "client_version": {
           "type": "string",

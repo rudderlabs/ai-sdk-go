@@ -48,6 +48,8 @@ type Request struct {
 	RegisteredPrompts []string
 	// HTTP reports a streamable HTTP request.
 	HTTP bool
+	// UserAgent is the HTTP request header, used only by the built-in client fallback.
+	UserAgent string
 }
 
 // Client is a client implementation.
