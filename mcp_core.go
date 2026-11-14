@@ -783,6 +783,9 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 	case o.ErrorType != "":
 		status = "error"
 		extra["error_type"] = o.ErrorType
+		if rc.opts.CaptureContent {
+			put(extra, "error_message", rc.opts.errorMessage(map[string]any{"error": map[string]any{"message": o.ErrorMessage}}))
+		}
 	case o.InputRequired:
 		// A 2026-07-28 input_required leg: the call goes on in the client's retry.
 		rc.inputRequired(o.InputKeys, o.RequestState)
@@ -811,6 +814,9 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 				kind = "api_error"
 			}
 			extra["error_type"] = kind
+			if rc.opts.CaptureContent {
+				put(extra, "error_message", rc.opts.errorMessage(result))
+			}
 		}
 	}
 	rc.finish("mcp_tool_called", "tool_name", rc.toolName, status, extra)
@@ -818,7 +824,7 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 }
 
 // Finished records a resources/read or prompts/get.
-func (rc *reqCtx) Finished(method, name string, size int, errorType string) {
+func (rc *reqCtx) Finished(method, name string, size int, errorType string, errorMessage ...string) {
 	event, nameKey := "mcp_resource_read", "resource_name"
 	if method == "prompts/get" {
 		event, nameKey = "mcp_prompt_used", "prompt_name"
@@ -832,6 +838,9 @@ func (rc *reqCtx) Finished(method, name string, size int, errorType string) {
 	if errorType != "" {
 		status = "error"
 		extra["error_type"] = errorType
+		if errorType != "cancelled" && rc.opts.CaptureContent && len(errorMessage) > 0 {
+			put(extra, "error_message", rc.opts.errorMessage(map[string]any{"error": map[string]any{"message": errorMessage[0]}}))
+		}
 	} else {
 		extra["result_size_bytes"] = size
 	}
@@ -1337,3 +1346,45 @@ func protocolVersion(v string) string {
 var protocolVersionRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 func cleanClient(client *mcpbridge.Client) *mcpbridge.Client { return mcpbridge.CleanClient(client) }
+
+// errorMessage implements spec/fixtures/mcp-error-message-v0.1.json: mask before capping,
+// and withhold empty text, failed masking and anything still matching a built-in pattern.
+func (o *options) errorMessage(source map[string]any) string {
+	var text string
+	if rpc, ok := source["error"].(map[string]any); ok {
+		text, _ = rpc["message"].(string)
+	} else if content, ok := source["content"].([]any); ok {
+		var blocks []string
+		for _, item := range content {
+			block, _ := item.(map[string]any)
+			if block["type"] == "text" {
+				if value, ok := block["text"].(string); ok {
+					blocks = append(blocks, value)
+				}
+			}
+		}
+		text = strings.Join(blocks, "\n")
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	masked, ok := o.maskErrorMessage(text)
+	if !ok || masked == "" || masked == redactionTimedOut || hasSensitive(masked) {
+		return ""
+	}
+	return capText(masked, maxTextLength)
+}
+
+// maskErrorMessage keeps the error message masking defaults separate from existing MCP fields.
+func (o *options) maskErrorMessage(text string) (string, bool) {
+	c := cfg()
+	if o.DisableRedaction || !c.redact {
+		return text, true
+	}
+	resolved := *o
+	if resolved.Redact == nil {
+		resolved.Redact = c.redactHook
+	}
+	return resolved.mask(text)
+}

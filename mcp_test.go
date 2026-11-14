@@ -226,7 +226,7 @@ func TestCancelledCall(t *testing.T) {
 		<-ctx.Done()
 		return nil, nil, ctx.Err()
 	})
-	r := wrap(t, server, Options{})
+	r := wrap(t, server, Options{CaptureContent: true})
 	cs := connect(t, server, "2025-06-18", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -243,6 +243,9 @@ func TestCancelledCall(t *testing.T) {
 	}
 	if ms, ok := p["time_to_cancel_ms"].(int64); !ok || ms < 10 {
 		t.Errorf("time_to_cancel_ms = %v", p["time_to_cancel_ms"])
+	}
+	if _, ok := p["error_message"]; ok {
+		t.Error("error_message on a cancelled call")
 	}
 	if _, ok := p["duration_ms"]; ok {
 		t.Error("duration_ms on a cancelled call")

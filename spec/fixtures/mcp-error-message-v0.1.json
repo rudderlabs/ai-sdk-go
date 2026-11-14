@@ -1,0 +1,199 @@
+{
+  "fixture_version": 1,
+  "description": "Opt-in `error_message` on failed mcp_tool_called, mcp_resource_read and mcp_prompt_used, sent only with content capture on. Source: for a tool result with `isError: true`, the `text` of its `content` items whose `type` is `text` and whose `text` is a string, joined with a newline; for a JSON-RPC error response, `error.message` when it is a string (never `error.data`). Trim surrounding whitespace, mask with the SDK's opt-in text masking (built-in patterns from redaction-v0.1.json, then the customer redact hook), withhold the field when masking fails or the masked text still matches a built-in pattern, then cap at 200 code points. Empty text after trimming is withheld. `expected: null` means no `error_message`. Cases use the default masking configuration.",
+  "max_code_points": 200,
+  "cases": [
+    {
+      "name": "result_text",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "Warehouse query timed out after 30s"
+          }
+        ]
+      },
+      "expected": "Warehouse query timed out after 30s"
+    },
+    {
+      "name": "result_text_blocks_joined",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "Query failed."
+          },
+          {
+            "type": "image",
+            "data": "AAAA",
+            "mimeType": "image/png"
+          },
+          {
+            "type": "text",
+            "text": "Column FOO not found"
+          }
+        ]
+      },
+      "expected": "Query failed.\nColumn FOO not found"
+    },
+    {
+      "name": "result_trimmed",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "  \n Rate limited \n"
+          }
+        ]
+      },
+      "expected": "Rate limited"
+    },
+    {
+      "name": "result_masked_email",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "No access for jane.doe@example.com in workspace"
+          }
+        ]
+      },
+      "expected": "No access for [email] in workspace"
+    },
+    {
+      "name": "result_masked_secret",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "Upstream rejected key sk-proj-AbCdEf0123456789xyzXYZ"
+          }
+        ]
+      },
+      "expected": "Upstream rejected key [secret]"
+    },
+    {
+      "name": "result_capped",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "Query failed: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          }
+        ]
+      },
+      "expected": "Query failed: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "name": "result_capped_code_points",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+          }
+        ]
+      },
+      "expected": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+    },
+    {
+      "name": "result_no_text",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "image",
+            "data": "AAAA",
+            "mimeType": "image/png"
+          }
+        ]
+      },
+      "expected": null
+    },
+    {
+      "name": "result_blank_text",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "   "
+          }
+        ]
+      },
+      "expected": null
+    },
+    {
+      "name": "result_text_not_string",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": 42
+          }
+        ]
+      },
+      "expected": null
+    },
+    {
+      "name": "result_no_content",
+      "result": {
+        "isError": true
+      },
+      "expected": null
+    },
+    {
+      "name": "jsonrpc_error",
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: workspace_id is required"
+      },
+      "expected": "Invalid params: workspace_id is required"
+    },
+    {
+      "name": "jsonrpc_error_masked",
+      "error": {
+        "code": -32603,
+        "message": "Lookup failed for 10.0.12.7"
+      },
+      "expected": "Lookup failed for [ip]"
+    },
+    {
+      "name": "jsonrpc_error_data_ignored",
+      "error": {
+        "code": -32603,
+        "message": "Internal error",
+        "data": {
+          "detail": "secret stack"
+        }
+      },
+      "expected": "Internal error"
+    },
+    {
+      "name": "jsonrpc_error_message_not_string",
+      "error": {
+        "code": -32603,
+        "message": {
+          "text": "x"
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "jsonrpc_error_blank",
+      "error": {
+        "code": -32603,
+        "message": ""
+      },
+      "expected": null
+    }
+  ]
+}

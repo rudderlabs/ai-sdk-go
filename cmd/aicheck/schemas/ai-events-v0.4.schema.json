@@ -1358,6 +1358,12 @@
         "error_type": {
           "$ref": "#/$defs/mcp_error_type"
         },
+        "error_message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Opt-in (content capture): why the request failed, from the isError result's text content or the JSON-RPC error message. Masked, capped at 200 characters and withheld if it still looks sensitive (spec/fixtures/mcp-error-message-v0.1.json)."
+        },
         "is_error_result": {
           "type": "boolean",
           "description": "The tool returned a result flagged isError, as opposed to a protocol error."
@@ -1610,6 +1616,12 @@
         "error_type": {
           "$ref": "#/$defs/mcp_error_type"
         },
+        "error_message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Opt-in (content capture): why the request failed, from the isError result's text content or the JSON-RPC error message. Masked, capped at 200 characters and withheld if it still looks sensitive (spec/fixtures/mcp-error-message-v0.1.json)."
+        },
         "duration_ms": {
           "type": "number",
           "minimum": 0
@@ -1658,6 +1670,12 @@
         },
         "error_type": {
           "$ref": "#/$defs/mcp_error_type"
+        },
+        "error_message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Opt-in (content capture): why the request failed, from the isError result's text content or the JSON-RPC error message. Masked, capped at 200 characters and withheld if it still looks sensitive (spec/fixtures/mcp-error-message-v0.1.json)."
         },
         "duration_ms": {
           "type": "number",

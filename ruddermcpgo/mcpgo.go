@@ -75,7 +75,7 @@ type Options struct {
 	// by mcp_client_seen, per server name and process. Also sets remembered client expiry
 	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
-	// CaptureContent sends masked call_reason and capability_detail capped at 200
+	// CaptureContent sends masked call_reason, capability_detail and error_message capped at 200
 	// characters, and feedback_text capped at 2000. Off by default.
 	CaptureContent bool
 	// CapabilityRequests registers the request_capability tool, recorded as
@@ -94,7 +94,7 @@ type Options struct {
 	Transport string
 	// ServerName overrides the server's own name, sent as server_name.
 	ServerName string
-	// Redact runs after the built-in masking of call_reason, capability_detail and feedback_text; if it fails
+	// Redact runs after the built-in masking of call_reason, capability_detail, error_message and feedback_text; for error_message, defaults to WithRedactHook. If it fails
 	// or panics, the field is not sent.
 	Redact func(text string) (string, error)
 	// DisableRedaction turns redaction off: the built-in masking and Redact.
@@ -743,12 +743,25 @@ func (t *tracked) onError(ctx context.Context, _ any, method mcp.MCPMethod, mess
 		switch c.method {
 		case "tools/call":
 			if !c.capability {
-				c.c.ToolDone(mcpbridge.Outcome{ErrorType: kind, Cancelled: kind == "cancelled"})
+				c.c.ToolDone(mcpbridge.Outcome{ErrorType: kind, Cancelled: kind == "cancelled", ErrorMessage: protocolErrorMessage(err)})
 			}
 		case "resources/read", "prompts/get":
-			c.c.Finished(c.method, c.name, 0, kind)
+			c.c.Finished(c.method, c.name, 0, kind, protocolErrorMessage(err))
 		}
 	})
+}
+
+// protocolErrorMessage reads the JSON-RPC response rather than requestError.Error(),
+// which adds a prefix absent from the wire. Error data is never captured.
+func protocolErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	var wire interface{ ToJSONRPCError() mcp.JSONRPCError }
+	if errors.As(err, &wire) {
+		return wire.ToJSONRPCError().Error.Message
+	}
+	return err.Error()
 }
 
 // errorType maps an mcp-go request error to an error_type: by its JSON-RPC code, else by the
