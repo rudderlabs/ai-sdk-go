@@ -151,6 +151,22 @@
       "expected": null
     },
     {
+      "name": "result_error_field_ignored",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "Query failed"
+          }
+        ],
+        "error": {
+          "message": "not the source"
+        }
+      },
+      "expected": "Query failed"
+    },
+    {
       "name": "jsonrpc_error",
       "error": {
         "code": -32602,

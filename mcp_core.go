@@ -783,7 +783,7 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 	case o.ErrorType != "":
 		status = "error"
 		extra["error_type"] = o.ErrorType
-		if rc.opts.CaptureContent {
+		if o.ErrorType != "cancelled" && rc.opts.CaptureContent {
 			put(extra, "error_message", rc.opts.errorMessage(map[string]any{"error": map[string]any{"message": o.ErrorMessage}}))
 		}
 	case o.InputRequired:
@@ -814,8 +814,8 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 				kind = "api_error"
 			}
 			extra["error_type"] = kind
-			if rc.opts.CaptureContent {
-				put(extra, "error_message", rc.opts.errorMessage(result))
+			if kind != "cancelled" && rc.opts.CaptureContent {
+				put(extra, "error_message", rc.opts.errorMessage(map[string]any{"result": result}))
 			}
 		}
 	}
@@ -1347,13 +1347,15 @@ var protocolVersionRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 func cleanClient(client *mcpbridge.Client) *mcpbridge.Client { return mcpbridge.CleanClient(client) }
 
-// errorMessage implements spec/fixtures/mcp-error-message-v0.1.json: mask before capping,
+// errorMessage reads an explicit {result} or {error} source as described by
+// spec/fixtures/mcp-error-message-v0.1.json: mask before capping,
 // and withhold empty text, failed masking and anything still matching a built-in pattern.
-func (o *options) errorMessage(source map[string]any) string {
+func (o *options) errorMessage(failure map[string]any) string {
 	var text string
-	if rpc, ok := source["error"].(map[string]any); ok {
+	if rpc, ok := failure["error"].(map[string]any); ok {
 		text, _ = rpc["message"].(string)
-	} else if content, ok := source["content"].([]any); ok {
+	} else if result, ok := failure["result"].(map[string]any); ok && result["isError"] == true {
+		content, _ := result["content"].([]any)
 		var blocks []string
 		for _, item := range content {
 			block, _ := item.(map[string]any)
@@ -1365,7 +1367,10 @@ func (o *options) errorMessage(source map[string]any) string {
 		}
 		text = strings.Join(blocks, "\n")
 	}
-	text = strings.TrimSpace(text)
+	// JS String.prototype.trim includes BOM but excludes NEL (U+0085).
+	text = strings.TrimFunc(text, func(r rune) bool {
+		return r == '\ufeff' || (r != '\u0085' && unicode.IsSpace(r))
+	})
 	if text == "" {
 		return ""
 	}

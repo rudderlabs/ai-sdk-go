@@ -10,6 +10,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
 
 func TestMCPErrorMessageFixtures(t *testing.T) {
@@ -29,8 +31,8 @@ func TestMCPErrorMessageFixtures(t *testing.T) {
 	}
 	for _, tc := range fixture.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			source := tc.Result
-			if source == nil {
+			source := map[string]any{"result": tc.Result}
+			if tc.Result == nil {
 				source = map[string]any{"error": tc.Error}
 			}
 			want := ""
@@ -39,6 +41,66 @@ func TestMCPErrorMessageFixtures(t *testing.T) {
 			}
 			if got := (&options{}).errorMessage(source); got != want {
 				t.Errorf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestMCPErrorMessageSourcesAndWhitespace(t *testing.T) {
+	for _, tc := range []struct {
+		name, text, want string
+	}{
+		{name: "BOM only", text: "\ufeff"},
+		{name: "Unicode whitespace only", text: "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"},
+		{name: "BOM around text", text: "\ufeff failure \ufeff", want: "failure"},
+		{name: "embedded BOM", text: "a\ufeffb", want: "a\ufeffb"},
+		{name: "NEL is not JS whitespace", text: "\u0085", want: "\u0085"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, source := range []map[string]any{
+				{"result": map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": tc.text}}}},
+				{"error": map[string]any{"message": tc.text, "data": "ignored"}},
+			} {
+				if got := (&options{}).errorMessage(source); got != tc.want {
+					t.Errorf("got %q, want %q", got, tc.want)
+				}
+			}
+		})
+	}
+	for _, source := range []map[string]any{
+		{"result": map[string]any{"isError": true, "error": map[string]any{"message": "ignored"}}},
+		{"result": map[string]any{"isError": false, "content": []any{map[string]any{"type": "text", "text": "success"}}}},
+		{"error": map[string]any{"data": "ignored"}, "result": map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "ignored"}}}},
+	} {
+		if got := (&options{}).errorMessage(source); got != "" {
+			t.Errorf("unexpected message %q from %v", got, source)
+		}
+	}
+}
+
+func TestMCPErrorMessageCancelledOutcomes(t *testing.T) {
+	result := map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "cancelled secret"}}}
+	for _, tc := range []struct {
+		name    string
+		outcome mcpbridge.Outcome
+	}{
+		{"classified result", mcpbridge.Outcome{Result: result, ClassifiedError: "cancelled"}},
+		{"protocol error", mcpbridge.Outcome{ErrorType: "cancelled", ErrorMessage: "cancelled secret"}},
+		{"cancelled call", mcpbridge.Outcome{Result: result, Cancelled: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := workspaceServer("cancelled-errors", nil)
+			r := wrap(t, s, Options{CaptureContent: true})
+			w, _ := instances.get(s)
+			rc := w.begin(mcpbridge.Request{Ctx: context.Background()})
+			rc.ToolCall("list_destinations", nil, false, nil, "")
+			rc.ToolDone(tc.outcome)
+			p := r.props(t, "mcp_tool_called")
+			if p["error_type"] != "cancelled" || p["tool_status"] != "error" {
+				t.Errorf("cancel fields: %v", p)
+			}
+			if _, ok := p["error_message"]; ok {
+				t.Errorf("error_message on cancellation: %v", p)
 			}
 		})
 	}

@@ -22,6 +22,16 @@ func reviewCheck(t *testing.T, capture string, args ...string) (int, string) {
 	return code, out.String()
 }
 
+func TestReviewMCPErrorMessageContent(t *testing.T) {
+	capture := `{"type":"track","event":"mcp_tool_called","userId":"u","properties":{"server_name":"docs","client_name":"client","tool_name":"search","tool_status":"error","error_type":"api_error","error_message":"query failed","request_id":"1"},"context":{"wrapperLibrary":{"name":"ai-sdk-go","version":"0.7.0","specVersion":"0.4.0","integration":"mcp"}}}`
+	if code, out := reviewCheck(t, capture); code != 1 || !strings.Contains(out, "content sent with capture off: ['error_message']") {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+	if code, out := reviewCheck(t, capture, "--capture-content"); code != 0 {
+		t.Fatalf("exit %d: %s", code, out)
+	}
+}
+
 func TestReviewFeedbackSystemTrigger(t *testing.T) {
 	capture := `{"type":"track","event":"ai_feedback_requested","userId":"u1","properties":{"source":"client","feature":"support_bot","surface":"mobile","conversation_id":"c1","interaction_id":"11111111-1111-4111-8111-111111111111","trigger":"system"}}`
 	if code, out := reviewCheck(t, capture); code != 0 {

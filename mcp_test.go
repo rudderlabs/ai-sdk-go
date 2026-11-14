@@ -643,7 +643,7 @@ func TestDeclaredToolEventPropertyGuard(t *testing.T) {
 	for _, capture := range []bool{false, true} {
 		t.Run(fmt.Sprintf("capture=%t", capture), func(t *testing.T) {
 			properties := map[string]any{"promptLength": 12, "promptSource": "app", "responseTimeMs": 3, "cardKinds": 2}
-			for _, name := range []string{"prompt_text", "response_text", "feedback_text", "call_reason", "capability_detail", "tool_status", "tool_name", "primary_model", "llm_call_count", "mcp_session_id", "server_version"} {
+			for _, name := range []string{"prompt_text", "response_text", "feedback_text", "call_reason", "capability_detail", "error_message", "tool_status", "tool_name", "primary_model", "llm_call_count", "mcp_session_id", "server_version"} {
 				for _, key := range propertyVariants(name) {
 					properties[key] = "custom"
 				}

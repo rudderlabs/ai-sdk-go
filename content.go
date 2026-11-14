@@ -20,7 +20,7 @@ func propertyName(key string) string {
 }
 
 // Content names shared by the Node.js, Python and Go SDKs.
-var contentProperties = set("prompt_text", "response_text", "feedback_text", "intent_summary", "explanation", "call_reason", "capability_detail")
+var contentProperties = set("prompt_text", "response_text", "feedback_text", "intent_summary", "explanation", "call_reason", "capability_detail", "error_message")
 
 func dropContentProperty(key string, capture bool) bool {
 	if capture || !contentProperties[propertyName(key)] {

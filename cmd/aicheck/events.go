@@ -46,7 +46,7 @@ var (
 	tracing     = []string{"tracing", "tracing/vercel-ai-sdk"}          // integrations of span events, which carry no specVersion
 	turnEvents  = set("ai_user_prompt_created", "ai_response_received") // the surface of a turn comes from these
 	// intent_summary is not here: the classifier's own intent_summary option sends it, whatever the capture switch
-	content   = set("prompt_text", "response_text", "explanation", "call_reason", "capability_detail", "feedback_text")
+	content   = set("prompt_text", "response_text", "explanation", "call_reason", "capability_detail", "feedback_text", "error_message")
 	rawMCP    = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
 	runFields = []string{"task_name", "trigger_source", "trigger_event_id", "conversation_id", "account_id",
 		"on_behalf_of", "parent_interaction_id", "llm_call_count", "total_tokens"}
