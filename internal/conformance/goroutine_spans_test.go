@@ -3,6 +3,7 @@ package conformance
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"testing"
@@ -51,7 +52,11 @@ func TestGoroutineSpanParents(t *testing.T) {
 				defer interaction.End(rudderstackai.EndOptions{})
 				ctx, root := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{Name: "agent", Operation: "invoke_agent"})
 				defer root.End(nil)
-				tools := make(chan *rudderstackai.Span, 2)
+				type toolCall struct {
+					span  *rudderstackai.Span
+					model string
+				}
+				tools := make(chan toolCall, 2)
 				type link struct {
 					span     *rudderstackai.Span
 					parentID string
@@ -60,9 +65,14 @@ func TestGoroutineSpanParents(t *testing.T) {
 				ready := sync.WaitGroup{}
 				ready.Add(2)
 				worker := func(ctx context.Context, n int) error {
+					workerCall := maps.Clone(call)
+					params := maps.Clone(obj0(call["params"]))
+					model := fmt.Sprintf("%s-worker-%d", str(params["model"]), n)
+					params["model"] = model
+					workerCall["params"] = params
 					toolCtx, tool := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{Name: fmt.Sprintf("tool-%d", n), Operation: "execute_tool"})
 					defer tool.End(nil)
-					tools <- tool
+					tools <- toolCall{tool, model}
 					ready.Done()
 					ready.Wait() // Both tools stay active while their independent descendants start.
 					var nested sync.WaitGroup
@@ -72,7 +82,7 @@ func TestGoroutineSpanParents(t *testing.T) {
 						retrieval.End(nil)
 					})
 					nested.Wait()
-					return apis[str(call["api"])](toolCtx, &run{t: t, llm: llm}, call)
+					return apis[str(workerCall["api"])](toolCtx, &run{t: t, llm: llm}, workerCall)
 				}
 				if mode == "errgroup" {
 					group, groupCtx := errgroup.WithContext(ctx)
@@ -106,10 +116,12 @@ func TestGoroutineSpanParents(t *testing.T) {
 				rudderstackai.Flush(context.Background())
 				parents := map[string]string{root.SpanID: ""}
 				toolIDs := map[string]bool{}
+				wrapperParentByModel := map[string]string{str(obj0(call["params"])["model"]): root.SpanID}
 				for range 2 {
 					tool := <-tools
-					parents[tool.SpanID] = root.SpanID
-					toolIDs[tool.SpanID] = true
+					parents[tool.span.SpanID] = root.SpanID
+					toolIDs[tool.span.SpanID] = true
+					wrapperParentByModel[tool.model] = tool.span.SpanID
 				}
 				retrievalIDs := map[string]string{}
 				for range 2 {
@@ -137,6 +149,11 @@ func TestGoroutineSpanParents(t *testing.T) {
 							t.Errorf("nested goroutine lost tool parent: %v", p)
 						}
 					} else {
+						model := str(obj0(p["gen_ai"])["request_model"])
+						want, ok := wrapperParentByModel[model]
+						if !ok || parent != want {
+							t.Errorf("wrapper for model %q parent = %s, want %s", model, parent, want)
+						}
 						wrapperParents[parent]++
 					}
 					if p["trace_id"] != root.TraceID || p["interaction_id"] != interaction.ID() || p["conversation_id"] != "goroutine-conversation" || event.UserId != "goroutine-user" {
