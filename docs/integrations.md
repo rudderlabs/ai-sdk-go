@@ -252,7 +252,14 @@ An agent that calls MCP servers can join each `mcp_tool_called` to its answer by
 
 ## Limits and differences from Node.js
 
-- Integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients only. There are no LangChain, LangGraph, OpenAI Agents SDK, Claude Agent SDK or Vercel AI SDK integrations, and no OpenTelemetry span processor or exporter.
+- Provider integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients. Go has no LangChain,
+  LangGraph, OpenAI Agents SDK, Claude Agent SDK or Vercel AI SDK integrations. The framework
+  integration spans added under `emitSpans` in Node are therefore unavailable in Go; this is a
+  platform limit. Enable `WithEmitSpans(true)` and use manual `invoke_agent`, `execute_tool` and
+  `retrieval` spans with wrapped model calls to build the same tree. Pass each returned context
+  into nested calls, goroutines and streams; wait for workers before ending their parents.
+  See the [manual agent/tool/stream example](tracing.md#framework-trees-with-manual-spans).
+  The optional `rudderotel` module also provides an OpenTelemetry span processor and exporter.
 - genai retries are recorded per attempt, as are openai-go and anthropic-sdk-go connection-error retries outside an interaction ([Retries](#retries)). Node.js wraps the SDK method and sees one call.
 - Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `EndOptions`; `client_disconnected` also by [`Middleware`](configuration.md#context-values).
 - Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.

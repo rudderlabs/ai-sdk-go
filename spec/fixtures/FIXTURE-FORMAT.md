@@ -243,3 +243,43 @@ Language-neutral inputs for wrapper and manual spans; `fixture_version: 1`, span
 Portable container descriptors use `$container`: `bytes` with byte `values`; `map` with `[key, value]` `entries`; `set` with `values`; `class` with `fields`; `bigint` with decimal string `value`; `symbol` for a nonportable key; and `cycle` with `value` and `self_key` (add a reference to that value itself). Drivers materialize the runtime containers before capture. These descriptors never appear on the wire. Strip native byte buffers/views, the serialized byte-buffer shape `{ "type": "Buffer", "data": [byte, ...] }` and cyclic edges; keep ordinary leaves and numeric-keyed objects, including numeric-valued Maps. Unsupported function, symbol and undefined array entries become null placeholders; cyclic array edges are omitted. Stringify string/number/boolean/bigint Map keys with `String()` (booleans lowercase), drop object/symbol keys, and turn Maps into objects and Sets into arrays. The `portable-containers` case must decode to `{ "1": "[email]", "2": "two", "true": ["keep"], "cycle": { "text": "keep" }, "class": { "text": "[email]" }, "numeric": { "1": 7, "2": 8 } }`.
 
 Conformance scenarios with `config.emit_spans` normalize span IDs to `$span1`, `$span2`, etc., in emission order, using the same symbols on joined call events; trace IDs normalize to `$trace1`, etc. Span summaries retain source, GenAI attributes, parent IDs and status; times normalize to `<number>`. Pause snapshots optionally carry internal `sdk_trace_id` and pending-call `span_id`. Restoring pending events never replays a span.
+
+## integration-spans-v0.1.json
+
+Language-neutral framework lifecycle observations, with `fixture_version: 1`, span
+schema `0.1` and product event spec `0.4.0`. Each scenario names its `integration`,
+ordered `steps`, `execution` metadata and `expected_spans` in emission order. Run
+IDs are symbolic driver inputs; drivers map them to their emitted W3C span IDs.
+`start` has `run_id`, `operation`, `name` and optional `parent_run_id`; `end` has
+`run_id` and optional `error`; `token` is a streaming observation. A returned tool
+failure uses `tool_status_error: true`. Expected spans may specify `status_code`.
+Vercel starts optionally list `tool_calls` / `tool_results` with symbolic tool `id`
+and `name`, translated to response parts and the later step prompt. Operation names
+are `invoke_agent`, `chat`, `execute_tool`, `retrieval`. Drivers translate these
+observations into their native framework callbacks or messages. The fixture never
+requires JavaScript classes, SDK-specific ID syntax or promise objects.
+
+All scenarios run with spans on and content off/on. Expect each listed operation,
+parent link, `rudderstack.span_source: integration` and valid span wire events;
+content off must omit the driver's sentinel `private`. Roots without a parent use
+null `parent_run_id`. An enclosing SDK span may be added by a driver-specific test.
+Parallel starts precede either end; streaming uses the same start/end lifecycle
+with optional token observations. Claude translates agent starts to Task/Agent
+blocks and descendant parents to `parent_tool_use_id`; repeated assistant message
+IDs share a model span. Agents handoff names select handoff spans. Vercel steps
+have no expected tool execution spans: middleware cannot observe local executions.
+
+`execution.mode` currently uses `async`; ports may add `thread_pool` or `goroutine`
+and `worker_id` on steps without changing span/parent expectations. A port skips
+integrations unavailable in that language: Vercel is Node-only, Python supports
+the other three, and Go has no framework integrations. Future scenarios may add
+`wrapper_call` observations to assert context deduplication and `error` endings.
+
+Node's recorded `test/fixtures/integration-spans-off-main.json` compares product
+JSON bytes at every callback checkpoint, before interaction end and before/after
+flush, against the recorded `origin/main` commit. Regenerate intentionally with
+`node scripts/generate-integration-spans-off-fixture.mjs <git-ref>`. The recorder
+uses a Git archive, not a worktree, and installed pinned dependencies. IDs and the
+clock are fixed driver inputs; `wrapperLibrary.version` becomes `<sdk-version>` so
+release changes do not invalidate recorded bytes. No span await is added when
+spans are off; the LangChain synchronous tracer protocol is disabled in that case.

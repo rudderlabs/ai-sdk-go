@@ -1,0 +1,519 @@
+{
+  "fixture_version": 1,
+  "span_schema_version": "0.1",
+  "event_spec_version": "0.4.0",
+  "description": "Framework callback observations in causal order. Symbolic run IDs are driver inputs, expected spans are in emission order. See FIXTURE-FORMAT.md.",
+  "scenarios": [
+    {
+      "name": "langchain-stream-parallel-tools-retriever",
+      "integration": "langchain",
+      "execution": {
+        "mode": "async",
+        "streaming": true
+      },
+      "steps": [
+        {
+          "kind": "start",
+          "run_id": "root",
+          "operation": "invoke_agent",
+          "name": "root"
+        },
+        {
+          "kind": "start",
+          "run_id": "retrieve",
+          "operation": "retrieval",
+          "parent_run_id": "root",
+          "name": "retrieve"
+        },
+        {
+          "kind": "end",
+          "run_id": "retrieve"
+        },
+        {
+          "kind": "start",
+          "run_id": "model",
+          "operation": "chat",
+          "parent_run_id": "root",
+          "name": "model"
+        },
+        {
+          "kind": "token",
+          "run_id": "model"
+        },
+        {
+          "kind": "end",
+          "run_id": "model"
+        },
+        {
+          "kind": "start",
+          "run_id": "tool1",
+          "operation": "execute_tool",
+          "parent_run_id": "root",
+          "name": "tool1"
+        },
+        {
+          "kind": "start",
+          "run_id": "tool2",
+          "operation": "execute_tool",
+          "parent_run_id": "root",
+          "name": "tool2"
+        },
+        {
+          "kind": "end",
+          "run_id": "tool2"
+        },
+        {
+          "kind": "end",
+          "run_id": "tool1"
+        },
+        {
+          "kind": "end",
+          "run_id": "root"
+        }
+      ],
+      "expected_spans": [
+        {
+          "run_id": "retrieve",
+          "parent_run_id": "root",
+          "operation": "retrieval"
+        },
+        {
+          "run_id": "model",
+          "parent_run_id": "root",
+          "operation": "chat"
+        },
+        {
+          "run_id": "tool2",
+          "parent_run_id": "root",
+          "operation": "execute_tool"
+        },
+        {
+          "run_id": "tool1",
+          "parent_run_id": "root",
+          "operation": "execute_tool"
+        },
+        {
+          "run_id": "root",
+          "parent_run_id": null,
+          "operation": "invoke_agent"
+        }
+      ]
+    },
+    {
+      "name": "agents-stream-handoff-nested-parallel-tools",
+      "integration": "openai-agents",
+      "execution": {
+        "mode": "async",
+        "streaming": true
+      },
+      "steps": [
+        {
+          "kind": "start",
+          "run_id": "root",
+          "operation": "invoke_agent",
+          "name": "root"
+        },
+        {
+          "kind": "start",
+          "run_id": "generation",
+          "operation": "chat",
+          "parent_run_id": "root",
+          "name": "generation"
+        },
+        {
+          "kind": "end",
+          "run_id": "generation"
+        },
+        {
+          "kind": "start",
+          "run_id": "handoff",
+          "operation": "invoke_agent",
+          "parent_run_id": "root",
+          "name": "handoff"
+        },
+        {
+          "kind": "end",
+          "run_id": "handoff"
+        },
+        {
+          "kind": "start",
+          "run_id": "agent2",
+          "operation": "invoke_agent",
+          "parent_run_id": "root",
+          "name": "agent2"
+        },
+        {
+          "kind": "start",
+          "run_id": "tool1",
+          "operation": "execute_tool",
+          "parent_run_id": "agent2",
+          "name": "tool1"
+        },
+        {
+          "kind": "start",
+          "run_id": "tool2",
+          "operation": "execute_tool",
+          "parent_run_id": "agent2",
+          "name": "tool2"
+        },
+        {
+          "kind": "start",
+          "run_id": "nested",
+          "operation": "invoke_agent",
+          "parent_run_id": "tool1",
+          "name": "nested"
+        },
+        {
+          "kind": "start",
+          "run_id": "nested-model",
+          "operation": "chat",
+          "parent_run_id": "nested",
+          "name": "nested-model"
+        },
+        {
+          "kind": "end",
+          "run_id": "nested-model"
+        },
+        {
+          "kind": "end",
+          "run_id": "nested"
+        },
+        {
+          "kind": "end",
+          "run_id": "tool2"
+        },
+        {
+          "kind": "end",
+          "run_id": "tool1"
+        },
+        {
+          "kind": "end",
+          "run_id": "agent2"
+        },
+        {
+          "kind": "end",
+          "run_id": "root"
+        }
+      ],
+      "expected_spans": [
+        {
+          "run_id": "generation",
+          "parent_run_id": "root",
+          "operation": "chat"
+        },
+        {
+          "run_id": "handoff",
+          "parent_run_id": "root",
+          "operation": "invoke_agent"
+        },
+        {
+          "run_id": "nested-model",
+          "parent_run_id": "nested",
+          "operation": "chat"
+        },
+        {
+          "run_id": "nested",
+          "parent_run_id": "tool1",
+          "operation": "invoke_agent"
+        },
+        {
+          "run_id": "tool2",
+          "parent_run_id": "agent2",
+          "operation": "execute_tool"
+        },
+        {
+          "run_id": "tool1",
+          "parent_run_id": "agent2",
+          "operation": "execute_tool"
+        },
+        {
+          "run_id": "agent2",
+          "parent_run_id": "root",
+          "operation": "invoke_agent"
+        },
+        {
+          "run_id": "root",
+          "parent_run_id": null,
+          "operation": "invoke_agent"
+        }
+      ]
+    },
+    {
+      "name": "claude-stream-nested-subagents-parallel-tools",
+      "integration": "claude-agent-sdk",
+      "execution": {
+        "mode": "async",
+        "streaming": true
+      },
+      "steps": [
+        {
+          "kind": "start",
+          "run_id": "root",
+          "operation": "invoke_agent",
+          "name": "root"
+        },
+        {
+          "kind": "start",
+          "run_id": "model",
+          "operation": "chat",
+          "parent_run_id": "root",
+          "name": "model"
+        },
+        {
+          "kind": "start",
+          "run_id": "subagent",
+          "operation": "invoke_agent",
+          "parent_run_id": "root",
+          "name": "Task"
+        },
+        {
+          "kind": "start",
+          "run_id": "sub-model",
+          "operation": "chat",
+          "parent_run_id": "subagent",
+          "name": "sub-model"
+        },
+        {
+          "kind": "start",
+          "run_id": "tool1",
+          "operation": "execute_tool",
+          "parent_run_id": "subagent",
+          "name": "search"
+        },
+        {
+          "kind": "start",
+          "run_id": "tool2",
+          "operation": "execute_tool",
+          "parent_run_id": "subagent",
+          "name": "lookup"
+        },
+        {
+          "kind": "end",
+          "run_id": "tool2"
+        },
+        {
+          "kind": "end",
+          "run_id": "tool1"
+        },
+        {
+          "kind": "end",
+          "run_id": "sub-model"
+        },
+        {
+          "kind": "end",
+          "run_id": "subagent"
+        },
+        {
+          "kind": "end",
+          "run_id": "model"
+        },
+        {
+          "kind": "end",
+          "run_id": "root"
+        }
+      ],
+      "expected_spans": [
+        {
+          "run_id": "tool2",
+          "parent_run_id": "subagent",
+          "operation": "execute_tool"
+        },
+        {
+          "run_id": "tool1",
+          "parent_run_id": "subagent",
+          "operation": "execute_tool"
+        },
+        {
+          "run_id": "sub-model",
+          "parent_run_id": "subagent",
+          "operation": "chat"
+        },
+        {
+          "run_id": "subagent",
+          "parent_run_id": "root",
+          "operation": "invoke_agent"
+        },
+        {
+          "run_id": "model",
+          "parent_run_id": "root",
+          "operation": "chat"
+        },
+        {
+          "run_id": "root",
+          "parent_run_id": null,
+          "operation": "invoke_agent"
+        }
+      ]
+    },
+    {
+      "name": "vercel-stream-tool-loop",
+      "integration": "vercel-ai-sdk",
+      "execution": {
+        "mode": "async",
+        "streaming": true
+      },
+      "steps": [
+        {
+          "kind": "start",
+          "run_id": "step1",
+          "operation": "chat",
+          "name": "step1",
+          "tool_calls": [
+            {
+              "id": "tool1",
+              "name": "search"
+            },
+            {
+              "id": "tool2",
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "kind": "end",
+          "run_id": "step1"
+        },
+        {
+          "kind": "start",
+          "run_id": "step2",
+          "operation": "chat",
+          "name": "step2",
+          "tool_results": [
+            {
+              "id": "tool1",
+              "name": "search"
+            },
+            {
+              "id": "tool2",
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "kind": "end",
+          "run_id": "step2"
+        }
+      ],
+      "expected_spans": [
+        {
+          "run_id": "step1",
+          "parent_run_id": null,
+          "operation": "chat"
+        },
+        {
+          "run_id": "step2",
+          "parent_run_id": null,
+          "operation": "chat"
+        }
+      ]
+    },
+    {
+      "name": "vercel-generate-tool-loop",
+      "integration": "vercel-ai-sdk",
+      "execution": {
+        "mode": "async",
+        "streaming": false
+      },
+      "steps": [
+        {
+          "kind": "start",
+          "run_id": "step1",
+          "operation": "chat",
+          "name": "step1",
+          "tool_calls": [
+            {
+              "id": "tool1",
+              "name": "search"
+            },
+            {
+              "id": "tool2",
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "kind": "end",
+          "run_id": "step1"
+        },
+        {
+          "kind": "start",
+          "run_id": "step2",
+          "operation": "chat",
+          "name": "step2",
+          "tool_results": [
+            {
+              "id": "tool1",
+              "name": "search"
+            },
+            {
+              "id": "tool2",
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "kind": "end",
+          "run_id": "step2"
+        }
+      ],
+      "expected_spans": [
+        {
+          "run_id": "step1",
+          "parent_run_id": null,
+          "operation": "chat"
+        },
+        {
+          "run_id": "step2",
+          "parent_run_id": null,
+          "operation": "chat"
+        }
+      ]
+    },
+    {
+      "name": "langchain-returned-tool-error",
+      "integration": "langchain",
+      "execution": {
+        "mode": "async",
+        "streaming": false
+      },
+      "steps": [
+        {
+          "kind": "start",
+          "run_id": "root",
+          "operation": "invoke_agent",
+          "name": "root"
+        },
+        {
+          "kind": "start",
+          "run_id": "tool",
+          "parent_run_id": "root",
+          "operation": "execute_tool",
+          "name": "tool"
+        },
+        {
+          "kind": "end",
+          "run_id": "tool",
+          "tool_status_error": true
+        },
+        {
+          "kind": "end",
+          "run_id": "root"
+        }
+      ],
+      "expected_spans": [
+        {
+          "run_id": "tool",
+          "parent_run_id": "root",
+          "operation": "execute_tool",
+          "status_code": "error"
+        },
+        {
+          "run_id": "root",
+          "parent_run_id": null,
+          "operation": "invoke_agent",
+          "status_code": "ok"
+        }
+      ]
+    }
+  ]
+}

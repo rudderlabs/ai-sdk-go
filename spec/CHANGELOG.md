@@ -1,5 +1,20 @@
 # AI events spec changelog
 
+- **SDK-6799 part 2 — 2026-11-14.** Node framework integrations emit
+  `ai_otel_span` with `rudderstack.span_source: integration` alongside the existing
+  `wrapper` and `manual` sources. LangChain parent runs include retrieval spans;
+  Agents SDK parent IDs preserve nested agents, handoffs and tools; Claude
+  Task/Agent launches parent subagent models/tools through `parent_tool_use_id`;
+  Vercel middleware emits model-step spans, without unobservable local tool
+  execution spans. Integration model contexts own model spans and wrapped calls
+  enrich/join them, avoiding duplicate model spans. Content follows
+  `captureContent`; spans-off product bytes and emission checkpoints match recorded
+  main. The language-neutral `integration-spans-v0.1.json` fixes parent expectations
+  and permits later thread-pool/goroutine cases. Vercel is Node-only; Python supports
+  the other three framework integrations; Go has none. Additive, no schema or
+  product spec version bump.
+
+
 Changes to [`ai-events-v0.4.schema.json`](ai-events-v0.4.schema.json), shared byte for byte by the Node.js, Python and Go SDKs.
 
 ## 0.4.0 — 2026-10-29
