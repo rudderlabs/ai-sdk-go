@@ -205,6 +205,7 @@ func foldCallInto(r *recordedCall, calls *[]*recordedCall) {
 		*calls = append(*calls, &first)
 		return
 	}
+	dst.order = r.order
 	if (dst.credits == nil && dst.errorType == "") || (r.credits == nil && r.errorType == "") {
 		dst.uncredited = true
 	}
@@ -455,6 +456,8 @@ type recordedCall struct {
 	// aggregate report stands for); content is its masked input and output until the event is sent.
 	callIndex int
 	content   *callContent
+	// order is its stamp in the segment's order of model and tool calls (SDK-6017).
+	order int
 	// Past MaxCallsPerInteraction, calls are folded into an overflow record per group: unpriced
 	// (a successful call had no cost) and feesUnknown (server-tool fees missing) then stick.
 	unpriced, feesUnknown bool
@@ -474,6 +477,9 @@ type recordedTool struct {
 	// next call settles the wait (SDK-6017). order is its place in the segment; carried tools restart at 0.
 	agentKey string
 	order    int
+	// keyCall is the stamp of the model call whose agent it took (0: none, or its own agent), so a
+	// merge that names that agent re-keys it.
+	keyCall int
 	// unkeyed: restored from a snapshot written before agent_key, so keyed by its own agent.
 	unkeyed bool
 }
@@ -1314,7 +1320,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			if call.ErrorType == "" && call.Integration != "tracing" {
 				i.keepAnswerLocked(call.OutputText, false)
 			}
-			fillString(&earlier.agentName, call.AgentName)
+			if earlier.agentName == "" && call.AgentName != "" {
+				earlier.agentName = call.AgentName
+				i.restampCallLocked(earlier)
+			}
 			fillString(&earlier.callPurpose, call.CallPurpose)
 			if call.BYOK != nil && (earlier != pricingTwin || !earlier.twinMatched) {
 				earlier.byok = copyCreditPointer(call.BYOK)
@@ -1429,7 +1438,11 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		if i.spanAnswerSource == r {
 			i.spanAnswerSource = twin
 		}
+		named := twin.agentName == ""
 		mergeCallTwin(twin, r)
+		if named && twin.agentName != "" {
+			i.restampCallLocked(twin)
+		}
 		// A merge does not advance callCount, so discard a generic app hint that
 		// would otherwise hide the newly learned provider classification.
 		if twin == i.lastCall && i.hint != nil && i.hint.errorType == "app_error" && first(twin.errorType, i.finishErrorLocked(twin)) != "" {
@@ -1443,7 +1456,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		return !r.fromSpan
 	}
 	i.callCount++
-	i.stampCallLocked(r.agentName)
+	i.stampCallLocked(r)
 	r.reportSequence = i.callCount
 	r.callIndex = i.callSeq + 1
 	i.callSeq += callCount
@@ -1507,10 +1520,40 @@ func (i *Interaction) noteCallOutcomeLocked(r *recordedCall) {
 }
 
 // stampCallLocked: a model call by an agent settles the wait on that agent's earlier tool calls (SDK-6017).
-func (i *Interaction) stampCallLocked(agentName string) {
+func (i *Interaction) stampCallLocked(c *recordedCall) {
 	i.order++
-	i.lastAgent = agentName
-	i.agentCalls[agentName] = i.order
+	c.order = i.order
+	i.lastAgent = c.agentName
+	i.agentCalls[c.agentName] = i.order
+}
+
+// restampCallLocked: a merge named the agent of a call stamped without one. Its stamp moves to
+// that agent, with the tools that took its empty key, as if it had been recorded with the agent (SDK-6017).
+func (i *Interaction) restampCallLocked(c *recordedCall) {
+	// A folded call keeps only totals, under the agent it was folded with.
+	if c.agentName == "" || c.order == 0 || !slices.Contains(i.calls, c) {
+		return
+	}
+	if i.agentCalls[i.lastAgent] == c.order {
+		i.lastAgent = c.agentName
+	}
+	latest := 0
+	for _, o := range append(slices.Clone(i.calls), i.overflow...) {
+		if o.agentName == "" {
+			latest = max(latest, o.order)
+		}
+	}
+	if latest > 0 {
+		i.agentCalls[""] = latest
+	} else {
+		delete(i.agentCalls, "")
+	}
+	i.agentCalls[c.agentName] = max(i.agentCalls[c.agentName], c.order)
+	for _, t := range i.tools {
+		if t.keyCall == c.order {
+			t.agentKey = c.agentName
+		}
+	}
 }
 
 func (i *Interaction) emitPendingCallLocked(r *recordedCall) {
@@ -1747,6 +1790,9 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 				// Wrappers record a call's tools right after it, so those take that call's agent.
 				i.order++
 				tool = &recordedTool{calls: 1, agentKey: first(call.AgentName, i.lastAgent), order: i.order}
+				if call.AgentName == "" {
+					tool.keyCall = i.agentCalls[i.lastAgent]
+				}
 				i.tools = append(i.tools, tool)
 				if call.ID != "" {
 					i.toolsByID[call.ID] = tool
@@ -3012,10 +3058,10 @@ func (i *Interaction) restartOrderLocked() {
 	i.order, i.lastAgent = 0, ""
 	clear(i.agentCalls)
 	for _, t := range i.tools {
-		t.order = 0
+		t.order, t.keyCall = 0, 0
 	}
 	for _, c := range append(slices.Clone(i.calls), i.overflow...) {
-		i.stampCallLocked(c.agentName)
+		i.stampCallLocked(c)
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 func sdk6017Call(agentName string, inputTokens int) LLMCall {
@@ -510,6 +512,114 @@ func TestSDK6017CallAfterTheLastToolPassStillFiresTheToolItCounts(t *testing.T) 
 			i.End(EndOptions{})
 			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{3, 0})
 			sdk6017Expect(t, "Planned", len(r.named("Planned")), 1)
+		})
+	}
+}
+
+// sdk6017EventClient runs fn once, inside delivery of the first track event named event.
+type sdk6017EventClient struct {
+	*recorder
+	event string
+	fn    func()
+	done  bool
+}
+
+func (c *sdk6017EventClient) Enqueue(m analytics.Message) error {
+	err := c.recorder.Enqueue(m)
+	if e, ok := m.(analytics.Track); ok && !c.done && e.Event == c.event {
+		c.done = true
+		c.fn()
+	}
+	return err
+}
+
+func TestSDK6017MergeThatNamesTheAgentOfACall(t *testing.T) {
+	timed := func(startMS int64, span bool, agentName string) LLMCall {
+		call := LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "openai", InputTokens: 10, AgentName: agentName, StartedAt: time.UnixMilli(startMS), EndedAt: time.UnixMilli(startMS + 100)}
+		if span {
+			call.Integration = "tracing"
+		}
+		return call
+	}
+	for _, restored := range []bool{false, true} {
+		where := map[bool]string{false: "first segment", true: "after a JSON restore"}[restored]
+		// started is a fresh run, or one restored from the snapshot of an empty first segment.
+		started := func(t *testing.T, client analytics.Client) *Interaction {
+			t.Helper()
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+			if !restored {
+				return i
+			}
+			snapshot, ok := i.Pause(PauseOptions{})
+			if !ok {
+				t.Fatal("pause")
+			}
+			var stored PausedInteraction
+			if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+				t.Fatal(err)
+			}
+			_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored, Analytics: client})
+			return i
+		}
+		counts := func(r *recorder) []int {
+			if restored {
+				return sdk6017ToolCounts(r)[1:]
+			}
+			return sdk6017ToolCounts(r)
+		}
+
+		for _, order := range []string{"tool after", "tool before"} {
+			t.Run(where+"/by response ID moves its stamp and its tools to that agent ("+order+")", func(t *testing.T) {
+				r := setupAI(t, sdk6017Rules(map[string]string{"search": "Searched"}))
+				i := started(t, r)
+				first := sdk6017Call("", 10)
+				first.ResponseID = "resp_1"
+				i.RecordCall(first)
+				if order == "tool before" {
+					i.RecordToolCalls(ToolCall{ID: "s1", Name: "search"})
+				}
+				// A framework reports the same response again and knows the agent.
+				repeat := sdk6017Call("researcher", 10)
+				repeat.ResponseID = "resp_1"
+				i.RecordCall(repeat)
+				if order == "tool after" {
+					i.RecordToolCalls(ToolCall{ID: "s1", Name: "search"})
+				}
+				i.RecordCall(sdk6017Call("researcher", 10))
+				i.Pause(PauseOptions{})
+				// The researcher moved on: the pause does not wait on its tool.
+				sdk6017Expect(t, "tool_call_count", counts(r), []int{1})
+				sdk6017Expect(t, "Searched", sdk6017ToolEvents(r, "Searched"), [][2]any{{"s1", "unknown"}})
+			})
+		}
+
+		t.Run(where+"/leaves a tool of an earlier agentless call waiting on that call", func(t *testing.T) {
+			r := setupAI(t)
+			i := started(t, r)
+			i.RecordCall(timed(1000, false, ""))
+			i.RecordToolCalls(ToolCall{ID: "s1", Name: "search"})
+			i.RecordCall(timed(3000, false, ""))
+			// The second call turns out to be the planner's: no agentless call follows the tool.
+			i.RecordCall(timed(3000, true, "planner"))
+			i.Pause(PauseOptions{})
+			sdk6017Expect(t, "tool_call_count", counts(r), []int{0})
+			i.RecordToolResult("s1", ToolResult{Error: Ptr(false)})
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", counts(r), []int{0, 1})
+		})
+
+		t.Run(where+"/recorded while a pause settles its tool events ends the wait before the totals", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"search": "Searched", "lookup": "Looked Up"}))
+			client := &sdk6017EventClient{recorder: r, event: "Looked Up"}
+			i := started(t, client)
+			i.RecordToolCalls(ToolCall{ID: "s1", Name: "search", AgentName: "researcher"})
+			i.RecordCall(timed(1000, false, ""))
+			i.RecordToolCalls(ToolCall{Name: "lookup"})
+			// The span twin names the researcher for the call after its tool, in the last callback.
+			client.fn = func() { i.RecordCall(timed(1000, true, "researcher")) }
+			i.Pause(PauseOptions{})
+			sdk6017Expect(t, "tool_call_count", counts(r), []int{2})
+			sdk6017Expect(t, "Searched", sdk6017ToolEvents(r, "Searched"), [][2]any{{"s1", "unknown"}})
 		})
 	}
 }
