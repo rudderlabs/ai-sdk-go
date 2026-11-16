@@ -264,6 +264,7 @@ type reqCtx struct {
 	sequence          uint64
 	http              bool
 	meta              map[string]any
+	callerModel       map[string]any
 	start             time.Time
 	tool              *toolState
 	// responses, rawID and held send a failed request's events once its final response is
@@ -398,6 +399,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 		client: seenClient, requestID: safeRequestID(r.RequestID), rawID: r.RequestID, responses: r.Responses, http: r.HTTP, meta: map[string]any{}, start: time.Now(),
 		initializeClient: r.InitializeClient, received: received, sequence: sequence, registeredTools: r.RegisteredTools, registeredPrompts: r.RegisteredPrompts,
 	}
+	rc.callerModel = callerModel(r.Meta)
 	// A copy: the SDK may remove the protocol keys from _meta while it handles the request.
 	for _, k := range []string{metaProtocolVersion, metaClientInfo, metaClientCapabilities} {
 		if v, ok := r.Meta[k]; ok {
@@ -565,6 +567,7 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 		t.props["argument_keys"] = registeredArgumentNames(t.schema, keys)
 	}
 	t.props["progress_requested"] = progress
+	maps.Copy(t.props, rc.callerModel)
 	t.answered = len(answers) > 0
 	var position map[string]any
 	if t.answered {

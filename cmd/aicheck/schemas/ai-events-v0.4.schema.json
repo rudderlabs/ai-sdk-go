@@ -1446,6 +1446,18 @@
         },
         "call_reason": {
           "$ref": "#/$defs/request_context/properties/call_reason"
+        },
+        "caller_model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "description": "The model calling the tool, as the client asserts it in the request's _meta (io.modelcontextprotocol/aiInvocation, then x-codex-turn-metadata). Unverified; unknown when it is not a bounded model ID (spec/fixtures/mcp-caller-model-v0.1.json). Absent when the client sends none."
+        },
+        "caller_model_source": {
+          "enum": [
+            "client_metadata"
+          ],
+          "description": "Where caller_model came from; sent only with it."
         }
       }
     },
