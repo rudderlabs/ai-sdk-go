@@ -63,7 +63,11 @@ type result struct {
 }
 
 // runSink runs the example with its events going to the sink and the given OpenAI client options.
+// EMIT_SPANS=1 adds one ai_otel_span per model call: product events and traces, no OpenTelemetry SDK.
 func runSink(sink *harness.Sink, opts ...option.RequestOption) (result, error) {
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(os.Getenv("EMIT_SPANS") == "1")); err != nil {
+		return result{}, err
+	}
 	rs, err := sink.NewClient()
 	if err != nil {
 		return result{}, err

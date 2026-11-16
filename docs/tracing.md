@@ -5,6 +5,36 @@ instrumentation already creates. Each finished AI span becomes one `ai_otel_span
 track event. `properties.otlp` is a complete OTLP/JSON `ExportTraceServiceRequest` containing that
 span, forwardable to `/v1/traces`. The core module has no OpenTelemetry dependency.
 
+## Choose a setup
+
+| Setup                  | Turn on                                                     | You get                                                                                         |
+| ---------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Product only (default) | Provider wrappers inside an interaction                     | `ai_response_received` and the other product events; no spans                                  |
+| Traces only            | Your OpenTelemetry instrumentation and `rudderotel`         | One `ai_otel_span` per AI span; no product events unless you set `ProductEvents: true`          |
+| Both                   | `rudderstackai.WithEmitSpans(true)` with your wrappers      | Product events plus one `ai_otel_span` per model call and manual span; no OpenTelemetry needed |
+
+```go
+// Product only
+err := rudderstackai.Configure(rudderstackai.WithAnalytics(client))
+llm := openai.NewClient(rudderopenai.WithTracking())
+err = rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID: userID},
+    func(ctx context.Context, _ *rudderstackai.Interaction) error {
+        _, err := llm.Chat.Completions.New(ctx, params)
+        return err
+    })
+
+// Traces only: keep your instrumentation; it creates the spans.
+provider, err := rudderotel.RegisterTracing(rudderotel.Options{Analytics: client})
+
+// Both: one option on the product setup
+err = rudderstackai.Configure(rudderstackai.WithAnalytics(client), rudderstackai.WithEmitSpans(true))
+```
+
+Already exporting OpenTelemetry spans and adding `WithEmitSpans(true)`? Keep the processor: each
+model call is still sent once ([one span per call](#one-span-per-call-with-the-span-processor)).
+Examples: [`openai`](../examples/openai) (product only; `EMIT_SPANS=1` for both) and
+[`tracing`](../examples/tracing) (traces only).
+
 ## Wrapper and manual spans
 
 Enable `rudderstackai.WithEmitSpans(true)` to emit one `ai_otel_span` per wrapped provider call,
@@ -77,8 +107,32 @@ encode bytes before inspection: binary
 payloads are stripped, numeric maps are preserved, primitive map keys become strings, other keys
 are dropped, cycles are dropped, and other unrepresentable list entries keep null placeholders.
 
-Interim behavior: enabling wrapper spans and an OTel processor instrumenting the same provider
-call can emit two spans. Cross-source span deduplication is not currently applied.
+### One span per call with the span processor
+
+When `WithEmitSpans(true)` and a `rudderotel` span processor (`NewSpanProcessor` or
+`RegisterTracing`) both see a model call, one `ai_otel_span` is sent. The outer span owns the
+call:
+
+- An OpenTelemetry model-call span (the conventions in
+  [product events from spans](#product-events-from-spans): GenAI `chat` / `text_completion` /
+  `generate_content`, OpenInference `LLM`, older OpenLLMetry `llm.request.type`) that starts
+  inside a wrapper call is not exported by the `rudderotel` processor. Your other processors and
+  exporters still receive it, and `ProductEvents` still counts the call once.
+- A wrapper call that starts inside such an OpenTelemetry span of the same interaction sends no
+  span of its own. Its `ai_llm_response_received.span_id` is the OpenTelemetry span's ID. The SDK
+  never writes attributes onto your span.
+- Any other span in between keeps both: a wrapper call inside a `StartSpan` span that is itself
+  inside an OpenTelemetry model-call span gets its own span, a child of the manual one.
+
+Matching uses context nesting only, never times or model names. Limits:
+
+- Instrumentations that never put their span on the context passed downstream, and spans your
+  sampler drops, cannot be matched, so the call can still produce two spans.
+- The bare `Exporter` has no start hook and cannot deduplicate; use the processor.
+- A span that already ended, or that started in another interaction, is never joined.
+- An exported child of a dropped OpenTelemetry span keeps that span as its `parent_span_id`,
+  although RudderStack never received it.
+- Go has no framework integrations, so no integration model spans take part.
 
 ## Framework trees with manual spans
 

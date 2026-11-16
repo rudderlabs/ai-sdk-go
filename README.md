@@ -358,7 +358,10 @@ payloads. Add `rudderotel.NewSpanProcessor(rudderotel.Options{Analytics: client}
 `sdktrace.WithSpanProcessor`. Set `ProductEvents: true` to record model/tool spans in the active
 interaction, and `LinkTraceID: true` to link its trace. Content capture is off by default.
 For one-call global setup, use `rudderotel.RegisterTracing`; it refuses an existing provider.
-See [tracing](docs/tracing.md) and the [runnable example](examples/tracing).
+See [tracing](docs/tracing.md) and the [runnable example](examples/tracing). Three setups:
+product only (the default), traces only (your instrumentation and `rudderotel`), or both
+(`WithEmitSpans(true)`); see [choose a setup](docs/tracing.md#choose-a-setup). With
+`WithEmitSpans(true)` and the processor together, each model call is still sent as one span.
 
 ## Checking a migration
 

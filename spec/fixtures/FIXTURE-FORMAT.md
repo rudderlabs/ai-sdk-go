@@ -287,3 +287,17 @@ uses a Git archive, not a worktree, and installed pinned dependencies. IDs and t
 clock are fixed driver inputs; `wrapperLibrary.version` becomes `<sdk-version>` so
 release changes do not invalidate recorded bytes. No span await is added when
 spans are off; the LangChain synchronous tracer protocol is disabled in that case.
+
+## span-dedup-v0.1.json
+
+One `ai_otel_span` per model call when SDK spans (`emitSpans`) and the RudderStack span processor both see it, with `fixture_version: 1`, span schema `0.1` and product event spec `0.4.0`. Each scenario has `emit_spans`, an optional `requires: "integration"` (drivers without framework integrations skip it), a `tree` of nested scopes, `expected_spans`, `call_span` and `other_processors_see`. Run every scenario with `emitLlmCalls` on, the processor and a second plain processor on one provider, and a context manager that makes started spans active.
+
+Tree nodes have a `kind`, a `label` and optional `children`, run in order inside the node's scope:
+
+- `interaction`: an interaction whose `userId` is the label;
+- `wrapper`: one provider wrapper call for model `label`; children run inside the provider request, as an instrumentation would;
+- `otel`: an active OpenTelemetry span named `label` with `gen_ai.operation.name` set to `operation`; `end_before_children: true` ends it before its children run while its context stays active;
+- `manual`: a `span()` named `label` with `operation`;
+- `integration`: an integration model span (`operation: "chat"`) named `label`, its children running in its context.
+
+`expected_spans` lists every exported `ai_otel_span` by label (a wrapper span's `chat <model>` name maps to its model label) with the label of its parent span, or `null` for a root. `call_span` is the label of the span whose ID every `ai_llm_response_received.span_id` carries, or `null` when no call event carries one. `other_processors_see` lists the OpenTelemetry spans the plain processor receives: deduplication never hides a span from other processors.

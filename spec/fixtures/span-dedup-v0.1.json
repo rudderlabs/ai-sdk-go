@@ -1,0 +1,238 @@
+{
+  "fixture_version": 1,
+  "span_schema_version": "0.1",
+  "event_spec_version": "0.4.0",
+  "description": "One ai_otel_span per model call when SDK spans and the RudderStack span processor both see it. Each scenario is a tree of nested scopes; the outer of an SDK call span and an OTel model-call span owns the call. See FIXTURE-FORMAT.md.",
+  "scenarios": [
+    {
+      "name": "otel-model-span-inside-wrapper",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "wrapper",
+            "label": "w",
+            "children": [{ "kind": "otel", "label": "i", "operation": "chat" }]
+          }
+        ]
+      },
+      "expected_spans": [{ "label": "w", "parent": null }],
+      "call_span": "w",
+      "other_processors_see": ["i"]
+    },
+    {
+      "name": "wrapper-inside-otel-model-span",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [{ "kind": "wrapper", "label": "w" }]
+          }
+        ]
+      },
+      "expected_spans": [{ "label": "o", "parent": null }],
+      "call_span": "o",
+      "other_processors_see": ["o"]
+    },
+    {
+      "name": "instrumentation-inside-joined-wrapper",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w",
+                "children": [{ "kind": "otel", "label": "i", "operation": "chat" }]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [{ "label": "o", "parent": null }],
+      "call_span": "o",
+      "other_processors_see": ["i", "o"]
+    },
+    {
+      "name": "manual-span-between-otel-model-span-and-wrapper",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "manual",
+                "label": "t",
+                "operation": "execute_tool",
+                "children": [{ "kind": "wrapper", "label": "w" }]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        { "label": "o", "parent": null },
+        { "label": "t", "parent": "o" },
+        { "label": "w", "parent": "t" }
+      ],
+      "call_span": "w",
+      "other_processors_see": ["o"]
+    },
+    {
+      "name": "wrapper-inside-otel-agent-span",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "a",
+            "operation": "invoke_agent",
+            "children": [{ "kind": "wrapper", "label": "w" }]
+          }
+        ]
+      },
+      "expected_spans": [
+        { "label": "a", "parent": null },
+        { "label": "w", "parent": "a" }
+      ],
+      "call_span": "w",
+      "other_processors_see": ["a"]
+    },
+    {
+      "name": "wrapper-in-another-interaction-inside-otel-model-span",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "interaction",
+                "label": "B",
+                "children": [{ "kind": "wrapper", "label": "w" }]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        { "label": "o", "parent": null },
+        { "label": "w", "parent": "o" }
+      ],
+      "call_span": "w",
+      "other_processors_see": ["o"]
+    },
+    {
+      "name": "wrapper-under-ended-otel-model-span",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "e",
+            "operation": "chat",
+            "end_before_children": true,
+            "children": [{ "kind": "wrapper", "label": "w" }]
+          }
+        ]
+      },
+      "expected_spans": [
+        { "label": "e", "parent": null },
+        { "label": "w", "parent": "e" }
+      ],
+      "call_span": "w",
+      "other_processors_see": ["e"]
+    },
+    {
+      "name": "integration-model-run-inside-otel-model-span",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "integration",
+                "label": "m",
+                "operation": "chat",
+                "children": [{ "kind": "wrapper", "label": "w" }]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [{ "label": "o", "parent": null }],
+      "call_span": "o",
+      "other_processors_see": ["o"]
+    },
+    {
+      "name": "otel-model-span-inside-integration-model-run",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "chat",
+            "children": [{ "kind": "otel", "label": "i", "operation": "chat" }]
+          }
+        ]
+      },
+      "expected_spans": [{ "label": "m", "parent": null }],
+      "call_span": null,
+      "other_processors_see": ["i"]
+    },
+    {
+      "name": "spans-off-exports-the-otel-model-span",
+      "emit_spans": false,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "wrapper",
+            "label": "w",
+            "children": [{ "kind": "otel", "label": "i", "operation": "chat" }]
+          }
+        ]
+      },
+      "expected_spans": [{ "label": "i", "parent": null }],
+      "call_span": null,
+      "other_processors_see": ["i"]
+    }
+  ]
+}
