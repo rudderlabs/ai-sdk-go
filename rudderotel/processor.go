@@ -86,6 +86,10 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	k := key(s.SpanContext())
 	otelCalls.mu.Lock()
 	defer otelCalls.mu.Unlock()
+	// Under the registry lock, so a registration never outlives this processor's Shutdown.
+	if p.closed.Load() {
+		return false
+	}
 	c := otelCalls.m[k]
 	if c == nil {
 		// Bounded like the SDK's other maps: past the cap a span cannot own a call.

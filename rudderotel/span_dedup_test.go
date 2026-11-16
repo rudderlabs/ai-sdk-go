@@ -533,6 +533,28 @@ func TestSpanDedupCapsReportLimitReached(t *testing.T) {
 	}
 }
 
+func TestSpanDedupNoRegistrationAfterShutdown(t *testing.T) {
+	_, p, _ := testProvider(t, Options{Simple: true})
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// A span whose OnStart passed the closed check just before Shutdown, registering now.
+	source := sdktrace.NewTracerProvider()
+	ctx, i, s := ownerSpan(source.Tracer("app"))
+	defer i.End(rudderstackai.EndOptions{})
+	defer s.End()
+	p.dedup(ctx, s.(sdktrace.ReadWriteSpan), i)
+	otelCalls.mu.Lock()
+	_, registered := otelCalls.m[key(s.SpanContext())]
+	otelCalls.mu.Unlock()
+	if registered {
+		t.Error("a shut-down processor registered an owner")
+	}
+}
+
 // render renders an event for substring checks.
 func render(e object) string {
 	b, _ := json.Marshal(e)
