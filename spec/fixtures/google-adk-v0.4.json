@@ -1,0 +1,87 @@
+{
+  "fixture_version": 1,
+  "spec_version": "0.4.0",
+  "supported_sdks": [
+    "node"
+  ],
+  "description": "Node-only @google/adk 2.5.0 real Runner and Gemini scenarios against the shared mock LLM server. Assert one answer per runAsync turn and one call per request, including final SSE usage. Python and Go drivers do not load this TypeScript plugin fixture.",
+  "scenarios": [
+    {
+      "name": "google_adk_answer",
+      "mode": "answer",
+      "prompt": "Hello private@example.com",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 1,
+        "tool_call_count": 0,
+        "response_status": "success",
+        "total_input_tokens": 45,
+        "total_output_tokens": 20
+      }
+    },
+    {
+      "name": "google_adk_content",
+      "mode": "content",
+      "prompt": "Hello private@example.com",
+      "capture_content": true,
+      "expected": {
+        "llm_call_count": 1,
+        "tool_call_count": 0,
+        "response_status": "success",
+        "total_input_tokens": 45,
+        "total_output_tokens": 20
+      }
+    },
+    {
+      "name": "google_adk_tool",
+      "mode": "tool",
+      "prompt": "Hello private@example.com",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 2,
+        "tool_call_count": 1,
+        "response_status": "success",
+        "total_input_tokens": 90,
+        "total_output_tokens": 40
+      }
+    },
+    {
+      "name": "google_adk_tool_failure",
+      "mode": "tool_failure",
+      "prompt": "Hello private@example.com",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 2,
+        "tool_call_count": 1,
+        "response_status": "success",
+        "total_input_tokens": 90,
+        "total_output_tokens": 40
+      }
+    },
+    {
+      "name": "google_adk_stream",
+      "mode": "stream",
+      "prompt": "Hello private@example.com",
+      "capture_content": true,
+      "expected": {
+        "llm_call_count": 1,
+        "tool_call_count": 0,
+        "response_status": "success",
+        "total_input_tokens": 45,
+        "total_output_tokens": 20
+      }
+    },
+    {
+      "name": "google_adk_error",
+      "mode": "error",
+      "prompt": "Hello private@example.com",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 1,
+        "tool_call_count": 0,
+        "response_status": "error",
+        "error_type": "auth_error"
+      }
+    }
+  ]
+}

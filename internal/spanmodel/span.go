@@ -6,6 +6,7 @@ import (
 	"math"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
@@ -120,6 +121,11 @@ func genAISummary(a map[string]any) map[string]any {
 	case string:
 		if v != "" {
 			g["finish_reasons"] = []string{v}
+		}
+	}
+	if _, exists := a["gen_ai.response.finish_reasons"]; !exists {
+		if reason := firstString(a, "gen_ai.response.finish_reason"); reason != "" {
+			g["finish_reasons"] = []string{strings.ToLower(reason[strings.LastIndex(reason, ".")+1:])}
 		}
 	}
 	return g

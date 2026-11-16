@@ -244,7 +244,7 @@ and also offers `ForceFlush(context.Context) error`. Constants expose `DefaultEv
 | `LinkTraceID` | false | Link the interaction to the first span started inside it, including non-AI spans. |
 
 The default AI-span filter keeps any span with a `gen_ai.*` attribute,
-`openinference.span.kind`, or legacy `ai.operationId`. Custom export filtering does not change
+`openinference.span.kind`, `traceloop.span.kind = "tool"`, or legacy `ai.operationId`. Custom export filtering does not change
 which spans count as product calls. Older OpenLLMetry spans with only `llm.request.type` can
 count as product calls while failing the default export filter, matching Node and Python.
 
@@ -298,6 +298,7 @@ The first convention present decides the role:
 | --- | --- | --- |
 | GenAI | `chat`, `text_completion`, `generate_content` operations | `execute_tool` |
 | OpenInference | `openinference.span.kind = LLM` (case insensitive) | `TOOL` |
+| Traceloop / OpenLLMetry tools | none | `traceloop.span.kind = "tool"` (`traceloop.entity.name`) |
 | Older OpenLLMetry | `llm.request.type = chat` or `completion` | none |
 
 Agent, workflow, embedding, and other operations do not count. Provider, response/request model,
@@ -306,6 +307,16 @@ the GenAI, OpenInference and OpenLLMetry mappings. Cost uses registered core pri
 record failed calls: HTTP status, `error.type`, or the last exception type determines their error
 category. Tool attributes supply ID, name, MCP server, parent, measured duration, and outcome.
 Arguments/results only reach declared tool-rule callbacks.
+
+Span mapping rules (SDK-6898; shared cases in [`tracing-product-events-v0.1.json`](../spec/fixtures/tracing-product-events-v0.1.json)):
+
+- Cache writes: `gen_ai.usage.cache_write.input_tokens` takes precedence over `gen_ai.usage.cache_creation.input_tokens`, then `gen_ai.usage.cache_creation_input_tokens`, then `llm.token_count.prompt_details.cache_write`. Use the first valid nonnegative integer, including zero. Map it once to `cache_write_tokens` and apply the same cache-write price as cache creation; never sum aliases.
+- Provider API IDs: product calls map only `anthropic.messages` → `anthropic`, `openai.chat` / `openai.responses` → `openai`, and `google.generative-ai` → `gcp.gemini`. The first three are provider IDs in AI SDK v7's `@ai-sdk/anthropic` 4.0.89 and `@ai-sdk/openai` 4.0.103 `src/*-provider.ts`; the Google ID is already documented in [`providers-v0.1.json`](../spec/fixtures/providers-v0.1.json). Apply this explicit allow-list after the existing lowercase step; never split arbitrary names at a dot. `aws.bedrock`, `gcp.vertex_ai`, `gcp.gemini`, `azure.ai.openai`, `azure.ai.inference` and unknown dotted names stay unchanged. Raw OTLP provider attributes and the GenAI provider summary keep the reported label.
+- Semantic Kernel: when `gen_ai.response.finish_reasons` is absent, read singular `gen_ai.response.finish_reason`. Strip the prefix through the last dot and lowercase the value: `FinishReason.STOP` / `STOP` → `stop`, `LENGTH` → `length`, `TOOL_CALLS` → `tool_calls`, `CONTENT_FILTER` → `content_filter`, case-insensitively. Unknown suffixes are lowercased too. Existing plural values keep their precedence and spelling.
+- Traceloop / OpenLLMetry: after GenAI and OpenInference classification, `traceloop.span.kind = "tool"` identifies one `execute_tool` execution. Read the tool name from `traceloop.entity.name` after `gen_ai.tool.name` / `tool.name`, and arguments/result from `traceloop.entity.input` / `traceloop.entity.output` after the existing tool content keys. Successful and failed executions count in `tool_breakdown`; these entity content keys follow `rudderstackai.WithCaptureContent(true)` and masking. The default `IsAISpan` filter also exports these tools and attaches interaction context when they start.
+- Mirascope native ops: parse `mirascope.response.usage` only if it is a JSON string of at most 64 KiB (65,536 UTF-8 bytes). Ignore malformed JSON, non-object JSON and invalid counts without throwing. Mirascope 2.8.2's `serialize_mirascope_usage` writes `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens` and `total_tokens`; map only the first four as independent fallbacks after existing GenAI and OpenInference usage keys. Zero counts are valid and existing counts win. Input tokens already include cache reads/writes; do not add them again. Ignore reasoning/total counts rather than deriving missing usage. Cache counts use registered cache pricing.
+
+OpenLLMetry Anthropic instrumentation 0.63.0 can overcount streamed output before emitting the span: it adds cumulative message-delta usage to message-start usage. The mapper copies the output count directly, without summing deltas or total-token attributes. Streamed output from that version can read one token high; it's an upstream issue.
 
 The core merges wrapper/span calls with the same provider response ID, or the closest overlapping
 call from the other source with matching provider/model, preserving wrapper usage. A tool span
