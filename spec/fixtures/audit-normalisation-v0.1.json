@@ -2642,6 +2642,1015 @@
           }
         ]
       }
+    },
+    {
+      "name": "claude subagent result on an older dated id",
+      "adapter": "claude-agent-sdk",
+      "description": "Node.js/Python only: Claude Agent SDK accounting; Go has no Claude Agent SDK adapter. The main loop streams a newer dated ID; a subagent's tool result names an older dated ID of the family as its resolvedModel. The subagent's call is counted, priced and credited under its own deployed ID and row, never under the streamed one.",
+      "input": {
+        "provider": "anthropic",
+        "resumed": false,
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "audit-subagent-older-id",
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-0",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "id": "toolu_agent",
+                  "name": "Agent",
+                  "input": {
+                    "subagent_type": "researcher",
+                    "prompt": "Look up order 1234"
+                  }
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "user",
+            "session_id": "audit-subagent-older-id",
+            "uuid": "00000000-0000-0000-0000-000000000002",
+            "parent_tool_use_id": null,
+            "message": {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_agent",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Order 1234 shipped."
+                    }
+                  ]
+                }
+              ]
+            },
+            "tool_use_result": {
+              "status": "completed",
+              "agentType": "researcher",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Order 1234 shipped."
+                }
+              ],
+              "resolvedModel": "claude-sonnet-4-5-20250929",
+              "totalToolUseCount": 0,
+              "usage": {
+                "input_tokens": 50,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "audit-subagent-older-id",
+            "uuid": "00000000-0000-0000-0000-000000000003",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-1",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 120,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "audit-subagent-older-id",
+            "uuid": "00000000-0000-0000-0000-000000000004",
+            "is_error": false,
+            "num_turns": 2,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "total_cost_usd": 0.00261,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 220,
+              "output_tokens": 30,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5-20250929": {
+                "inputTokens": 50,
+                "outputTokens": 5,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.00011,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5-20251001": {
+                "inputTokens": 220,
+                "outputTokens": 30,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.0025,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            }
+          }
+        ],
+        "prices": {
+          "claude-sonnet-4-5-20250929": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 2
+          },
+          "claude-sonnet-4-5-20251001": {
+            "input_per_mtok": 10,
+            "output_per_mtok": 10
+          }
+        },
+        "credits": {
+          "claude-sonnet-4-5-20250929": 1,
+          "claude-sonnet-4-5-20251001": 3
+        }
+      },
+      "expected": {
+        "primary_model": "claude-sonnet-4-5",
+        "llm_call_count": 3,
+        "call_events": 2,
+        "total_input_tokens": 270,
+        "total_output_tokens": 35,
+        "total_cost_usd": 0.00261,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 1
+          },
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "claude subagent result on a newer dated id",
+      "adapter": "claude-agent-sdk",
+      "description": "Node.js/Python only: Claude Agent SDK accounting; Go has no Claude Agent SDK adapter. The reverse: the main loop streams the older dated ID and the subagent's tool result names the newer one. Each deployed ID keeps its own row, calls and credits.",
+      "input": {
+        "provider": "anthropic",
+        "resumed": false,
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "audit-subagent-newer-id",
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-0",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20250929",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "id": "toolu_agent",
+                  "name": "Agent",
+                  "input": {
+                    "subagent_type": "researcher",
+                    "prompt": "Look up order 1234"
+                  }
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "user",
+            "session_id": "audit-subagent-newer-id",
+            "uuid": "00000000-0000-0000-0000-000000000002",
+            "parent_tool_use_id": null,
+            "message": {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_agent",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Order 1234 shipped."
+                    }
+                  ]
+                }
+              ]
+            },
+            "tool_use_result": {
+              "status": "completed",
+              "agentType": "researcher",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Order 1234 shipped."
+                }
+              ],
+              "resolvedModel": "claude-sonnet-4-5-20251001",
+              "totalToolUseCount": 0,
+              "usage": {
+                "input_tokens": 50,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "audit-subagent-newer-id",
+            "uuid": "00000000-0000-0000-0000-000000000003",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-1",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20250929",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 120,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "audit-subagent-newer-id",
+            "uuid": "00000000-0000-0000-0000-000000000004",
+            "is_error": false,
+            "num_turns": 2,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "total_cost_usd": 0.00105,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 220,
+              "output_tokens": 30,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5-20250929": {
+                "inputTokens": 220,
+                "outputTokens": 30,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.0005,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5-20251001": {
+                "inputTokens": 50,
+                "outputTokens": 5,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.00055,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            }
+          }
+        ],
+        "prices": {
+          "claude-sonnet-4-5-20250929": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 2
+          },
+          "claude-sonnet-4-5-20251001": {
+            "input_per_mtok": 10,
+            "output_per_mtok": 10
+          }
+        },
+        "credits": {
+          "claude-sonnet-4-5-20250929": 1,
+          "claude-sonnet-4-5-20251001": 3
+        }
+      },
+      "expected": {
+        "primary_model": "claude-sonnet-4-5",
+        "llm_call_count": 3,
+        "call_events": 2,
+        "total_input_tokens": 270,
+        "total_output_tokens": 35,
+        "total_cost_usd": 0.00105,
+        "total_credits": 5,
+        "groups": [
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 1
+          },
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "claude subagent result on another dated id under one alias row",
+      "adapter": "claude-agent-sdk",
+      "description": "Node.js/Python only: Claude Agent SDK accounting; Go has no Claude Agent SDK adapter. One alias row covers the family: the main loop streams the newer dated ID and the subagent's tool result names the older one. The row's totals are split between the two deployed IDs, each credited once under its own ID.",
+      "input": {
+        "provider": "anthropic",
+        "resumed": false,
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "audit-subagent-alias-row",
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-0",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "id": "toolu_agent",
+                  "name": "Agent",
+                  "input": {
+                    "subagent_type": "researcher",
+                    "prompt": "Look up order 1234"
+                  }
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "user",
+            "session_id": "audit-subagent-alias-row",
+            "uuid": "00000000-0000-0000-0000-000000000002",
+            "parent_tool_use_id": null,
+            "message": {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_agent",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Order 1234 shipped."
+                    }
+                  ]
+                }
+              ]
+            },
+            "tool_use_result": {
+              "status": "completed",
+              "agentType": "researcher",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Order 1234 shipped."
+                }
+              ],
+              "resolvedModel": "claude-sonnet-4-5-20250929",
+              "totalToolUseCount": 0,
+              "usage": {
+                "input_tokens": 50,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "audit-subagent-alias-row",
+            "uuid": "00000000-0000-0000-0000-000000000003",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-1",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 120,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "audit-subagent-alias-row",
+            "uuid": "00000000-0000-0000-0000-000000000004",
+            "is_error": false,
+            "num_turns": 2,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "total_cost_usd": 0.00445,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 220,
+              "output_tokens": 30,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5": {
+                "inputTokens": 270,
+                "outputTokens": 35,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.00445,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            }
+          }
+        ],
+        "prices": {
+          "claude-sonnet-4-5-20250929": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 2
+          },
+          "claude-sonnet-4-5-20251001": {
+            "input_per_mtok": 10,
+            "output_per_mtok": 10
+          }
+        },
+        "credits": {
+          "claude-sonnet-4-5-20250929": 1,
+          "claude-sonnet-4-5-20251001": 3
+        }
+      },
+      "expected": {
+        "primary_model": "claude-sonnet-4-5",
+        "llm_call_count": 3,
+        "call_events": 2,
+        "total_input_tokens": 270,
+        "total_output_tokens": 35,
+        "total_cost_usd": 0.00445,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 1
+          },
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "claude resumed subagent result on an older dated id",
+      "adapter": "claude-agent-sdk",
+      "description": "Node.js/Python only: Claude Agent SDK accounting; Go has no Claude Agent SDK adapter. A resumed run without a baseline, counted from its own messages: the main loop streams the newer dated ID and the subagent's tool result names the older one. Each deployed ID is priced and credited once under its own ID.",
+      "input": {
+        "provider": "anthropic",
+        "resumed": true,
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "audit-resumed-subagent-older-id",
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-0",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "id": "toolu_agent",
+                  "name": "Agent",
+                  "input": {
+                    "subagent_type": "researcher",
+                    "prompt": "Look up order 1234"
+                  }
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "user",
+            "session_id": "audit-resumed-subagent-older-id",
+            "uuid": "00000000-0000-0000-0000-000000000002",
+            "parent_tool_use_id": null,
+            "message": {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_agent",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Order 1234 shipped."
+                    }
+                  ]
+                }
+              ]
+            },
+            "tool_use_result": {
+              "status": "completed",
+              "agentType": "researcher",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Order 1234 shipped."
+                }
+              ],
+              "resolvedModel": "claude-sonnet-4-5-20250929",
+              "totalToolUseCount": 0,
+              "usage": {
+                "input_tokens": 50,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "audit-resumed-subagent-older-id",
+            "uuid": "00000000-0000-0000-0000-000000000003",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-1",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 120,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "audit-resumed-subagent-older-id",
+            "uuid": "00000000-0000-0000-0000-000000000004",
+            "is_error": false,
+            "num_turns": 2,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "total_cost_usd": 0.01581,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 220,
+              "output_tokens": 30,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5-20250929": {
+                "inputTokens": 1050,
+                "outputTokens": 105,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.00231,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5-20251001": {
+                "inputTokens": 1220,
+                "outputTokens": 130,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.0135,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            }
+          }
+        ],
+        "prices": {
+          "claude-sonnet-4-5-20250929": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 2
+          },
+          "claude-sonnet-4-5-20251001": {
+            "input_per_mtok": 10,
+            "output_per_mtok": 10
+          }
+        },
+        "credits": {
+          "claude-sonnet-4-5-20250929": 1,
+          "claude-sonnet-4-5-20251001": 3
+        }
+      },
+      "expected": {
+        "primary_model": "claude-sonnet-4-5",
+        "llm_call_count": 3,
+        "call_events": 2,
+        "total_input_tokens": 270,
+        "total_output_tokens": 35,
+        "total_cost_usd": 0.00261,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 1
+          },
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "claude dated row without a streamed call keeps its id",
+      "adapter": "claude-agent-sdk",
+      "description": "Node.js/Python only: Claude Agent SDK accounting; Go has no Claude Agent SDK adapter. The main loop streams the newer dated ID only, and modelUsage also reports an older dated row of the family that no message or subagent names. That row is one call under its own ID; it never takes the streamed ID or its call count.",
+      "input": {
+        "provider": "anthropic",
+        "resumed": false,
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "audit-unstreamed-dated-row",
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-0",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "audit-unstreamed-dated-row",
+            "uuid": "00000000-0000-0000-0000-000000000003",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-1",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 120,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "audit-unstreamed-dated-row",
+            "uuid": "00000000-0000-0000-0000-000000000004",
+            "is_error": false,
+            "num_turns": 2,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "total_cost_usd": 0.00261,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 220,
+              "output_tokens": 30,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5-20250929": {
+                "inputTokens": 50,
+                "outputTokens": 5,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.00011,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5-20251001": {
+                "inputTokens": 220,
+                "outputTokens": 30,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.0025,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            }
+          }
+        ],
+        "prices": {
+          "claude-sonnet-4-5-20250929": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 2
+          },
+          "claude-sonnet-4-5-20251001": {
+            "input_per_mtok": 10,
+            "output_per_mtok": 10
+          }
+        },
+        "credits": {
+          "claude-sonnet-4-5-20250929": 1,
+          "claude-sonnet-4-5-20251001": 3
+        }
+      },
+      "expected": {
+        "primary_model": "claude-sonnet-4-5",
+        "llm_call_count": 3,
+        "call_events": 2,
+        "total_input_tokens": 270,
+        "total_output_tokens": 35,
+        "total_cost_usd": 0.00261,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "claude restored usage is read from the main model's own dated row",
+      "adapter": "claude-agent-sdk",
+      "description": "Node.js/Python only: Claude Agent SDK accounting; Go has no Claude Agent SDK adapter. A session with restored history and no baseline: the main loop streams the newer dated ID, whose row far exceeds this turn's usage, and a subagent's tool result names the older one, whose row comes first. The restored history is detected on the main model's own row, and the turn is counted from its own messages and registered prices.",
+      "input": {
+        "provider": "anthropic",
+        "resumed": false,
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "audit-restored-own-dated-row",
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-0",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "id": "toolu_agent",
+                  "name": "Agent",
+                  "input": {
+                    "subagent_type": "researcher",
+                    "prompt": "Look up order 1234"
+                  }
+                }
+              ],
+              "usage": {
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "user",
+            "session_id": "audit-restored-own-dated-row",
+            "uuid": "00000000-0000-0000-0000-000000000002",
+            "parent_tool_use_id": null,
+            "message": {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_agent",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Order 1234 shipped."
+                    }
+                  ]
+                }
+              ]
+            },
+            "tool_use_result": {
+              "status": "completed",
+              "agentType": "researcher",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Order 1234 shipped."
+                }
+              ],
+              "resolvedModel": "claude-sonnet-4-5-20250929",
+              "totalToolUseCount": 0,
+              "usage": {
+                "input_tokens": 50,
+                "output_tokens": 5,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "audit-restored-own-dated-row",
+            "uuid": "00000000-0000-0000-0000-000000000003",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "call-1",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 120,
+                "output_tokens": 20,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "audit-restored-own-dated-row",
+            "uuid": "00000000-0000-0000-0000-000000000004",
+            "is_error": false,
+            "num_turns": 2,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "total_cost_usd": 0.50011,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 220,
+              "output_tokens": 30,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5-20250929": {
+                "inputTokens": 50,
+                "outputTokens": 5,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.00011,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5-20251001": {
+                "inputTokens": 5220,
+                "outputTokens": 530,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "costUSD": 0.5,
+                "provider": "firstParty",
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            }
+          }
+        ],
+        "prices": {
+          "claude-sonnet-4-5-20250929": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 2
+          },
+          "claude-sonnet-4-5-20251001": {
+            "input_per_mtok": 10,
+            "output_per_mtok": 10
+          }
+        },
+        "credits": {
+          "claude-sonnet-4-5-20250929": 1,
+          "claude-sonnet-4-5-20251001": 3
+        }
+      },
+      "expected": {
+        "primary_model": "claude-sonnet-4-5",
+        "llm_call_count": 3,
+        "call_events": 2,
+        "total_input_tokens": 270,
+        "total_output_tokens": 35,
+        "total_cost_usd": 0.00261,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 1
+          },
+          {
+            "model": "claude-sonnet-4-5",
+            "call_count": 2
+          }
+        ]
+      }
     }
   ],
   "statuses": [
