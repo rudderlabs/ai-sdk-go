@@ -1,7 +1,7 @@
 {
   "fixture_version": 1,
   "spec_version": "0.4.0",
-  "description": "captureContent policy resolution (SDK-6888). Each case lists levels most general first (global, then interaction, mcp or exporter); every SDK resolves them with the same rules and must produce `expected`. Keys are snake_case; Node.js and Go map them to their own names. `capture_content: null` means the level sets nothing. `intent_summary: null` means not set at any level (sent as before the policy). `invalid` values must be rejected where captureContent is accepted (Go: not applicable, the type checks it). `custom_properties`: whether a custom event property with a content name is kept under the resolved policy: intent_summary follows an explicit intent_summary key at any level, else the default chain (boolean false drops it, as today); other names follow their own key. `spans`: one span's content and, per resolved span kinds, the content exported with built-in masking on. Kept kinds are masked, other content removed; content events, the status message and ai.response.toolCalls are the messages kind; `tool_call_keys` (equal to span-content-keys toolCallAttributeKeys) are the tool_calls kind; with http, url.path and full URLs are kept without query or fragment and masked; url.query, user agents, client addresses and headers never. A span-kind case with its own `input` uses it instead of `spans.input`. On a tool-execution span (attribute gen_ai.operation.name execute_tool, or openinference.span.kind TOOL), content attributes other than exception.message, exception.stacktrace and scoped error.message are the tool_calls kind. URL attributes with array values are sanitised per element (non-strings dropped, an empty result removed).",
+  "description": "captureContent policy resolution (SDK-6888). Each case lists levels most general first (global, then interaction, mcp or exporter); every SDK resolves them with the same rules and must produce `expected`. Keys are snake_case; Node.js and Go map them to their own names. `capture_content: null` means the level sets nothing. `intent_summary: null` means not set at any level (sent as before the policy). `invalid` values must be rejected where captureContent is accepted (Go: not applicable, the type checks it). `custom_properties`: whether a custom event property with a content name is kept under the resolved policy: intent_summary follows an explicit intent_summary key at any level, else the default chain (boolean false drops it, as today); other names follow their own key; input_messages, output_text and output_tool_calls follow llm_calls (input_truncated is a boolean marker, not content, and is never dropped). `spans`: one span's content and, per resolved span kinds, the content exported with built-in masking on. Kept kinds are masked, other content removed; content events, the status message and ai.response.toolCalls are the messages kind; `tool_call_keys` (equal to span-content-keys toolCallAttributeKeys) are the tool_calls kind; with http, url.path and full URLs are kept without query or fragment and masked; url.query, user agents, client addresses and headers never. A span-kind case with its own `input` uses it instead of `spans.input`. On a tool-execution span (attribute gen_ai.operation.name execute_tool, or openinference.span.kind TOOL), content attributes other than exception.message, exception.stacktrace and scoped error.message are the tool_calls kind, in span attributes and in the attributes of events other than content events. URL attributes with array values are sanitised per element (non-strings dropped, an empty result removed).",
   "resolution": [
     {
       "name": "nothing_set",
@@ -953,6 +953,132 @@
       ],
       "property": "response_text",
       "sent": true
+    },
+    {
+      "name": "input_messages_boolean_false",
+      "description": "input_messages follows llm_calls: boolean false drops them.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": false
+        }
+      ],
+      "property": "input_messages",
+      "sent": false
+    },
+    {
+      "name": "input_messages_llm_calls_off",
+      "description": "input_messages follows llm_calls: llm_calls off with the default on drops them.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true,
+            "llm_calls": false
+          }
+        }
+      ],
+      "property": "input_messages",
+      "sent": false
+    },
+    {
+      "name": "input_messages_llm_calls_on",
+      "description": "input_messages follows llm_calls: llm_calls on with the default off keeps them.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": false,
+            "llm_calls": true
+          }
+        }
+      ],
+      "property": "input_messages",
+      "sent": true
+    },
+    {
+      "name": "output_text_boolean_false",
+      "description": "output_text follows llm_calls: boolean false drops them.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": false
+        }
+      ],
+      "property": "output_text",
+      "sent": false
+    },
+    {
+      "name": "output_text_llm_calls_off",
+      "description": "output_text follows llm_calls: llm_calls off with the default on drops them.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true,
+            "llm_calls": false
+          }
+        }
+      ],
+      "property": "output_text",
+      "sent": false
+    },
+    {
+      "name": "output_text_llm_calls_on",
+      "description": "output_text follows llm_calls: llm_calls on with the default off keeps them.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": false,
+            "llm_calls": true
+          }
+        }
+      ],
+      "property": "output_text",
+      "sent": true
+    },
+    {
+      "name": "output_tool_calls_boolean_false",
+      "description": "output_tool_calls follows llm_calls: boolean false drops them.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": false
+        }
+      ],
+      "property": "output_tool_calls",
+      "sent": false
+    },
+    {
+      "name": "output_tool_calls_llm_calls_off",
+      "description": "output_tool_calls follows llm_calls: llm_calls off with the default on drops them.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true,
+            "llm_calls": false
+          }
+        }
+      ],
+      "property": "output_tool_calls",
+      "sent": false
+    },
+    {
+      "name": "output_tool_calls_llm_calls_on",
+      "description": "output_tool_calls follows llm_calls: llm_calls on with the default off keeps them.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": false,
+            "llm_calls": true
+          }
+        }
+      ],
+      "property": "output_tool_calls",
+      "sent": true
     }
   ],
   "spans": {
@@ -1420,6 +1546,116 @@
             ]
           },
           "events": [],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "tool_span_event_attributes_messages_only",
+        "description": "On a tool-execution span, content attributes inside other events are the tool_calls kind; content events (gen_ai.choice) stay messages.",
+        "input": {
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "refund"
+          },
+          "events": [
+            {
+              "name": "tool.io",
+              "attributes": {
+                "input.value": "order A-1 for jane@example.com",
+                "output.value": "refunded",
+                "step": 1
+              }
+            },
+            {
+              "name": "gen_ai.choice",
+              "attributes": {
+                "message": "done"
+              }
+            }
+          ],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": true,
+          "tool_calls": false,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "refund"
+          },
+          "events": [
+            {
+              "name": "tool.io",
+              "attributes": {
+                "step": 1
+              }
+            },
+            {
+              "name": "gen_ai.choice",
+              "attributes": {
+                "message": "done"
+              }
+            }
+          ],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "tool_span_event_attributes_tool_calls_only",
+        "description": "The same span with only tool_calls: the event's tool content is kept and masked; the content event is removed.",
+        "input": {
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "refund"
+          },
+          "events": [
+            {
+              "name": "tool.io",
+              "attributes": {
+                "input.value": "order A-1 for jane@example.com",
+                "output.value": "refunded",
+                "step": 1
+              }
+            },
+            {
+              "name": "gen_ai.choice",
+              "attributes": {
+                "message": "done"
+              }
+            }
+          ],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": false,
+          "tool_calls": true,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "refund"
+          },
+          "events": [
+            {
+              "name": "tool.io",
+              "attributes": {
+                "input.value": "order A-1 for [email]",
+                "output.value": "refunded",
+                "step": 1
+              }
+            }
+          ],
           "status": {
             "code": 0
           }
