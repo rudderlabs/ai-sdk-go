@@ -2683,17 +2683,25 @@
             {
               "id": "sevt_childint_05",
               "processed_at": "2026-11-16T10:00:00.710000Z",
-              "type": "user.interrupt",
-              "session_thread_id": "sthr_child"
+              "type": "session.thread_created",
+              "agent_name": "researcher",
+              "session_thread_id": "sthr_child",
+              "workflow_run_id": null
             },
             {
               "id": "sevt_childint_06",
               "processed_at": "2026-11-16T10:00:00.810000Z",
-              "type": "span.model_request_start"
+              "type": "user.interrupt",
+              "session_thread_id": "sthr_child"
             },
             {
               "id": "sevt_childint_07",
-              "processed_at": "2026-11-16T10:00:01.160000Z",
+              "processed_at": "2026-11-16T10:00:00.910000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_childint_08",
+              "processed_at": "2026-11-16T10:00:01.260000Z",
               "type": "agent.message",
               "content": [
                 {
@@ -2703,11 +2711,11 @@
               ]
             },
             {
-              "id": "sevt_childint_08",
-              "processed_at": "2026-11-16T10:00:01.210000Z",
+              "id": "sevt_childint_09",
+              "processed_at": "2026-11-16T10:00:01.310000Z",
               "type": "span.model_request_end",
               "is_error": false,
-              "model_request_start_id": "sevt_childint_06",
+              "model_request_start_id": "sevt_childint_07",
               "model_usage": {
                 "cache_creation_input_tokens": 0,
                 "cache_read_input_tokens": 0,
@@ -2717,8 +2725,8 @@
               }
             },
             {
-              "id": "sevt_childint_09",
-              "processed_at": "2026-11-16T10:00:01.310000Z",
+              "id": "sevt_childint_10",
+              "processed_at": "2026-11-16T10:00:01.410000Z",
               "type": "session.status_idle",
               "stop_details": null,
               "stop_reason": {
@@ -2768,6 +2776,308 @@
                 "cost_usd": 0.0000042
               }
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "primary_thread_interrupt",
+      "description": "An interrupt naming a thread the session did not create as a subagent (the primary thread) cancels the turn.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_primint_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_primint_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            },
+            {
+              "id": "sevt_primint_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "session.thread_created",
+              "agent_name": "researcher",
+              "session_thread_id": "sthr_child",
+              "workflow_run_id": null
+            },
+            {
+              "id": "sevt_primint_04",
+              "processed_at": "2026-11-16T10:00:00.310000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_primint_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_primint_04",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_primint_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "user.interrupt",
+              "session_thread_id": "sthr_primary"
+            },
+            {
+              "id": "sevt_primint_07",
+              "processed_at": "2026-11-16T10:00:00.910000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000002,
+            "error_type": "cancelled",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000002
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "error_before_turn_events",
+      "description": "A terminal session.error while the session runs, before any model request (a repository that cannot be cloned), is the turn's error.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_early_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_early_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "session.error",
+              "error": {
+                "type": "repository_clone_error",
+                "message": "clone failed",
+                "retry_status": {
+                  "type": "terminal"
+                }
+              }
+            },
+            {
+              "id": "sevt_early_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "session.status_terminated"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "error",
+            "trigger": "user",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "error_type": "invalid_request"
+          }
+        }
+      ]
+    },
+    {
+      "name": "paused_then_terminated",
+      "description": "A later stream of a paused session holds only session.status_terminated: the paused answer ends cancelled.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_pterm_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_pterm_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Weather?"
+                }
+              ]
+            },
+            {
+              "id": "sevt_pterm_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_pterm_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_pterm_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_pterm_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "agent.custom_tool_use",
+              "name": "get_weather",
+              "input": {
+                "city": "Paris"
+              }
+            },
+            {
+              "id": "sevt_pterm_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_pterm_05"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "events": [
+            {
+              "id": "sevt_pterm_07",
+              "processed_at": "2026-11-16T10:00:01.810000Z",
+              "type": "session.status_terminated"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "paused",
+            "pause_reason": "deferred_tool",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ]
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "error_type": "cancelled",
+            "pause_count": 1
           }
         }
       ]
