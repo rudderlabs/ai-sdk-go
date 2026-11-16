@@ -4,6 +4,30 @@
   "description": "A request forcing exactly one named tool marks matching response calls as candidates. Only at final End, candidates without a result or an already emitted event are excluded. Pause retains candidates and defers their unknown-outcome events. Model calls and tokens count unchanged. Snapshot fields use structured_candidate.",
   "cases": [
     {
+      "name": "Gemini id-less forced call with named result",
+      "request": {
+        "config": {
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "ANY",
+              "allowedFunctionNames": ["Schema"]
+            }
+          }
+        }
+      },
+      "response_tool": {
+        "name": "Schema",
+        "args": { "answer": "yes" }
+      },
+      "result_name": "Schema",
+      "result": { "answer": "yes" },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 1,
+        "tool_events": 1
+      }
+    },
+    {
       "name": "Instructor OpenAI Chat no result",
       "request": {
         "tool_choice": {

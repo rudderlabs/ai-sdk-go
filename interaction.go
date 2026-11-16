@@ -1477,13 +1477,23 @@ func (i *Interaction) RecordToolResult(id string, result ToolResult) {
 	i.recordToolResult(id, result, result.Result != nil)
 }
 
-func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult bool) {
+// name is Gemini's fallback for a forced candidate whose call and result omit IDs.
+// Ordinary id-less calls keep their existing outcome accounting.
+func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult bool, name ...string) {
 	safely(func() {
-		if id == "" {
+		if id == "" && (len(name) == 0 || name[0] == "") {
 			return
 		}
 		i.mu.Lock()
 		tool := i.toolsByID[id]
+		if id == "" {
+			for _, candidate := range i.tools {
+				if candidate.id == "" && candidate.rawName == name[0] && candidate.structuredCandidate && !candidate.settled {
+					tool = candidate
+					break
+				}
+			}
+		}
 		if tool != nil {
 			tool.resultSeen = true
 			mergeToolResult(tool, result, hasResult)

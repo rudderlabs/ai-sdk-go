@@ -306,7 +306,7 @@ func recordFunctionResponses(i *rudderstackai.Interaction, contents any) {
 			result = output
 		}
 		_, hasResult := fr["response"]
-		kit.RecordToolResult(i, kit.Str(fr["id"]), rudderstackai.ToolResult{Error: &failed, Result: result}, hasResult)
+		kit.RecordToolResult(i, kit.Str(fr["id"]), rudderstackai.ToolResult{Error: &failed, Result: result}, hasResult, kit.Str(fr["name"]))
 	}
 }
 

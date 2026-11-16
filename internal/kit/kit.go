@@ -142,6 +142,7 @@ func List(v any) []any {
 }
 
 // RecordToolResult preserves observed JSON null separately from an omitted tool result.
-func RecordToolResult(i *rudderstackai.Interaction, id string, result rudderstackai.ToolResult, hasResult bool) {
-	hook.RecordToolResult(i, id, result, hasResult)
+// The optional name matches only id-less forced Gemini candidates.
+func RecordToolResult(i *rudderstackai.Interaction, id string, result rudderstackai.ToolResult, hasResult bool, name ...string) {
+	hook.RecordToolResult(i, id, result, hasResult, name...)
 }

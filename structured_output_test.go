@@ -3,6 +3,7 @@ package rudderstackai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -21,6 +22,7 @@ func TestStructuredOutputLifecycle(t *testing.T) {
 			Request        map[string]any
 			Tool           ToolCall `json:"response_tool"`
 			Result         json.RawMessage
+			ResultName     string `json:"result_name"`
 			Pause, Emitted bool
 			InProcess      bool `json:"in_process"`
 			EmptyResult    bool `json:"empty_result"`
@@ -100,7 +102,7 @@ func TestStructuredOutputLifecycle(t *testing.T) {
 				i.RecordToolResult(c.Tool.ID, ToolResult{})
 			}
 			if c.Result != nil {
-				i.RecordToolResult(c.Tool.ID, ToolResult{Result: c.Result})
+				i.recordToolResult(c.Tool.ID, ToolResult{Result: c.Result}, true, c.ResultName)
 			}
 			i.End(EndOptions{})
 			i.End(EndOptions{})
@@ -141,23 +143,57 @@ func TestStructuredOutputLifecycle(t *testing.T) {
 }
 
 func TestStructuredOutputOutcomeBeforeCandidate(t *testing.T) {
-	for _, source := range []string{"result", "execution span"} {
-		t.Run(source, func(t *testing.T) {
-			r := setupAI(t, WithToolBreakdown(true))
-			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
-			call := ToolCall{ID: "schema", Name: "Schema"}
-			if source == "execution span" {
-				i.recordToolCalls(true, call)
-			} else {
+	for _, events := range []bool{false, true} {
+		for _, source := range []string{"result", "empty result", "execution span", "inline result", "emitted event"} {
+			if !events && source == "emitted event" {
+				continue
+			}
+			t.Run(fmt.Sprintf("%s/events=%t", source, events), func(t *testing.T) {
+				opts := []ConfigOption{WithToolBreakdown(true)}
+				if events {
+					opts = append(opts, WithEventRules(EventRules{Tools: map[string]ToolEventRule{"Schema": {Event: "schema_done"}}}))
+				}
+				r := setupAI(t, opts...)
+				_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+				call := ToolCall{ID: "schema", Name: "Schema"}
 				i.RecordToolCalls(call)
-				i.RecordToolResult(call.ID, ToolResult{})
-			}
-			call.StructuredCandidate = true
-			i.RecordToolCalls(call)
-			i.End(EndOptions{})
-			if lastResponse(t, r)["tool_call_count"] != 1 {
-				t.Fatal("observed execution/outcome lost when candidate recognized later")
-			}
-		})
+				switch source {
+				case "result":
+					i.RecordToolResult(call.ID, ToolResult{Result: map[string]any{"ok": true}})
+				case "empty result":
+					i.RecordToolResult(call.ID, ToolResult{})
+				case "execution span":
+					i.recordToolCalls(true, call)
+				case "inline result":
+					outcome := call
+					outcome.Result = map[string]any{"ok": true}
+					i.RecordToolCalls(outcome)
+				case "emitted event":
+					outcome := call
+					outcome.Error = Ptr(false)
+					i.RecordToolCalls(outcome)
+					if len(r.named("schema_done")) != 1 {
+						t.Fatal("event not emitted before recognition")
+					}
+				}
+				call.StructuredCandidate = true
+				i.RecordToolCalls(call)
+				i.End(EndOptions{})
+				if lastResponse(t, r)["tool_call_count"] != 1 {
+					t.Fatal("observed execution/outcome lost when candidate recognized later")
+				}
+				rows := lastResponse(t, r)["tool_breakdown"].([]map[string]any)
+				if len(rows) != 1 || rows[0]["call_count"] != 1 {
+					t.Fatalf("breakdown = %v", rows)
+				}
+				wantEvents := 0
+				if events {
+					wantEvents = 1
+				}
+				if got := len(r.named("schema_done")); got != wantEvents {
+					t.Fatalf("events = %d; want %d", got, wantEvents)
+				}
+			})
+		}
 	}
 }
