@@ -973,6 +973,69 @@ func TestSDK6111R1CancelledCallsNeverGainCredits(t *testing.T) {
 	}
 }
 
+func TestSDK6111R2LegacyFailedPendingCallsKeepCredits(t *testing.T) {
+	raw, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Snapshot json.RawMessage `json:"snapshot"`
+		Errors   []string        `json:"error_types"`
+		Expected map[string]any  `json:"expected"`
+	}
+	if err = json.Unmarshal(fixtures["legacy_failed_credits"], &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, errType := range fixture.Errors {
+		for _, field := range []string{"agent", "purpose", "fallback", "byok"} {
+			for _, explicit := range []string{"legacy", "true", "false"} {
+				t.Run(errType+"/"+field+"/"+explicit, func(t *testing.T) {
+					r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(CreditCall) (*float64, error) { t.Error("failed call priced"); return nil, nil }))
+					var snapshot PausedInteraction
+					if err := json.Unmarshal(fixture.Snapshot, &snapshot); err != nil {
+						t.Fatal(err)
+					}
+					snapshot.PendingCalls[0]["error_type"] = errType
+					if explicit != "legacy" {
+						snapshot.PendingCalls[0]["credits_explicit"] = explicit == "true"
+					}
+					_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshot})
+					call := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "openai", ResponseID: "legacy", InputTokens: 10, OutputTokens: 2}, 100)
+					switch field {
+					case "agent":
+						call.AgentName = "answer"
+					case "purpose":
+						call.CallPurpose = "answer"
+					case "fallback":
+						call.FallbackUsed = Ptr(true)
+					case "byok":
+						call.BYOK = Ptr(true)
+					}
+					i.RecordCall(call)
+					i.End(EndOptions{})
+					response := lastResponse(t, r)
+					for k, v := range fixture.Expected {
+						if n, ok := v.(float64); ok {
+							if sdk6111Num(response[k]) != n {
+								t.Errorf("%s=%v want %v", k, response[k], v)
+							}
+						} else if response[k] != v {
+							t.Errorf("%s=%v want %v", k, response[k], v)
+						}
+					}
+					if sdk6111Num(r.named("ai_llm_response_received")[0].Properties["credits"]) != 7 {
+						t.Fatal("lost call credits")
+					}
+				})
+			}
+		}
+	}
+}
+
 func sdk6111ReviewPending(t *testing.T, r *recorder, mode string, record func(*Interaction)) *Interaction {
 	t.Helper()
 	client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}

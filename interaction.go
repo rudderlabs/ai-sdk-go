@@ -997,6 +997,9 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 		credits = nil
 	}
 	explicit := credits != nil
+	if credits == nil && earlier.errorType != "" && earlier.errorType != "cancelled" {
+		credits = earlier.credits
+	}
 	if credits == nil && !earlier.creditsExplicit && hook != nil && earlier.errorType == "" && !earlier.usageUnknown {
 		basis := CreditCall{
 			Provider: earlier.provider, Model: first(earlier.rawModel, earlier.model),
@@ -2533,6 +2536,9 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 			c.usageUnknown = !known
 		}
 		c.creditsExplicit = pendingBool(p, "credits_explicit")
+		if _, present := p["credits_explicit"]; !present {
+			c.creditsExplicit = p["credits"] != nil
+		}
 		c.startedAt, c.endedAt = pendingTime(p, "started"), pendingTime(p, "ended")
 		if p["credits"] != nil {
 			c.credits = Ptr(pendingNumber(p, "credits"))
