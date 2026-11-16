@@ -645,5 +645,268 @@
       "total_cost_usd": 0.01,
       "total_credits": 21
     }
+  },
+  "fractional_timing": {
+    "snapshots": [
+      {
+        "written_by": "node",
+        "snapshot": {
+          "interaction_id": "fractional-timing",
+          "conversation_id": "fractional-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862452044,
+          "report_count": 3,
+          "successful_call_sequence": 3,
+          "call_sequence": 3,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "gpt-4o",
+              "call_count": 1,
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cost_usd": 0.01,
+              "credits": 1,
+              "credits_explicit": true,
+              "latency_ms": 10.5,
+              "time_to_first_token_ms": 10.5,
+              "started_at": 100.25,
+              "ended_at": 110.75,
+              "from_span": true,
+              "matched": false,
+              "usage_known": true,
+              "call_event_pending": true,
+              "call_index": 1,
+              "report_sequence": 1
+            },
+            {
+              "provider": "openai",
+              "model": "gpt-4o",
+              "call_count": 1,
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cost_usd": 0.01,
+              "credits": 1,
+              "credits_explicit": true,
+              "latency_ms": 0.5,
+              "time_to_first_token_ms": 0.5,
+              "started_at": 200.25,
+              "ended_at": 200.75,
+              "from_span": true,
+              "matched": false,
+              "usage_known": true,
+              "call_event_pending": true,
+              "call_index": 2,
+              "report_sequence": 2
+            },
+            {
+              "provider": "openai",
+              "model": "gpt-4o",
+              "call_count": 1,
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cost_usd": 0.01,
+              "credits": 1,
+              "credits_explicit": true,
+              "latency_ms": 10.49,
+              "time_to_first_token_ms": 10.49,
+              "started_at": 300.25,
+              "ended_at": 310.74,
+              "from_span": true,
+              "matched": false,
+              "usage_known": true,
+              "call_event_pending": true,
+              "call_index": 3,
+              "report_sequence": 3,
+              "last": true,
+              "last_ok": true
+            }
+          ]
+        }
+      },
+      {
+        "written_by": "python",
+        "snapshot": {
+          "interaction_id": "fractional-timing",
+          "conversation_id": "fractional-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862452044,
+          "report_count": 3,
+          "successful_call_sequence": 3,
+          "call_sequence": 3,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "gpt-4o",
+              "call_count": 1,
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cost_usd": 0.01,
+              "credits": 1,
+              "credits_explicit": true,
+              "latency_ms": 10.5,
+              "time_to_first_token_ms": 10.5,
+              "started_at": 100.25,
+              "ended_at": 110.75,
+              "from_span": true,
+              "matched": false,
+              "usage_known": true,
+              "call_event_pending": true,
+              "call_index": 1,
+              "report_sequence": 1
+            },
+            {
+              "provider": "openai",
+              "model": "gpt-4o",
+              "call_count": 1,
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cost_usd": 0.01,
+              "credits": 1,
+              "credits_explicit": true,
+              "latency_ms": 0.5,
+              "time_to_first_token_ms": 0.5,
+              "started_at": 200.25,
+              "ended_at": 200.75,
+              "from_span": true,
+              "matched": false,
+              "usage_known": true,
+              "call_event_pending": true,
+              "call_index": 2,
+              "report_sequence": 2
+            },
+            {
+              "provider": "openai",
+              "model": "gpt-4o",
+              "call_count": 1,
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cost_usd": 0.01,
+              "credits": 1,
+              "credits_explicit": true,
+              "latency_ms": 10.49,
+              "time_to_first_token_ms": 10.49,
+              "started_at": 300.25,
+              "ended_at": 310.74,
+              "from_span": true,
+              "matched": false,
+              "usage_known": true,
+              "call_event_pending": true,
+              "call_index": 3,
+              "report_sequence": 3,
+              "last": true,
+              "last_ok": true
+            }
+          ]
+        }
+      },
+      {
+        "written_by": "go",
+        "snapshot": {
+          "interaction_id": "fractional-timing",
+          "conversation_id": "fractional-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862452044,
+          "report_count": 3,
+          "successful_call_sequence": 3,
+          "call_sequence": 3,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "gpt-4o",
+              "call_count": 1,
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cost_usd": 0.01,
+              "credits": 1,
+              "credits_explicit": true,
+              "latency_ms": 10.5,
+              "time_to_first_token_ms": 10.5,
+              "started_at": 100.25,
+              "ended_at": 110.75,
+              "from_span": true,
+              "matched": false,
+              "usage_known": true,
+              "call_event_pending": true,
+              "call_index": 1,
+              "report_sequence": 1
+            },
+            {
+              "provider": "openai",
+              "model": "gpt-4o",
+              "call_count": 1,
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cost_usd": 0.01,
+              "credits": 1,
+              "credits_explicit": true,
+              "latency_ms": 0.5,
+              "time_to_first_token_ms": 0.5,
+              "started_at": 200.25,
+              "ended_at": 200.75,
+              "from_span": true,
+              "matched": false,
+              "usage_known": true,
+              "call_event_pending": true,
+              "call_index": 2,
+              "report_sequence": 2
+            },
+            {
+              "provider": "openai",
+              "model": "gpt-4o",
+              "call_count": 1,
+              "input_tokens": 2,
+              "output_tokens": 1,
+              "cost_usd": 0.01,
+              "credits": 1,
+              "credits_explicit": true,
+              "latency_ms": 10.49,
+              "time_to_first_token_ms": 10.49,
+              "started_at": 300.25,
+              "ended_at": 310.74,
+              "from_span": true,
+              "matched": false,
+              "usage_known": true,
+              "call_event_pending": true,
+              "call_index": 3,
+              "report_sequence": 3,
+              "last": true,
+              "last_ok": true
+            }
+          ]
+        }
+      }
+    ],
+    "expected": {
+      "response": {
+        "llm_call_count": 3,
+        "total_input_tokens": 6,
+        "total_cost_usd": 0.03,
+        "total_credits": 3
+      },
+      "call_events": [
+        {
+          "latency_ms": 11,
+          "time_to_first_token_ms": 11
+        },
+        {
+          "latency_ms": 1,
+          "time_to_first_token_ms": 1
+        },
+        {
+          "latency_ms": 10,
+          "time_to_first_token_ms": 10
+        }
+      ]
+    }
   }
 }

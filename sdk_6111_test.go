@@ -25,6 +25,8 @@ func sdk6111Num(v any) float64 {
 	switch n := v.(type) {
 	case int:
 		return float64(n)
+	case int64:
+		return float64(n)
 	case float64:
 		return n
 	}
@@ -1278,6 +1280,76 @@ func TestSDK6111R6TypedNestedBytesStayOutOfTelemetry(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestSDK6111R8RestoredFractionalTimingRoundsHalfUp(t *testing.T) {
+	raw, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Snapshots []struct {
+			Writer   string          `json:"written_by"`
+			Snapshot json.RawMessage `json:"snapshot"`
+		} `json:"snapshots"`
+		Expected struct {
+			Response map[string]any   `json:"response"`
+			Events   []map[string]any `json:"call_events"`
+		} `json:"expected"`
+	}
+	if err = json.Unmarshal(fixtures["fractional_timing"], &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range fixture.Snapshots {
+		t.Run(entry.Writer, func(t *testing.T) {
+			r := setupAI(t, WithLLMCallEvents(true))
+			var stored PausedInteraction
+			if err := json.Unmarshal(entry.Snapshot, &stored); err != nil {
+				t.Fatal(err)
+			}
+			_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+			i.End(EndOptions{})
+			resp := lastResponse(t, r)
+			for k, v := range fixture.Expected.Response {
+				if sdk6111Num(resp[k]) != v.(float64) {
+					t.Errorf("%s=%v want %v", k, resp[k], v)
+				}
+			}
+			events := r.named("ai_llm_response_received")
+			if len(events) != 3 {
+				t.Fatal(len(events))
+			}
+			for n, e := range events {
+				for k, v := range fixture.Expected.Events[n] {
+					if sdk6111Num(e.Properties[k]) != v.(float64) {
+						t.Errorf("%s=%v want %v", k, e.Properties[k], v)
+					}
+				}
+			}
+		})
+	}
+}
+func TestSDK6111R8FractionalCallWindowsPreserveTimingAcrossResume(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		t.Run(mode, func(t *testing.T) {
+			r := setupAI(t, WithLLMCallEvents(true))
+			i := sdk6111ReviewPending(t, r, mode, func(i *Interaction) {
+				i.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "tracing", InputTokens: 10, StartedAt: time.Unix(0, 100250000), EndedAt: time.Unix(0, 110750000), FirstTokenAt: time.Unix(0, 110750000)})
+			})
+			i.End(EndOptions{})
+			events := r.named("ai_llm_response_received")
+			if len(events) != 1 {
+				t.Fatal(len(events))
+			}
+			if sdk6111Num(events[0].Properties["latency_ms"]) != 11 || sdk6111Num(events[0].Properties["time_to_first_token_ms"]) != 11 {
+				t.Fatal(events[0].Properties)
+			}
+		})
 	}
 }
 
