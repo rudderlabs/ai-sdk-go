@@ -902,7 +902,10 @@
                 "error_count": 1,
                 "error_types": {
                   "denied": 1
-                }
+                },
+                "duration_ms": 200,
+                "measured_count": 1,
+                "max_duration_ms": 200
               }
             ]
           }
@@ -4307,6 +4310,321 @@
                 "duration_ms": 1600,
                 "measured_count": 1,
                 "max_duration_ms": 1600
+              }
+            ],
+            "pause_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "running_then_budget_reached",
+      "description": "The prompt came with initial_events and the session stopped at its budget before any model request: the turn still sends its answer, without prompt_text.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_runbudget_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_runbudget_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "budget_reached"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "incomplete",
+            "trigger": "user",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "error_type": "max_budget_usd"
+          }
+        }
+      ]
+    },
+    {
+      "name": "running_then_terminated",
+      "description": "The session starts running and is terminated before any other event: the turn still sends its answer.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_runterm_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_runterm_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "session.status_terminated"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "denied_after_wait",
+      "description": "A tool call paused for approval and the app denied it 10 s later on a second stream: the denial counts in the resumed segment with the wait as its duration.",
+      "options": {
+        "tool_breakdown": true
+      },
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_denywait_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_denywait_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Delete it"
+                }
+              ]
+            },
+            {
+              "id": "sevt_denywait_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_denywait_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_denywait_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_denywait_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "agent.tool_use",
+              "name": "bash",
+              "input": {
+                "command": "rm -rf /tmp/x"
+              },
+              "evaluated_permission": "ask",
+              "evaluation": {
+                "type": "always_ask"
+              }
+            },
+            {
+              "id": "sevt_denywait_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_denywait_05"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "events": [
+            {
+              "id": "sevt_denywait_07",
+              "processed_at": "2026-11-16T10:00:10.710000Z",
+              "type": "user.tool_confirmation",
+              "tool_use_id": "sevt_denywait_05",
+              "result": "deny"
+            },
+            {
+              "id": "sevt_denywait_08",
+              "processed_at": "2026-11-16T10:00:10.720000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_denywait_09",
+              "processed_at": "2026-11-16T10:00:10.820000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_denywait_10",
+              "processed_at": "2026-11-16T10:00:11.170000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I was not allowed to."
+                }
+              ]
+            },
+            {
+              "id": "sevt_denywait_11",
+              "processed_at": "2026-11-16T10:00:11.220000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_denywait_09",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 40,
+                "output_tokens": 6,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_denywait_12",
+              "processed_at": "2026-11-16T10:00:11.320000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "paused",
+            "pause_reason": "approval",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ]
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 40,
+            "total_output_tokens": 6,
+            "total_tokens": 46,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 40,
+                "output_tokens": 6,
+                "total_tokens": 46,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ],
+            "tool_breakdown": [
+              {
+                "tool_name": "bash",
+                "call_count": 1,
+                "error_count": 1,
+                "error_types": {
+                  "denied": 1
+                },
+                "duration_ms": 10000,
+                "measured_count": 1,
+                "max_duration_ms": 10000
               }
             ],
             "pause_count": 1

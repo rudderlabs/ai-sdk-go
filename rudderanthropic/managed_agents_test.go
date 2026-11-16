@@ -792,3 +792,77 @@ func TestManagedAgentsEndsATurnTheAppsOwnExceptionStoppedAsAppError(t *testing.T
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestManagedAgentsRecordsABorrowedAnswersWorkAsItArrivesSoTheCallersPauseHoldsIt(t *testing.T) {
+	f, sc := maFixtureScenario(t, "custom_tool_pause_resume")
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
+	resetMA(t)
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	// running, user, request start, request end, tool use: the idle is never read.
+	events := rudderanthropic.TrackSessionEvents(ctx, &sliceStream{events: decodeEvents(t, sc.Streams[0].Events[:5])}, rudderanthropic.WithSession(withID(f.Session, "sesn_borrowed_pause")))
+	// Read exactly five: reaching the stream's end would settle the turn into the answer anyway.
+	for range 5 {
+		if !events.Next() {
+			t.Fatal("stream ended early")
+		}
+	}
+	if _, ok := i.Pause(rudderstackai.PauseOptions{}); !ok {
+		t.Fatal("not paused")
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["response_status"] != "paused" || got[0]["llm_call_count"] != float64(1) ||
+		got[0]["tool_call_count"] != float64(1) || got[0]["total_input_tokens"] != float64(30) || got[0]["total_output_tokens"] != float64(8) {
+		t.Fatalf("%v", got)
+	}
+	// The paused segment holds the work; the resumed one counts nothing twice.
+	_ = events.Close()
+	i.Resume()
+	i.End(rudderstackai.EndOptions{Status: rudderstackai.StatusSuccess})
+	got = rec.events(t)["ai_response_received"]
+	if len(got) != 2 || got[1]["llm_call_count"] != float64(0) || got[1]["tool_call_count"] != float64(0) || got[1]["total_input_tokens"] != float64(0) {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestManagedAgentsTimesASpilledDenialFromTheToolUse(t *testing.T) {
+	f, sc := maFixtureScenario(t, "denied_after_wait")
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 1}))
+	resetMA(t)
+	session := rudderanthropic.WithSession(withID(f.Session, "sesn_denied_spill"))
+	for _, s := range sc.Streams {
+		events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, s.Events)}, session)
+		for events.Next() {
+		}
+		_ = events.Close()
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 2 {
+		t.Fatalf("%v", got)
+	}
+	breakdown := got[1]["tool_breakdown"].([]any)
+	entry := breakdown[0].(map[string]any)
+	if len(breakdown) != 1 || entry["duration_ms"] != float64(10_000) || entry["error_types"].(map[string]any)["denied"] != float64(1) {
+		t.Fatalf("%v", breakdown)
+	}
+}
+
+func TestManagedAgentsGivesAToolRefusedUpFrontNoDuration(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
+	resetMA(t)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+		`{"id":"sevt_refused_1","type":"session.status_running","processed_at":"2026-11-16T10:00:00.000Z"}`,
+		`{"id":"sevt_refused_2","type":"user.message","content":[],"processed_at":"2026-11-16T10:00:00.100Z"}`,
+		`{"id":"sevt_refused_3","type":"agent.tool_use","name":"bash","evaluated_permission":"deny","processed_at":"2026-11-16T10:00:00.200Z"}`,
+		`{"id":"sevt_refused_4","type":"session.status_idle","stop_reason":{"type":"end_turn"},"processed_at":"2026-11-16T10:00:00.900Z"}`,
+	), rudderanthropic.WithSessionID("sesn_refused"))
+	for events.Next() {
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 {
+		t.Fatalf("%v", got)
+	}
+	entry := got[0]["tool_breakdown"].([]any)[0].(map[string]any)
+	if _, has := entry["duration_ms"]; has || entry["error_types"].(map[string]any)["denied"] != float64(1) {
+		t.Fatalf("%v", entry)
+	}
+}
