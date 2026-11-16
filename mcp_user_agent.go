@@ -9,13 +9,20 @@ import (
 
 // User-Agent product -> the client's own initialize name (spec/fixtures/mcp-client-user-agent-v0.1.json).
 var userAgentClients = map[string]string{
-	"claude-code":  "claude-code",
-	"claude":       "Anthropic/ClaudeAI",
-	"cursor":       "Cursor",
-	"openai-mcp":   "openai-mcp",
-	"codex_cli_rs": "codex-mcp-client",
-	"opencode":     "opencode",
+	"claude-code":      "claude-code",
+	"claude":           "Anthropic/ClaudeAI",
+	"cursor":           "Cursor",
+	"openai-mcp":       "openai-mcp",
+	"codex_cli_rs":     "codex-mcp-client",
+	"opencode":         "opencode",
+	"claude-user":      "Anthropic/ClaudeAI",
+	"codex-mcp-client": "codex-mcp-client",
+	"copilot-cli":      "copilot-cli",
+	"devin-mcp-client": "rmcp",
 }
+
+// Products whose User-Agent version is their own, not the clientInfo version of the name they map to.
+var userAgentVersionless = map[string]bool{"devin-mcp-client": true}
 
 var userAgentVersion = regexp.MustCompile(`^[0-9][0-9A-Za-z.+-]{0,31}$`)
 
@@ -41,7 +48,7 @@ func clientFromUserAgent(userAgent string) *mcpbridge.Client {
 		return &mcpbridge.Client{Name: "other"}
 	}
 	client := &mcpbridge.Client{Name: name}
-	if userAgentVersion.MatchString(version) {
+	if !userAgentVersionless[key] && userAgentVersion.MatchString(version) {
 		client.Version = version
 	}
 	return client
