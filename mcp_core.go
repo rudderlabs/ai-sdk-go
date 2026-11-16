@@ -881,9 +881,11 @@ type heldEvents struct {
 	props map[string]any
 	tool  bool
 	mask  func(string) (string, bool)
-	sends []func()
-	done  bool
-	sent  chan struct{} // closed once flush has sent the held events
+	// allowed is the live ErrorMessage policy, checked again when the response arrives.
+	allowed func() bool
+	sends   []func()
+	done    bool
+	sent    chan struct{} // closed once flush has sent the held events
 }
 
 // add queues send behind the held events. Once flushing has begun it waits until they are sent
@@ -908,7 +910,7 @@ func (h *heldEvents) flush(response map[string]any) {
 	sends := h.sends
 	h.sends = nil
 	h.mu.Unlock()
-	if response != nil {
+	if response != nil && h.allowed() {
 		safely(func() {
 			source := map[string]any{}
 			if e, ok := response["error"].(map[string]any); ok {
@@ -937,7 +939,8 @@ func (rc *reqCtx) send(event string, p map[string]any, send func()) {
 	}
 	if rc.responses != nil && rc.opts.capture().ErrorMessage && failureEvents[event] &&
 		p["tool_status"] == "error" && p["error_type"] != "cancelled" {
-		h := &heldEvents{props: p, tool: event == "mcp_tool_called", mask: rc.opts.mask, sends: []func(){send}, sent: make(chan struct{})}
+		h := &heldEvents{props: p, tool: event == "mcp_tool_called", mask: rc.opts.mask, sends: []func(){send}, sent: make(chan struct{}),
+			allowed: func() bool { return rc.opts.capture().ErrorMessage }}
 		if rc.responses.Await(rc.rawID, h.flush) {
 			rc.held = h
 			return

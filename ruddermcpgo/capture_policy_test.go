@@ -4,6 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
 
@@ -75,6 +79,41 @@ func TestFeedbackSchemaFollowsLiveGlobalPolicy(t *testing.T) {
 			}
 			if _, sent := r.props(t, "mcp_feedback_submitted")["feedback_text"]; sent != offered {
 				t.Fatalf("feedback_text sent = %v, want %v", sent, offered)
+			}
+		})
+	}
+}
+
+// error_message follows the live policy at the final response: turning ErrorMessage off after
+// the failure is held leaves it out; the event still goes out.
+func TestHeldErrorMessageRechecksLivePolicy(t *testing.T) {
+	for _, tc := range observedConnectors {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := rudderstackai.Configure(rudderstackai.WithCaptureContent(true)); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				_ = rudderstackai.Configure(rudderstackai.WithCaptureContent(false), rudderstackai.WithContentCapture(rudderstackai.ContentCapture{}))
+			})
+			hooks := &server.Hooks{}
+			s := server.NewMCPServer("live-error-mcpgo", "1", server.WithToolCapabilities(true), server.WithHooks(hooks))
+			s.AddTool(mcp.NewTool("lookup"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return mcp.NewToolResultError("lookup failed"), nil
+			})
+			r := wrap(t, s, Options{})
+			hooks.AddAfterCallTool(func(context.Context, any, *mcp.CallToolRequest, any) {
+				_ = rudderstackai.Configure(rudderstackai.WithContentCapture(rudderstackai.ContentCapture{ErrorMessage: rudderstackai.Ptr(false)}))
+			})
+			cs := tc.connect(t, s)
+			if _, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "lookup"}); err != nil {
+				t.Fatal(err)
+			}
+			p := waitProps(t, r, "mcp_tool_called")
+			if p["tool_status"] != "error" {
+				t.Fatalf("event: %v", p)
+			}
+			if _, ok := p["error_message"]; ok {
+				t.Fatalf("error_message sent after ErrorMessage turned off: %v", p)
 			}
 		})
 	}
