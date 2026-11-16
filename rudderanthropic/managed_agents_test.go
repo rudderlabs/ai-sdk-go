@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
@@ -234,6 +235,7 @@ func TestManagedAgentsFixture(t *testing.T) {
 	for _, sc := range f.Scenarios {
 		t.Run(sc.Name, func(t *testing.T) {
 			_, rec := setup(t, rudderstackai.WithToolBreakdown(sc.Options.ToolBreakdown), rudderstackai.WithCaptureContent(sc.Options.CaptureContent))
+			resetMA(t)
 			t.Cleanup(rudderstackai.ClearPrices)
 			p := f.Price
 			if err := rudderstackai.RegisterPrice(p.Model, rudderstackai.ModelPrice{Provider: p.Provider, TokenPrice: rudderstackai.TokenPrice{
@@ -302,6 +304,7 @@ func slicesClone[T any](s []T) []T { return append([]T(nil), s...) }
 func TestManagedAgentsIntegrationTag(t *testing.T) {
 	f := loadMAFixture(t)
 	_, rec := setup(t)
+	resetMA(t)
 	sc := f.Scenarios[1] // text_turn_capture
 	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)}, rudderanthropic.WithSession(withID(f.Session, "sesn_tag")))
 	for events.Next() {
@@ -323,6 +326,7 @@ func TestManagedAgentsIntegrationTag(t *testing.T) {
 func TestManagedAgentsReportsIntoTheContextInteraction(t *testing.T) {
 	f := loadMAFixture(t)
 	_, rec := setup(t)
+	resetMA(t)
 	var two maScenario
 	for _, sc := range f.Scenarios {
 		if sc.Name == "two_turns" {
@@ -346,6 +350,7 @@ func TestManagedAgentsReportsIntoTheContextInteraction(t *testing.T) {
 func TestManagedAgentsFailingStreamEndsTheTurnAsAnError(t *testing.T) {
 	f := loadMAFixture(t)
 	_, rec := setup(t)
+	resetMA(t)
 	sc := f.Scenarios[1] // text_turn_capture
 	failure := errors.New("connection reset")
 	src := &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)[:3], err: failure}
@@ -369,6 +374,7 @@ func TestManagedAgentsFailingStreamEndsTheTurnAsAnError(t *testing.T) {
 func TestManagedAgentsOptionsAndMapCap(t *testing.T) {
 	f := loadMAFixture(t)
 	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 2}))
+	resetMA(t)
 	var two maScenario
 	for _, sc := range f.Scenarios {
 		if sc.Name == "two_turns" {
@@ -412,6 +418,7 @@ func withID(session json.RawMessage, id string) rawJSON {
 func TestManagedAgentsCloseEndsIterationAndTypedNilSession(t *testing.T) {
 	f := loadMAFixture(t)
 	_, rec := setup(t)
+	resetMA(t)
 	var nilSession *anthropic.BetaManagedAgentsSession
 	src := &sliceStream{events: decodeEvents(t, f.Scenarios[1].Streams[0].Events)}
 	events := rudderanthropic.TrackSessionEvents(context.Background(), src,
@@ -436,6 +443,7 @@ func TestManagedAgentsCloseEndsIterationAndTypedNilSession(t *testing.T) {
 func TestManagedAgentsModelOptionWinsOverTheSession(t *testing.T) {
 	f := loadMAFixture(t)
 	_, rec := setup(t)
+	resetMA(t)
 	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, f.Scenarios[1].Streams[0].Events)},
 		rudderanthropic.WithSessionModel("claude-opus-5-5"), rudderanthropic.WithSession(withID(f.Session, "sesn_model")))
 	for events.Next() {
@@ -446,8 +454,9 @@ func TestManagedAgentsModelOptionWinsOverTheSession(t *testing.T) {
 	}
 }
 
-func TestManagedAgentsFoldsCallsAndToolsPastTheCap(t *testing.T) {
+func TestManagedAgentsSpillsCallsAndToolsPastTheCap(t *testing.T) {
 	_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 2}))
+	resetMA(t)
 	at := `"processed_at":"2026-11-16T10:00:01.000Z"`
 	raw := []json.RawMessage{json.RawMessage(`{"id":"sevt_fold_u","type":"user.message","content":[],` + at + `}`)}
 	for n := range 5 {
@@ -462,5 +471,121 @@ func TestManagedAgentsFoldsCallsAndToolsPastTheCap(t *testing.T) {
 	got := rec.events(t)["ai_response_received"]
 	if len(got) != 1 || got[0]["llm_call_count"] != float64(5) || got[0]["tool_call_count"] != float64(5) || got[0]["total_input_tokens"] != float64(50) {
 		t.Fatalf("%v", got)
+	}
+}
+
+// resetMA forgets every session's state, so a test reads its sessions afresh under -count.
+func resetMA(t *testing.T) {
+	t.Helper()
+	rudderanthropic.ResetManagedAgents()
+	t.Cleanup(rudderanthropic.ResetManagedAgents)
+}
+
+func maEvents(t *testing.T, raw ...string) *sliceStream {
+	t.Helper()
+	list := make([]json.RawMessage, len(raw))
+	for n, r := range raw {
+		list[n] = json.RawMessage(r)
+	}
+	return &sliceStream{events: decodeEvents(t, list)}
+}
+
+func TestManagedAgentsPricesEachCallPastTheCapOnItsOwn(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 2}))
+	resetMA(t)
+	t.Cleanup(rudderstackai.ClearPrices)
+	if err := rudderstackai.RegisterPrice("claude-long", rudderstackai.ModelPrice{
+		Provider: "anthropic", TokenPrice: rudderstackai.TokenPrice{InputPerMtok: 1, OutputPerMtok: 1},
+		LongContext: &rudderstackai.LongContextPrice{ThresholdTokens: 200_000, TokenPrice: rudderstackai.TokenPrice{InputPerMtok: 2, OutputPerMtok: 2}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	at := `"processed_at":"2026-11-16T10:00:01.000Z"`
+	raw := []string{`{"id":"sevt_long_u","type":"user.message","content":[],` + at + `}`}
+	for n := range 5 {
+		raw = append(raw, fmt.Sprintf(`{"id":"sevt_long_%d","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":150000,"output_tokens":0},%s}`, n, at))
+	}
+	raw = append(raw, `{"id":"sevt_long_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at+`}`)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t, raw...),
+		rudderanthropic.WithSessionID("sesn_long"), rudderanthropic.WithSessionModel("claude-long"))
+	for events.Next() {
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["llm_call_count"] != float64(5) || got[0]["total_cost_usd"] != 0.75 {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestManagedAgentsSettlesToolsRecordedPastTheCap(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 2}))
+	resetMA(t)
+	at := func(n int) string { return fmt.Sprintf(`"processed_at":"2026-11-16T10:00:0%d.000Z"`, n) }
+	raw := []string{`{"id":"sevt_spill_u","type":"user.message","content":[],` + at(1) + `}`}
+	for n := range 3 {
+		raw = append(raw, fmt.Sprintf(`{"id":"sevt_spill_t%d","type":"agent.tool_use","name":"bash","input":{},%s}`, n, at(1)))
+	}
+	for n := range 3 {
+		raw = append(raw, fmt.Sprintf(`{"id":"sevt_spill_r%d","type":"agent.tool_result","tool_use_id":"sevt_spill_t%d","is_error":%t,%s}`, n, n, n == 0, at(2)))
+	}
+	raw = append(raw, `{"id":"sevt_spill_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at(3)+`}`)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t, raw...), rudderanthropic.WithSessionID("sesn_spill"))
+	for events.Next() {
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["tool_call_count"] != float64(3) {
+		t.Fatalf("%v", got)
+	}
+	breakdown := got[0]["tool_breakdown"].([]any)[0].(map[string]any)
+	if breakdown["call_count"] != float64(3) || breakdown["error_count"] != float64(1) {
+		t.Fatalf("%v", breakdown)
+	}
+}
+
+func TestManagedAgentsIDLessToolsExposeNoLocalKey(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithCaptureContent(true))
+	resetMA(t)
+	at := `"processed_at":"2026-11-16T10:00:01.000Z"`
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+		`{"id":"sevt_noid_u","type":"user.message","content":[],`+at+`}`,
+		`{"type":"agent.tool_use","name":"bash","input":{},`+at+`}`,
+		`{"id":"sevt_noid_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at+`}`,
+	), rudderanthropic.WithSessionID("sesn_noid"))
+	for events.Next() {
+	}
+	got := rec.events(t)
+	raw, _ := json.Marshal(got)
+	if len(got["ai_response_received"]) != 1 || got["ai_response_received"][0]["tool_call_count"] != float64(1) || strings.Contains(string(raw), "local:") {
+		t.Fatalf("%s", raw)
+	}
+}
+
+func TestManagedAgentsKeepsAResumedSegmentReadFromHistoryToItsOwnLatency(t *testing.T) {
+	f := loadMAFixture(t)
+	_, rec := setup(t)
+	resetMA(t)
+	var sc maScenario
+	for _, s := range f.Scenarios {
+		if s.Name == "custom_tool_pause_resume" {
+			sc = s
+		}
+	}
+	session := rudderanthropic.WithSession(withID(f.Session, "sesn_history"))
+	for n, s := range sc.Streams {
+		if n > 0 {
+			time.Sleep(800 * time.Millisecond) // the app reads the rest from history later
+		}
+		events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, s.Events)}, session)
+		for events.Next() {
+		}
+		_ = events.Close()
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 2 {
+		t.Fatalf("%v", got)
+	}
+	// The segment ran 610 ms on the server (01.810 -> 02.420); the rest of the wait was paused.
+	latency, paused := got[1]["latency_ms"].(float64), got[1]["total_paused_ms"].(float64)
+	if latency < 600 || latency > 700 || paused > 300 {
+		t.Fatalf("latency %v, paused %v", latency, paused)
 	}
 }

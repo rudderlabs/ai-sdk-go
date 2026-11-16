@@ -518,6 +518,7 @@ type Interaction struct {
 	pendingRunning         int           // queued ends being delivered; pendingDone stays until zero
 	pauseCount             int
 	pausedTotal            time.Duration
+	lastPause              time.Duration // the latest pause's length: how far backdate may move the start back
 	adapterAnalytics       analytics.Client
 	intent, outcome        string
 	traceID                string
@@ -2073,10 +2074,29 @@ func (i *Interaction) resumeAtLocked(start time.Time) {
 	if start.IsZero() || start.Before(i.pausedAt) {
 		start = time.Now()
 	}
-	i.pausedTotal += max(start.Sub(i.pausedAt), 0)
+	i.lastPause = max(start.Sub(i.pausedAt), 0)
+	i.pausedTotal += i.lastPause
 	i.pausedAt = time.Time{}
 	i.started = start
 	reopen(i)
+}
+
+// backdate moves the current segment's start back to startedAt, for an adapter that reads a
+// resumed segment's events after they happened. The time moves from the latest pause to the
+// segment, so never before that pause began. No-op while paused.
+func (i *Interaction) backdate(startedAt time.Time) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.ended || !i.pausedAt.IsZero() || startedAt.IsZero() {
+		return
+	}
+	shift := min(i.started.Sub(startedAt), i.lastPause)
+	if shift <= 0 {
+		return
+	}
+	i.started = i.started.Add(-shift)
+	i.pausedTotal -= shift
+	i.lastPause -= shift
 }
 
 // Paused reports whether the run is paused and not resumed or ended yet.
