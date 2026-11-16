@@ -35,7 +35,7 @@ func JoinInteraction(ctx context.Context, interactionID string, o JoinOptions) (
 		}
 	}()
 	i := openByID(interactionID)
-	if i == nil || i.Ended() {
+	if !i.joinable() {
 		warnOnce("join:unknown", "JoinInteraction: no open interaction has this ID in this process; the context is unchanged", joinWarnEvery)
 		return ctx
 	}
@@ -59,6 +59,16 @@ func joinedParent(i *Interaction, spanID string) *Span {
 	traceID := i.sdkTraceID
 	i.mu.Unlock()
 	return &Span{TraceID: traceID, SpanID: spanID, interaction: i, seq: spanSeq.Add(1)}
+}
+
+// joinable reports, under its lock, that it is neither pausing, paused nor ended.
+func (i *Interaction) joinable() bool {
+	if i == nil {
+		return false
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return !i.ended && !i.pausing && i.pausedAt.IsZero()
 }
 
 // openByID is the open (not paused) interaction with this ID in this process.

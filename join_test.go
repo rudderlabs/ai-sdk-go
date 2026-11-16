@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 type joinStep struct {
@@ -229,5 +231,23 @@ func TestJoinInteractionEdgeCases(t *testing.T) {
 	// The unknown ID warns twice: the loop re-armed it.
 	if n := logs.count("JoinInteraction"); n != 5 {
 		t.Errorf("want 5 warnings, got %d: %s", n, logs.String())
+	}
+}
+
+func TestJoinInteractionNeverJoinsAPausingInteraction(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
+	var during context.Context
+	r.onEnqueue = func(m analytics.Message) {
+		if track, ok := m.(analytics.Track); ok && track.Event == "ai_response_received" && during == nil {
+			during = JoinInteraction(context.Background(), i.ID(), JoinOptions{})
+		}
+	}
+	i.Pause(PauseOptions{})
+	if during == nil || FromContext(during) == i {
+		t.Error("a pausing interaction was joinable")
+	}
+	if FromContext(JoinInteraction(context.Background(), i.ID(), JoinOptions{})) == i {
+		t.Error("a paused interaction was joinable")
 	}
 }
