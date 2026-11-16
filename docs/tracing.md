@@ -143,7 +143,10 @@ and the SDK span follows its ordinary delivery path.
   whether the call's span is sent, and a stream read after the OpenTelemetry span ended still
   sends the adopted span.
 - An outer model-call span with no wrapper call inside is exported normally. A newer SDK span in
-  between prevents adoption: the most recently started active SDK span decides.
+  between prevents adoption: the most recently started active SDK span decides. A
+  `JoinInteraction` synthetic parent counts as an SDK span: an OpenTelemetry model span started
+  inside it can be replaced by a direct wrapper call, while a newer join or manual span between
+  the OpenTelemetry span and that call prevents replacement.
 - An SDK span that replaced or covered an OpenTelemetry span sheds optional fields in this order
   after ordinary string truncation: (1) content span, resource and scope attributes and events
   identified by [`span-content-keys-v0.1.json`](../spec/fixtures/span-content-keys-v0.1.json), OTLP
