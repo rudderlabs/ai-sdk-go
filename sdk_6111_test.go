@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -445,5 +446,64 @@ func TestSDK6111SpanTwinOfAWrapperWithExplicitCreditsDoesNotRunTheCreditsHook(t 
 				}
 			})
 		}
+	}
+}
+
+// The call event of calls folded past the cap behind a held span is the same after a JSON restore.
+func TestSDK6111FoldedCallEventRestoredFromJSONEqualsTheOneSentInProcess(t *testing.T) {
+	run := func(t *testing.T, restore bool) ([]any, map[string]any) {
+		r := setupAI(t, WithLLMCallEvents(true), WithLimits(Limits{MaxCallsPerInteraction: 1}))
+		client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+		_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", InteractionID: "run", ConversationID: "thread", Analytics: client})
+		wrapper := LLMCall{Provider: "openai", Model: "unpriced-model", Integration: "openai"}
+		client.reenter = func() {
+			// A held span, then two calls past the cap in one group: only the first is priced and credited.
+			i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "unpriced-model", Integration: "tracing", InputTokens: 10}, 100))
+			first, second := wrapper, wrapper
+			first.InputTokens, first.CostUSD, first.Credits = 20, Ptr(0.002), Ptr(2.0)
+			second.InputTokens = 30
+			i.RecordCall(first)
+			i.RecordCall(second)
+		}
+		snapshot, ok := i.Pause(PauseOptions{})
+		if !ok || !client.done {
+			t.Fatalf("pause ok=%v, delivered=%v", ok, client.done)
+		}
+		if restore {
+			var stored PausedInteraction
+			if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+				t.Fatal(err)
+			}
+			_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored, Analytics: client})
+		}
+		// Folded after the restore into the same unsent event.
+		late := wrapper
+		late.InputTokens, late.CostUSD, late.Credits = 40, Ptr(0.001), Ptr(1.0)
+		i.RecordCall(late)
+		i.End(EndOptions{})
+		calls := []any{}
+		for _, e := range r.named("ai_llm_response_received") {
+			calls = append(calls, pauseSegmentsJSON(t, e.Properties))
+		}
+		segments := r.named("ai_response_received")
+		return calls, pauseSegmentsJSON(t, segments[len(segments)-1].Properties).(map[string]any)
+	}
+	inProcess, last := run(t, false)
+	if len(inProcess) != 2 {
+		t.Fatalf("call events = %v, want the span's and the folded group's", inProcess)
+	}
+	folded := inProcess[1].(map[string]any)
+	if folded["input_tokens"] != 90.0 || folded["call_index"] != 2.0 || folded["cost_usd"] != nil || folded["credits"] != nil {
+		t.Errorf("folded call event = %v, want 90 input tokens at call_index 2 without cost_usd or credits", folded)
+	}
+	if last["llm_call_count"] != 4.0 || last["total_input_tokens"] != 100.0 {
+		t.Errorf("in process: llm_call_count=%v total_input_tokens=%v, want 4 and 100", last["llm_call_count"], last["total_input_tokens"])
+	}
+	restored, last := run(t, true)
+	if !reflect.DeepEqual(restored, inProcess) {
+		t.Errorf("restored call events = %v, want %v", restored, inProcess)
+	}
+	if last["llm_call_count"] != 4.0 || last["total_input_tokens"] != 100.0 {
+		t.Errorf("restored: llm_call_count=%v total_input_tokens=%v, want 4 and 100", last["llm_call_count"], last["total_input_tokens"])
 	}
 }

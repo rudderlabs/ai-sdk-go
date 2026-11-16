@@ -570,6 +570,138 @@
       }
     },
     {
+      "name": "overflow calls recorded behind a held span during paused response delivery",
+      "description": "With max_calls_per_interaction 1, delivery of the paused response records a span, whose call event is held, and two calls past the cap. They are pending for the next segment, and the folded pair sends one call event after the span's.",
+      "config": {
+        "emit_llm_calls": true,
+        "max_calls_per_interaction": 1
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 200,
+              "ended_ms": 210
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 30,
+              "started_ms": 300,
+              "ended_ms": 310
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "llm_call_count": 3,
+            "total_input_tokens": 60
+          }
+        ],
+        "call_events": [
+          10,
+          50
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "overflow calls recorded behind a held span during paused response delivery, then JSON restore",
+      "description": "The same run continued from the JSON snapshot: the folded pair's unsent call event is restored with the pending calls and sent once.",
+      "config": {
+        "emit_llm_calls": true,
+        "max_calls_per_interaction": 1
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 200,
+              "ended_ms": 210
+            },
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 30,
+              "started_ms": 300,
+              "ended_ms": 310
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "llm_call_count": 3,
+            "total_input_tokens": 60
+          }
+        ],
+        "call_events": [
+          10,
+          50
+        ],
+        "tool_events": []
+      }
+    },
+    {
       "name": "call recorded during final call delivery is not counted",
       "description": "The final end delivers a held span call event after the interaction ended, so a call the callback records is refused, as any write after end is.",
       "config": {

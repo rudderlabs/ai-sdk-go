@@ -2194,6 +2194,12 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 			snapshot.PendingCalls = append(snapshot.PendingCalls, p)
 		}
 	}
+	// A folded group's unsent call event: it restores as that event and adds no totals.
+	for _, c := range i.pendingOverflowCalls {
+		p := pendingCall(c)
+		p["history_only"] = true
+		snapshot.PendingCalls = append(snapshot.PendingCalls, p)
+	}
 	for _, t := range i.tools {
 		snapshot.PendingTools = append(snapshot.PendingTools, pendingTool(t))
 	}
@@ -2430,6 +2436,11 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 			c.serverToolCostUSD = Ptr(pendingNumber(p, "server_tool_cost_usd"))
 		}
 		c.callCount = max(c.callCount, 1)
+		// Neither marker: a folded group's unsent call event, not the last call's outcome.
+		if pendingBool(p, "history_only") && c.callEventPending && !pendingBool(p, "last") && !pendingBool(p, "last_ok") {
+			i.pendingOverflowCalls = append(i.pendingOverflowCalls, c)
+			continue
+		}
 		if !pendingBool(p, "history_only") {
 			if key := c.provider + "\x00" + c.responseID; c.responseID != "" {
 				if _, seen := i.seen[key]; seen {
