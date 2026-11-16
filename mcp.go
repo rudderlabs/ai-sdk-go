@@ -230,7 +230,7 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	}
 	r.SessionID = sessionIDOf(ss, extra)
 	if r.HTTP {
-		r.Responses = observedHTTP(extra.Header)
+		r.Responses = observedHTTP(extra.Header, r.SessionID)
 	} else {
 		r.Responses = mcpbridge.ResponsesFrom(ctx)
 	}

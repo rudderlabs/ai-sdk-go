@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"slices"
 	"sync"
 	"unsafe"
 
@@ -63,21 +64,23 @@ func ObserveMCPTransport(ctx context.Context, t mcp.Transport) (context.Context,
 // server's handlers, which the go-sdk passes on as RequestExtra.Header; a middleware between the
 // two that copies the headers (Request.Clone) leaves error_message out, as do requests in
 // flight together that share one header map. Don't put it behind a middleware that reuses
-// header maps across requests. Responses pass through
+// header maps across stateless requests. Responses pass through
 // unchanged. A failed request's events are sent once its response is written, or without
 // error_message when the HTTP request ends first.
 func ObserveMCPHTTP(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := headerKey(r.Header)
-		// Wrapped twice around the same headers: the outer wrapper observes. Behind a middleware
-		// that copied them, the inner one does.
-		if key == nil || r.Context().Value(observingHTTP{}) == key {
+		// Wrapped more than once around the same headers: the outermost wrapper observes. Behind a
+		// middleware that copied them, an inner one does.
+		observed, _ := r.Context().Value(observingHTTP{}).([]unsafe.Pointer)
+		if key == nil || slices.Contains(observed, key) {
 			h.ServeHTTP(w, r)
 			return
 		}
 		responses := mcpbridge.NewResponses()
-		defer observeHTTP(key, responses)()
-		mcpbridge.ServeHTTP(h, w, r.WithContext(context.WithValue(r.Context(), observingHTTP{}, key)), responses)
+		defer observeHTTP(key, r.Header.Get("Mcp-Session-Id"), responses)()
+		ctx := context.WithValue(r.Context(), observingHTTP{}, append(slices.Clip(observed), key))
+		mcpbridge.ServeHTTP(h, w, r.WithContext(ctx), responses)
 	})
 }
 
@@ -95,17 +98,20 @@ type httpObserver struct {
 	// responses is nil once two requests in flight share the header map: their requests can't
 	// be told apart, so neither is observed.
 	responses *mcpbridge.Responses
-	inFlight  int
+	// session is the request's Mcp-Session-Id: a call from another session never matches, even
+	// when a middleware reuses the header map after that call's own request ended.
+	session  string
+	inFlight int
 }
 
-// observeHTTP registers responses for the HTTP request with header map key, and returns its
-// release.
-func observeHTTP(key unsafe.Pointer, responses *mcpbridge.Responses) (release func()) {
+// observeHTTP registers responses for the HTTP request with header map key and session, and
+// returns its release.
+func observeHTTP(key unsafe.Pointer, session string, responses *mcpbridge.Responses) (release func()) {
 	httpObserversMu.Lock()
 	defer httpObserversMu.Unlock()
 	o := httpObservers[key]
 	if o == nil {
-		o = &httpObserver{responses: responses}
+		o = &httpObserver{responses: responses, session: session}
 		httpObservers[key] = o
 	} else {
 		o.responses = nil
@@ -127,15 +133,16 @@ func headerKey(h http.Header) unsafe.Pointer {
 	return reflect.ValueOf(h).UnsafePointer()
 }
 
-// observedHTTP is the observer of the HTTP request with header map h, or nil.
-func observedHTTP(h http.Header) *mcpbridge.Responses {
+// observedHTTP is the observer of the HTTP request with header map h, for a call in session, or
+// nil.
+func observedHTTP(h http.Header, session string) *mcpbridge.Responses {
 	key := headerKey(h)
 	if key == nil {
 		return nil
 	}
 	httpObserversMu.Lock()
 	defer httpObserversMu.Unlock()
-	if o := httpObservers[key]; o != nil {
+	if o := httpObservers[key]; o != nil && (o.session == "" || session == "" || o.session == session) {
 		return o.responses
 	}
 	return nil

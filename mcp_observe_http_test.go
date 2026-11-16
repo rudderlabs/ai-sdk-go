@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -197,6 +198,16 @@ func TestObserveMCPHTTPNested(t *testing.T) {
 	for name, nest := range map[string]func(http.Handler) http.Handler{
 		"twice":          func(h http.Handler) http.Handler { return ObserveMCPHTTP(ObserveMCPHTTP(h)) },
 		"around a clone": func(h http.Handler) http.Handler { return ObserveMCPHTTP(cloning(ObserveMCPHTTP(h))) },
+		// Headers A, then a copy B, then A again: the outermost wrapper still observes A.
+		"restored after a clone": func(h http.Handler) http.Handler {
+			return ObserveMCPHTTP(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				original := req.Header
+				ObserveMCPHTTP(http.HandlerFunc(func(w http.ResponseWriter, copied *http.Request) {
+					copied.Header = original
+					ObserveMCPHTTP(h).ServeHTTP(w, copied)
+				})).ServeHTTP(w, req.Clone(req.Context()))
+			}))
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			setupAI(t)
@@ -270,7 +281,7 @@ func TestObserveMCPHTTPGoSDKPassesHeaderMap(t *testing.T) {
 				return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 					if extra := req.GetExtra(); extra != nil {
 						mu.Lock()
-						found[method] = observedHTTP(extra.Header) != nil
+						found[method] = observedHTTP(extra.Header, "") != nil
 						mu.Unlock()
 					}
 					return next(ctx, method, req)
@@ -286,5 +297,106 @@ func TestObserveMCPHTTPGoSDKPassesHeaderMap(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A middleware that reuses one header map across requests must not let a call that outlived its
+// own POST take another session's response text.
+func TestObserveMCPHTTPReusedHeaderMapOtherSession(t *testing.T) {
+	setupAI(t)
+	s := mcp.NewServer(&mcp.Implementation{Name: "reused-header-mcp", Version: "1"}, nil)
+	aBlocked, release, aReturned, bStarted, bRelease := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
+	s.AddTool(&mcp.Tool{Name: "a_fail", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		defer close(aReturned)
+		return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "A text"}}}, nil
+	})
+	s.AddTool(&mcp.Tool{Name: "b_fail", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		close(bStarted)
+		<-bRelease
+		return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "B secret"}}}, nil
+	})
+	r := wrap(t, s, Options{CaptureContent: true})
+	// Added after WrapMCPServer, so it runs before it: A's call waits here until its POST is gone.
+	s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if call, ok := req.(*mcp.CallToolRequest); ok && call.Params.Name == "a_fail" {
+				close(aBlocked)
+				<-release
+			}
+			return next(ctx, method, req)
+		}
+	})
+	var poolMu sync.Mutex
+	pool := http.Header{}
+	posts := make(chan struct{}, 16)
+	pooling := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			poolMu.Lock()
+			clear(pool)
+			for k, v := range req.Header {
+				pool[k] = v
+			}
+			req.Header = pool
+			poolMu.Unlock()
+			h.ServeHTTP(w, req)
+			posts <- struct{}{}
+		})
+	}
+	url := serveStreamable(t, s, nil, func(h http.Handler) http.Handler { return pooling(ObserveMCPHTTP(h)) })
+	post := func(ctx context.Context, session, body string) (string, error) {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Mcp-Protocol-Version", "2025-06-18")
+		req.Header.Set("Authorization", "Bearer tok_secret")
+		if session != "" {
+			req.Header.Set("Mcp-Session-Id", session)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer func() { _ = res.Body.Close() }()
+		_, _ = io.Copy(io.Discard, res.Body)
+		return res.Header.Get("Mcp-Session-Id"), nil
+	}
+	open := func() string {
+		session, err := post(context.Background(), "", `{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"c","version":"1"}}}`)
+		if err != nil || session == "" {
+			t.Fatalf("initialize: session=%q err=%v", session, err)
+		}
+		<-posts
+		if _, err := post(context.Background(), session, `{"jsonrpc":"2.0","method":"notifications/initialized"}`); err != nil {
+			t.Fatal(err)
+		}
+		<-posts
+		return session
+	}
+	call := func(name string) string {
+		return `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + name + `","arguments":{}}}`
+	}
+
+	sessionA := open()
+	ctxA, cancelA := context.WithCancel(context.Background())
+	go func() { _, _ = post(ctxA, sessionA, call("a_fail")) }()
+	<-aBlocked
+	cancelA() // A's POST ends; its call carries on
+	<-posts
+
+	sessionB := open()
+	go func() { _, _ = post(context.Background(), sessionB, call("b_fail")) }()
+	<-bStarted // B's POST now owns the reused header map
+	close(release)
+	<-aReturned
+	time.Sleep(100 * time.Millisecond) // A's failed event is held or sent
+	close(bRelease)
+
+	for _, e := range r.wait(t, "mcp_tool_called", 2) {
+		if e.Properties["tool_name"] == "a_fail" && e.Properties["error_message"] == "B secret" {
+			t.Errorf("session A's event took session B's error text: %v", e.Properties)
+		}
+		if e.Properties["tool_name"] == "b_fail" && e.Properties["error_message"] != "B secret" {
+			t.Errorf("session B's event lost its own error text: %v", e.Properties)
+		}
 	}
 }

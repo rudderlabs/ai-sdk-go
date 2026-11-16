@@ -15,6 +15,11 @@ import (
 func ServeHTTP(h http.Handler, w http.ResponseWriter, r *http.Request, responses *Responses) {
 	ow := &observedWriter{ResponseWriter: w, responses: responses}
 	defer func() {
+		if p := recover(); p != nil {
+			// The handler aborted: what it wrote may never reach the client.
+			ow.fail()
+			panic(p)
+		}
 		safely(ow.finish)
 		responses.Close()
 	}()
