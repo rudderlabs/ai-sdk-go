@@ -226,6 +226,7 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	if extra != nil {
 		r.Token = extra.TokenInfo
 		r.HTTP = extra.Header != nil
+		r.UserAgent = extra.Header.Get("User-Agent")
 	}
 	r.SessionID = sessionIDOf(ss, extra)
 	var info sessionInfo

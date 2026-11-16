@@ -310,9 +310,14 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 			r.ProtocolVersion = version
 		}
 	}
+	metaClient := clientFromMeta(r.Meta[metaClientInfo])
+	requestClient := metaClient
+	if r.InitializeClient != nil {
+		requestClient = r.InitializeClient
+	}
 	client := r.InitializeClient
 	if !knownClient(client) {
-		client = clientFromMeta(r.Meta[metaClientInfo])
+		client = metaClient
 	}
 	if !knownClient(client) {
 		client = r.Client
@@ -325,9 +330,8 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	}
 	// Remembered details enrich request events only; client-seen keeps its existing sources.
 	seenClient := client
-	// With a fallback configured, a blank initialize must resolve afresh. Remembered
-	// clients still enrich later requests and retain their behavior without a fallback.
-	if !knownClient(client) && (!r.Initialize || opts.ClientInfoFallback == nil) {
+	// A blank initialize resolves afresh; remembered clients enrich later requests only.
+	if !knownClient(client) && !r.Initialize {
 		if key := clientKey(id); key != (rememberedClientKey{}) {
 			st.Lock()
 			// Keep expired entries' sequence until eviction so stale initializes cannot revive them.
@@ -346,6 +350,21 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 			// Like ClientInfo, the fallback supplies client-seen as well as request events.
 			seenClient = client
 		}
+	}
+	if !knownClient(client) && r.HTTP {
+		// The raw header never becomes an event property.
+		if uaClient := clientFromUserAgent(r.UserAgent); uaClient != nil {
+			client = uaClient
+			seenClient = client
+		}
+	}
+	// Like Node, client-seen keeps the request's title while resolving name/version.
+	if requestClient != nil {
+		seen := mcpbridge.Client{Title: requestClient.Title}
+		if seenClient != nil {
+			seen.Name, seen.Version = seenClient.Name, seenClient.Version
+		}
+		seenClient = &seen
 	}
 	interactionID, traceID := joinIDs(r.Meta)
 	base := map[string]any{}

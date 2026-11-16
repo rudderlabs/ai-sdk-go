@@ -62,7 +62,8 @@ type Options struct {
 	// ClientInfoFallback resolves a client only when initialize, metadata, session state
 	// and ClientInfo provide none. Remembered clients take precedence only on
 	// non-initialize requests. Panics are swallowed. Its result feeds mcp_client_seen
-	// under the same conditions as ClientInfo.
+	// under the same conditions as ClientInfo. Without a result, HTTP requests fall
+	// back to the User-Agent; the raw header is never sent.
 	ClientInfoFallback func(ctx context.Context) (name, version string)
 	// ClassifyToolError classifies isError results using spec MCP categories.
 	ClassifyToolError func(toolName string, result *mcp.CallToolResult) string
@@ -449,7 +450,7 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if method == "tools/call" {
 		identityCtx = mcpbridge.WithToolCall(ctx, env.Params.Name, env.Params.Arguments)
 	}
-	r := mcpbridge.Request{Ctx: identityCtx, Meta: env.Params.Meta, RequestID: id, HTTP: len(header) > 0}
+	r := mcpbridge.Request{Ctx: identityCtx, Meta: env.Params.Meta, RequestID: id, HTTP: len(header) > 0, UserAgent: header.Get("User-Agent")}
 	session := server.ClientSessionFromContext(ctx)
 	// Read per request: names come from the registry as it is now, never from earlier lists.
 	if (method == "tools/call" || method == "tools/list") && t.tools != nil {
