@@ -956,6 +956,51 @@ func (i *Interaction) emitPrompt(o InteractionOptions) {
 
 func nonNegative(n int) int { return max(n, 0) }
 
+// enrichRepeatLocked prices new metadata against the retained response's usage. Lock held.
+func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, hook CreditsFunc) {
+	enriches := (earlier.agentName == "" && call.AgentName != "") ||
+		(earlier.callPurpose == "" && call.CallPurpose != "") ||
+		(earlier.fallbackUsed == nil && call.FallbackUsed != nil) ||
+		(earlier.byok == nil && call.BYOK != nil)
+	if !enriches {
+		return
+	}
+	agent, purpose := first(earlier.agentName, call.AgentName), first(earlier.callPurpose, call.CallPurpose)
+	fallback, byok := earlier.fallbackUsed, earlier.byok
+	if fallback == nil {
+		fallback = call.FallbackUsed
+	}
+	if byok == nil {
+		byok = call.BYOK
+	}
+	credits := creditsOf(call.Credits)
+	if call.ErrorType == "cancelled" {
+		credits = nil
+	}
+	explicit := credits != nil
+	if credits == nil && !earlier.creditsExplicit && hook != nil && earlier.errorType == "" && !earlier.usageUnknown {
+		basis := CreditCall{
+			Provider: earlier.provider, Model: first(earlier.rawModel, earlier.model),
+			InputTokens: earlier.inputTokens, OutputTokens: earlier.outputTokens,
+			ReasoningTokens: earlier.reasoningTokens, CachedInputTokens: earlier.cachedInputTokens,
+			CacheWriteTokens: earlier.cacheWriteTokens, ServiceTier: earlier.serviceTier,
+			CostUSD: earlier.costUSD, CallCount: max(earlier.callCount, max(call.CallCount, 1)),
+			AgentName: agent, CallPurpose: purpose, FallbackUsed: fallback, BYOK: byok,
+		}
+		i.mu.Unlock()
+		credits = priceCredits(hook, basis)
+		i.mu.Lock()
+	}
+	if i.ended || !slices.Contains(i.calls, earlier) {
+		return
+	}
+	earlier.agentName, earlier.callPurpose = agent, purpose
+	earlier.fallbackUsed, earlier.byok = fallback, byok
+	if !earlier.creditsExplicit {
+		earlier.credits, earlier.creditsExplicit = credits, explicit
+	}
+}
+
 // RecordCall reports one model call (or CallCount aggregated calls). It returns false when the
 // call was ignored: a repeated provider response ID, or the interaction already ended.
 // A merged wrapper is accepted so it can record tools; a merged span returns false.
@@ -1000,6 +1045,13 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	if call.ResponseID != "" {
 		if earlier, seen := i.seen[call.Provider+"\x00"+call.ResponseID]; seen && earlier == nil {
+			return false
+		}
+	}
+	if call.ResponseID != "" {
+		earlier := i.seen[call.Provider+"\x00"+call.ResponseID]
+		if earlier != nil && (earlier.fromSpan == (call.Integration == "tracing") || earlier.twinMatched) {
+			i.enrichRepeatLocked(earlier, call, c.credits)
 			return false
 		}
 	}

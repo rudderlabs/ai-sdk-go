@@ -367,7 +367,7 @@ func TestSDK6111SameSourceRepeatWhoseCreditsHookPausesIsDropped(t *testing.T) {
 							<-done
 						}
 					}
-					// No credits, so the repeat is priced again.
+					// New agent metadata makes the repeat eligible for repricing.
 					return nil, nil
 				}))
 				_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
@@ -375,6 +375,7 @@ func TestSDK6111SameSourceRepeatWhoseCreditsHookPausesIsDropped(t *testing.T) {
 				if !i.RecordCall(call) {
 					t.Fatal("first report was not recorded")
 				}
+				call.AgentName = "planner"
 				if i.RecordCall(call) {
 					t.Error("the repeat was recorded as a new call")
 				}
@@ -630,5 +631,101 @@ func TestSDK6111WritesTheSharedPendingCallKeys(t *testing.T) {
 				t.Errorf("record %d has %s, which Node.js does not write", n, key)
 			}
 		}
+	}
+}
+
+func TestSDK6111GAEnrichingSameSourceRepeatRepricesRetainedUsage(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		for _, enrichedFirst := range []bool{false, true} {
+			for _, explicit := range []bool{false, true} {
+				t.Run(fmt.Sprintf("json=%t/enrichedFirst=%t/explicit=%t", restore, enrichedFirst, explicit), func(t *testing.T) {
+					var priced []string
+					r := setupAI(t, WithCredits(func(c CreditCall) (*float64, error) {
+						priced = append(priced, fmt.Sprintf("%d/%s", c.InputTokens, c.CallPurpose))
+						if c.CallPurpose == "answer" {
+							return Ptr(7.0), nil
+						}
+						return Ptr(1.0), nil
+					}))
+					client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+					_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+					call := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "openai", ResponseID: "resp_1", InputTokens: 10, OutputTokens: 2}, 100)
+					if enrichedFirst {
+						call.CallPurpose = "answer"
+					}
+					if explicit {
+						call.Credits = Ptr(9.0)
+					}
+					client.reenter = func() { i.RecordCall(call) }
+					snapshot, ok := i.Pause(PauseOptions{})
+					if !ok {
+						t.Fatal("pause")
+					}
+					if restore {
+						raw, err := json.Marshal(snapshot)
+						if err != nil {
+							t.Fatal(err)
+						}
+						var stored PausedInteraction
+						if err := json.Unmarshal(raw, &stored); err != nil {
+							t.Fatal(err)
+						}
+						_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+					} else {
+						i.Resume()
+					}
+					call.Credits, call.InputTokens = nil, 999
+					if enrichedFirst {
+						call.CallPurpose = ""
+					} else {
+						call.CallPurpose = "answer"
+					}
+					if i.RecordCall(call) {
+						t.Fatal("repeat accepted")
+					}
+					i.End(EndOptions{})
+					resp := lastResponse(t, r)
+					want := 7.0
+					if explicit {
+						want = 9
+					}
+					if sdk6111Num(resp["llm_call_count"]) != 1 || sdk6111Num(resp["total_input_tokens"]) != 10 || sdk6111Num(resp["total_credits"]) != want {
+						t.Fatalf("response = %v", resp)
+					}
+					var wantPriced []string
+					if !explicit {
+						if enrichedFirst {
+							wantPriced = []string{"10/answer"}
+						} else {
+							wantPriced = []string{"10/", "10/answer"}
+						}
+					}
+					if !reflect.DeepEqual(priced, wantPriced) {
+						t.Fatalf("priced = %v, want %v", priced, wantPriced)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestSDK6111GAEnrichingRepeatPricesLargerReportedCountWithoutReplacingUsage(t *testing.T) {
+	var priced [][2]int
+	r := setupAI(t, WithCredits(func(call CreditCall) (*float64, error) {
+		priced = append(priced, [2]int{call.InputTokens, call.CallCount})
+		return Ptr(float64(call.CallCount)), nil
+	}))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	call := LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "openai", ResponseID: "resp_1", InputTokens: 10}
+	i.RecordCall(call)
+	call.InputTokens, call.CallCount, call.BYOK = 999, 3, Ptr(false)
+	i.RecordCall(call)
+	i.End(EndOptions{})
+	if !reflect.DeepEqual(priced, [][2]int{{10, 1}, {10, 3}}) {
+		t.Fatalf("priced = %v", priced)
+	}
+	resp := lastResponse(t, r)
+	if sdk6111Num(resp["llm_call_count"]) != 1 || sdk6111Num(resp["total_input_tokens"]) != 10 || sdk6111Num(resp["total_credits"]) != 3 {
+		t.Fatalf("response = %v", resp)
 	}
 }
