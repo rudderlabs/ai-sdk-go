@@ -259,7 +259,7 @@ The server reads exactly these keys from a request's `_meta`:
 
 - `io.modelcontextprotocol/clientInfo` supplies the per-call client name and version;
 - `com.rudderstack/interaction_id` becomes `interaction_id`;
-- the W3C `traceparent` trace-id becomes `trace_id`, else `com.rudderstack/trace_id`.
+- the trace-id of a valid W3C `traceparent` becomes `trace_id`, else `com.rudderstack/trace_id`. Valid means lowercase hex, a version other than `ff` and no all-zero ID; version `00` is exactly 55 characters, and only later versions may add fields after the flags ([fixture](../spec/fixtures/mcp-traceparent-v0.1.json)).
 
 Values are opaque strings capped at 256 characters, as are IDs and names from the wire and from `Identify` (session ID, client name, title and version, account and user IDs, scopes); short labels (`protocol_version`, `auth_method`, `country`, `delivery_mode`, `failure_reason`) are capped at 64. No other `_meta` content is copied. Without them the server mints a random `interaction_id` per request and sends no `trace_id`. An agent tracked with the Node.js or Python SDK passes its interaction's ID, so each `mcp_tool_called` joins the `ai_response_received` that made the call. A Go agent sends `Interaction.ID()` under `com.rudderstack/interaction_id` itself: no Go integration adds it.
 

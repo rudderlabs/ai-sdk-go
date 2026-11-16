@@ -1,0 +1,32 @@
+{
+  "fixture_version": 1,
+  "description": "trace_id from an MCP request's _meta.traceparent, per W3C Trace Context Level 1. Trim Unicode White_Space, then match `version-trace_id-parent_id-flags`: two, 32, 16 and two lowercase hex characters. Ignore it when the version is `ff` or either ID is all zeros. Version `00` must be exactly 55 characters. A later version may add fields after the flags: past 55 characters, the next character must be `-`, and everything after the flags is ignored. An ignored or non-string traceparent gives no trace ID (`expected: null`), and the SDK falls back to `_meta[\"com.rudderstack/trace_id\"]`.",
+  "cases": [
+    {"name": "version_00", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "expected": "4bf92f3577b34da6a3ce929d0e0e4736"},
+    {"name": "not_sampled", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00", "expected": "4bf92f3577b34da6a3ce929d0e0e4736"},
+    {"name": "version_00_extra_field", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-extra", "expected": null},
+    {"name": "version_00_trailing_dash", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-", "expected": null},
+    {"name": "later_version", "traceparent": "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "expected": "4bf92f3577b34da6a3ce929d0e0e4736"},
+    {"name": "later_version_extra_fields", "traceparent": "cc-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-what-the-future-holds", "expected": "4bf92f3577b34da6a3ce929d0e0e4736"},
+    {"name": "later_version_trailing_dash", "traceparent": "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-", "expected": "4bf92f3577b34da6a3ce929d0e0e4736"},
+    {"name": "later_version_no_dash_after_flags", "traceparent": "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01x", "expected": null},
+    {"name": "later_version_three_flag_characters", "traceparent": "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-012", "expected": null},
+    {"name": "version_ff", "traceparent": "ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "expected": null},
+    {"name": "uppercase_trace_id", "traceparent": "00-4BF92F3577B34DA6A3CE929D0E0E4736-00f067aa0ba902b7-01", "expected": null},
+    {"name": "uppercase_parent_id", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00F067AA0BA902B7-01", "expected": null},
+    {"name": "uppercase_version", "traceparent": "0A-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "expected": null},
+    {"name": "uppercase_flags", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-0A", "expected": null},
+    {"name": "all_zero_trace_id", "traceparent": "00-00000000000000000000000000000000-00f067aa0ba902b7-01", "expected": null},
+    {"name": "all_zero_parent_id", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01", "expected": null},
+    {"name": "short_trace_id", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e473-00f067aa0ba902b7-01", "expected": null},
+    {"name": "short_flags", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-1", "expected": null},
+    {"name": "non_hex", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e473g-00f067aa0ba902b7-01", "expected": null},
+    {"name": "trims_white_space", "traceparent": " \t00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\n", "expected": "4bf92f3577b34da6a3ce929d0e0e4736"},
+    {"name": "trims_unicode_white_space", "traceparent": "\u00a0\u300000-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\u0085", "expected": "4bf92f3577b34da6a3ce929d0e0e4736"},
+    {"name": "byte_order_mark_is_not_white_space", "traceparent": "\ufeff00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "expected": null},
+    {"name": "inner_space", "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736- 00f067aa0ba902b7-01", "expected": null},
+    {"name": "empty", "traceparent": "", "expected": null},
+    {"name": "garbage", "traceparent": "garbage", "expected": null},
+    {"name": "not_a_string", "traceparent": 42, "expected": null}
+  ]
+}
