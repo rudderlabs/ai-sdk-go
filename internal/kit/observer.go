@@ -199,7 +199,11 @@ func (o *Observer) recordTools() {
 	}
 	o.mu.Unlock()
 	if len(calls) > 0 {
-		o.Interaction.RecordToolCalls(calls...)
+		if o.call != nil {
+			o.call.RecordToolCalls(calls...)
+		} else {
+			o.Interaction.RecordToolCalls(calls...)
+		}
 	}
 }
 

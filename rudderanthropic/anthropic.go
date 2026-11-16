@@ -274,7 +274,7 @@ func recordMessage(c *kit.Call, msg map[string]any, _ *http.Response) bool {
 		UsageUnknown: usage == nil, OutputText: text.String(), OutputToolCalls: kit.ToolCalls(tools),
 	})
 	if recorded && len(tools) > 0 {
-		c.Interaction.RecordToolCalls(tools...)
+		c.RecordToolCalls(tools...)
 	}
 	return true
 }

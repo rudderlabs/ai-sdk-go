@@ -406,14 +406,15 @@ func (t *tracker) HandleInitialize(ctx context.Context, in middleware.Initialize
 
 func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, call func(context.Context) (middleware.InitializeOutput, middleware.Metadata, error)) (middleware.InitializeOutput, middleware.Metadata, error) {
 	var model *string
+	var toolConfig *types.ToolConfiguration
 	var messages []types.Message
 	var system []types.SystemContentBlock
 	stream := false
 	switch p := in.Parameters.(type) {
 	case *bedrockruntime.ConverseInput:
-		model, messages, system = p.ModelId, p.Messages, p.System
+		model, messages, system, toolConfig = p.ModelId, p.Messages, p.System, p.ToolConfig
 	case *bedrockruntime.ConverseStreamInput:
-		model, messages, system, stream = p.ModelId, p.Messages, p.System, true
+		model, messages, system, toolConfig, stream = p.ModelId, p.Messages, p.System, p.ToolConfig, true
 	default:
 		return call(ctx)
 	}
@@ -427,6 +428,11 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	}
 	ctx, span := hook.Tracing.BeginWrapper(ctx, i, started)
 	c := &kit.Call{Span: span, Details: rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, t.cfg.details)), Interaction: i, Ephemeral: ephemeral, Provider: provider, Integration: integration, Model: aws.ToString(model), StartedAt: started}
+	if toolConfig != nil {
+		if choice, ok := toolConfig.ToolChoice.(*types.ToolChoiceMemberTool); ok && choice != nil {
+			c.ForcedToolName = aws.ToString(choice.Value.Name)
+		}
+	}
 	hook.Tracing.WrapperMetadata(c.Span, c.Provider, c.Model)
 	safe(func() {
 		if c.CapturesContent() {
@@ -516,7 +522,7 @@ func recordResponse(c *kit.Call, out *bedrockruntime.ConverseOutput, responseID 
 		call.OutputToolCalls = kit.ToolCalls(tools)
 	}
 	if c.RecordCall(call) && len(tools) > 0 {
-		c.Interaction.RecordToolCalls(tools...)
+		c.RecordToolCalls(tools...)
 	}
 	if c.Ephemeral {
 		kit.EndEphemeral(c.Interaction, "")

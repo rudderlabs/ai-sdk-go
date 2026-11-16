@@ -1,0 +1,944 @@
+{
+  "fixture_version": 1,
+  "spec_version": "0.4.0",
+  "description": "A request forcing exactly one named tool marks matching response calls as candidates. Only at final End, candidates without a result or an already emitted event are excluded. Pause retains candidates and defers their unknown-outcome events. Model calls and tokens count unchanged. Snapshot fields use structured_candidate.",
+  "cases": [
+    {
+      "name": "Instructor OpenAI Chat no result",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 0
+      },
+      "provider": "openai-chat",
+      "provider_response": {
+        "id": "response-schema",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call-schema",
+                  "type": "function",
+                  "function": {
+                    "name": "Schema",
+                    "arguments": "{\"answer\":\"yes\"}"
+                  }
+                }
+              ]
+            },
+            "finish_reason": "tool_calls"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 10,
+          "completion_tokens": 5
+        }
+      },
+      "provider_stream": [
+        {
+          "id": "response-schema",
+          "model": "gpt-4o",
+          "choices": [
+            {
+              "index": 0,
+              "delta": {
+                "tool_calls": [
+                  {
+                    "index": 0,
+                    "id": "call-schema",
+                    "type": "function",
+                    "function": {
+                      "name": "Schema",
+                      "arguments": "{\"answer\":\"yes\"}"
+                    }
+                  }
+                ]
+              },
+              "finish_reason": "tool_calls"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "OpenAI Responses no result",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "name": "Schema"
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 0
+      },
+      "provider": "openai-responses",
+      "provider_response": {
+        "id": "response-schema",
+        "model": "gpt-4o",
+        "status": "completed",
+        "output": [
+          {
+            "type": "function_call",
+            "call_id": "call-schema",
+            "name": "Schema",
+            "arguments": "{\"answer\":\"yes\"}"
+          }
+        ],
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 5
+        }
+      },
+      "provider_stream": [
+        {
+          "type": "response.completed",
+          "response": {
+            "id": "response-schema",
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [
+              {
+                "type": "function_call",
+                "call_id": "call-schema",
+                "name": "Schema",
+                "arguments": "{\"answer\":\"yes\"}"
+              }
+            ],
+            "usage": {
+              "input_tokens": 10,
+              "output_tokens": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Anthropic no result",
+      "request": {
+        "tool_choice": {
+          "type": "tool",
+          "name": "Schema"
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 0
+      },
+      "provider": "anthropic",
+      "provider_response": {
+        "id": "response-schema",
+        "model": "claude-sonnet-4-5",
+        "content": [
+          {
+            "type": "tool_use",
+            "id": "call-schema",
+            "name": "Schema",
+            "input": {
+              "answer": "yes"
+            }
+          }
+        ],
+        "stop_reason": "tool_use",
+        "usage": {
+          "input_tokens": 10,
+          "output_tokens": 5
+        }
+      },
+      "provider_stream": [
+        {
+          "type": "message_start",
+          "message": {
+            "id": "response-schema",
+            "model": "claude-sonnet-4-5",
+            "content": [],
+            "stop_reason": "tool_use",
+            "usage": {
+              "input_tokens": 10,
+              "output_tokens": 5
+            }
+          }
+        },
+        {
+          "type": "content_block_start",
+          "index": 0,
+          "content_block": {
+            "type": "tool_use",
+            "id": "call-schema",
+            "name": "Schema",
+            "input": {
+              "answer": "yes"
+            }
+          }
+        },
+        {
+          "type": "message_delta",
+          "delta": {
+            "stop_reason": "tool_use"
+          },
+          "usage": {
+            "output_tokens": 5
+          }
+        },
+        {
+          "type": "message_stop"
+        }
+      ]
+    },
+    {
+      "name": "Bedrock Converse no result",
+      "request": {
+        "toolConfig": {
+          "toolChoice": {
+            "tool": {
+              "name": "Schema"
+            }
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 0
+      },
+      "provider": "bedrock",
+      "provider_response": {
+        "output": {
+          "message": {
+            "role": "assistant",
+            "content": [
+              {
+                "toolUse": {
+                  "toolUseId": "call-schema",
+                  "name": "Schema",
+                  "input": {
+                    "answer": "yes"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "stopReason": "tool_use",
+        "usage": {
+          "inputTokens": 10,
+          "outputTokens": 5
+        }
+      },
+      "provider_stream": [
+        {
+          "contentBlockStart": {
+            "contentBlockIndex": 0,
+            "start": {
+              "toolUse": {
+                "toolUseId": "call-schema",
+                "name": "Schema"
+              }
+            }
+          }
+        },
+        {
+          "contentBlockDelta": {
+            "contentBlockIndex": 0,
+            "delta": {
+              "toolUse": {
+                "input": "{\"answer\":\"yes\"}"
+              }
+            }
+          }
+        },
+        {
+          "messageStop": {
+            "stopReason": "tool_use"
+          }
+        },
+        {
+          "metadata": {
+            "usage": {
+              "inputTokens": 10,
+              "outputTokens": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Gemini ANY single name no result",
+      "request": {
+        "config": {
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "ANY",
+              "allowedFunctionNames": [
+                "Schema"
+              ]
+            }
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 0
+      },
+      "provider": "gemini",
+      "provider_response": {
+        "responseId": "response-schema",
+        "modelVersion": "gemini-2.5-flash",
+        "candidates": [
+          {
+            "content": {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "id": "call-schema",
+                    "name": "Schema",
+                    "args": {
+                      "answer": "yes"
+                    }
+                  }
+                }
+              ]
+            },
+            "finishReason": "STOP"
+          }
+        ],
+        "usageMetadata": {
+          "promptTokenCount": 10,
+          "candidatesTokenCount": 5,
+          "totalTokenCount": 15
+        }
+      },
+      "provider_stream": [
+        {
+          "responseId": "response-schema",
+          "modelVersion": "gemini-2.5-flash",
+          "candidates": [
+            {
+              "content": {
+                "role": "model",
+                "parts": [
+                  {
+                    "functionCall": {
+                      "id": "call-schema",
+                      "name": "Schema",
+                      "args": {
+                        "answer": "yes"
+                      }
+                    }
+                  }
+                ]
+              },
+              "finishReason": "STOP"
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 10,
+            "candidatesTokenCount": 5,
+            "totalTokenCount": 15
+          }
+        }
+      ]
+    },
+    {
+      "name": "Vercel middleware no result",
+      "request": {
+        "toolChoice": {
+          "type": "tool",
+          "toolName": "Schema"
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 0
+      },
+      "provider": "vercel",
+      "provider_response": {
+        "content": [
+          {
+            "type": "tool-call",
+            "toolCallId": "call-schema",
+            "toolName": "Schema",
+            "input": "{\"answer\":\"yes\"}"
+          }
+        ],
+        "finishReason": {
+          "unified": "tool-calls",
+          "raw": "tool_calls"
+        },
+        "usage": {
+          "inputTokens": {
+            "total": 10
+          },
+          "outputTokens": {
+            "total": 5
+          }
+        },
+        "response": {
+          "id": "response-schema"
+        }
+      },
+      "provider_stream": [
+        {
+          "type": "tool-call",
+          "toolCallId": "call-schema",
+          "toolName": "Schema",
+          "input": "{\"answer\":\"yes\"}"
+        },
+        {
+          "type": "finish",
+          "finishReason": {
+            "unified": "tool-calls",
+            "raw": "tool_calls"
+          },
+          "usage": {
+            "inputTokens": {
+              "total": 10
+            },
+            "outputTokens": {
+              "total": 5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "forced real tool result",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 1,
+        "tool_events": 1
+      },
+      "result": {
+        "answer": "yes"
+      }
+    },
+    {
+      "name": "auto no result",
+      "request": {
+        "tool_choice": "auto"
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": null,
+        "tool_call_count": 1,
+        "tool_events": 1
+      }
+    },
+    {
+      "name": "pause then result after resume",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 1,
+        "tool_events": 1
+      },
+      "pause": true,
+      "result": {
+        "answer": "yes"
+      }
+    },
+    {
+      "name": "pause then final without result",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 0
+      },
+      "pause": true
+    },
+    {
+      "name": "forced event already emitted",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 1,
+        "tool_events": 1
+      },
+      "emitted": true
+    },
+    {
+      "name": "native OpenAI response_format json_schema",
+      "request": {
+        "response_format": {
+          "type": "json_schema",
+          "json_schema": {
+            "name": "Schema",
+            "schema": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": null,
+        "tool_call_count": 0,
+        "tool_events": 0
+      },
+      "no_tool": true,
+      "provider": "openai-chat",
+      "provider_response": {
+        "id": "response-schema",
+        "model": "gpt-4o",
+        "choices": [
+          {
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "{\"answer\":\"yes\"}"
+            },
+            "finish_reason": "stop"
+          }
+        ],
+        "usage": {
+          "prompt_tokens": 10,
+          "completion_tokens": 5
+        }
+      }
+    },
+    {
+      "name": "Gemini multiple allowed names",
+      "request": {
+        "toolConfig": {
+          "functionCallingConfig": {
+            "mode": "ANY",
+            "allowedFunctionNames": [
+              "Schema",
+              "lookup"
+            ]
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": null,
+        "tool_call_count": 1,
+        "tool_events": 1
+      }
+    },
+    {
+      "name": "Gemini AUTO single name",
+      "request": {
+        "toolConfig": {
+          "functionCallingConfig": {
+            "mode": "AUTO",
+            "allowedFunctionNames": [
+              "Schema"
+            ]
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": null,
+        "tool_call_count": 1,
+        "tool_events": 1
+      }
+    },
+    {
+      "name": "forced different response tool",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "lookup",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 1,
+        "tool_events": 1
+      }
+    },
+    {
+      "name": "missing choice",
+      "request": {},
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": null,
+        "tool_call_count": 1,
+        "tool_events": 1
+      }
+    },
+    {
+      "name": "required unnamed choice",
+      "request": {
+        "tool_choice": "required"
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": null,
+        "tool_call_count": 1,
+        "tool_events": 1
+      }
+    },
+    {
+      "name": "malformed named choice",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": ""
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": null,
+        "tool_call_count": 1,
+        "tool_events": 1
+      }
+    },
+    {
+      "name": "pause then result on same instance",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 1,
+        "tool_events": 1
+      },
+      "pause": true,
+      "result": {
+        "answer": "yes"
+      },
+      "in_process": true
+    },
+    {
+      "name": "forced tool null result",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 1,
+        "tool_events": 1
+      },
+      "result": null
+    },
+    {
+      "name": "forced tool empty outcome report",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 1,
+        "tool_events": 1
+      },
+      "empty_result": true
+    },
+    {
+      "name": "suppressed event does not count as emitted",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 0
+      },
+      "emitted": true,
+      "suppressed_event": true
+    }
+  ],
+  "span_cases": [
+    {
+      "name": "gen_ai.request.tool_choice",
+      "attributes": {
+        "gen_ai.request.tool_choice": "{\"type\": \"function\", \"function\": {\"name\": \"Schema\"}}",
+        "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"call-schema\", \"name\": \"Schema\", \"arguments\": {\"answer\": \"yes\"}}]}]"
+      },
+      "expected_tool_call_count": 0
+    },
+    {
+      "name": "llm.invocation_parameters",
+      "attributes": {
+        "llm.invocation_parameters": "{\"tool_choice\": {\"type\": \"function\", \"function\": {\"name\": \"Schema\"}}}",
+        "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"call-schema\", \"name\": \"Schema\", \"arguments\": {\"answer\": \"yes\"}}]}]"
+      },
+      "expected_tool_call_count": 0
+    },
+    {
+      "name": "ai.prompt.toolChoice",
+      "attributes": {
+        "ai.prompt.toolChoice": "{\"type\": \"tool\", \"toolName\": \"Schema\"}",
+        "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"call-schema\", \"name\": \"Schema\", \"arguments\": {\"answer\": \"yes\"}}]}]"
+      },
+      "expected_tool_call_count": 0
+    },
+    {
+      "name": "span forced result on later model input",
+      "attributes": {
+        "gen_ai.request.tool_choice": "{\"type\": \"function\", \"function\": {\"name\": \"Schema\"}}",
+        "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"call-schema\", \"name\": \"Schema\", \"arguments\": {\"answer\": \"yes\"}}]}]"
+      },
+      "result_attributes": {
+        "gen_ai.input.messages": "[{\"role\": \"tool\", \"parts\": [{\"type\": \"tool_call_response\", \"id\": \"call-schema\", \"response\": {\"answer\": \"yes\"}}]}]"
+      },
+      "expected_tool_call_count": 1
+    },
+    {
+      "name": "span no request choice preserves existing accounting",
+      "attributes": {
+        "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"call-schema\", \"name\": \"Schema\", \"arguments\": {\"answer\": \"yes\"}}]}]"
+      },
+      "expected_tool_call_count": 0,
+      "no_exclusion": true
+    },
+    {
+      "name": "OpenInference request and response tool",
+      "attributes": {
+        "llm.invocation_parameters": "{\"tool_choice\": {\"type\": \"function\", \"function\": {\"name\": \"Schema\"}}}",
+        "llm.output_messages.0.message.role": "assistant",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.id": "call-schema",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.name": "Schema",
+        "llm.output_messages.0.message.tool_calls.0.tool_call.function.arguments": "{\"answer\":\"yes\"}"
+      },
+      "expected_tool_call_count": 0
+    },
+    {
+      "name": "forced tool executed by a tool span",
+      "attributes": {
+        "gen_ai.request.tool_choice": "{\"type\": \"function\", \"function\": {\"name\": \"Schema\"}}",
+        "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"call-schema\", \"name\": \"Schema\", \"arguments\": {\"answer\": \"yes\"}}]}]"
+      },
+      "result_attributes": {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.call.id": "call-schema",
+        "gen_ai.tool.name": "Schema"
+      },
+      "expected_tool_call_count": 1
+    },
+    {
+      "name": "invalid invocation JSON leaves existing accounting",
+      "attributes": {
+        "llm.invocation_parameters": "{invalid",
+        "gen_ai.output.messages": "[{\"role\": \"assistant\", \"parts\": [{\"type\": \"tool_call\", \"id\": \"call-schema\", \"name\": \"Schema\", \"arguments\": {\"answer\": \"yes\"}}]}]"
+      },
+      "expected_tool_call_count": 0,
+      "no_exclusion": true
+    }
+  ]
+}

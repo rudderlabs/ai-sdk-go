@@ -154,7 +154,7 @@ func onChatResponse(c *kit.Call, body map[string]any, resp *http.Response) bool 
 		OutputText: kit.Str(message["content"]), OutputToolCalls: kit.ToolCalls(tools),
 	})
 	if recorded && len(tools) > 0 {
-		c.Interaction.RecordToolCalls(tools...)
+		c.RecordToolCalls(tools...)
 	}
 	return true
 }

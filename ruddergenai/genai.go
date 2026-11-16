@@ -283,7 +283,7 @@ func recordResponse(c *kit.Call, body map[string]any) {
 		return
 	}
 	if len(tools) > 0 {
-		c.Interaction.RecordToolCalls(tools...)
+		c.RecordToolCalls(tools...)
 	}
 }
 

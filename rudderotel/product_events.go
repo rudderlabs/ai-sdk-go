@@ -16,6 +16,8 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/internal/kit"
+	"github.com/rudderlabs/ai-sdk-go/internal/structuredoutput"
 )
 
 func spanRole(s sdktrace.ReadOnlySpan) string {
@@ -274,6 +276,32 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 			call.InputMessages, call.OutputToolCalls = spanCallContent(a)
 		}
 		hook.Tracing.RecordSpan(i, call, spanSource(s, call))
+		// Read original attributes for accounting, independently of content capture.
+		forced := structuredoutput.ForcedToolName(parsedJSON(rawAttr(a, "llm.invocation_parameters")))
+		if forced == "" {
+			choice := coalesce(rawAttr(a, "gen_ai.request.tool_choice"), coalesce(rawAttr(a, "gen_ai.request.toolChoice"), rawAttr(a, "ai.prompt.toolChoice")))
+			forced = structuredoutput.ForcedToolName(map[string]any{"tool_choice": parsedJSON(choice)})
+		}
+		if forced != "" || hook.HasStructuredTools(i) {
+			for _, message := range inputOf(a) {
+				for _, part := range message.Parts {
+					if part["type"] == "tool_call_response" {
+						id, _ := part["id"].(string)
+						kit.RecordToolResult(i, id, rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Result: part["response"]}, true)
+					}
+				}
+			}
+			var tools []rudderstackai.ToolCall
+			for _, message := range outputOf(a) {
+				for _, part := range message.Parts {
+					if forced != "" && part["type"] == "tool_call" && part["name"] == forced {
+						id, _ := part["id"].(string)
+						tools = append(tools, rudderstackai.ToolCall{ID: id, Name: forced, Args: part["arguments"], StructuredCandidate: true})
+					}
+				}
+			}
+			i.RecordToolCalls(tools...)
+		}
 		if !call.FirstTokenAt.IsZero() {
 			hook.FirstToken(i, call.FirstTokenAt)
 		}

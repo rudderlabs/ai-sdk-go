@@ -1,5 +1,7 @@
 # AI events spec changelog
 
+- **SDK-6911 — structured-output tools — 2026-11-16.** A request forcing exactly one named tool marks matching response tool calls as structured-output candidates. Only at final End, exclude a candidate with no tool result and no already emitted tool event from tool counts, breakdowns and unknown-outcome declared events; retain model calls and tokens. OpenAI Chat/Responses, Anthropic, Bedrock Converse, Gemini ANY with one allowed function, and Vercel named tool choices share this rule, without library markers. Pause retains candidates (optional `structured_candidate`, `result_seen` and `tool_event_emitted` pending-tool snapshot fields) and defers unknown events, allowing results after resume. Native response formats are unchanged. Spans follow the rule when request-choice and tool-message attributes exist; absent request choice is a documented limit. Exclusions have a debug reason, not a new product field. Language-neutral recognition, lifecycle, provider wire payloads and span cases are in `fixtures/structured-output-v0.1.json`; existing recorded fixtures are unchanged. No schema version change.
+
 - **SDK-6799 part 2 — 2026-11-14.** Node framework integrations emit
   `ai_otel_span` with `rudderstack.span_source: integration` alongside the existing
   `wrapper` and `manual` sources. LangChain parent runs include retrieval spans;
