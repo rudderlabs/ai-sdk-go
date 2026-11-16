@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -1244,6 +1245,38 @@ func TestSDK6111R5AggregateTwinPricingRetainsMetadataWithUsage(t *testing.T) {
 					}
 				})
 			}
+		}
+	}
+}
+
+func TestSDK6111R6TypedNestedBytesStayOutOfTelemetry(t *testing.T) {
+	type Nested struct {
+		Body []byte `json:"body"`
+		Keep string `json:"keep"`
+	}
+	type Payload struct {
+		Body   []byte `json:"body"`
+		Nested Nested `json:"nested"`
+	}
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, capture := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/capture=%t", mode, capture), func(t *testing.T) {
+				r := setupAI(t, WithLLMCallEvents(true), WithCaptureContent(capture))
+				value := Payload{[]byte("customer-binary-S3cr3t"), Nested{[]byte("secret"), "ok"}}
+				i := sdk6111ReviewPending(t, r, mode, func(i *Interaction) {
+					i.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4o", OutputToolCalls: []GenAIToolCall{{Name: "lookup", Arguments: value}}, InputMessages: []GenAIMessage{{Role: "user", Parts: []GenAIPart{{"type": "tool_call", "id": "t", "name": "lookup", "arguments": value}}}}})
+				})
+				i.End(EndOptions{})
+				for _, e := range r.named("ai_llm_response_received") {
+					text := mustJSON(e.Properties)
+					if strings.Contains(text, "customer-binary-S3cr3t") || strings.Contains(text, "\"body\"") {
+						t.Fatal(text)
+					}
+					if capture && !strings.Contains(text, "ok") {
+						t.Fatal(text)
+					}
+				}
+			})
 		}
 	}
 }
