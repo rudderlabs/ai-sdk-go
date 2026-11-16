@@ -147,7 +147,7 @@ When Clerk, WorkOS, Auth0 or Stytch protects your server, each request already c
 
 Clerk issues OAuth access tokens to MCP clients as JWTs by default; `sub` is the Clerk user ID (`user_...`). Enable `user:org:read` on the OAuth application, list it in the protected resource metadata's `scopes_supported`, and have the client request it. Only then does the access token carry a top-level `org_id`: the user selects the organisation on the consent screen, or Clerk uses their last active organisation when consent is disabled. Without that scope, `AccountID` stays unset. See [Clerk's organisation scope](https://clerk.com/changelog/2026-05-14-oauth-organizations).
 
-For JWT tokens, use `github.com/golang-jwt/jwt/v5@v5.3.1` and `github.com/MicahParks/keyfunc/v3@v3.9.2`. This handler checks the signature, expiry, issuer and audience (the MCP resource URL) before reading claims; replace `issuer` and `resource` with your URLs and pass a server and analytics client from [Setup](#setup).
+For JWT tokens, use `github.com/golang-jwt/jwt/v5@v5.3.1` and `github.com/MicahParks/keyfunc/v3@v3.9.2`. This handler checks the signature, expiry, issuer and audience (the MCP resource URL) before reading claims; replace `issuer` and `resource` with your URLs and pass a server and analytics client from [Setup](#setup). Clerk adds `aud` only after you add that URL under **Agents → MCP servers** in the Clerk Dashboard; until then, audience verification rejects every token.
 
 ```go
 import (
