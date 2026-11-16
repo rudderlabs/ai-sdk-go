@@ -124,7 +124,7 @@ ctx := rudderstackai.JoinInteraction(context.Background(), id, rudderstackai.Joi
 _, err := llm.Chat.Completions.New(ctx, params)
 ```
 
-The joined interaction and parent win over whatever the context carries; an unknown or ended ID logs a warning and returns the context unchanged. See [docs/integrations.md](docs/integrations.md#how-integrations-work).
+The joined interaction and parent win over whatever the context carries; an unknown, paused or ended ID logs a warning and returns the context unchanged. See [docs/integrations.md](docs/integrations.md#how-integrations-work).
 
 ### Gateways and pricing labels
 
