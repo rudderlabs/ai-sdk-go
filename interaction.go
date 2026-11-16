@@ -1910,13 +1910,22 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 	if len(rules) == 0 {
 		return
 	}
-	type job struct {
-		rule     ToolEventRule
-		tool     recordedTool
-		original *recordedTool
-	}
-	var jobs []job
 	i.mu.Lock()
+	jobs := i.toolEventJobsLocked(tools, final)
+	i.mu.Unlock()
+	i.runToolEvents(jobs)
+}
+
+type toolEventJob struct {
+	rule     ToolEventRule
+	tool     recordedTool
+	original *recordedTool
+}
+
+// toolEventJobsLocked selects the tools whose declared event is due and marks them fired.
+func (i *Interaction) toolEventJobsLocked(tools []*recordedTool, final bool) []toolEventJob {
+	rules := cfg().toolRules
+	var jobs []toolEventJob
 	for _, t := range tools {
 		// A tool the pause waits on fires in the segment that runs it, or as unknown at a resumed
 		// run's final End; an End while still paused never ran it, so it never fires.
@@ -1930,9 +1939,13 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 			continue
 		}
 		t.fired = true
-		jobs = append(jobs, job{rule, *t, t})
+		jobs = append(jobs, toolEventJob{rule, *t, t})
 	}
-	i.mu.Unlock()
+	return jobs
+}
+
+// runToolEvents sends the selected events; rules run without the lock held.
+func (i *Interaction) runToolEvents(jobs []toolEventJob) {
 	for _, j := range jobs {
 		i.toolEvent(j.rule, j.tool, j.original)
 	}
@@ -2354,13 +2367,14 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	// or tool the app records during delivery joins this segment (pausedAt is still zero), and its
 	// events go too.
 	for {
-		// From the first tool: a call recorded during delivery can end the wait on a carried one.
-		for fired := 0; fired < len(i.tools); {
-			tools := slices.Clone(i.tools[fired:])
-			fired = len(i.tools)
+		// Every tool, under the lock that captures the totals: a call recorded since the last pass,
+		// by a callback or another goroutine, can end the wait on a carried one, which then counts
+		// here and must fire here.
+		if jobs := i.toolEventJobsLocked(i.tools, true); len(jobs) > 0 {
 			i.mu.Unlock()
-			i.fireToolEvents(tools, true)
+			i.runToolEvents(jobs)
 			i.mu.Lock()
+			continue
 		}
 		i.filterSpanCallsLocked()
 		i.emitPendingCallsLocked()

@@ -466,3 +466,50 @@ func TestSDK6017DeclaredRulesAroundAPause(t *testing.T) {
 		})
 	}
 }
+
+// A call recorded by another goroutine after the pause's last tool-event pass, and before it
+// captures the totals, ends a wait: the tool is counted, so its declared event must be sent too.
+func TestSDK6017CallAfterTheLastToolPassStillFiresTheToolItCounts(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		mode := map[bool]string{false: "in-process", true: "json"}[restore]
+		t.Run(mode, func(t *testing.T) {
+			var i *Interaction
+			// concurrently records agent's next call from another goroutine, once, and waits for it.
+			raced := map[string]bool{}
+			concurrently := func(agent string) bool {
+				if !raced[agent] {
+					raced[agent] = true
+					done := make(chan struct{})
+					go func() {
+						defer close(done)
+						i.RecordCall(sdk6017Call(agent, 20))
+					}()
+					<-done
+				}
+				return true
+			}
+			r := setupAI(t, WithEventRules(EventRules{Tools: map[string]ToolEventRule{
+				// Fired while the pause captures its answer: ends the wait on the researcher's tool.
+				"lookup": {Event: "Looked Up", When: func(map[string]any, any) bool { return concurrently("researcher") }},
+				// Fired by the pause's next pass, which already skipped the planner's tool: ends that wait.
+				"search": {Event: "Searched", When: func(map[string]any, any) bool { return concurrently("planner") }},
+				"plan":   {Event: "Planned"},
+			}}))
+			i = sdk6017Start()
+			i.RecordCall(sdk6017Call("researcher", 10))
+			i.RecordToolCalls(
+				ToolCall{ID: "s1", Name: "search", AgentName: "researcher"},
+				ToolCall{ID: "p1", Name: "plan", AgentName: "planner"},
+				ToolCall{Name: "lookup"},
+			)
+			i = sdk6017Continue(t, i, restore)
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{3})
+			sdk6017Expect(t, "Searched", sdk6017ToolEvents(r, "Searched"), [][2]any{{"s1", "unknown"}})
+			sdk6017Expect(t, "Planned", sdk6017ToolEvents(r, "Planned"), [][2]any{{"p1", "unknown"}})
+			// Counted and sent at the pause: nothing is left for the next segment.
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{3, 0})
+			sdk6017Expect(t, "Planned", len(r.named("Planned")), 1)
+		})
+	}
+}
