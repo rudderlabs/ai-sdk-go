@@ -138,7 +138,11 @@ func TrackSessionEvents[T SessionEvent](ctx context.Context, stream SessionEvent
 			if c.model == "" {
 				c.model = c.sessionModel
 			}
-			events.tracker = &sessionTracker{ctx: ctx, cfg: c, shared: sessionStateOf(c.sessionID)}
+			scope := c.sessionID
+			if scope == "" {
+				scope = "stream:" + strconv.FormatUint(streams.Add(1), 10)
+			}
+			events.tracker = &sessionTracker{ctx: ctx, cfg: c, shared: sessionStateOf(c.sessionID), scope: scope + "\x00"}
 		})
 	}
 	return events
@@ -242,20 +246,26 @@ var settleEvents = map[string]bool{
 	"user.custom_tool_result": true, "user.tool_confirmation": true, "user.tool_result": true, "user.interrupt": true,
 }
 
-// sessionState is what a session's streams share: event IDs already read, the subagent threads
-// it started, and a turn in the caller's interaction that ended with tools still open.
+// sessionState is what a session's streams share: a turn in the caller's interaction that ended
+// with tools still open.
 type sessionState struct {
-	seen, children *boundedSet
-	mu             sync.Mutex // guards borrowed
-	borrowed       *borrowedTurn
+	mu       sync.Mutex // guards borrowed
+	borrowed *borrowedTurn
 }
 
-func newSessionState() *sessionState {
-	return &sessionState{seen: newBoundedSet("claude-managed-agents events"), children: newBoundedSet("claude-managed-agents threads")}
-}
+func newSessionState() *sessionState { return &sessionState{} }
 
-// sessionStates holds each session's state, so a reconnect that reads history again counts each
-// event once.
+// seenEvents holds the event IDs already read, by session, so a reconnect that reads history again
+// counts each event once. One set for every session: the process keeps at most MaxMapEntries.
+var seenEvents = newBoundedSet("claude-managed-agents events")
+
+// childThreads holds the subagent threads each session started, keyed like seenEvents.
+var childThreads = newBoundedSet("claude-managed-agents threads")
+
+// streams numbers the streams without a session, for their keys in seenEvents and childThreads.
+var streams atomic.Uint64
+
+// sessionStates holds each session's state.
 var sessionStates = struct {
 	sync.Mutex
 	m     map[string]*sessionState
@@ -388,6 +398,7 @@ type sessionTracker struct {
 	ctx          context.Context
 	cfg          sessionConfig
 	shared       *sessionState
+	scope        string // key prefix in seenEvents and childThreads: the session, else this stream
 	turn         *turn
 	runningAt    msTime
 	lastError    string
@@ -431,13 +442,13 @@ func (s *sessionTracker) observe(raw string) {
 	id := str(e["id"])
 	if id != "" {
 		// The consolidation pattern (stream + history) repeats events.
-		if !s.shared.seen.add(id) {
+		if !seenEvents.add(s.scope + id) {
 			return
 		}
 	}
 	at := timeOf(e)
 	thread := str(e["session_thread_id"])
-	if thread != "" && (strings.HasPrefix(kind, "agent.") || (strings.HasPrefix(kind, "user.") && s.shared.children.has(thread))) {
+	if thread != "" && (strings.HasPrefix(kind, "agent.") || (strings.HasPrefix(kind, "user.") && childThreads.has(s.scope+thread))) {
 		// Cross-posted from a subagent thread (agent events), or aimed at one: not this thread's work.
 		if s.turn != nil && id != "" {
 			if kind == "agent.custom_tool_use" {
@@ -451,7 +462,7 @@ func (s *sessionTracker) observe(raw string) {
 	switch kind {
 	case "session.thread_created":
 		if thread != "" {
-			s.shared.children.add(thread)
+			childThreads.add(s.scope + thread)
 		}
 	case "session.status_running":
 		if s.turn != nil {
@@ -1058,6 +1069,13 @@ func (b *boundedSet) has(id string) bool {
 	defer b.mu.Unlock()
 	_, ok := b.m[id]
 	return ok
+}
+
+// clear forgets every ID (tests only).
+func (b *boundedSet) clear() {
+	b.mu.Lock()
+	b.m, b.order = map[string]struct{}{}, nil
+	b.mu.Unlock()
 }
 
 // add adds id; false when it was there already.
