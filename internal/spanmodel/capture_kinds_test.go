@@ -130,3 +130,51 @@ func TestCapturePolicySpanKindsFixture(t *testing.T) {
 		})
 	}
 }
+
+// On a tool-execution span, content inside non-content events is ToolCalls too; error text and
+// content events stay Messages.
+func TestToolSpanEventContentIsToolCalls(t *testing.T) {
+	start := time.Unix(1700000000, 0)
+	s := spanmodel.Span{
+		Name: "execute_tool refund", Kind: 1, Start: start, End: start.Add(time.Millisecond),
+		Context:    spanmodel.Context{TraceID: strings.Repeat("1", 32), SpanID: strings.Repeat("2", 16)},
+		Attributes: map[string]any{"gen_ai.operation.name": "execute_tool"},
+		Events: []spanmodel.Event{
+			{Name: "tool.io", Time: start, Attributes: map[string]any{"input.value": `{"order":"A-1"}`, "exception.message": "boom"}},
+			{Name: "gen_ai.choice", Time: start, Attributes: map[string]any{"message": "done"}},
+		},
+	}
+	events := func(kinds capture.Spans) map[string]map[string]any {
+		track, err := spanmodel.ToTrack(s, spanmodel.Options{Capture: &kinds})
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := json.Marshal(track.Properties["otlp"])
+		var otlp map[string]any
+		_ = json.Unmarshal(b, &otlp)
+		span := otlp["resourceSpans"].([]any)[0].(map[string]any)["scopeSpans"].([]any)[0].(map[string]any)["spans"].([]any)[0].(map[string]any)
+		out := map[string]map[string]any{}
+		for _, e := range span["events"].([]any) {
+			e := e.(map[string]any)
+			out[e["name"].(string)] = attributes(e["attributes"])
+		}
+		return out
+	}
+	tools := events(capture.Spans{ToolCalls: true})
+	if _, ok := tools["tool.io"]["input.value"]; !ok {
+		t.Errorf("tool calls only: tool event content dropped: %v", tools)
+	}
+	if _, ok := tools["tool.io"]["exception.message"]; ok {
+		t.Errorf("tool calls only: error text kept: %v", tools)
+	}
+	if _, ok := tools["gen_ai.choice"]; ok {
+		t.Errorf("tool calls only: content event kept: %v", tools)
+	}
+	messages := events(capture.Spans{Messages: true})
+	if _, ok := messages["tool.io"]["input.value"]; ok {
+		t.Errorf("messages only: tool event content kept: %v", messages)
+	}
+	if _, ok := messages["gen_ai.choice"]; !ok {
+		t.Errorf("messages only: content event dropped: %v", messages)
+	}
+}

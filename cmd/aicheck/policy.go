@@ -78,6 +78,8 @@ func (c capturePolicy) keeps(field string) bool {
 		return c.key("score_explanation")
 	case "call_reason", "error_message":
 		return c.key(field)
+	case "input_messages", "output_text", "output_tool_calls":
+		return c.key("llm_calls")
 	}
 	panic(fmt.Sprintf("not a content field: %s", field))
 }

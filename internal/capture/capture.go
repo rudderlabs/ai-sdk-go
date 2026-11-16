@@ -165,6 +165,8 @@ func (r Resolved) Field(name string) bool {
 		return r.CallReason
 	case "error_message":
 		return r.ErrorMessage
+	case "input_messages", "output_text", "output_tool_calls":
+		return r.LLMCalls
 	}
 	return r.Any
 }

@@ -164,3 +164,16 @@ func TestLevelBoolIsDefault(t *testing.T) {
 		t.Fatal("nothing set is nil")
 	}
 }
+
+// Per-call content names in custom properties follow LLMCalls, the bool form included.
+func TestCallContentPropertiesFollowLLMCalls(t *testing.T) {
+	yes, no := true, false
+	for _, name := range []string{"input_messages", "output_text", "output_tool_calls"} {
+		if Resolve(Bool(false)).Field(name) || !Resolve(Bool(true)).Field(name) {
+			t.Errorf("%s does not follow the bool", name)
+		}
+		if Resolve(&Policy{Default: &yes, LLMCalls: &no}).Field(name) || !Resolve(&Policy{LLMCalls: &yes}).Field(name) {
+			t.Errorf("%s does not follow LLMCalls", name)
+		}
+	}
+}

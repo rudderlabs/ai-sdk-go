@@ -22,7 +22,8 @@ func propertyName(key string) string {
 }
 
 // Content names shared by the Node.js, Python and Go SDKs.
-var contentProperties = set("prompt_text", "response_text", "feedback_text", "intent_summary", "explanation", "call_reason", "capability_detail", "error_message")
+// input_messages, output_text and output_tool_calls follow LLMCalls; input_truncated is not content.
+var contentProperties = set("prompt_text", "response_text", "feedback_text", "intent_summary", "explanation", "call_reason", "capability_detail", "error_message", "input_messages", "output_text", "output_tool_calls")
 
 // dropContentProperty drops a custom content property when its kind of capture is off.
 func dropContentProperty(key string, policy capture.Resolved) bool {

@@ -49,7 +49,7 @@ func toOTLP(s Span, kinds capture.Spans, masked bool, attributes map[string]any)
 		if !kinds.Messages && contentEvent(e.Name) {
 			continue
 		}
-		event := object{"timeUnixNano": strconv.FormatInt(e.Time.UnixNano(), 10), "name": e.Name, "attributes": keyValues(cleanKinds(e.Attributes, s.Scope.Name, kinds, contentEvent(e.Name), false, masked), e.AttributeKeys)}
+		event := object{"timeUnixNano": strconv.FormatInt(e.Time.UnixNano(), 10), "name": e.Name, "attributes": keyValues(cleanKinds(e.Attributes, s.Scope.Name, kinds, contentEvent(e.Name), toolSpan(s.Attributes), masked), e.AttributeKeys)}
 		dropped(event, "droppedAttributesCount", e.DroppedAttributeCount)
 		events = append(events, event)
 	}

@@ -73,7 +73,8 @@ func toolSpan(a map[string]any) bool {
 var errorKeys = []string{"exception.message", "exception.stacktrace", "error.message"}
 
 // cleanKinds is cleanAttributes per span content kind. In a content event (all) every attribute
-// is the Messages kind; on a tool-execution span's own attributes (tool) all content is ToolCalls.
+// is the Messages kind; on a tool-execution span (tool), its attributes' and its other events'
+// content is ToolCalls, except error text.
 func cleanKinds(a map[string]any, scope string, kinds capture.Spans, all, tool, masked bool) map[string]any {
 	if !kinds.HTTP && kinds.Messages == kinds.ToolCalls {
 		return cleanAttributes(a, scope, kinds.Messages, all, masked)
