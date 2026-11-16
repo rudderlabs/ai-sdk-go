@@ -45,6 +45,8 @@ Each target covers every module of `go.work`.
 | `make cover`     | Runs the tests, then prints per-function and total coverage                      |
 | `make vulncheck` | govulncheck on each module alone, against its own `go.mod`                       |
 | `make tidy`      | `go mod tidy` on each module alone                                               |
+| `make bench`     | Overhead benchmarks: per interaction, per stream chunk and per MCP call, with and without the SDK ([docs/performance.md](docs/performance.md)) |
+| `make load`      | Load test: sustained interactions and MCP calls through analytics-go to a local data plane (`LOAD_SECONDS`, `LOAD_RATE`) |
 | `make example`   | Runs every example with `--check`                                                |
 
 CI also runs `gofmt -l .` and `go vet` on their own, tests on the minimum and latest supported Go, builds, tests and vulnchecks each module alone at the minimum versions in its `go.mod`, tests `ruddermcpgo` against the latest mcp-go, and fails if total coverage drops below 90%.

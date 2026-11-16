@@ -16,7 +16,10 @@ require (
 	google.golang.org/genai v1.77.0
 )
 
-require golang.org/x/sync v0.23.0
+require (
+	github.com/modelcontextprotocol/go-sdk v1.8.0
+	golang.org/x/sync v0.23.0
+)
 
 require (
 	cloud.google.com/go v0.116.0 // indirect
@@ -43,7 +46,6 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/grafana/jsonparser v0.0.0-20250908162026-5c2524e07b4c // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.8.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect

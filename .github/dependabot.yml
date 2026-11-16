@@ -6,6 +6,8 @@ updates:
       interval: 'weekly'
     cooldown:
       default-days: 7
+      exclude:
+        - 'rudderlabs/*'
     labels:
       - 'dependencies'
       - 'github_actions'
@@ -43,6 +45,8 @@ updates:
       interval: 'weekly'
     cooldown:
       default-days: 7
+      exclude:
+        - 'github.com/rudderlabs/*'
     labels:
       - 'dependencies'
     open-pull-requests-limit: 4
@@ -77,6 +81,8 @@ updates:
       interval: 'weekly'
     cooldown:
       default-days: 7
+      exclude:
+        - 'github.com/rudderlabs/*'
     labels:
       - 'dependencies'
     open-pull-requests-limit: 4

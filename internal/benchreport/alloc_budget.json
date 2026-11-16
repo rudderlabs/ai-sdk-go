@@ -1,0 +1,9 @@
+{
+  "interaction/manual": 220,
+  "interaction/openai": 375,
+  "interaction/openai-stream": 6050,
+  "interaction/openai+content": 880,
+  "interaction/openai+spans": 925,
+  "interaction/openai-stream+spans": 6610,
+  "mcp/tools-call": 395
+}

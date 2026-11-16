@@ -1,0 +1,145 @@
+name: Performance
+
+on:
+  push:
+    branches: ['main']
+  # No base-branch filter: stacked PRs target other feature branches.
+  pull_request:
+  schedule:
+    # Nightly load soak.
+    - cron: '23 2 * * *'
+    # Weekly fuzzing.
+    - cron: '41 3 * * 0'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  bench:
+    # Timings are reported only; extra allocations per op must stay within
+    # internal/benchreport/alloc_budget.json.
+    name: Benchmarks
+    if: github.event.schedule != '41 3 * * 0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # actions/checkout
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          # Allocation counts depend on the Go release: the budget is measured on the go.mod minimum.
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Run benchmarks
+        run: |
+          set -o pipefail
+          mkdir -p bench-results
+          go test -run '^$' -bench Overhead -benchmem . ./rudderopenai | tee bench-results/go.txt
+          go run ./internal/benchreport -out bench-results/go.json -budget internal/benchreport/alloc_budget.json < bench-results/go.txt
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bench-go
+          path: bench-results/
+
+  load:
+    name: Load test
+    if: github.event.schedule != '41 3 * * 0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read # actions/checkout
+    env:
+      # A 30-second smoke on PRs; a 5-minute soak on main and every night.
+      LOAD_SECONDS: ${{ github.event_name == 'pull_request' && '30' || '300' }}
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Run the load test
+        run: go test -tags load -run TestLoad -count=1 -v -timeout 15m ./internal/conformance
+
+  fuzz:
+    # The seed inputs run in every unit-test run; this explores beyond them.
+    name: Fuzz ${{ matrix.target }}
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 * * 0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # actions/checkout
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { package: ., target: FuzzJoinIDs }
+          - { package: ., target: FuzzTraceparent }
+          - { package: ./rudderopenai, target: FuzzChatUsage }
+          - { package: ./rudderopenai, target: FuzzChatStreamSplit }
+          - { package: ./rudderopenai, target: FuzzChatStreamCut }
+          - { package: ./rudderopenai, target: FuzzResponsesStreamSplit }
+          - { package: ./rudderopenai, target: FuzzResponsesStreamCut }
+          - { package: ./rudderanthropic, target: FuzzMessagesUsage }
+          - { package: ./rudderanthropic, target: FuzzMessagesStreamSplit }
+          - { package: ./rudderanthropic, target: FuzzMessagesStreamCut }
+          - { package: ./ruddergenai, target: FuzzUsage }
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      - name: Fuzz
+        env:
+          PACKAGE: ${{ matrix.package }}
+          TARGET: ${{ matrix.target }}
+        run: go test -run '^$' -fuzz "^${TARGET}\$" -fuzztime 60s "$PACKAGE"
+
+      # A failing input is written under testdata/fuzz; commit it to keep it as a seed.
+      - name: Upload failing inputs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: '**/testdata/fuzz/'
