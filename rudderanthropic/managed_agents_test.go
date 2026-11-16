@@ -1102,3 +1102,57 @@ func TestManagedAgentsKeepsAtMostMaxMapEntriesEventIDsForTheWholeProcess(t *test
 		t.Fatalf("%d answers, want 3", len(got))
 	}
 }
+
+func TestManagedAgentsEndsATurnWhoseStreamEndedAfterATerminalSessionErrorAsThatError(t *testing.T) {
+	_, sc := maFixtureScenario(t, "paused_then_error")
+	_, rec := setup(t)
+	resetMA(t)
+	first := sc.Streams[0].Events
+	var terminal []json.RawMessage
+	for _, raw := range sc.Streams[1].Events {
+		var e struct{ Type string }
+		_ = json.Unmarshal(raw, &e)
+		if e.Type == "session.error" {
+			terminal = append(terminal, raw)
+		}
+	}
+	read := func(session string, raw []json.RawMessage) {
+		events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, raw)}, rudderanthropic.WithSessionID(session))
+		for events.Next() {
+		}
+	}
+	// Fresh: the error ends the stream mid-turn. Resumed: a paused session's later stream.
+	read("sesn_eof_fresh", append(slicesClone(first[:2]), terminal...))
+	read("sesn_eof_resumed", first)
+	read("sesn_eof_resumed", terminal)
+	var ends [][2]any
+	for _, p := range rec.events(t)["ai_response_received"] {
+		ends = append(ends, [2]any{p["response_status"], p["error_type"]})
+	}
+	if want := [][2]any{{"error", "connection_error"}, {"paused", nil}, {"error", "connection_error"}}; !reflect.DeepEqual(ends, want) {
+		t.Fatalf("%v", ends)
+	}
+}
+
+func TestManagedAgentsKeepsAHistoryTurnsLatencyWhenTheReaderFallsBehindAfterASpill(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 1}))
+	resetMA(t)
+	at := func(n int) string { return fmt.Sprintf(`"processed_at":"2026-11-16T10:00:0%d.000Z"`, n) }
+	// A fake clock: the minute the app takes to read the idle costs no real time.
+	synctest.Test(t, func(t *testing.T) {
+		events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+			`{"id":"sevt_stall_u","type":"user.message","content":[],`+at(0)+`}`,
+			`{"id":"sevt_stall_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},`+at(1)+`}`,
+			`{"id":"sevt_stall_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at(2)+`}`,
+		), rudderanthropic.WithSessionID("sesn_stall"))
+		for n := 1; events.Next(); n++ {
+			if n == 2 {
+				time.Sleep(60 * time.Second) // the app reads the idle a minute after the spill
+			}
+		}
+	})
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["latency_ms"] != float64(2000) {
+		t.Fatalf("%v", got)
+	}
+}

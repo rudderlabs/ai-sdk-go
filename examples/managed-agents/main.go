@@ -153,7 +153,11 @@ func session(ctx context.Context, client anthropic.Client, rs analytics.Client) 
 			return res, errors.New("session terminated")
 		}
 	}
-	return res, events.Err()
+	if err := events.Err(); err != nil {
+		return res, err
+	}
+	// No idle or termination was read: the turn did not finish.
+	return res, errors.New("the stream ended before the session went idle")
 }
 
 // setup returns the environment and agent to run in, creating them unless their IDs are set.
