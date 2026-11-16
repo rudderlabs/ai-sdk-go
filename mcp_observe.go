@@ -62,20 +62,22 @@ func ObserveMCPTransport(ctx context.Context, t mcp.Transport) (context.Context,
 // It works for stateful and stateless handlers. The request's header map identifies it to the
 // server's handlers, which the go-sdk passes on as RequestExtra.Header; a middleware between the
 // two that copies the headers (Request.Clone) leaves error_message out, as do requests in
-// flight together that share one header map. Responses pass through
+// flight together that share one header map. Don't put it behind a middleware that reuses
+// header maps across requests. Responses pass through
 // unchanged. A failed request's events are sent once its response is written, or without
 // error_message when the HTTP request ends first.
 func ObserveMCPHTTP(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := headerKey(r.Header)
-		// Wrapped twice: the outer wrapper observes.
-		if key == nil || r.Context().Value(observingHTTP{}) != nil {
+		// Wrapped twice around the same headers: the outer wrapper observes. Behind a middleware
+		// that copied them, the inner one does.
+		if key == nil || r.Context().Value(observingHTTP{}) == key {
 			h.ServeHTTP(w, r)
 			return
 		}
 		responses := mcpbridge.NewResponses()
 		defer observeHTTP(key, responses)()
-		mcpbridge.ServeHTTP(h, w, r.WithContext(context.WithValue(r.Context(), observingHTTP{}, true)), responses)
+		mcpbridge.ServeHTTP(h, w, r.WithContext(context.WithValue(r.Context(), observingHTTP{}, key)), responses)
 	})
 }
 

@@ -191,14 +191,23 @@ func TestObserveMCPHTTPSharedHeaderMap(t *testing.T) {
 }
 
 func TestObserveMCPHTTPNested(t *testing.T) {
-	setupAI(t)
-	s := errorServer("nested-http-mcp")
-	r := wrap(t, s, Options{CaptureContent: true})
-	twice := func(h http.Handler) http.Handler { return ObserveMCPHTTP(ObserveMCPHTTP(h)) }
-	cs := connectHTTP(t, serveStreamable(t, s, nil, twice), "2025-06-18")
-	_, _ = cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "lookup", Arguments: map[string]any{"text": "lookup failed"}})
-	if p := r.wait(t, "mcp_tool_called", 1)[0].Properties; p["error_message"] != "lookup failed" {
-		t.Errorf("error_message=%v through nested wrappers", p["error_message"])
+	cloning := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) { h.ServeHTTP(w, req.Clone(req.Context())) })
+	}
+	for name, nest := range map[string]func(http.Handler) http.Handler{
+		"twice":          func(h http.Handler) http.Handler { return ObserveMCPHTTP(ObserveMCPHTTP(h)) },
+		"around a clone": func(h http.Handler) http.Handler { return ObserveMCPHTTP(cloning(ObserveMCPHTTP(h))) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			setupAI(t)
+			s := errorServer("nested-http-mcp")
+			r := wrap(t, s, Options{CaptureContent: true})
+			cs := connectHTTP(t, serveStreamable(t, s, nil, nest), "2025-06-18")
+			_, _ = cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "lookup", Arguments: map[string]any{"text": "lookup failed"}})
+			if p := r.wait(t, "mcp_tool_called", 1)[0].Properties; p["error_message"] != "lookup failed" {
+				t.Errorf("error_message=%v through nested wrappers", p["error_message"])
+			}
+		})
 	}
 }
 
