@@ -2,16 +2,19 @@ package rudderotel
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	analytics "github.com/rudderlabs/analytics-go/v4"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/ruddertest"
 )
 
 // spanNames lists the exported ai_otel_span names.
@@ -159,6 +162,54 @@ func TestSpanCoverageNeedsASendableSDKSpan(t *testing.T) {
 				i.End(rudderstackai.EndOptions{})
 				if names := spanNames(events()); len(names) != 1 || names[0] != "provider" {
 					t.Errorf("spans %v, want the OTel span exported once", names)
+				}
+			})
+		}
+	}
+}
+
+type failingClient struct {
+	*ruddertest.Recorder
+	panics bool
+	calls  int
+}
+
+func (c *failingClient) Enqueue(analytics.Message) error {
+	c.calls++
+	if c.panics {
+		panic("delivery failed")
+	}
+	return errors.New("delivery failed")
+}
+
+// Accepted limit: when the processor replaces an OTel model span, the SDK span is the one kept;
+// if the SDK's own client fails to deliver, the call has no span.
+func TestSpanCoverageSDKDeliveryFailureLosesTheSpan(t *testing.T) {
+	for _, panics := range []bool{false, true} {
+		for _, outer := range []bool{false, true} {
+			t.Run("panics="+strconvBool(panics)+"/outer="+strconvBool(outer), func(t *testing.T) {
+				provider, _, events := testProvider(t, Options{Simple: true})
+				r, _ := recorder(t)
+				sdk := &failingClient{Recorder: r, panics: panics}
+				configureSpans(t, rudderstackai.WithAnalytics(sdk), rudderstackai.WithOnError(func(error, rudderstackai.ErrorInfo) {}))
+				ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+				started := time.Now()
+				if outer {
+					octx, o := provider.Tracer("app").Start(ctx, "provider", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+					_, s := hook.Tracing.BeginWrapper(octx, i, started)
+					hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "m", StartedAt: started, EndedAt: time.Now()}, s, 200)
+					o.End()
+				} else {
+					wrapped, s := hook.Tracing.BeginWrapper(ctx, i, started)
+					modelSpan(wrapped, provider.Tracer("app"), "provider").End()
+					hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "m", StartedAt: started, EndedAt: time.Now()}, s, 200)
+				}
+				i.End(rudderstackai.EndOptions{})
+				if sdk.calls == 0 {
+					t.Fatal("the SDK client was never asked to deliver")
+				}
+				if names := spanNames(events()); len(names) != 0 {
+					t.Errorf("spans %v, want none for the call", names)
 				}
 			})
 		}

@@ -418,10 +418,6 @@
         {
           "label": "t",
           "parent": "m"
-        },
-        {
-          "label": "i",
-          "parent": null
         }
       ],
       "call_span": null,

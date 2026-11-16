@@ -110,12 +110,16 @@ are dropped, cycles are dropped, and other unrepresentable list entries keep nul
 ### One span per call with the span processor
 
 When `WithEmitSpans(true)` and a `rudderotel` span processor (`NewSpanProcessor` or
-`RegisterTracing`) both see a model call, the SDK span is always the one sent.
+`RegisterTracing`) both see a model call, the SDK span is the one sent when it has an analytics
+client and its message context plus identity fit the span size budget. Otherwise the OpenTelemetry
+span exports normally, and the SDK span follows its ordinary delivery path.
 
 - An OpenTelemetry model-call span (the conventions in
   [product events from spans](#product-events-from-spans): GenAI `chat` / `text_completion` /
   `generate_content`, OpenInference `LLM`, older OpenLLMetry `llm.request.type`) that starts
-  inside a wrapper call is dropped by every `rudderotel` processor. Other processors and
+  inside any active wrapper call ancestor in the current interaction is dropped by every
+  `rudderotel` processor, using a mark they share. Manual tool, retrieval and agent middleware do
+  not hide the call; the ancestry stops at the interaction boundary. Other processors and
   exporters receive it unchanged. Span-built product events still count the call once.
 - For an active, still-recording model-call span a processor observed outside an SDK call, in the
   same open interaction, the first wrapper call that starts directly inside it takes its place.
@@ -137,6 +141,7 @@ still apply.
 
 Matching uses context nesting only, never times or model names. Limits:
 
+- When RudderStack processors replace an OTel model span, the SDK span is the one kept; if the SDK's own client fails to deliver, that span is lost, as the call's product events are.
 - Instrumentations that never put their span on the context passed downstream cannot be matched.
 - The bare `Exporter` has no start hook; use the processor.
 - A span is classified when it starts: model-call attributes added later cannot enable adoption.
