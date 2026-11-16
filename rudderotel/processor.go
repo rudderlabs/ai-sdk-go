@@ -27,6 +27,68 @@ type spanState struct {
 	tags       map[string]string
 	owner      *rudderstackai.Interaction
 	suppressed bool
+	// covered: a model-call span inside a call an SDK span already sends; recorded, never exported.
+	covered bool
+}
+
+// otelCalls are the OTel model-call spans a processor saw start outside any SDK call span,
+// while they are open: an SDK call starting inside one joins it instead of sending its own span.
+var otelCalls = struct {
+	mu sync.Mutex
+	m  map[spanKey]otelCall
+	// n mirrors len(m), so OnEnd skips the lock while nothing is registered (spans off).
+	n atomic.Int64
+}{m: map[spanKey]otelCall{}}
+
+type otelCall struct {
+	seq         uint64
+	interaction *rudderstackai.Interaction
+}
+
+func init() {
+	hook.Tracing.OTelCallOwner = func(ctx context.Context) (string, string, uint64, any, bool) {
+		s := trace.SpanFromContext(ctx)
+		if !s.IsRecording() {
+			return "", "", 0, nil, false
+		}
+		sc := s.SpanContext()
+		otelCalls.mu.Lock()
+		c, ok := otelCalls.m[key(sc)]
+		otelCalls.mu.Unlock()
+		if !ok {
+			return "", "", 0, nil, false
+		}
+		return sc.TraceID().String(), sc.SpanID().String(), c.seq, c.interaction, true
+	}
+}
+
+// dedup keeps one span per model call: the outer of an SDK call span and an OTel model-call
+// span owns it. Spans off, it is never called.
+func dedup(ctx context.Context, s sdktrace.ReadWriteSpan, interaction *rudderstackai.Interaction) (covered bool) {
+	if interaction == nil || interaction.Ended() || spanRole(s) != "llm" {
+		return false
+	}
+	if hook.Tracing.SDKOwnsCall(ctx, interaction) {
+		return true
+	}
+	otelCalls.mu.Lock()
+	defer otelCalls.mu.Unlock()
+	// Bounded like the SDK's other maps: past the cap a span is simply not joined.
+	if len(otelCalls.m) < max(hook.MaxMapEntries(), 1) {
+		otelCalls.m[key(s.SpanContext())] = otelCall{seq: hook.Tracing.NextSpanSeq(), interaction: interaction}
+		otelCalls.n.Store(int64(len(otelCalls.m)))
+	}
+	return false
+}
+
+func forgetOTelCall(k spanKey) {
+	if otelCalls.n.Load() == 0 {
+		return
+	}
+	otelCalls.mu.Lock()
+	delete(otelCalls.m, k)
+	otelCalls.n.Store(int64(len(otelCalls.m)))
+	otelCalls.mu.Unlock()
 }
 
 // SpanProcessor adds interaction identity and optionally records product calls before export.
@@ -164,7 +226,8 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 				held[k] = v
 			}
 		}
-		p.remember(key(s.SpanContext()), spanState{tags: held, owner: interaction})
+		covered := interaction != nil && hook.Tracing.EmitSpans() && dedup(ctx, s, interaction)
+		p.remember(key(s.SpanContext()), spanState{tags: held, owner: interaction, covered: covered})
 		if IsAISpan(s) {
 			for k, v := range tags {
 				s.SetAttributes(attribute.String(k, v))
@@ -188,6 +251,7 @@ func (s taggedSpan) Attributes() []attribute.KeyValue { return s.attrs }
 // OnEnd records only spans of an open interaction and skips suppressed classifier spans.
 func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	defer p.finish(key(s.SpanContext()))
+	forgetOTelCall(key(s.SpanContext()))
 	if p.closed.Load() {
 		return
 	}
@@ -209,7 +273,9 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 		if p.options.ProductEvents {
 			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
 		}
-		p.inner.OnEnd(s)
+		if !state.covered {
+			p.inner.OnEnd(s)
+		}
 	})
 }
 

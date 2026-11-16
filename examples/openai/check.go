@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/openai/openai-go/v3/option"
 
@@ -33,10 +34,21 @@ func runCheck(sink *harness.Sink) error {
 // expectEvents checks the prompt, the answer and the feedback, field by field.
 func expectEvents(msgs []dataplane.Message, res result) error {
 	byEvent := harness.ByEvent(msgs)
-	if err := harness.Counts(byEvent, map[string]int{"ai_user_prompt_created": 1, "ai_response_received": 1, "ai_user_action": 1}); err != nil {
+	spans := 0
+	if os.Getenv("EMIT_SPANS") == "1" {
+		spans = 1
+	}
+	if err := harness.Counts(byEvent, map[string]int{"ai_user_prompt_created": 1, "ai_response_received": 1, "ai_user_action": 1, "ai_otel_span": spans}); err != nil {
 		return err
 	}
 	ids := map[string]any{"interaction_id": res.InteractionID, "conversation_id": "conv_shipping_1"}
+	if spans == 1 {
+		if err := harness.Fields("ai_otel_span", byEvent["ai_otel_span"][0].Properties, map[string]any{
+			"interaction_id": res.InteractionID, "span_name": harness.Present, "status_code": "ok",
+		}); err != nil {
+			return err
+		}
+	}
 	checks := []struct {
 		event, integration string
 		want               map[string]any

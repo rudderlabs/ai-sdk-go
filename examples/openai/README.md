@@ -13,6 +13,8 @@ RUDDERSTACK_WRITE_KEY=... RUDDERSTACK_DATA_PLANE_URL=... go run ./examples/opena
 go run ./examples/openai
 ```
 
+`EMIT_SPANS=1` also sends one `ai_otel_span` for the model call (`WithEmitSpans(true)`), the product-and-traces setup ([choose a setup](../../docs/tracing.md#choose-a-setup)); the check then also expects that span, joined to the answer's `interaction_id`.
+
 `--check` replays `spec/fixtures/cassettes/examples/node-openai.json` (the cassette has no tool call) and must produce:
 
 - `ai_user_prompt_created` and `ai_response_received` tagged `openai` in `context.wrapperLibrary`, for `user_42`, with the interaction and conversation IDs;

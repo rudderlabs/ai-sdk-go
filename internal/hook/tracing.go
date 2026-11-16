@@ -36,4 +36,11 @@ var Tracing struct {
 	RememberClient        func(analytics.Client)
 	Wait                  func(context.Context) bool
 	FlushClient           func(context.Context, analytics.Client) bool
+	// NextSpanSeq orders SDK spans and processor-seen OTel model-call spans by start.
+	NextSpanSeq func() uint64
+	// SDKOwnsCall reports whether the active SDK span in ctx is a model call of interaction.
+	SDKOwnsCall func(ctx context.Context, interaction any) bool
+	// OTelCallOwner returns the active, still-recording OTel model-call span in ctx that a span
+	// processor registered: its IDs, start order and interaction. Set by rudderotel.
+	OTelCallOwner func(ctx context.Context) (traceID, spanID string, seq uint64, interaction any, ok bool)
 }

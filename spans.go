@@ -9,6 +9,7 @@ import (
 	"maps"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
@@ -43,8 +44,15 @@ type Span struct {
 	capture    capture.Spans
 	llmCalls   bool
 	msgContext map[string]any
+	// seq: start order, compared with OTel model-call spans to tell which one is nested.
+	seq uint64
+	// call: a provider wrapper's model call. otelOwned: it joined an enclosing OTel
+	// model-call span, taking its IDs, and sends nothing.
+	call, otelOwned bool
 }
 type sdkSpanKey struct{}
+
+var spanSeq atomic.Uint64
 
 // WithEmitSpans enables wrapper and manual ai_otel_span events. Off by default,
 // independent of WithLLMCallEvents; no OpenTelemetry dependency is required.
@@ -148,6 +156,28 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
 	}
 	s.msgContext, _ = stripBinary(msgContext).(map[string]any)
 	s.SpanID = randomSpanID(8)
+	s.seq = spanSeq.Add(1)
+	return s
+}
+
+// otelOwnedSpan joins the active OTel model-call span a span processor saw start in this
+// interaction, when it is nested inside the active SDK span (or there is none): it already
+// owns the call. The app's span is never modified.
+func otelOwnedSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
+	if hook.Tracing.OTelCallOwner == nil || i == nil || i.Ended() {
+		return nil
+	}
+	traceID, spanID, seq, owner, ok := hook.Tracing.OTelCallOwner(ctx)
+	if !ok || owner != any(i) {
+		return nil
+	}
+	if active := activeSDKSpan(ctx); active != nil && active.interaction == i && active.seq > seq {
+		return nil
+	}
+	s := &Span{TraceID: traceID, SpanID: spanID, started: started, interaction: i, call: true, otelOwned: true}
+	i.mu.Lock()
+	s.llmCalls = i.capture.LLMCalls
+	i.mu.Unlock()
 	return s
 }
 
@@ -217,7 +247,12 @@ func beginWrapperSpan(ctx context.Context, i *Interaction, started time.Time) (c
 	if !cfg().emitSpans || isUntracked(ctx) || (i != nil && !i.Ended() && i.untracked) {
 		return ctx, nil
 	}
+	if s := otelOwnedSpan(ctx, i, started); s != nil {
+		ctx = context.WithValue(ctx, keyInteraction, s.interaction)
+		return context.WithValue(ctx, sdkSpanKey{}, s), s
+	}
 	s := newSDKSpan(ctx, i, started)
+	s.call = true
 	ctx = context.WithValue(ctx, keyInteraction, s.interaction)
 	pendingWrapperSpans.mu.Lock()
 	pendingWrapperSpans.spans[s] = wrapperMetadata{}
@@ -278,6 +313,10 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 	pendingWrapperSpans.mu.Lock()
 	delete(pendingWrapperSpans.spans, s)
 	pendingWrapperSpans.mu.Unlock()
+	if s.otelOwned {
+		s.mu.Unlock()
+		return
+	}
 	attrs := maps.Clone(s.attributes)
 	s.mu.Unlock()
 	if attrs == nil {
@@ -378,6 +417,11 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 }
 func init() {
 	hook.Tracing.EmitSpans = func() bool { return cfg().emitSpans }
+	hook.Tracing.NextSpanSeq = func() uint64 { return spanSeq.Add(1) }
+	hook.Tracing.SDKOwnsCall = func(ctx context.Context, i any) bool {
+		active := activeSDKSpan(ctx)
+		return active != nil && any(active.interaction) == i && active.call
+	}
 	hook.Tracing.WrapperCaptureContent = func(value any) bool {
 		s, _ := value.(*Span)
 		return s != nil && s.capturesContent()

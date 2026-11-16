@@ -136,6 +136,12 @@ func Validate(msgs []dataplane.Message) error {
 		return err
 	}
 	for _, m := range msgs {
+		if m.Event == "ai_otel_span" {
+			if err := validateSpan(m); err != nil {
+				return err
+			}
+			continue
+		}
 		wl, _ := m.Context["wrapperLibrary"].(map[string]any)
 		lib, _ := m.Context["library"].(map[string]any)
 		integration := Integration(m)
@@ -164,13 +170,40 @@ func Validate(msgs []dataplane.Message) error {
 }
 
 const (
-	schemaURL  = "https://rudderstack.com/schemas/ai-events/0.4.0"
-	schemaPath = "spec/ai-events-v0.4.schema.json"
+	schemaURL      = "https://rudderstack.com/schemas/ai-events/0.4.0"
+	schemaPath     = "spec/ai-events-v0.4.schema.json"
+	spanSchemaURL  = "https://rudderstack.com/schemas/ai-otel-span-v0.1.schema.json"
+	spanSchemaPath = "spec/ai-otel-span-v0.1.schema.json"
 )
 
-// compiler loads the schema from the repository.
+// validateSpan checks an ai_otel_span's context and properties against the span schema; the
+// mock data plane keeps no messageId or timestamp to check the whole message.
+func validateSpan(m dataplane.Message) error {
+	c, err := compilerFor(spanSchemaURL, spanSchemaPath)
+	if err != nil {
+		return err
+	}
+	for part, value := range map[string]map[string]any{"context": m.Context, "properties": m.Properties} {
+		schema, err := c.Compile(spanSchemaURL + "#/properties/" + part)
+		if err != nil {
+			return fmt.Errorf("%s: %w", m.Event, err)
+		}
+		b, _ := json.Marshal(value)
+		v, _ := jsonschema.UnmarshalJSON(bytes.NewReader(b))
+		if err := schema.Validate(v); err != nil {
+			return fmt.Errorf("%s.%s: %w", m.Event, part, err)
+		}
+	}
+	return nil
+}
+
+// compiler loads the event schema from the repository.
 func compiler() (*jsonschema.Compiler, error) {
-	path, err := RepoFile(schemaPath)
+	return compilerFor(schemaURL, schemaPath)
+}
+
+func compilerFor(url, rel string) (*jsonschema.Compiler, error) {
+	path, err := RepoFile(rel)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +217,7 @@ func compiler() (*jsonschema.Compiler, error) {
 		return nil, err
 	}
 	c := jsonschema.NewCompiler()
-	return c, c.AddResource(schemaURL, doc)
+	return c, c.AddResource(url, doc)
 }
 
 // RepoFile returns the path of a repository file, found from the working directory up, so the

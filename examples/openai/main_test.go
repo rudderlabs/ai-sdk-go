@@ -16,6 +16,15 @@ func TestCheck(t *testing.T) {
 	}
 }
 
+// TestCheckEmitSpans checks the product-and-traces setup: the same events plus one span.
+func TestCheckEmitSpans(t *testing.T) {
+	t.Setenv("EMIT_SPANS", "1")
+	var out bytes.Buffer
+	if code := run([]string{"--check"}, &out); code != 0 {
+		t.Fatalf("check exited %d:\n%s", code, out.String())
+	}
+}
+
 // TestLive runs --live against a mock standing in for the real data plane.
 func TestLive(t *testing.T) {
 	upstream := dataplane.Start()
