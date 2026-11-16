@@ -133,7 +133,7 @@ func TrackSessionEvents[T SessionEvent](ctx context.Context, stream SessionEvent
 	events := &SessionEvents[T]{src: stream}
 	// The SDK's own calls (a classifier or evaluator) are never tracked.
 	if !kit.Untracked(ctx) {
-		events.tracker = &sessionTracker{ctx: ctx, cfg: c, seen: sessionSeen(c.sessionID)}
+		events.tracker = &sessionTracker{ctx: ctx, cfg: c, shared: sessionStateOf(c.sessionID)}
 	}
 	return events
 }
@@ -221,33 +221,47 @@ var settleEvents = map[string]bool{
 	"user.custom_tool_result": true, "user.tool_confirmation": true, "user.tool_result": true, "user.interrupt": true,
 }
 
-// seenBySession holds the event IDs already read, by session ID: a reconnect that reads history
-// again counts them once.
-var seenBySession = struct {
-	sync.Mutex
-	m     map[string]*boundedSet
-	order []string
-}{m: map[string]*boundedSet{}}
+// sessionState is what a session's streams share: event IDs already read and the subagent threads
+// it started.
+type sessionState struct {
+	seen, children *boundedSet
+}
 
-// sessionSeen is the session's set of read event IDs (a new one for a stream without a session).
-func sessionSeen(sessionID string) *boundedSet {
+func newSessionState() *sessionState {
+	return &sessionState{seen: newBoundedSet("claude-managed-agents events"), children: newBoundedSet("claude-managed-agents threads")}
+}
+
+// sessionStates holds each session's state, so a reconnect that reads history again counts each
+// event once.
+var sessionStates = struct {
+	sync.Mutex
+	m     map[string]*sessionState
+	order []string
+}{m: map[string]*sessionState{}}
+
+// sessionStateOf is the session's shared state (a new one for a stream without a session).
+func sessionStateOf(sessionID string) *sessionState {
 	if sessionID == "" {
-		return newBoundedSet("claude-managed-agents events")
+		return newSessionState()
 	}
-	seenBySession.Lock()
-	defer seenBySession.Unlock()
-	if set := seenBySession.m[sessionID]; set != nil {
-		return set
+	sessionStates.Lock()
+	state := sessionStates.m[sessionID]
+	evicted := false
+	if state == nil {
+		state = newSessionState()
+		sessionStates.m[sessionID] = state
+		sessionStates.order = append(sessionStates.order, sessionID)
+		for len(sessionStates.m) > kit.MaxMapEntries() && len(sessionStates.order) > 0 {
+			delete(sessionStates.m, sessionStates.order[0])
+			sessionStates.order = sessionStates.order[1:]
+			evicted = true
+		}
 	}
-	set := newBoundedSet("claude-managed-agents events")
-	seenBySession.m[sessionID] = set
-	seenBySession.order = append(seenBySession.order, sessionID)
-	for len(seenBySession.m) > kit.MaxMapEntries() && len(seenBySession.order) > 0 {
-		delete(seenBySession.m, seenBySession.order[0])
-		seenBySession.order = seenBySession.order[1:]
+	sessionStates.Unlock()
+	if evicted { // reported outside the lock: an onError callback may track another stream
 		kit.LimitReached("claude-managed-agents sessions")
 	}
-	return set
+	return state
 }
 
 // pausedTurns are turns paused at requires_action, by session ID: a later stream resumes them.
@@ -273,13 +287,29 @@ func timeOf(e map[string]any) msTime {
 }
 
 type turnCall struct {
-	usage          map[string]any
-	model, agent   string
-	serviceTier    string
-	errorType      string
-	outputText     string
-	startAt, endAt msTime
+	input, output, cached, cacheWrite int // input includes cache reads and writes
+	model, agent                      string
+	serviceTier                       string
+	errorType                         string
+	outputText                        string
+	startAt, endAt                    msTime
+	callCount                         int
 }
+
+// withUsage sets the tokens of a model_usage (or grader usage): input includes cache reads and writes.
+func (c turnCall) withUsage(usage map[string]any) turnCall {
+	c.cached, c.cacheWrite = num(usage["cache_read_input_tokens"]), num(usage["cache_creation_input_tokens"])
+	c.input = num(usage["input_tokens"]) + c.cached + c.cacheWrite
+	c.output = num(usage["output_tokens"])
+	c.callCount = 1
+	return c
+}
+
+// foldKey groups calls past the call cap.
+type foldKey struct{ model, agent, errorType, serviceTier string }
+
+// toolKey groups tools past the call cap.
+type toolKey struct{ name, mcpServer string }
 
 type turnTool struct {
 	id, name, mcpServer string
@@ -289,7 +319,6 @@ type turnTool struct {
 	errorType           string
 	duration            *time.Duration
 	settled             bool
-	keep                bool // arguments and result are kept (under the call cap)
 }
 
 type turn struct {
@@ -301,7 +330,11 @@ type turn struct {
 	modelError      string
 	requestText     string
 	calls           []turnCall
+	foldedCalls     map[foldKey]*turnCall // calls past the call cap, summed
+	foldOrder       []foldKey
 	tools           []*turnTool
+	foldedTools     map[toolKey]int // tools past the call cap, counted; outcomes not tracked
+	toolOrder       []toolKey
 	toolsByID       map[string]*turnTool
 	blocking        map[string]rudderstackai.PauseReason
 	answer          string
@@ -310,6 +343,7 @@ type turn struct {
 	waiting         rudderstackai.PauseReason
 	compactions     int
 	resumed         *rudderstackai.Interaction
+	abandoned       bool // opened by an ending event to settle a paused turn
 }
 
 type turnEnd struct {
@@ -321,7 +355,7 @@ type turnEnd struct {
 type sessionTracker struct {
 	ctx          context.Context
 	cfg          sessionConfig
-	seen         *boundedSet
+	shared       *sessionState
 	turn         *turn
 	runningAt    msTime
 	lastError    string
@@ -365,14 +399,14 @@ func (s *sessionTracker) observe(raw string) {
 	id := str(e["id"])
 	if id != "" {
 		// The consolidation pattern (stream + history) repeats events.
-		if s.seen.has(id) {
+		if !s.shared.seen.add(id) {
 			return
 		}
-		s.seen.add(id)
 	}
 	at := timeOf(e)
-	if str(e["session_thread_id"]) != "" && (strings.HasPrefix(kind, "agent.") || strings.HasPrefix(kind, "user.")) {
-		// Cross-posted from, or aimed at, a subagent thread: not this thread's work.
+	thread := str(e["session_thread_id"])
+	if thread != "" && (strings.HasPrefix(kind, "agent.") || (strings.HasPrefix(kind, "user.") && s.shared.children.has(thread))) {
+		// Cross-posted from a subagent thread (agent events), or aimed at one: not this thread's work.
 		if s.turn != nil && id != "" {
 			if kind == "agent.custom_tool_use" {
 				s.turn.blocking[id] = rudderstackai.PauseDeferredTool
@@ -383,6 +417,10 @@ func (s *sessionTracker) observe(raw string) {
 		return
 	}
 	switch kind {
+	case "session.thread_created":
+		if thread != "" {
+			s.shared.children.add(thread)
+		}
 	case "session.status_running":
 		if s.turn == nil {
 			s.runningAt = at
@@ -403,6 +441,7 @@ func (s *sessionTracker) observe(raw string) {
 		s.settle(s.open(kind, at), str(e["tool_use_id"]), e, at)
 	case "user.tool_confirmation":
 		t := s.open(kind, at)
+		delete(t.blocking, str(e["tool_use_id"]))
 		if tool := t.toolsByID[str(e["tool_use_id"])]; tool != nil && e["result"] == "deny" {
 			tool.err, tool.errorType = rudderstackai.Ptr(true), "denied"
 		}
@@ -417,8 +456,7 @@ func (s *sessionTracker) observe(raw string) {
 	case "span.model_request_end":
 		s.call(s.open(kind, at), e, at)
 	case "span.outcome_evaluation_end":
-		t := s.open(kind, at)
-		t.calls = append(t.calls, turnCall{usage: obj(e["usage"]), agent: grader, endAt: at})
+		s.push(s.open(kind, at), turnCall{agent: grader, endAt: at}.withUsage(obj(e["usage"])))
 	case "agent.message":
 		t := s.open(kind, at)
 		if text := textOf(e["content"]); text != "" {
@@ -434,22 +472,26 @@ func (s *sessionTracker) observe(raw string) {
 	case "agent.thread_context_compacted":
 		s.open(kind, at).compactions++
 	case "session.error":
+		// An error while the session runs (a repository that cannot be cloned) is part of a turn.
+		if s.turn == nil && s.runningAt.ok {
+			s.open(kind, at)
+		}
 		s.sessionError(e)
 	case "session.status_idle":
 		s.idle(e, at)
 	case "session.status_terminated":
-		if s.turn != nil {
+		if t := s.ending(kind, at); t != nil {
 			switch {
-			case s.turn.errorType != "":
-				s.finish(turnEnd{status: rudderstackai.StatusError, errorType: s.turn.errorType}, at)
-			case s.turn.interrupted:
+			case t.errorType != "":
+				s.finish(turnEnd{status: rudderstackai.StatusError, errorType: t.errorType}, at)
+			case t.interrupted || t.abandoned:
 				s.finish(turnEnd{status: rudderstackai.StatusCancelled, errorType: "cancelled"}, at)
 			default:
 				s.finish(turnEnd{status: rudderstackai.StatusSuccess}, at)
 			}
 		}
 	case "session.deleted":
-		if s.turn != nil {
+		if s.ending(kind, at) != nil {
 			s.finish(turnEnd{status: rudderstackai.StatusCancelled, errorType: "cancelled"}, at)
 		}
 	}
@@ -476,6 +518,19 @@ func (s *sessionTracker) close(err error) {
 	}
 }
 
+// ending is the turn an ending event ends: the open one, else this session's paused one (resumed).
+func (s *sessionTracker) ending(kind string, at msTime) *turn {
+	if s.turn != nil {
+		return s.turn
+	}
+	if !s.hasPausedTurn() {
+		return nil
+	}
+	t := s.open(kind, at)
+	t.abandoned = true
+	return t
+}
+
 func (s *sessionTracker) open(kind string, at msTime) *turn {
 	t := s.turn
 	if t == nil {
@@ -489,6 +544,7 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 		t = &turn{
 			startAt: start, continuation: continuation, starts: map[string]msTime{},
 			toolsByID: map[string]*turnTool{}, blocking: map[string]rudderstackai.PauseReason{},
+			foldedCalls: map[foldKey]*turnCall{}, foldedTools: map[toolKey]int{},
 		}
 		s.turn, s.runningAt = t, msTime{}
 		if t.continuation {
@@ -537,11 +593,7 @@ func (s *sessionTracker) call(t *turn, e map[string]any, at msTime) {
 	if s.cfg.model == "" {
 		kit.WarnOnce("claude-managed-agents-model", "claude-managed-agents: pass WithSession or WithSessionModel to TrackSessionEvents; calls are unpriced without a model")
 	}
-	c := turnCall{usage: usage, model: s.cfg.model, agent: s.cfg.agentName, endAt: at}
-	// Past the call cap the core folds calls; their text is not kept.
-	if len(t.calls) < kit.MaxCallsPerInteraction() {
-		c.outputText = t.requestText
-	}
+	c := turnCall{model: s.cfg.model, agent: s.cfg.agentName, outputText: t.requestText, endAt: at}.withUsage(usage)
 	if speed := str(usage["speed"]); speed == "fast" || speed == "standard" {
 		c.serviceTier = speed
 	}
@@ -555,43 +607,68 @@ func (s *sessionTracker) call(t *turn, e map[string]any, at msTime) {
 		c.startAt = t.starts[startID]
 		delete(t.starts, startID)
 	}
-	t.calls = append(t.calls, c)
+	s.push(t, c)
 	t.modelError, t.requestText = "", ""
 }
 
-func (s *sessionTracker) tool(t *turn, kind string, e map[string]any, id string, at msTime) {
-	tool := &turnTool{id: id, name: str(e["name"]), at: at}
-	// Arguments and results feed declared tool rules; past the call cap they are not kept.
-	if tool.keep = len(t.tools) < kit.MaxCallsPerInteraction(); tool.keep {
-		tool.args = e["input"]
+// push keeps a call, or past the call cap sums it into one aggregate per model, agent, error and
+// tier.
+func (s *sessionTracker) push(t *turn, c turnCall) {
+	if len(t.calls) < kit.MaxCallsPerInteraction() {
+		t.calls = append(t.calls, c)
+		return
 	}
+	key := foldKey{c.model, c.agent, c.errorType, c.serviceTier}
+	folded := t.foldedCalls[key]
+	if folded == nil {
+		c.outputText, c.startAt = "", msTime{}
+		t.foldedCalls[key] = &c
+		t.foldOrder = append(t.foldOrder, key)
+		return
+	}
+	folded.callCount++
+	folded.input += c.input
+	folded.output += c.output
+	folded.cached += c.cached
+	folded.cacheWrite += c.cacheWrite
+	folded.endAt = c.endAt
+}
+
+func (s *sessionTracker) tool(t *turn, kind string, e map[string]any, id string, at msTime) {
+	tool := &turnTool{id: id, name: str(e["name"]), args: e["input"], at: at}
 	if kind == "agent.mcp_tool_use" {
 		tool.mcpServer = str(e["mcp_server_name"])
+	}
+	if id != "" && kind == "agent.custom_tool_use" {
+		t.blocking[id] = rudderstackai.PauseDeferredTool
+	} else if id != "" && e["evaluated_permission"] == "ask" {
+		t.blocking[id] = rudderstackai.PauseApproval
+	}
+	if len(t.tools) >= kit.MaxCallsPerInteraction() {
+		// Past the call cap: counted by name and server, without arguments, results or outcomes.
+		key := toolKey{tool.name, tool.mcpServer}
+		if t.foldedTools[key] == 0 {
+			t.toolOrder = append(t.toolOrder, key)
+		}
+		t.foldedTools[key]++
+		return
 	}
 	if e["evaluated_permission"] == "deny" {
 		tool.err, tool.errorType = rudderstackai.Ptr(true), "denied"
 	}
 	t.tools = append(t.tools, tool)
-	if id == "" {
-		return
-	}
-	t.toolsByID[id] = tool
-	if kind == "agent.custom_tool_use" {
-		t.blocking[id] = rudderstackai.PauseDeferredTool
-	} else if e["evaluated_permission"] == "ask" {
-		t.blocking[id] = rudderstackai.PauseApproval
+	if id != "" {
+		t.toolsByID[id] = tool
 	}
 }
 
 func (s *sessionTracker) settle(t *turn, id string, e map[string]any, at msTime) {
+	delete(t.blocking, id)
 	tool := t.toolsByID[id]
 	if tool == nil || tool.settled {
 		return
 	}
-	tool.settled = true
-	if tool.keep {
-		tool.result = e["content"]
-	}
+	tool.settled, tool.result = true, e["content"]
 	if tool.errorType != "denied" {
 		tool.err = rudderstackai.Ptr(e["is_error"] == true)
 	}
@@ -623,11 +700,15 @@ func (s *sessionTracker) sessionError(e map[string]any) {
 }
 
 func (s *sessionTracker) idle(e map[string]any, at msTime) {
+	stop := obj(e["stop_reason"])
+	// Still waiting on the app: nothing to resume yet.
 	t := s.turn
+	if str(stop["type"]) != "requires_action" {
+		t = s.ending("session.status_idle", at)
+	}
 	if t == nil {
 		return
 	}
-	stop := obj(e["stop_reason"])
 	switch str(stop["type"]) {
 	case "requires_action":
 		ids, _ := stop["event_ids"].([]any)
@@ -714,28 +795,35 @@ func (s *sessionTracker) record(t *turn, end turnEnd, endAt msTime) {
 		s.conversation = i.ConversationID() // minted for the first turn when nothing names one
 	}
 	kit.Adopt(i, managedAgentsIntegration, s.cfg.analytics)
-	for _, c := range t.calls {
-		read, write := num(c.usage["cache_read_input_tokens"]), num(c.usage["cache_creation_input_tokens"])
+	calls := slices.Clone(t.calls)
+	for _, key := range t.foldOrder {
+		calls = append(calls, *t.foldedCalls[key])
+	}
+	for _, c := range calls {
 		i.RecordCall(rudderstackai.LLMCall{
 			Integration: managedAgentsIntegration, Provider: "anthropic", Model: c.model, AgentName: c.agent,
-			InputTokens: num(c.usage["input_tokens"]) + read + write, OutputTokens: num(c.usage["output_tokens"]),
-			CachedInputTokens: read, CacheWriteTokens: write, ServiceTier: c.serviceTier,
-			ErrorType: c.errorType, UsageUnknown: c.errorType != "", OutputText: c.outputText,
-			StartedAt: local(c.startAt), EndedAt: local(c.endAt),
+			InputTokens: c.input, OutputTokens: c.output, CachedInputTokens: c.cached, CacheWriteTokens: c.cacheWrite,
+			CallCount: c.callCount, ServiceTier: c.serviceTier, ErrorType: c.errorType, UsageUnknown: c.errorType != "",
+			OutputText: c.outputText, StartedAt: local(c.startAt), EndedAt: local(c.endAt),
 		})
 	}
 	// The grader's model is unknown: it never becomes primary_model.
-	if n := len(t.calls); n > 0 && t.calls[n-1].agent == grader && s.cfg.model != "" {
+	if n := len(calls); n > 0 && calls[n-1].agent == grader && s.cfg.model != "" {
 		kit.PrimaryModel(i, s.cfg.model, "anthropic")
 	}
-	if len(t.tools) > 0 {
-		calls := make([]rudderstackai.ToolCall, len(t.tools))
-		for n, tool := range t.tools {
-			calls[n] = rudderstackai.ToolCall{
+	if len(t.tools) > 0 || len(t.foldedTools) > 0 {
+		toolCalls := make([]rudderstackai.ToolCall, 0, len(t.tools))
+		for _, tool := range t.tools {
+			toolCalls = append(toolCalls, rudderstackai.ToolCall{
 				ID: tool.id, Name: tool.name, MCPServer: tool.mcpServer, AgentName: s.cfg.agentName, Args: tool.args,
+			})
+		}
+		for _, key := range t.toolOrder {
+			for range t.foldedTools[key] {
+				toolCalls = append(toolCalls, rudderstackai.ToolCall{Name: key.name, MCPServer: key.mcpServer, AgentName: s.cfg.agentName})
 			}
 		}
-		i.RecordToolCalls(calls...)
+		i.RecordToolCalls(toolCalls...)
 		for _, tool := range t.tools {
 			if tool.id != "" && (tool.settled || tool.err != nil) {
 				kit.RecordToolResult(i, tool.id, rudderstackai.ToolResult{
@@ -760,12 +848,16 @@ func (s *sessionTracker) record(t *turn, end turnEnd, endAt msTime) {
 				pausedTurns.order = append(pausedTurns.order, s.cfg.sessionID)
 			}
 			pausedTurns.m[s.cfg.sessionID] = i
+			evicted := false
 			for len(pausedTurns.m) > kit.MaxMapEntries() && len(pausedTurns.order) > 0 {
 				delete(pausedTurns.m, pausedTurns.order[0])
 				pausedTurns.order = pausedTurns.order[1:]
-				kit.LimitReached("claude-managed-agents paused turns")
+				evicted = true
 			}
 			pausedTurns.Unlock()
+			if evicted { // reported outside the lock: an onError callback may track another stream
+				kit.LimitReached("claude-managed-agents paused turns")
+			}
 		}
 		return
 	}
@@ -790,9 +882,10 @@ func first(values ...string) string {
 	return ""
 }
 
-// boundedSet keeps at most MaxMapEntries IDs, dropping the oldest.
+// boundedSet keeps at most MaxMapEntries IDs, dropping the oldest. Streams of one session share it.
 type boundedSet struct {
 	where string
+	mu    sync.Mutex
 	m     map[string]struct{}
 	order []string
 }
@@ -801,16 +894,31 @@ func newBoundedSet(where string) *boundedSet {
 	return &boundedSet{where: where, m: map[string]struct{}{}}
 }
 
-func (b *boundedSet) has(id string) bool { _, ok := b.m[id]; return ok }
+func (b *boundedSet) has(id string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	_, ok := b.m[id]
+	return ok
+}
 
-func (b *boundedSet) add(id string) {
+// add adds id; false when it was there already.
+func (b *boundedSet) add(id string) bool {
+	b.mu.Lock()
+	if _, ok := b.m[id]; ok {
+		b.mu.Unlock()
+		return false
+	}
 	b.m[id] = struct{}{}
 	b.order = append(b.order, id)
-	if limit := kit.MaxMapEntries(); len(b.m) > limit {
-		for len(b.m) > limit && len(b.order) > 0 {
-			delete(b.m, b.order[0])
-			b.order = b.order[1:]
-		}
+	evicted := false
+	for limit := kit.MaxMapEntries(); len(b.m) > limit && len(b.order) > 0; {
+		delete(b.m, b.order[0])
+		b.order = b.order[1:]
+		evicted = true
+	}
+	b.mu.Unlock()
+	if evicted { // reported outside the lock: an onError callback may track another stream
 		kit.LimitReached(b.where)
 	}
+	return true
 }

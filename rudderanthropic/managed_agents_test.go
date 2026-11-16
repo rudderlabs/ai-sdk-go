@@ -445,3 +445,22 @@ func TestManagedAgentsModelOptionWinsOverTheSession(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestManagedAgentsFoldsCallsAndToolsPastTheCap(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 2}))
+	at := `"processed_at":"2026-11-16T10:00:01.000Z"`
+	raw := []json.RawMessage{json.RawMessage(`{"id":"sevt_fold_u","type":"user.message","content":[],` + at + `}`)}
+	for n := range 5 {
+		raw = append(raw,
+			json.RawMessage(fmt.Sprintf(`{"id":"sevt_fold_c%d","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":10,"output_tokens":1},%s}`, n, at)),
+			json.RawMessage(fmt.Sprintf(`{"id":"sevt_fold_t%d","type":"agent.tool_use","name":"bash","input":{},%s}`, n, at)))
+	}
+	raw = append(raw, json.RawMessage(`{"id":"sevt_fold_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at+`}`))
+	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, raw)}, rudderanthropic.WithSessionID("sesn_fold"))
+	for events.Next() {
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["llm_call_count"] != float64(5) || got[0]["tool_call_count"] != float64(5) || got[0]["total_input_tokens"] != float64(50) {
+		t.Fatalf("%v", got)
+	}
+}
