@@ -602,3 +602,38 @@ func render(e object) string {
 	b, _ := json.Marshal(e)
 	return string(b)
 }
+
+func TestSpanDedupProcessorRejectingAtStartStillSettles(t *testing.T) {
+	ok := func(s sdktrace.ReadOnlySpan) bool { return s.Status().Code != codes.Error }
+	failed := func(s sdktrace.ReadOnlySpan) bool { return s.Status().Code == codes.Error }
+	for _, reverse := range []bool{false, true} {
+		t.Run("reverse="+strconvBool(reverse), func(t *testing.T) {
+			// One accepts at start and rejects at the end; the other rejects at start and exports.
+			filters := [2]func(sdktrace.ReadOnlySpan) bool{ok, failed}
+			if reverse {
+				filters[0], filters[1] = filters[1], filters[0]
+			}
+			provider, p, events := testProvider(t, Options{Simple: true, Filter: filters[0]})
+			other, err := NewSpanProcessor(Options{Simple: true, Filter: filters[1], Analytics: p.exporter.client})
+			if err != nil {
+				t.Fatal(err)
+			}
+			provider.RegisterSpanProcessor(other)
+			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+				t.Fatal(err)
+			}
+			ctx, i, o := ownerSpan(provider.Tracer("app"))
+			wrapperIn(ctx, t, i, events)
+			o.SetStatus(codes.Error, "")
+			o.End()
+			i.End(rudderstackai.EndOptions{})
+			spans := spanEvents(events())
+			if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
+				t.Fatalf("want only the exported owner, got %d spans", len(spans))
+			}
+			if strings.Contains(render(spans[0]), "rudderstack.span_source") {
+				t.Error("the SDK fallback went out although a processor exported the owner")
+			}
+		})
+	}
+}
