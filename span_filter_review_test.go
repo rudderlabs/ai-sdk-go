@@ -6,6 +6,43 @@ import (
 	"time"
 )
 
+func TestSpanRulesNestedResponseIDs(t *testing.T) {
+	for _, tc := range []struct {
+		name, parentResponseID, childResponseID string
+		count                                   int
+	}{
+		{"distinct", "parent-response", "child-response", 2},
+		{"shared", "shared-response", "shared-response", 1},
+		{"parent absent", "", "child-response", 1},
+		{"child absent", "parent-response", "", 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := setupAI(t, WithLLMCallEvents(true))
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+			i.recordSpanAncestry("trace", "parent", "")
+			i.recordSpanAncestry("trace", "child", "parent")
+			start := time.Now().Add(-time.Second)
+			for _, call := range []LLMCall{
+				taggedRuleCall("child", "parent", true, tc.childResponseID, ""),
+				taggedRuleCall("parent", "", true, tc.parentResponseID, ""),
+			} {
+				call.InputTokens, call.OutputTokens = 10, 2
+				call.StartedAt, call.EndedAt = start, start.Add(time.Millisecond)
+				call.spanSource.Start, call.spanSource.End = float64(start.UnixMilli()), float64(call.EndedAt.UnixMilli())
+				i.RecordCall(call)
+			}
+			i.End(EndOptions{})
+			response := lastResponse(t, r)
+			if response["llm_call_count"] != tc.count || response["total_input_tokens"] != tc.count*10 || response["total_output_tokens"] != tc.count*2 {
+				t.Fatal(response)
+			}
+			if calls := r.named("ai_llm_response_received"); len(calls) != tc.count {
+				t.Fatal(calls)
+			}
+		})
+	}
+}
+
 func TestSpanRulesMissingBridgeAncestryKeepsCalls(t *testing.T) {
 	for _, missing := range []string{"evicted", "unknown"} {
 		for _, rule := range []string{"prep", "nested"} {

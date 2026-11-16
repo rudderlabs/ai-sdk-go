@@ -203,7 +203,7 @@ func skippedSpanCalls(calls []*recordedCall, endedAt float64) map[*recordedCall]
 			if node.Error {
 				matching = evidence.Error && sameModel && overlaps
 			}
-			nested := descendant(evidence, node) == related && (evidence.ResponseID != "" || evidence.Usage) && matching
+			nested := descendant(evidence, node) == related && (node.ResponseID == "" || node.ResponseID == evidence.ResponseID) && (evidence.ResponseID != "" || evidence.Usage) && matching
 			if (prep || nested) && decide(other) == keep {
 				result = skip
 				break

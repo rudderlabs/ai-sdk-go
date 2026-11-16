@@ -19268,6 +19268,195 @@
           }
         }
       ]
+    },
+    {
+      "name": "sdk6898_nested_distinct_response_ids_keeps_both",
+      "description": "Successful nested calls to the same provider and model with overlapping windows, distinct response IDs and usage are separate requests. Keep both calls and their usage.",
+      "config": {
+        "advanceClock": true,
+        "emitLlmCalls": true,
+        "perCallContent": true
+      },
+      "interaction": {
+        "interactionId": "int_fixture_1",
+        "conversationId": "conv_fixture_1",
+        "userId": "user_1",
+        "feature": "support_bot",
+        "promptText": "Where is my order 1234?"
+      },
+      "steps": [
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000c6",
+            "parentSpanId": "0000000000006913",
+            "name": "child",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000200000000",
+            "endTimeUnixNano": "1760000000800000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "gen_ai.operation.name": "chat",
+              "gen_ai.provider.name": "openai",
+              "gen_ai.request.model": "gpt-5",
+              "gen_ai.response.id": "resp-child",
+              "gen_ai.usage.input_tokens": 100,
+              "gen_ai.usage.output_tokens": 20
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "0000000000006913",
+            "name": "parent",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000900000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "gen_ai.operation.name": "chat",
+              "gen_ai.provider.name": "openai",
+              "gen_ai.request.model": "gpt-5",
+              "gen_ai.response.id": "resp-parent",
+              "gen_ai.usage.input_tokens": 200,
+              "gen_ai.usage.output_tokens": 40
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": "openai",
+            "model": "gpt-5",
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "total_tokens": 120,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "response_id": "resp-child",
+            "call_index": 1
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": "openai",
+            "model": "gpt-5",
+            "input_tokens": 200,
+            "output_tokens": 40,
+            "total_tokens": 240,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "response_id": "resp-parent",
+            "call_index": 2
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-5",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 2,
+            "tool_call_count": 0,
+            "total_input_tokens": 300,
+            "total_output_tokens": 60,
+            "total_tokens": 360,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-5",
+                "call_count": 2,
+                "input_tokens": 300,
+                "output_tokens": 60,
+                "total_tokens": 360,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        }
+      ]
     }
   ]
 }
