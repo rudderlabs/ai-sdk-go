@@ -836,9 +836,11 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 func (rc *reqCtx) Finished(method, name string, size int, errorType string) {
 	event, nameKey := "mcp_resource_read", "resource_name"
 	if method == "prompts/get" {
+		// The exact registered name, as for tools; resource names come off the wire.
 		event, nameKey = "mcp_prompt_used", "prompt_name"
+	} else {
+		name = capID(name)
 	}
-	name = capID(name)
 	if name == "" {
 		return
 	}
