@@ -202,6 +202,7 @@ func (s *SessionEvents[T]) finishLocked(err error) {
 		return
 	}
 	s.finished = true
+	s.closed.Store(true) // an ended stream is not read again
 	if s.tracker != nil {
 		contain(func() { s.tracker.close(err) })
 	}
