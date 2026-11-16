@@ -1137,6 +1137,9 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			credits = earlier.credits
 		}
 	}
+	if useTwinUsage && pricingTwin.callCount < pricingCallCount && !pricingTwin.creditsExplicit {
+		credits = creditsOf(call.Credits)
+	}
 	if call.ErrorType == "cancelled" {
 		credits = nil
 	}
@@ -1154,6 +1157,14 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		creditCall := own
 		creditCall.CallCount = pricingCallCount
 		if useTwinUsage {
+			creditCall.AgentName = first(pricingTwin.agentName, creditCall.AgentName)
+			creditCall.CallPurpose = first(pricingTwin.callPurpose, creditCall.CallPurpose)
+			if pricingTwin.fallbackUsed != nil {
+				creditCall.FallbackUsed = pricingTwin.fallbackUsed
+			}
+			if pricingTwin.byok != nil {
+				creditCall.BYOK = pricingTwin.byok
+			}
 			creditCall.Model = first(pricingTwin.rawModel, pricingTwin.model)
 			creditCall.InputTokens, creditCall.OutputTokens = pricingTwin.inputTokens, pricingTwin.outputTokens
 			creditCall.ReasoningTokens, creditCall.CachedInputTokens = pricingTwin.reasoningTokens, pricingTwin.cachedInputTokens

@@ -633,5 +633,17 @@
       "total_input_tokens": 10,
       "total_credits": 7
     }
+  },
+  "aggregate_twin_metadata": {
+    "call_count": 3,
+    "input_tokens": 10,
+    "cost_usd": 0.01,
+    "credits_per_call": 7,
+    "expected": {
+      "llm_call_count": 3,
+      "total_input_tokens": 10,
+      "total_cost_usd": 0.01,
+      "total_credits": 21
+    }
   }
 }

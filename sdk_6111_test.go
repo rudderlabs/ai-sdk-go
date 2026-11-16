@@ -1179,6 +1179,75 @@ func TestSDK6111R4LateTwinsAfterAggregateReportsPreservePrimaryOrder(t *testing.
 	}
 }
 
+func TestSDK6111R5AggregateTwinPricingRetainsMetadataWithUsage(t *testing.T) {
+	raw, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures map[string]json.RawMessage
+	if err = json.Unmarshal(raw, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Count    int            `json:"call_count"`
+		Input    int            `json:"input_tokens"`
+		Cost     float64        `json:"cost_usd"`
+		Credits  float64        `json:"credits_per_call"`
+		Expected map[string]any `json:"expected"`
+	}
+	if err = json.Unmarshal(fixtures["aggregate_twin_metadata"], &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, spanFirst := range []bool{false, true} {
+			for field := 0; field < 4; field++ {
+				t.Run(fmt.Sprintf("%s/spanFirst=%t/field=%d", mode, spanFirst, field), func(t *testing.T) {
+					r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+						present := []bool{c.AgentName == "answer", c.CallPurpose == "answer", c.FallbackUsed != nil && *c.FallbackUsed, c.BYOK != nil && *c.BYOK}
+						rate := 1.0
+						if present[field] {
+							rate = fixture.Credits
+						}
+						return Ptr(float64(c.CallCount) * rate), nil
+					}))
+					w := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "openai", ResponseID: "r5", InputTokens: fixture.Input, OutputTokens: 2, CostUSD: Ptr(fixture.Cost)}, 100)
+					switch field {
+					case 0:
+						w.AgentName = "answer"
+					case 1:
+						w.CallPurpose = "answer"
+					case 2:
+						w.FallbackUsed = Ptr(true)
+					case 3:
+						w.BYOK = Ptr(true)
+					}
+					s := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "tracing", ResponseID: "r5", UsageUnknown: true, CallCount: fixture.Count}, 100)
+					first, second := w, s
+					if spanFirst {
+						first, second = s, w
+					}
+					i := sdk6111ReviewPending(t, r, mode, func(i *Interaction) { i.RecordCall(first) })
+					i.RecordCall(second)
+					i.End(EndOptions{})
+					resp := lastResponse(t, r)
+					for k, v := range fixture.Expected {
+						if sdk6111Num(resp[k]) != v.(float64) {
+							t.Errorf("%s=%v want %v", k, resp[k], v)
+						}
+					}
+					var credits float64
+					for _, e := range r.named("ai_response_received") {
+						credits += sdk6111Num(e.Properties["total_credits"])
+					}
+					if credits != 21 {
+						t.Fatal(credits)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestSDK6111R1CreditsFollowRetainedStatusAndTwinReplacement(t *testing.T) {
 	for _, mode := range []string{"segment", "in-process", "json"} {
 		for _, source := range []string{"openai", "tracing"} {
