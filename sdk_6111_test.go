@@ -1140,6 +1140,45 @@ func TestSDK6111R3RepeatHooksRetainNewerEnrichmentAndPricing(t *testing.T) {
 	}
 }
 
+func TestSDK6111R4LateTwinsAfterAggregateReportsPreservePrimaryOrder(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, count := range []int{3, 10} {
+			for _, late := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/count=%d/late=%t", mode, count, late), func(t *testing.T) {
+					r := setupAI(t, WithLLMCallEvents(true))
+					older := sdk6111Window(LLMCall{Provider: "openai", Model: "older-model", Integration: "openai", ResponseID: "older", InputTokens: 10, OutputTokens: 2, CostUSD: Ptr(0.01)}, 200)
+					i := sdk6111ReviewPending(t, r, mode, func(i *Interaction) {
+						i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "aggregate-model", Integration: "openai", ResponseID: "aggregate", CallCount: count, InputTokens: 30, CostUSD: Ptr(0.03)}, 100))
+						span := older
+						span.Integration = "tracing"
+						span.ErrorType = "timeout"
+						i.RecordCall(span)
+					})
+					if !late {
+						i.RecordCall(older)
+					}
+					i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "latest-model", Integration: "openai", ResponseID: "latest", InputTokens: 20, CostUSD: Ptr(0.02)}, 300))
+					if late {
+						i.RecordCall(older)
+					}
+					i.End(EndOptions{})
+					resp := lastResponse(t, r)
+					if resp["primary_model"] != "latest-model" || sdk6111Num(resp["llm_call_count"]) != float64(count+2) || sdk6111Num(resp["total_input_tokens"]) != 60 || sdk6111Num(resp["total_cost_usd"]) != 0.06 {
+						t.Fatal(resp)
+					}
+					var calls float64
+					for _, e := range r.named("ai_response_received") {
+						calls += sdk6111Num(e.Properties["llm_call_count"])
+					}
+					if calls != float64(count+2) {
+						t.Fatal(calls)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestSDK6111R1CreditsFollowRetainedStatusAndTwinReplacement(t *testing.T) {
 	for _, mode := range []string{"segment", "in-process", "json"} {
 		for _, source := range []string{"openai", "tracing"} {

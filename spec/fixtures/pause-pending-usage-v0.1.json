@@ -177,7 +177,8 @@
               "matched": false,
               "started_at": 100,
               "ended_at": 110,
-              "raw_model": "example-model"
+              "raw_model": "example-model",
+              "report_sequence": 1
             },
             {
               "call_event_pending": true,
@@ -202,7 +203,8 @@
               "ended_at": 210,
               "last": true,
               "last_ok": true,
-              "raw_model": "example-model"
+              "raw_model": "example-model",
+              "report_sequence": 2
             }
           ],
           "user_id": "u",
@@ -255,7 +257,8 @@
               "latency_ms": 10,
               "call_index": 1,
               "started_at": 100,
-              "ended_at": 110
+              "ended_at": 110,
+              "report_sequence": 1
             },
             {
               "provider": "openai",
@@ -280,7 +283,8 @@
               "started_at": 200,
               "ended_at": 210,
               "last": true,
-              "last_ok": true
+              "last_ok": true,
+              "report_sequence": 2
             }
           ],
           "primary": {
