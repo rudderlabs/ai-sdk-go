@@ -83,10 +83,19 @@ func TestLoadMCPMaps(t *testing.T) {
 		"inputRequired": s.inputRequired.size(), "expiries": s.expiries.size(),
 	}
 	s.Unlock()
+	servers.Lock()
+	sizes["servers"] = servers.m.size()
+	servers.Unlock()
 	t.Logf("MCP map sizes (cap %d) after %d calls: %v", maxMapEntries, workers*callsPerWorker, sizes)
+	// Templates and server names have their own fixed caps; every other map has MaxMapEntries.
+	caps := map[string]int{"templates": maxTemplates, "servers": maxServers}
 	for m, n := range sizes {
-		if n > maxMapEntries {
-			t.Errorf("%s holds %d entries, over its cap of %d", m, n, maxMapEntries)
+		limit, ok := caps[m]
+		if !ok {
+			limit = maxMapEntries
+		}
+		if n > limit {
+			t.Errorf("%s holds %d entries, over its cap of %d", m, n, limit)
 		}
 	}
 	// Every call has its own interaction, so the per-interaction maps must have filled and evicted.
