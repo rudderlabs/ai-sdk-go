@@ -353,8 +353,10 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	}
 	if !knownClient(client) && r.HTTP {
 		// The raw header never becomes an event property.
-		client = clientFromUserAgent(r.UserAgent)
-		seenClient = client
+		if uaClient := clientFromUserAgent(r.UserAgent); uaClient != nil {
+			client = uaClient
+			seenClient = client
+		}
 	}
 	// Like Node, client-seen keeps the request's title while resolving name/version.
 	if requestClient != nil {

@@ -2,14 +2,91 @@ package ruddermcpgo
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mark3labs/mcp-go/server"
+	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
+
+type userAgentTransport struct{}
+
+func (userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("User-Agent", "Cursor/1.7.4")
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestMCPUserAgentLegacySSEFallback(t *testing.T) {
+	s := workspaceServer(t.Name(), nil)
+	r := wrap(t, s, Options{Transport: "sse"})
+	ts := httptest.NewServer(server.NewSSEServer(s))
+	defer ts.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cs, err := sdk.NewClient(&sdk.Implementation{}, nil).Connect(ctx,
+		&sdk.SSEClientTransport{Endpoint: ts.URL + "/sse", HTTPClient: &http.Client{Transport: userAgentTransport{}}},
+		&sdk.ClientSessionOptions{ProtocolVersion: "2025-06-18"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cs.Close() }()
+	res, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: "list_destinations", Arguments: map[string]any{"workspace_id": "w"}})
+	if err != nil || res.IsError {
+		t.Fatalf("SSE tool call: result=%v error=%v", res, err)
+	}
+	for _, event := range []string{"mcp_client_seen", "mcp_tool_called"} {
+		p := r.props(t, event)
+		if p["client_name"] != "Cursor" || p["client_version"] != "1.7.4" {
+			t.Errorf("%s did not resolve SSE User-Agent: %v", event, p)
+		}
+	}
+}
+
+func TestMCPUserAgentPreservesTitleOnlySessionClient(t *testing.T) {
+	for _, ua := range []string{"", " \t", "Cursor/1.7.4"} {
+		t.Run(ua, func(t *testing.T) {
+			s := workspaceServer(t.Name(), nil)
+			r := wrap(t, s, Options{Identify: func(context.Context) (rudderstackai.Identity, error) {
+				return rudderstackai.Identity{UserID: "user"}, nil
+			}})
+			lookup(s).sessions.store(`["","user","","session"]`, sessionInfo{client: &mcpbridge.Client{Title: "Session Client Title"}, version: "2025-06-18"})
+			body := mustJSON(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{
+				"name": "list_destinations", "arguments": map[string]any{"workspace_id": "w"},
+				"_meta": map[string]any{"io.modelcontextprotocol/protocolVersion": "2025-06-18"},
+			}})
+			req := httptest.NewRequest("POST", "http://localhost/mcp", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			req.Header.Set("Mcp-Session-Id", "session")
+			req.Header.Set("Mcp-Protocol-Version", "2025-06-18")
+			req.Header.Set("Mcp-Method", "tools/call")
+			req.Header.Set("Mcp-Name", "list_destinations")
+			if ua != "" {
+				req.Header.Set("User-Agent", ua)
+			}
+			response := httptest.NewRecorder()
+			server.NewStreamableHTTPServer(s, server.WithStateLess(true)).ServeHTTP(response, req)
+			if response.Code != 200 || strings.Contains(response.Body.String(), `"error"`) {
+				t.Fatalf("HTTP %d: %s", response.Code, response.Body.String())
+			}
+			p := r.props(t, "mcp_client_seen")
+			if ua == "Cursor/1.7.4" {
+				if p["client_name"] != "Cursor" || p["client_version"] != "1.7.4" || p["client_title"] != nil {
+					t.Errorf("User-Agent client = %v", p)
+				}
+			} else if p["client_title"] != "Session Client Title" || p["client_name"] != nil || p["client_version"] != nil {
+				t.Errorf("title-only session client lost: %v", p)
+			}
+		})
+	}
+}
 
 func TestMCPUserAgentFallback(t *testing.T) {
 	for _, scenario := range []string{"known", "seen", "unknown", "app", "app_version_only", "empty", "blank", "panic", "absent", "metadata", "resolver", "title_only", "title_blank_labels", "title_unknown", "title_app", "title_empty"} {
