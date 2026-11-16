@@ -203,7 +203,11 @@ func stream(ctx context.Context, body, cuts []byte, wrap bool) string {
 	for s.Next() {
 		out = append(out, s.Current().RawJSON())
 	}
-	return outcome(strings.Join(out, "\n"), s.Err())
+	// Every chunk the app saw, then the error that ended the stream, if any.
+	if err := s.Err(); err != nil {
+		out = append(out, "error: "+err.Error())
+	}
+	return strings.Join(out, "\n")
 }
 
 // stable drops the event fields that differ between two runs of the same call.
@@ -235,7 +239,7 @@ func FuzzMessagesStreamSplit(f *testing.F) {
 			var rec *recorder
 			whole, rec = tracked(t, func(ctx context.Context) string { return stream(ctx, body, nil, true) })
 			wholeEvents = stable(checkAnswer(t, rec))
-			if strings.HasPrefix(whole, "error: ") {
+			if strings.Contains(whole, "error: ") {
 				t.Fatalf("the recorded stream failed: %s", whole)
 			}
 		})

@@ -184,6 +184,15 @@ func TestLoad(t *testing.T) {
 	// rebuilt per request.
 	ctx := context.Background()
 	sessions := make([]*mcp.ClientSession, workers)
+	// Released however the test ends, so a failed check or worker leaves nothing running.
+	t.Cleanup(func() {
+		for _, cs := range sessions {
+			if cs != nil {
+				_ = cs.Close()
+			}
+		}
+		_ = client.Close()
+	})
 	for w := range sessions {
 		s := mcp.NewServer(&mcp.Implementation{Name: server, Version: "1.0.0"}, nil)
 		mcp.AddTool(s, &mcp.Tool{Name: "lookup_order"}, func(_ context.Context, _ *mcp.CallToolRequest, in lookupArgs) (*mcp.CallToolResult, any, error) {
@@ -268,11 +277,13 @@ func TestLoad(t *testing.T) {
 
 	var warmHeap uint64
 	phase1 := phase(seconds, func() { warmHeap = heapAfterGC() })
-	sent := [2]int64{interactions.Load(), mcpCalls.Load()}
+	sent := [3]int64{interactions.Load(), interactions.Load(), mcpCalls.Load()}
 	if !rudderstackai.Flush(ctx) {
 		t.Error("flush after phase 1 timed out")
 	}
-	delivered := [2]int64{int64(plane.count("ai_response_received")), int64(plane.count("mcp_tool_called"))}
+	delivered := [3]int64{
+		int64(plane.count("ai_user_prompt_created")), int64(plane.count("ai_response_received")), int64(plane.count("mcp_tool_called")),
+	}
 
 	plane.failing.Store(true)
 	phase2 := phase(seconds/2, nil)
@@ -282,15 +293,14 @@ func TestLoad(t *testing.T) {
 		_ = cs.Close()
 	}
 	endHeap := heapAfterGC()
-	_ = client.Close()
 
 	p2 := interactions.Load() - sent[0]
 	summary := fmt.Sprintf("### Go load test (%s, %d workers, %.0f interactions/s target)\n\n"+
 		"| Phase | Seconds | Interactions | MCP calls | Interactions/s | Data plane |\n| --- | --- | --- | --- | --- | --- |\n"+
-		"| 1 healthy | %.0f | %d | %d | %.0f | %d answers, %d tool calls delivered |\n"+
+		"| 1 healthy | %.0f | %d | %d | %.0f | %d prompts, %d answers, %d tool calls delivered |\n"+
 		"| 2 HTTP 500 | %.0f | %d | %d | %.0f | %d batches rejected |\n\n"+
 		"Heap after GC: %.1f MB after warm-up, %.1f MB at the end. Contained errors: %v.\n",
-		runtime.Version(), workers, rate, phase1, sent[0], sent[1], float64(sent[0])/phase1, delivered[0], delivered[1],
+		runtime.Version(), workers, rate, phase1, sent[0], sent[2], float64(sent[0])/phase1, delivered[0], delivered[1], delivered[2],
 		phase2, p2, mcpCalls.Load()-sent[1], float64(p2)/phase2, plane.rejected, float64(warmHeap)/1e6, float64(endHeap)/1e6, errs)
 	fmt.Println(summary)
 	if path := os.Getenv("GITHUB_STEP_SUMMARY"); path != "" {
@@ -301,7 +311,7 @@ func TestLoad(t *testing.T) {
 	}
 
 	if delivered != sent {
-		t.Errorf("phase 1 delivered %v (answers, tool calls), sent %v", delivered, sent)
+		t.Errorf("phase 1 delivered %v (prompts, answers, tool calls), want %v", delivered, sent)
 	}
 	if errs["internal"] > 0 {
 		t.Errorf("%d SDK steps failed", errs["internal"])

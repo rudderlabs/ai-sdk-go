@@ -213,7 +213,16 @@ func streamed(ctx context.Context, sc streamCase, body []byte, cuts []byte, wrap
 		opts = append(opts, rudderopenai.WithTracking())
 	}
 	chunks, err := sc.consume(ctx, fakeClient(static{200, "text/event-stream", split(body, cuts)}, opts...))
-	return outcome(strings.Join(chunks, "\n"), err)
+	return delivered(chunks, err)
+}
+
+// delivered is what the app saw of a stream: every chunk, then the error that ended it, if any.
+func delivered(chunks []string, err error) string {
+	out := strings.Join(chunks, "\n")
+	if err != nil {
+		out += "\nerror: " + err.Error()
+	}
+	return out
 }
 
 // stable drops the event fields that differ between two runs of the same call.
@@ -248,7 +257,7 @@ func fuzzStreamSplit(f *testing.F, name string) {
 				return nil
 			})
 			wholeEvents = stable(checkAnswer(t, rec))
-			if strings.HasPrefix(whole, "error: ") {
+			if strings.Contains(whole, "error: ") {
 				t.Fatalf("the recorded stream failed: %s", whole)
 			}
 		})

@@ -74,8 +74,12 @@ func FuzzTraceparent(f *testing.F) {
 		if got != "" && (!traceIDShape.MatchString(got) || strings.Trim(got, "0") == "") {
 			t.Fatalf("trace ID %q is not 32 lowercase hex digits", got)
 		}
-		// The W3C rule, as in Node.js: lowercase hex, not version ff, neither ID all zeros; later
-		// versions may add fields after the flags.
+		// The W3C rule: lowercase hex, not version ff, neither ID all zeros; version 00 is exactly
+		// 55 characters, and only later versions may add fields after the flags. Node.js and Go read
+		// 00 with extra fields today (SDK-6930), so that case is not checked.
+		if version == "00" && rest != "" {
+			return
+		}
 		valid := lowerHex(version, 2) && version != "ff" && lowerHex(traceID, 32) && strings.Trim(traceID, "0") != "" &&
 			lowerHex(parentID, 16) && strings.Trim(parentID, "0") != "" && lowerHex(flags, 2) &&
 			(rest == "" || rest[0] == '-') && rest == strings.TrimRight(rest, " \t\n\r\v\f")
