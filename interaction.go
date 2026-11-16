@@ -993,7 +993,7 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 		byok = call.BYOK
 	}
 	credits := creditsOf(call.Credits)
-	if call.ErrorType == "cancelled" {
+	if earlier.errorType == "cancelled" {
 		credits = nil
 	}
 	explicit := credits != nil

@@ -905,3 +905,139 @@ func TestSDK6111GAEnrichingRepeatPricesLargerReportedCountWithoutReplacingUsage(
 		t.Fatalf("response = %v", resp)
 	}
 }
+
+func TestSDK6111R1CancelledCallsNeverGainCredits(t *testing.T) {
+	for _, field := range []string{"agent", "purpose", "fallback", "byok"} {
+		for _, mode := range []string{"segment", "in-process", "json"} {
+			for _, source := range []string{"openai", "tracing"} {
+				t.Run(field+"/"+mode+"/"+source, func(t *testing.T) {
+					r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(CreditCall) (*float64, error) { t.Error("cancelled call priced"); return Ptr(1.0), nil }))
+					_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+					first := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", InputTokens: 10, OutputTokens: 2, ResponseID: "r1", Integration: source, ErrorType: "cancelled"}, 100)
+					if mode == "segment" {
+						i.RecordCall(first)
+					} else {
+						client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received", reenter: func() { i.RecordCall(first) }}
+						i.explicitAnalytics = client
+						snapshot, ok := i.Pause(PauseOptions{})
+						if !ok {
+							t.Fatal("pause failed")
+						}
+						if mode == "json" {
+							var stored PausedInteraction
+							if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+								t.Fatal(err)
+							}
+							_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+						} else {
+							i.Resume()
+						}
+					}
+					later := first
+					later.ErrorType = ""
+					later.Credits = Ptr(7.0)
+					switch field {
+					case "agent":
+						later.AgentName = "answer"
+					case "purpose":
+						later.CallPurpose = "answer"
+					case "fallback":
+						later.FallbackUsed = Ptr(true)
+					case "byok":
+						later.BYOK = Ptr(true)
+					}
+					i.RecordCall(later)
+					i.End(EndOptions{})
+					var calls, tokens float64
+					for _, e := range r.named("ai_response_received") {
+						calls += sdk6111Num(e.Properties["llm_call_count"])
+						tokens += sdk6111Num(e.Properties["total_input_tokens"])
+						if _, ok := e.Properties["total_credits"]; ok {
+							t.Error("cancelled credits", e.Properties)
+						}
+					}
+					if calls != 1 || tokens != 10 {
+						t.Fatalf("calls=%g tokens=%g", calls, tokens)
+					}
+					if lastResponse(t, r)["response_status"] != "cancelled" {
+						t.Fatal(lastResponse(t, r))
+					}
+					for _, e := range r.named("ai_llm_response_received") {
+						if _, ok := e.Properties["credits"]; ok {
+							t.Error("call credits", e.Properties)
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func sdk6111ReviewPending(t *testing.T, r *recorder, mode string, record func(*Interaction)) *Interaction {
+	t.Helper()
+	client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+	if mode == "segment" {
+		record(i)
+		return i
+	}
+	client.reenter = func() { record(i) }
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("pause")
+	}
+	if mode == "json" {
+		var stored PausedInteraction
+		if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+			t.Fatal(err)
+		}
+		_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	} else {
+		i.Resume()
+	}
+	return i
+}
+
+func TestSDK6111R1CreditsFollowRetainedStatusAndTwinReplacement(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, source := range []string{"openai", "tracing"} {
+			for _, errType := range []string{"", "timeout", "cancelled"} {
+				t.Run(mode+"/"+source+"/"+errType, func(t *testing.T) {
+					r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) { return Ptr(1.0), nil }))
+					call := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: source, ResponseID: "status", InputTokens: 10, ErrorType: errType}, 100)
+					i := sdk6111ReviewPending(t, r, mode, func(i *Interaction) { i.RecordCall(call) })
+					call.ErrorType = "cancelled"
+					call.AgentName = "agent"
+					call.Credits = Ptr(7.0)
+					i.RecordCall(call)
+					i.End(EndOptions{})
+					resp := lastResponse(t, r)
+					if errType == "cancelled" {
+						if _, ok := resp["total_credits"]; ok {
+							t.Fatal(resp)
+						}
+					} else if sdk6111Num(resp["total_credits"]) != 7 {
+						t.Fatal(resp)
+					}
+				})
+			}
+		}
+	}
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		t.Run(mode+"/replacement", func(t *testing.T) {
+			r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) { return Ptr(1.0), nil }))
+			call := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "tracing", ResponseID: "status-twin", InputTokens: 10, ErrorType: "cancelled"}, 100)
+			i := sdk6111ReviewPending(t, r, mode, func(i *Interaction) { i.RecordCall(call) })
+			call.Integration = "openai"
+			call.ErrorType = ""
+			call.AgentName = "agent"
+			call.Credits = Ptr(7.0)
+			i.RecordCall(call)
+			i.End(EndOptions{})
+			resp := lastResponse(t, r)
+			if resp["response_status"] != "success" || sdk6111Num(resp["total_credits"]) != 7 {
+				t.Fatal(resp)
+			}
+		})
+	}
+}
