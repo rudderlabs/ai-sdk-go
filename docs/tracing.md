@@ -122,8 +122,10 @@ call:
   span of its own, provided the processor exports that span: it must be sampled and pass the
   export filter when it starts. If it fails the filter when it ends, the SDK span is sent in its
   place, with its IDs; with several `rudderotel` processors, only when none of them exports it.
-  Each processor decides once, when the span ends, and exports by that same decision; a filter
-  that panics rejects the span, and a processor that shuts down first does not export it. `Flush`
+  Each processor decides once, when the span ends, and exports by that same decision; one that
+  has shut down counts as not exporting it, and a filter that panics rejects the span and is
+  reported to `WithOnError` as `user_callback`. An owning span a processor exports goes straight to
+  its exporter, outside the batch queue, so a full queue never drops it. `Flush`
   and `Shutdown` finish an unread joined call too, and its span then follows the same rule. Its
   `ai_llm_response_received.span_id` is the OpenTelemetry span's ID.
   No wrapper usage or content is copied onto your span; the processor's usual identity attributes
@@ -141,9 +143,9 @@ active SDK span decides. Limits:
   matched.
 - An owning span the exporter drops because it cannot fit `rudderotel.Options.MaxEventBytes`
   leaves the call without a span.
-- Past `Limits.MaxMapEntries` open owner spans, a new span cannot own a call, and past that many
-  held SDK spans under one owner, a further call has no span; both are reported to `WithOnError`
-  as `limit_reached`.
+- At most `Limits.MaxMapEntries` owning spans are open, and each holds at most that many SDK
+  spans waiting on its decision. Past either cap, `WithOnError` gets `limit_reached`: a new span
+  cannot own calls (they send their own spans), or a waiting SDK span is dropped.
 - A span that already ended, or that started in another interaction, is never joined.
 - An exported child of a dropped OpenTelemetry span keeps that span as its `parent_span_id`,
   although RudderStack never received it.
