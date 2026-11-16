@@ -2310,9 +2310,19 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 			return PausedInteraction{}, false
 		}
 	}
-	if i.ended || i.ending || !i.pausedAt.IsZero() {
+	if i.ended || i.ending {
 		defer i.mu.Unlock()
 		return i.snapshotLocked()
+	}
+	if !i.pausedAt.IsZero() {
+		// A tool settled since the pause has its result only here: its rules freeze into the snapshot.
+		i.pausing = true
+		i.mu.Unlock()
+		i.preparePendingRules(func() {
+			snapshot, ok = i.snapshotLocked()
+			i.pausing = false
+		})
+		return snapshot, ok
 	}
 	i.pausing = true
 	i.pauseCount++

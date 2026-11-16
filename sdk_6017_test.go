@@ -447,5 +447,22 @@ func TestSDK6017DeclaredRulesAroundAPause(t *testing.T) {
 			sdk6017Expect(t, "Searched", sdk6017ToolEvents(r, "Searched"), [][2]any{{"call_1", "success"}})
 			sdk6017Expect(t, "when calls", when, []any{"raw-result"})
 		})
+
+		t.Run(mode+"/are frozen with the result of a tool settled while paused, for a later snapshot", func(t *testing.T) {
+			var when []any
+			r := setupAI(t, sdk6017ResultRule(&when))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{ID: "call_1", Name: "search"})
+			first.Pause(PauseOptions{})
+			// Held: the run is still paused.
+			first.RecordToolResult("call_1", ToolResult{Result: "raw-result", Error: Ptr(false)})
+			sdk6017Expect(t, "when calls while paused", len(when), 0)
+			i := continued(t, first)
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			sdk6017Expect(t, "Searched", sdk6017ToolEvents(r, "Searched"), [][2]any{{"call_1", "success"}})
+			sdk6017Expect(t, "when calls", when, []any{"raw-result"})
+		})
 	}
 }
