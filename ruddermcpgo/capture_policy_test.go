@@ -118,3 +118,30 @@ func TestHeldErrorMessageRechecksLivePolicy(t *testing.T) {
 		})
 	}
 }
+
+// Rewrapping the server with ErrorMessage off while a failure is held leaves error_message out.
+func TestHeldErrorMessageFollowsRewrap(t *testing.T) {
+	for _, tc := range observedConnectors {
+		t.Run(tc.name, func(t *testing.T) {
+			hooks := &server.Hooks{}
+			s := server.NewMCPServer("rewrap-error-mcpgo", "1", server.WithToolCapabilities(true), server.WithHooks(hooks))
+			s.AddTool(mcp.NewTool("lookup"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return mcp.NewToolResultError("lookup failed"), nil
+			})
+			r := wrap(t, s, Options{CaptureContent: true})
+			hooks.AddAfterCallTool(func(context.Context, any, *mcp.CallToolRequest, any) {
+				if err := WrapServer(s, Options{Analytics: r, CaptureContent: true, ContentCapture: &rudderstackai.ContentCapture{ErrorMessage: rudderstackai.Ptr(false)}}); err != nil {
+					t.Error(err)
+				}
+			})
+			cs := tc.connect(t, s)
+			if _, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "lookup"}); err != nil {
+				t.Fatal(err)
+			}
+			p := waitProps(t, r, "mcp_tool_called")
+			if _, ok := p["error_message"]; ok || p["tool_status"] != "error" {
+				t.Fatalf("error_message sent after the rewrap turned it off: %v", p)
+			}
+		})
+	}
+}

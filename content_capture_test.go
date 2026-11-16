@@ -251,3 +251,29 @@ func TestHeldErrorMessageRechecksLivePolicy(t *testing.T) {
 		t.Fatalf("error_message sent after ErrorMessage turned off: %v", p)
 	}
 }
+
+// Rewrapping the server with ErrorMessage off while a failure is held leaves error_message out.
+func TestHeldErrorMessageFollowsRewrap(t *testing.T) {
+	setupAI(t)
+	s := failingServer("rewrap-error-mcp")
+	r := wrap(t, s, Options{CaptureContent: true})
+	s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			res, err := next(ctx, method, req)
+			if method == "tools/call" {
+				if e := WrapMCPServer(s, Options{Analytics: r, CaptureContent: true, ContentCapture: &ContentCapture{ErrorMessage: Ptr(false)}}); e != nil {
+					t.Error(e)
+				}
+			}
+			return res, err
+		}
+	})
+	cs := connectMaybeObserved(t, s, true)
+	if _, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "lookup", Arguments: map[string]any{"text": "lookup failed"}}); err == nil {
+		t.Fatal("expected error")
+	}
+	p := r.wait(t, "mcp_tool_called", 1)[0].Properties
+	if _, ok := p["error_message"]; ok || p["tool_status"] != "error" {
+		t.Fatalf("error_message sent after the rewrap turned it off: %v", p)
+	}
+}

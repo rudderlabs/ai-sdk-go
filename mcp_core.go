@@ -880,9 +880,9 @@ type heldEvents struct {
 	mu    sync.Mutex
 	props map[string]any
 	tool  bool
-	mask  func(string) (string, bool)
-	// allowed is the live ErrorMessage policy, checked again when the response arrives.
-	allowed func() bool
+	// current is the wrapper's options when the response arrives (a rewrap may replace them):
+	// their ErrorMessage policy and masking apply.
+	current func() *options
 	sends   []func()
 	done    bool
 	sent    chan struct{} // closed once flush has sent the held events
@@ -910,15 +910,19 @@ func (h *heldEvents) flush(response map[string]any) {
 	sends := h.sends
 	h.sends = nil
 	h.mu.Unlock()
-	if response != nil && h.allowed() {
+	if response != nil {
 		safely(func() {
+			opts := h.current()
+			if !opts.capture().ErrorMessage {
+				return
+			}
 			source := map[string]any{}
 			if e, ok := response["error"].(map[string]any); ok {
 				source["error"] = e
 			} else if r, ok := response["result"].(map[string]any); ok && h.tool {
 				source["result"] = r
 			}
-			if message := errorMessage(source, h.mask); message != "" {
+			if message := errorMessage(source, opts.mask); message != "" {
 				h.props["error_message"] = message
 			}
 		})
@@ -933,14 +937,23 @@ var failureEvents = set("mcp_tool_called", "mcp_resource_read", "mcp_prompt_used
 
 // send emits now, or holds a failed request's event (and those after it) for its response when
 // content capture is on and the application observes responses.
+// currentOptions are the wrapper's options now, else (no wrapper) the request's.
+func (rc *reqCtx) currentOptions() *options {
+	if rc.w != nil {
+		if o := rc.w.opts.Load(); o != nil {
+			return o
+		}
+	}
+	return rc.opts
+}
+
 func (rc *reqCtx) send(event string, p map[string]any, send func()) {
 	if h := rc.held; h != nil && h.add(send) {
 		return
 	}
 	if rc.responses != nil && rc.opts.capture().ErrorMessage && failureEvents[event] &&
 		p["tool_status"] == "error" && p["error_type"] != "cancelled" {
-		h := &heldEvents{props: p, tool: event == "mcp_tool_called", mask: rc.opts.mask, sends: []func(){send}, sent: make(chan struct{}),
-			allowed: func() bool { return rc.opts.capture().ErrorMessage }}
+		h := &heldEvents{props: p, tool: event == "mcp_tool_called", sends: []func(){send}, sent: make(chan struct{}), current: rc.currentOptions}
 		if rc.responses.Await(rc.rawID, h.flush) {
 			rc.held = h
 			return
