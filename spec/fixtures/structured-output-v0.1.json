@@ -887,6 +887,102 @@
       "suppressed_event": true
     }
   ],
+  "lifecycle_cases": [
+    {
+      "name": "pending forced tool result after resume across all segments",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "pause": true,
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 1,
+        "tool_events": 1,
+        "segment_tool_call_counts": [
+          0,
+          1
+        ],
+        "total_tool_call_count": 1
+      },
+      "result": {
+        "answer": "yes"
+      }
+    },
+    {
+      "name": "pending forced tool no result across all segments",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "pause": true,
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 0,
+        "segment_tool_call_counts": [
+          0,
+          0
+        ],
+        "total_tool_call_count": 0
+      }
+    },
+    {
+      "name": "forced tool result before pause across all segments",
+      "request": {
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "Schema"
+          }
+        }
+      },
+      "response_tool": {
+        "id": "call-schema",
+        "name": "Schema",
+        "args": {
+          "answer": "yes"
+        }
+      },
+      "pause": true,
+      "expected": {
+        "forced_tool": "Schema",
+        "tool_call_count": 0,
+        "tool_events": 1,
+        "segment_tool_call_counts": [
+          1,
+          0
+        ],
+        "total_tool_call_count": 1
+      },
+      "result": {
+        "answer": "yes"
+      },
+      "result_before_pause": true
+    }
+  ],
   "span_cases": [
     {
       "name": "gen_ai.request.tool_choice",

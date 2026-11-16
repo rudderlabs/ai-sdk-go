@@ -16,27 +16,38 @@ func TestStructuredOutputLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var fixture struct {
-		Cases []struct {
-			Name           string
-			Request        map[string]any
-			Tool           ToolCall `json:"response_tool"`
-			Result         json.RawMessage
-			ResultName     string `json:"result_name"`
-			Pause, Emitted bool
-			InProcess      bool `json:"in_process"`
-			EmptyResult    bool `json:"empty_result"`
-			Suppressed     bool `json:"suppressed_event"`
-			NoTool         bool `json:"no_tool"`
-			Expected       struct {
-				Forced *string `json:"forced_tool"`
-				Count  int     `json:"tool_call_count"`
-				Events int     `json:"tool_events"`
-			}
+	type fixtureCase struct {
+		Name              string
+		Request           map[string]any
+		Tool              ToolCall `json:"response_tool"`
+		Result            json.RawMessage
+		ResultName        string `json:"result_name"`
+		ResultBeforePause bool   `json:"result_before_pause"`
+		Pause, Emitted    bool
+		InProcess         bool `json:"in_process"`
+		EmptyResult       bool `json:"empty_result"`
+		Suppressed        bool `json:"suppressed_event"`
+		NoTool            bool `json:"no_tool"`
+		Expected          struct {
+			Forced        *string `json:"forced_tool"`
+			Count         int     `json:"tool_call_count"`
+			Events        int     `json:"tool_events"`
+			SegmentCounts []int   `json:"segment_tool_call_counts"`
+			TotalCount    int     `json:"total_tool_call_count"`
 		}
+	}
+	var fixture struct {
+		Cases          []fixtureCase
+		LifecycleCases []fixtureCase `json:"lifecycle_cases"`
 	}
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
+	}
+	for _, c := range fixture.LifecycleCases {
+		fixture.Cases = append(fixture.Cases, c)
+		c.Name += " on same instance"
+		c.InProcess = true
+		fixture.Cases = append(fixture.Cases, c)
 	}
 	for _, c := range fixture.Cases {
 		t.Run(c.Name, func(t *testing.T) {
@@ -67,19 +78,29 @@ func TestStructuredOutputLifecycle(t *testing.T) {
 				call.StructuredCandidate = forced != "" && call.Name == forced
 				i.RecordToolCalls(call)
 			}
+			if c.ResultBeforePause {
+				i.recordToolResult(c.Tool.ID, ToolResult{Result: c.Result}, true, c.ResultName)
+			}
 			if c.Pause {
 				snapshot, ok := i.Pause(PauseOptions{Reason: PauseApproval})
 				if !ok {
 					t.Fatal("pause failed")
 				}
-				if len(r.named("schema_done")) != 0 || strings.Contains(logs.String(), "structured output: forced tool with no result") {
-					t.Fatal("pause decided candidate")
+				wantEvents, wantPending, wantCount := 0, 1, 0
+				if c.ResultBeforePause {
+					wantEvents, wantPending, wantCount = 1, 0, 1
 				}
-				if lastResponse(t, r)["tool_call_count"] != 1 {
-					t.Fatal("pause did not provisionally count candidate")
+				if len(r.named("schema_done")) != wantEvents || strings.Contains(logs.String(), "structured output: forced tool with no result") {
+					t.Error("pause decided pending candidate or lost known outcome")
 				}
-				if len(snapshot.PendingTools) != 1 || snapshot.PendingTools[0]["structured_candidate"] != true {
-					t.Fatal("candidate missing from snapshot")
+				if got := lastResponse(t, r)["tool_call_count"]; got != wantCount {
+					t.Errorf("pause count=%v; want %d", got, wantCount)
+				}
+				if len(snapshot.PendingTools) != wantPending {
+					t.Fatalf("pending tools=%d; want %d", len(snapshot.PendingTools), wantPending)
+				}
+				if wantPending == 1 && (snapshot.PendingTools[0]["structured_candidate"] != true || snapshot.PendingTools[0]["tool_call_id"] != c.Tool.ID) {
+					t.Error("candidate identity missing from snapshot")
 				}
 				encoded, err := json.Marshal(snapshot)
 				if err != nil {
@@ -101,7 +122,7 @@ func TestStructuredOutputLifecycle(t *testing.T) {
 			if c.EmptyResult {
 				i.RecordToolResult(c.Tool.ID, ToolResult{})
 			}
-			if c.Result != nil {
+			if c.Result != nil && !c.ResultBeforePause {
 				i.recordToolResult(c.Tool.ID, ToolResult{Result: c.Result}, true, c.ResultName)
 			}
 			i.End(EndOptions{})
@@ -118,6 +139,30 @@ func TestStructuredOutputLifecycle(t *testing.T) {
 			}
 			if breakdown != c.Expected.Count {
 				t.Errorf("breakdown=%d; want %d", breakdown, c.Expected.Count)
+			}
+			if c.Expected.SegmentCounts != nil {
+				segments := r.named("ai_response_received")
+				if len(segments) != len(c.Expected.SegmentCounts) {
+					t.Fatalf("response segments=%d; want %d", len(segments), len(c.Expected.SegmentCounts))
+				}
+				totalCount, totalBreakdown := 0, 0
+				for index, segment := range segments {
+					count := segment.Properties["tool_call_count"].(int)
+					breakdown := 0
+					if rows, ok := segment.Properties["tool_breakdown"].([]map[string]any); ok {
+						for _, row := range rows {
+							breakdown += row["call_count"].(int)
+						}
+					}
+					totalCount += count
+					totalBreakdown += breakdown
+					if want := c.Expected.SegmentCounts[index]; count != want || breakdown != want {
+						t.Errorf("segment %d: count=%d, breakdown=%d; want %d", index, count, breakdown, want)
+					}
+				}
+				if want := c.Expected.TotalCount; totalCount != want || totalBreakdown != want {
+					t.Errorf("all segments: count=%d, breakdown=%d; want %d", totalCount, totalBreakdown, want)
+				}
 			}
 			if events := len(r.named("schema_done")) + len(r.named("lookup_done")); events != c.Expected.Events {
 				t.Errorf("tool events=%d; want %d", events, c.Expected.Events)

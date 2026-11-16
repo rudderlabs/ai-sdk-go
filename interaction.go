@@ -2789,6 +2789,10 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	}
 	p["llm_call_count"] = sum(func(c *recordedCall) int { return c.callCount })
 	allTools := append(slices.Clone(i.tools), i.toolOverflow...)
+	// Pending forced tools stay in the snapshot; count them once their outcome is known.
+	if status == StatusPaused {
+		allTools = slices.DeleteFunc(allTools, func(tool *recordedTool) bool { return tool.structuredPending() })
+	}
 	tools := 0
 	for _, t := range allTools {
 		tools += t.calls
