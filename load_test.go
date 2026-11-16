@@ -3,8 +3,10 @@
 package rudderstackai
 
 // The in-process half of the load test (internal/conformance/load_test.go is the end-to-end
-// half): sustained MCP calls from interactions, checked against the SDK's own state, which only
-// this package can read. Node.js and Python make the same checks in their single load test.
+// half): 6,000 MCP calls from interactions, checking every MCP map's cap, eviction of
+// per-interaction entries, and the open-interaction count against the SDK's own state.
+// Only this package can read that state.
+// Node.js and Python make the same checks in their single load test.
 //
 //	go test -tags load -run TestLoadMCPMaps .
 

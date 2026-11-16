@@ -3,10 +3,12 @@
 // adds over the same call without the SDK. With -budget, it fails when a scenario's extra
 // allocations per op exceed the ceiling in that file.
 //
-//	go test -run '^$' -bench Overhead -benchmem -count 5 . ./rudderopenai > go.txt
+//	go test -run '^$' -bench Overhead -benchmem . ./rudderopenai > go.txt
 //	go run ./internal/benchreport -budget internal/benchreport/alloc_budget.json < go.txt
 //
-// With -count, each metric is the median of the runs, which alternate baseline and sdk.
+// BenchmarkOverhead runs BENCH_ROUNDS rounds (default 5), each running every scenario's
+// baseline then sdk. Repeated names have Go's #NN suffix; each metric is the median over all
+// rounds of a side. The manual interaction scenario has only an sdk side.
 package main
 
 import (
@@ -51,7 +53,7 @@ type Unit struct {
 // units are the streamed scenarios' chunk counts, as the benchmarks send them.
 var units = map[string]int{"interaction/openai-stream": 100, "interaction/openai-stream+spans": 100}
 
-var line = regexp.MustCompile(`^BenchmarkOverhead/(.+)/(baseline|sdk)(?:-\d+)?\s+\d+\s+(.*)$`)
+var line = regexp.MustCompile(`^BenchmarkOverhead/(.+)/(baseline|sdk)(?:#\d+)?(?:-\d+)?\s+\d+\s+(.*)$`)
 
 // parse reads benchmark output: the scenarios in first-seen order, and the cpu line.
 func parse(r io.Reader) (order []string, sides map[string]map[string]side, cpu string, err error) {
@@ -106,8 +108,7 @@ func parse(r io.Reader) (order []string, sides map[string]map[string]side, cpu s
 	return order, sides, cpu, sc.Err()
 }
 
-// medianSide is the median of each metric over the runs of one side (go test -count n runs the
-// sub-benchmarks n times, alternating baseline and sdk).
+// medianSide is the median of each metric over all rounds of one side.
 func medianSide(list []side) side {
 	med := func(get func(side) float64) float64 {
 		vs := make([]float64, len(list))

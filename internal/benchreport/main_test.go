@@ -53,6 +53,31 @@ BenchmarkOverhead/interaction/manual/sdk-4  10  1 ns/op  1 cpu-ns/op  1 gc/10k-o
 	}
 }
 
+func TestMedianOfRounds(t *testing.T) {
+	in := `BenchmarkOverhead/mcp/tools-call/baseline-4 10 30 ns/op 10 cpu-ns/op 20 gc/10k-op 30 p50-ns 10 p99-ns 20 B/op 30 allocs/op
+BenchmarkOverhead/mcp/tools-call/sdk-4 10 60 ns/op 40 cpu-ns/op 50 gc/10k-op 60 p50-ns 40 p99-ns 50 B/op 60 allocs/op
+BenchmarkOverhead/mcp/tools-call/baseline#01-4 10 10 ns/op 20 cpu-ns/op 30 gc/10k-op 10 p50-ns 20 p99-ns 30 B/op 10 allocs/op
+BenchmarkOverhead/mcp/tools-call/sdk#01-4 10 40 ns/op 50 cpu-ns/op 60 gc/10k-op 40 p50-ns 50 p99-ns 60 B/op 40 allocs/op
+BenchmarkOverhead/mcp/tools-call/baseline#02 10 20 ns/op 30 cpu-ns/op 10 gc/10k-op 20 p50-ns 30 p99-ns 10 B/op 20 allocs/op
+BenchmarkOverhead/mcp/tools-call/sdk#02 10 50 ns/op 60 cpu-ns/op 40 gc/10k-op 50 p50-ns 60 p99-ns 40 B/op 50 allocs/op
+`
+	order, sides, _, err := parse(strings.NewReader(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(order) != 1 || order[0] != "mcp/tools-call" {
+		t.Fatalf("scenario order: %v", order)
+	}
+	for name, want := range map[string]side{
+		"baseline": {ns: 20, cpu: 20, gc: 20, p50: 20, p99: 20, bytes: 20, allocs: 20},
+		"sdk":      {ns: 50, cpu: 50, gc: 50, p50: 50, p99: 50, bytes: 50, allocs: 50},
+	} {
+		if got := sides["mcp/tools-call"][name]; got != want {
+			t.Errorf("%s median: %+v, want %+v", name, got, want)
+		}
+	}
+}
+
 func TestBudget(t *testing.T) {
 	dir := t.TempDir()
 	budget := filepath.Join(dir, "budget.json")

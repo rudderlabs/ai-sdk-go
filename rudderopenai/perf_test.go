@@ -9,8 +9,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -256,12 +258,18 @@ func consumeStream(ctx context.Context, c openai.Client) error {
 
 func BenchmarkOverhead(b *testing.B) {
 	short := create("Where is my order?")
-	pair(b, "interaction/openai", short, false)
-	pair(b, "interaction/openai-stream", consumeStream, false)
-	pair(b, "interaction/openai+content", create(longPrompt), true,
-		rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true))
-	pair(b, "interaction/openai+spans", short, false, rudderstackai.WithEmitSpans(true))
-	pair(b, "interaction/openai-stream+spans", consumeStream, false, rudderstackai.WithEmitSpans(true))
+	rounds, err := strconv.Atoi(os.Getenv("BENCH_ROUNDS"))
+	if err != nil || rounds <= 0 {
+		rounds = 5
+	}
+	for range rounds {
+		pair(b, "interaction/openai", short, false)
+		pair(b, "interaction/openai-stream", consumeStream, false)
+		pair(b, "interaction/openai+content", create(longPrompt), true,
+			rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true))
+		pair(b, "interaction/openai+spans", short, false, rudderstackai.WithEmitSpans(true))
+		pair(b, "interaction/openai-stream+spans", consumeStream, false, rudderstackai.WithEmitSpans(true))
+	}
 }
 
 // TestFakeOpenAIAnswers keeps the benchmark honest: the fake answers as the scenarios expect.

@@ -36,7 +36,7 @@ example:
 # Overhead per interaction and MCP call, with and without the SDK (docs/performance.md).
 bench:
 	mkdir -p bench-results
-	$(GO) test -run '^$$' -bench Overhead -benchmem -count 5 . ./rudderopenai > bench-results/go.txt
+	$(GO) test -run '^$$' -bench Overhead -benchmem . ./rudderopenai > bench-results/go.txt
 	$(GO) run ./internal/benchreport -out bench-results/go.json < bench-results/go.txt
 
 # Sustained interactions and MCP calls through analytics-go to a local data plane.

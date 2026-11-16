@@ -5,8 +5,10 @@ package rudderstackai_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
 	"slices"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -101,14 +103,7 @@ func BenchmarkOverhead(b *testing.B) {
 		b.Fatal(err)
 	}
 	user := rudderstackai.InteractionOptions{UserID: "bench-user", ConversationID: "bench-conversation"}
-	b.Run("interaction/manual/sdk", func(b *testing.B) {
-		measure(b, func(ctx context.Context) error {
-			return rudderstackai.RunInteraction(ctx, user, func(_ context.Context, in *rudderstackai.Interaction) error {
-				in.RecordCall(rudderstackai.LLMCall{Provider: "openai", Model: "gpt-4.1-mini", InputTokens: 12, OutputTokens: 5})
-				return nil
-			})
-		})
-	})
+
 	n := 0
 	call := func(cs *mcp.ClientSession) func(context.Context) error {
 		return func(ctx context.Context) error {
@@ -121,6 +116,20 @@ func BenchmarkOverhead(b *testing.B) {
 			return err
 		}
 	}
-	b.Run("mcp/tools-call/baseline", func(b *testing.B) { measure(b, call(benchServer(b, "bench-plain", false))) })
-	b.Run("mcp/tools-call/sdk", func(b *testing.B) { measure(b, call(benchServer(b, "bench-mcp", true))) })
+	rounds, err := strconv.Atoi(os.Getenv("BENCH_ROUNDS"))
+	if err != nil || rounds <= 0 {
+		rounds = 5
+	}
+	for range rounds {
+		b.Run("interaction/manual/sdk", func(b *testing.B) {
+			measure(b, func(ctx context.Context) error {
+				return rudderstackai.RunInteraction(ctx, user, func(_ context.Context, in *rudderstackai.Interaction) error {
+					in.RecordCall(rudderstackai.LLMCall{Provider: "openai", Model: "gpt-4.1-mini", InputTokens: 12, OutputTokens: 5})
+					return nil
+				})
+			})
+		})
+		b.Run("mcp/tools-call/baseline", func(b *testing.B) { measure(b, call(benchServer(b, "bench-plain", false))) })
+		b.Run("mcp/tools-call/sdk", func(b *testing.B) { measure(b, call(benchServer(b, "bench-mcp", true))) })
+	}
 }
