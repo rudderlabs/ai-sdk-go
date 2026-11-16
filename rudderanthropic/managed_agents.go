@@ -560,6 +560,9 @@ func (s *sessionTracker) close(err error) {
 		// Ends as an error ends an answer: the app's own is app_error, a deadline is timeout.
 		errorType := kit.AppErrorType(err)
 		s.finish(turnEnd{status: kit.StatusForErrorType(errorType), errorType: errorType}, msTime{})
+	case t.errorType != "":
+		// A terminal session.error read before the stream ended: the session will not go on.
+		s.finish(turnEnd{status: rudderstackai.StatusError, errorType: t.errorType}, msTime{})
 	case t.waiting != "":
 		s.finish(turnEnd{status: rudderstackai.StatusPaused, pauseReason: t.waiting}, msTime{})
 	default:

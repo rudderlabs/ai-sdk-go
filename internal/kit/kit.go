@@ -68,8 +68,8 @@ func PrimaryModel(i *rudderstackai.Interaction, model, provider string) {
 // KeepAnswer keeps answer text for the classifier and evaluator.
 func KeepAnswer(i *rudderstackai.Interaction, text string) { hook.KeepAnswer(i, text) }
 
-// Backdate moves a resumed segment's start back to when its events happened, taking the time from
-// the latest pause.
+// Backdate moves the current segment's start to when its events happened, back or forward; a
+// resumed segment's time moves out of or into the latest pause.
 func Backdate(i *rudderstackai.Interaction, startedAt time.Time) { hook.Backdate(i, startedAt) }
 
 // AppErrorType is the error_type of an error the app's own code ended an answer with: app_error
