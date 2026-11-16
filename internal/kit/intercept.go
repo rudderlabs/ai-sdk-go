@@ -16,15 +16,17 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/internal/structuredoutput"
 )
 
 // Call is one intercepted model request.
 type Call struct {
-	Span         any
-	HTTPStatus   int
-	Details      rudderstackai.CallDetails
-	FirstTokenAt time.Time
-	Interaction  *rudderstackai.Interaction
+	ForcedToolName string
+	Span           any
+	HTTPStatus     int
+	Details        rudderstackai.CallDetails
+	FirstTokenAt   time.Time
+	Interaction    *rudderstackai.Interaction
 	// Ephemeral: the integration opened the interaction for this call and ends it.
 	Ephemeral   bool
 	Provider    string
@@ -209,7 +211,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 	req = req.WithContext(context.WithValue(ctx, trackedKey{s.Integration}, true))
 	model, _ := body["model"].(string)
 	details := rudderstackai.CallDetailsFromContext(rudderstackai.WithCallDetails(ctx, s.Details))
-	c := &Call{Span: span, Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
+	c := &Call{ForcedToolName: structuredoutput.ForcedToolName(body), Span: span, Details: details, Interaction: i, Ephemeral: ephemeral, Provider: s.Provider, Integration: s.Integration, Model: model, StartedAt: started, Request: body, HTTPRequest: req}
 	hook.Tracing.WrapperMetadata(c.Span, c.Provider, c.Model)
 	current = c
 	safe(func() {
@@ -670,4 +672,14 @@ func PanicErrorType(value any) string {
 		return ErrorTypeOfTransport(err)
 	}
 	return "api_error"
+}
+
+// RecordToolCalls marks only matching response calls from this request as candidates.
+func (c *Call) RecordToolCalls(tools ...rudderstackai.ToolCall) {
+	for n := range tools {
+		if c.ForcedToolName != "" && tools[n].Name == c.ForcedToolName {
+			tools[n].StructuredCandidate = true
+		}
+	}
+	c.Interaction.RecordToolCalls(tools...)
 }

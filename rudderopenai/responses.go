@@ -153,7 +153,7 @@ func recordResponse(c *kit.Call, response map[string]any, g gateway) bool {
 	})
 	// A repeated response (same ID) adds no tool calls.
 	if recorded && len(tools) > 0 {
-		c.Interaction.RecordToolCalls(tools...)
+		c.RecordToolCalls(tools...)
 	}
 	return true
 }

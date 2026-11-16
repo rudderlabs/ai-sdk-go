@@ -261,6 +261,9 @@ func derefFloat(p *float64) float64 {
 
 // ToolCall is one tool call the model made, for [Interaction.RecordToolCalls].
 type ToolCall struct {
+	// StructuredCandidate marks a matching response call to the request's forced single named tool.
+	// Provider integrations set this; final End excludes it only without a result or emitted event.
+	StructuredCandidate bool
 	// ID is the provider tool-call ID: a call already recorded under it is merged, not counted
 	// again.
 	ID string
@@ -443,6 +446,7 @@ type recordedCall struct {
 }
 
 type recordedTool struct {
+	structuredCandidate, resultSeen, eventEmitted       bool
 	rawName, name, mcpServer, parentTool, agentName, id string
 	calls                                               int
 	err                                                 *bool
@@ -1431,6 +1435,10 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 					i.toolsByID[call.ID] = tool
 				}
 			}
+			tool.structuredCandidate = tool.structuredCandidate || call.StructuredCandidate
+			if fromSpan || call.Result != nil {
+				tool.resultSeen = true
+			}
 			fillString(&tool.id, call.ID)
 			fillString(&tool.rawName, call.Name)
 			fillString(&tool.name, name)
@@ -1469,14 +1477,25 @@ func (i *Interaction) RecordToolResult(id string, result ToolResult) {
 	i.recordToolResult(id, result, result.Result != nil)
 }
 
-func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult bool) {
+// name is Gemini's fallback for a forced candidate whose call and result omit IDs.
+// Ordinary id-less calls keep their existing outcome accounting.
+func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult bool, name ...string) {
 	safely(func() {
-		if id == "" {
+		if id == "" && (len(name) == 0 || name[0] == "") {
 			return
 		}
 		i.mu.Lock()
 		tool := i.toolsByID[id]
+		if id == "" {
+			for _, candidate := range i.tools {
+				if candidate.id == "" && candidate.rawName == name[0] && candidate.structuredCandidate && !candidate.settled {
+					tool = candidate
+					break
+				}
+			}
+		}
 		if tool != nil {
+			tool.resultSeen = true
 			mergeToolResult(tool, result, hasResult)
 		}
 		i.mu.Unlock()
@@ -1571,13 +1590,14 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 		return
 	}
 	type job struct {
-		rule ToolEventRule
-		tool recordedTool
+		rule     ToolEventRule
+		tool     recordedTool
+		original *recordedTool
 	}
 	var jobs []job
 	i.mu.Lock()
 	for _, t := range tools {
-		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || t.fired || t.name == "" || (!t.settled && !final) {
+		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || t.fired || t.name == "" || (final && t.structuredPending()) || (!t.settled && !final) {
 			continue
 		}
 		rule, ok := rules[first(t.rawName, t.name)]
@@ -1585,11 +1605,11 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 			continue
 		}
 		t.fired = true
-		jobs = append(jobs, job{rule, *t})
+		jobs = append(jobs, job{rule, *t, t})
 	}
 	i.mu.Unlock()
 	for _, j := range jobs {
-		i.toolEvent(j.rule, j.tool)
+		i.toolEvent(j.rule, j.tool, j.original)
 	}
 }
 
@@ -1642,7 +1662,7 @@ func (i *Interaction) preparePendingRules(done func()) {
 		var rule ToolEventRule
 		for _, t := range i.tools {
 			r, ok := cfg().toolRules[first(t.rawName, t.name)]
-			if !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
+			if !t.structuredPending() && !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
 				selected, rule = t, r
 				break
 			}
@@ -1664,7 +1684,7 @@ func (i *Interaction) preparePendingRules(done func()) {
 	}
 }
 
-func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
+func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool, original *recordedTool) {
 	outcome := t.ruleOutcome
 	if outcome == nil {
 		outcome = evaluateToolRule(rule, t, i.capture)
@@ -1706,6 +1726,7 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	p = fitToolEventProperties(rule.Event, jsonSafeMap(p), keys, rates)
 	i.mu.Lock()
 	defer i.unlock()
+	original.eventEmitted = true
 	i.sendLockedRates(rule.Event, func() map[string]any { return p }, rates, true)
 }
 
@@ -1965,7 +1986,18 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	for key := range i.seen {
 		i.seen[key] = nil
 	}
-	i.tools, i.toolOverflow, i.toolsByID = nil, nil, map[string]*recordedTool{}
+	structured := make([]*recordedTool, 0)
+	for _, tool := range i.tools {
+		if tool.structuredPending() {
+			structured = append(structured, tool)
+		}
+	}
+	i.tools, i.toolOverflow, i.toolsByID = structured, nil, map[string]*recordedTool{}
+	for _, tool := range structured {
+		if tool.id != "" {
+			i.toolsByID[tool.id] = tool
+		}
+	}
 	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
 	i.answerSource, i.spanAnswerSource = nil, nil
 	i.prompt, i.answer, i.spanAnswer, i.messages = "", "", "", nil // not in the snapshot, so not in an in-process resume
@@ -2264,6 +2296,15 @@ func pendingTool(c *recordedTool) map[string]any {
 		}
 		p["rule_outcome"] = outcome
 	}
+	if c.structuredCandidate {
+		p["structured_candidate"] = true
+		if c.resultSeen {
+			p["result_seen"] = true
+		}
+		if c.eventEmitted {
+			p["tool_event_emitted"] = true
+		}
+	}
 	p["settled"] = c.settled
 	p["fired"] = c.fired
 	return p
@@ -2386,6 +2427,9 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		}
 		c.settled = pendingBool(p, "settled")
 		c.fired = pendingBool(p, "fired")
+		c.structuredCandidate = pendingBool(p, "structured_candidate")
+		c.resultSeen = pendingBool(p, "result_seen")
+		c.eventEmitted = pendingBool(p, "tool_event_emitted")
 		c.calls = max(c.calls, 1)
 		if outcome, ok := p["rule_outcome"].(map[string]any); ok {
 			c.ruleOutcome = &toolRuleOutcome{suppressed: pendingBool(outcome, "suppressed"), properties: maps.Clone(outcome["properties"].(map[string]any)), resultSize: -1}
@@ -2542,6 +2586,17 @@ func (i *Interaction) end(o EndOptions) {
 		return
 	}
 	i.filterSpanCallsLocked()
+	var excluded []*recordedTool
+	i.tools = slices.DeleteFunc(i.tools, func(tool *recordedTool) bool {
+		if !tool.structuredPending() {
+			return false
+		}
+		excluded = append(excluded, tool)
+		if tool.id != "" {
+			delete(i.toolsByID, tool.id)
+		}
+		return true
+	})
 	i.ending = true
 	i.settled = true
 	// Ended while paused: the wait counts as paused time and the final segment starts now.
@@ -2551,6 +2606,9 @@ func (i *Interaction) end(o EndOptions) {
 		i.started = time.Now()
 	}
 	i.mu.Unlock()
+	for _, tool := range excluded {
+		debugf("structured output: forced tool with no result", "tool_name", first(tool.rawName, tool.name), "tool_call_id", tool.id)
+	}
 	i.checkDisconnected()
 	i.mu.Lock()
 	responseText, responseOK := i.captureResponseLocked(o.ResponseText)
@@ -2731,6 +2789,10 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	}
 	p["llm_call_count"] = sum(func(c *recordedCall) int { return c.callCount })
 	allTools := append(slices.Clone(i.tools), i.toolOverflow...)
+	// Pending forced tools stay in the snapshot; count them once their outcome is known.
+	if status == StatusPaused {
+		allTools = slices.DeleteFunc(allTools, func(tool *recordedTool) bool { return tool.structuredPending() })
+	}
 	tools := 0
 	for _, t := range allTools {
 		tools += t.calls
@@ -3231,4 +3293,16 @@ func creditedTotal(calls []*recordedCall) (float64, bool) {
 		}
 	}
 	return round8(total), known
+}
+
+// structuredPending is decided only by final End; pause retains these calls.
+func (t *recordedTool) structuredPending() bool {
+	return t.structuredCandidate && !t.resultSeen && !t.eventEmitted
+}
+
+// hasStructuredTools reports whether model spans may complete a pending candidate.
+func (i *Interaction) hasStructuredTools() bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return slices.ContainsFunc(i.tools, func(t *recordedTool) bool { return t.structuredCandidate })
 }

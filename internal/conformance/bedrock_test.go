@@ -129,6 +129,9 @@ func converseInput(p obj) (*bedrockruntime.ConverseInput, error) {
 	}
 	if tc := obj0(p["toolConfig"]); tc != nil {
 		in.ToolConfig = &types.ToolConfiguration{}
+		if choice := obj0(obj0(tc["toolChoice"])["tool"]); choice != nil {
+			in.ToolConfig.ToolChoice = &types.ToolChoiceMemberTool{Value: types.SpecificToolChoice{Name: aws.String(str(choice["name"]))}}
+		}
 		for _, t := range objs0(tc["tools"]) {
 			spec := obj0(t["toolSpec"])
 			ts := types.ToolSpecification{Name: aws.String(str(spec["name"]))}
