@@ -186,6 +186,10 @@ func otelOwnedSpan(ctx context.Context, i *Interaction, started time.Time) *Span
 	// Sent in the owner's place, with its IDs and parent, if the processor does not export it.
 	s := &Span{TraceID: o.TraceID, SpanID: o.SpanID, parentID: o.ParentID, started: started, interaction: i, attributes: map[string]any{}, parent: active, seq: spanSeq.Add(1), call: true, otelOwned: true, owner: o.Owner}
 	i.mu.Lock()
+	// The first SDK span fixes the interaction's trace, persisted across pause and JSON restore.
+	if i.sdkTraceID == "" {
+		i.sdkTraceID = o.TraceID
+	}
 	s.userID, s.anonymousID, s.interactionID, s.conversationID = i.userID, i.anonymousID, i.id, i.conversationID
 	s.client, s.capture, s.llmCalls = i.analytics(), i.capture.Spans, i.capture.LLMCalls
 	msgContext := i.msgContext
