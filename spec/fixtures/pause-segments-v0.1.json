@@ -310,6 +310,93 @@
       }
     },
     {
+      "name": "span answer recorded by a tool event during paused call delivery",
+      "description": "A tool recorded during delivery sends its declared event at pause; a span answer its callback reports does not replace the answer captured before delivery.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "output_text": "First answer."
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "name": "lookup"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "Looked Up",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310,
+              "output_text": "Late answer."
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "response_text": "First answer."
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": null,
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
       "name": "span recorded by a tool event during paused call delivery",
       "description": "Delivery records a tool whose declared event, sent at pause, reports a held span; pause delivers that span's call event too before capturing totals.",
       "config": {
