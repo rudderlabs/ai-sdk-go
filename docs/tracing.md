@@ -64,7 +64,8 @@ return err // the original error, unchanged
 `TraceID` and `SpanID`, `SetAttributes(map[string]any)` and idempotent `End(error)`. When disabled,
 the returned context is unchanged and the handle is a no-op. Pass the returned context to nested
 work; the nearest active SDK span becomes its parent only within the same interaction. Ended
-spans are skipped. Provider middleware makes its wrapper span active on the context passed
+spans are skipped. Where that context is lost, [`JoinInteraction`](integrations.md#how-integrations-work)
+passes the interaction and parent span IDs explicitly. Provider middleware makes its wrapper span active on the context passed
 downstream; independent concurrent requests and streams keep independent contexts. No interaction
 root span is created.
 

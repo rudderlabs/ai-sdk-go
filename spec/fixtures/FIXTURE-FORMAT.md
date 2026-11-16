@@ -319,3 +319,15 @@ After ordinary longest-string OTLP truncation (down to a 256-byte UTF-8 prefix p
 Equal sizes use collection order: span attributes, resource attributes, scope attributes, events, links, OTLP status message, property status message, `gen_ai` entries, extra properties, then the three dropped-count fields in the order above. Keyed collections use ascending UTF-8 key order; events/links retain array order. Attributes/events/links are measured as complete OTLP entries; other candidates as their values. If completion enlarged core values beyond the budget after all candidates are removed, restore admitted core values, retaining current IDs, parent, start/end timing, duration, status code, `messageId` and `timestamp`. Core OTLP string values may be truncated, but admitted core keys remain. `properties.truncated` is true whenever strings were shortened or shedding/core restoration ran; otherwise false. Non-dedup spans still drop if ordinary truncation cannot make them fit.
 
 Budget scenarios additionally allow `capture_content`, interaction-node `anonymous_id` / `conversation_id`, and SDK model-emitter (`integration`) node `start_time_ms` / `end_time_ms`, `initial_attributes` and `completion_attributes` (literal values or `{ "repeat": <number>, "count": <integer> }` for fixed numeric arrays), and expected-span `attribute_keys` (exact sorted OTLP span keys), `shed_attribute_keys` (ordered removed keys) and `truncated`. Drivers check the core and delivery budget; the fixtures cover successive shedding frontiers. These are additive fields within fixture version 2; span schemas and spec versions are unchanged.
+
+## explicit-context-v0.1.json
+
+Joining an open interaction, and optionally a parent SDK span, by ID where the SDK's context is lost, with `fixture_version: 1`, span schema `0.1` and product event spec `0.4.0`. Each scenario has `emit_spans`, ordered `steps` and `expected`. Steps run in order, each child inside its parent's scope:
+
+- `interaction`: an interaction whose `userId` is the label; it ends after its children;
+- `lost`: children run with no interaction, context or SDK span, as on a bare worker thread, a callback library or a goroutine on a fresh context;
+- `join`: the join API with the ID of interaction `interaction` (`"unknown"` is an ID no interaction has) and, when present, the span ID of manual span `parent` (`"invalid"` is the malformed ID `xyz`; with spans off, pass whatever the no-op handle returns);
+- `manual`: a `span()` named `label` with operation `execute_tool`;
+- `wrapper`: one provider wrapper call for model `label`.
+
+`expected.answers` is the `llm_call_count` summed over each labelled interaction's `ai_response_received`; `other_answers` counts `ai_response_received` events of any other interaction. `warnings` is the number of join warnings, with each warning kind re-armed before the scenario. `spans` lists every exported `ai_otel_span` by label (a wrapper span's `chat <model>` name maps to its model label) with its parent's label, or `null` for a root; every exported span belongs to the first interaction in `answers`.
