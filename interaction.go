@@ -429,6 +429,7 @@ type recordedCall struct {
 	startedAt, endedAt                               time.Time
 	fromSpan, twinMatched, usageUnknown              bool
 	callEventPending                                 bool
+	pricingRevision                                  int
 	reportSequence                                   int
 	creditsExplicit                                  bool
 	credits                                          *float64
@@ -979,18 +980,18 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	}
 	enriches := (earlier.agentName == "" && call.AgentName != "") ||
 		(earlier.callPurpose == "" && call.CallPurpose != "") ||
-		(earlier.fallbackUsed == nil && call.FallbackUsed != nil) ||
-		(earlier.byok == nil && call.BYOK != nil)
+		(call.FallbackUsed != nil && (earlier.fallbackUsed == nil || *earlier.fallbackUsed != *call.FallbackUsed)) ||
+		(call.BYOK != nil && (earlier.byok == nil || *earlier.byok != *call.BYOK))
 	if !enriches {
 		return
 	}
 	agent, purpose := first(earlier.agentName, call.AgentName), first(earlier.callPurpose, call.CallPurpose)
 	fallback, byok := earlier.fallbackUsed, earlier.byok
-	if fallback == nil {
-		fallback = call.FallbackUsed
+	if call.FallbackUsed != nil {
+		fallback = copyCreditPointer(call.FallbackUsed)
 	}
-	if byok == nil {
-		byok = call.BYOK
+	if call.BYOK != nil {
+		byok = copyCreditPointer(call.BYOK)
 	}
 	credits := creditsOf(call.Credits)
 	if earlier.errorType == "cancelled" {
@@ -1000,6 +1001,8 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	if credits == nil && earlier.errorType != "" && earlier.errorType != "cancelled" {
 		credits = earlier.credits
 	}
+	earlier.pricingRevision++
+	revision := earlier.pricingRevision
 	priorCredits := earlier.credits
 	// Publish before unlocking so nested repeats see the combined metadata.
 	earlier.agentName, earlier.callPurpose = agent, purpose
@@ -1020,7 +1023,7 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	if i.ended || !slices.Contains(i.calls, earlier) {
 		return
 	}
-	if earlier.agentName != agent || earlier.callPurpose != purpose || earlier.fallbackUsed != fallback || earlier.byok != byok || earlier.credits != priorCredits {
+	if earlier.pricingRevision != revision || earlier.agentName != agent || earlier.callPurpose != purpose || earlier.fallbackUsed != fallback || earlier.byok != byok || earlier.credits != priorCredits {
 		return // newer enrichment already priced the combined metadata
 	}
 	if !earlier.creditsExplicit {
@@ -1448,6 +1451,7 @@ func sameModel(a, b string) bool {
 }
 
 func mergeCallTwin(kept, later *recordedCall) {
+	kept.pricingRevision++
 	if kept.spanSource == nil {
 		kept.spanSource = later.spanSource
 	}
