@@ -71,8 +71,9 @@ func TestCapturePolicySpanKindsFixture(t *testing.T) {
 			ToolCallKeys []string `json:"tool_call_keys"`
 			Input        kindSpan `json:"input"`
 			Cases        []struct {
-				Name  string `json:"name"`
-				Spans struct {
+				Name          string            `json:"name"`
+				NotApplicable map[string]string `json:"not_applicable"`
+				Spans         struct {
 					Messages  bool `json:"messages"`
 					ToolCalls bool `json:"tool_calls"`
 					HTTP      bool `json:"http"`
@@ -87,6 +88,9 @@ func TestCapturePolicySpanKindsFixture(t *testing.T) {
 	}
 	for _, c := range fixture.Spans.Cases {
 		t.Run(c.Name, func(t *testing.T) {
+			if reason, ok := c.NotApplicable["go"]; ok {
+				t.Skip("N/A for Go: " + reason)
+			}
 			in := fixture.Spans.Input
 			if c.Input != nil {
 				in = *c.Input

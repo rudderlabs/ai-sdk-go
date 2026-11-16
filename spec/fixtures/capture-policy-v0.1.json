@@ -1,7 +1,7 @@
 {
   "fixture_version": 1,
   "spec_version": "0.4.0",
-  "description": "captureContent policy resolution (SDK-6888). Each case lists levels most general first (global, then interaction, mcp or exporter); every SDK resolves them with the same rules and must produce `expected`. Keys are snake_case; Node.js and Go map them to their own names. `capture_content: null` means the level sets nothing. `intent_summary: null` means not set at any level (sent as before the policy). `invalid` values must be rejected where captureContent is accepted (Go: not applicable, the type checks it). `custom_properties`: whether a custom event property with a content name is kept under the resolved policy: intent_summary follows an explicit intent_summary key at any level, else the default chain (boolean false drops it, as today); other names follow their own key; input_messages, output_text and output_tool_calls follow llm_calls (input_truncated is a boolean marker, not content, and is never dropped). `spans`: one span's content and, per resolved span kinds, the content exported with built-in masking on. Kept kinds are masked, other content removed; content events, the status message and ai.response.toolCalls are the messages kind; `tool_call_keys` (equal to span-content-keys toolCallAttributeKeys) are the tool_calls kind; with http, url.path and full URLs are kept without query or fragment and masked; url.query, user agents, client addresses and headers never. A span-kind case with its own `input` uses it instead of `spans.input`. On a tool-execution span (attribute gen_ai.operation.name execute_tool, openinference.span.kind TOOL, traceloop.span.kind tool, ai.operationId ai.toolCall or langsmith.span.kind tool), content attributes other than exception.message, exception.stacktrace and scoped error.message are the tool_calls kind, in span attributes and in the attributes of events other than content events. URL attributes with array values are sanitised per element (non-strings dropped, an empty result removed).",
+  "description": "captureContent policy resolution (SDK-6888). Each case lists levels most general first (global, then interaction, mcp or exporter); every SDK resolves them with the same rules and must produce `expected`. Keys are snake_case; Node.js and Go map them to their own names. `capture_content: null` means the level sets nothing. `intent_summary: null` means not set at any level (sent as before the policy). `invalid` values must be rejected where captureContent is accepted (Go: not applicable, the type checks it). `custom_properties`: whether a custom event property with a content name is kept under the resolved policy: intent_summary follows an explicit intent_summary key at any level, else the default chain (boolean false drops it, as today); other names follow their own key; input_messages, output_text and output_tool_calls follow llm_calls (input_truncated is a boolean marker, not content, and is never dropped). `spans`: one span's content and, per resolved span kinds, the content exported with built-in masking on. Kept kinds are masked, other content removed; content events, the status message and ai.response.toolCalls are the messages kind; `tool_call_keys` (equal to span-content-keys toolCallAttributeKeys) are the tool_calls kind; with http, url.path and full URLs are kept without query or fragment and masked; url.query, user agents, client addresses and headers never. A span-kind case with its own `input` uses it instead of `spans.input`. On a tool-execution span (attribute gen_ai.operation.name execute_tool, openinference.span.kind TOOL, traceloop.span.kind tool, ai.operationId ai.toolCall or langsmith.span.kind tool), content attributes other than exception.message, exception.stacktrace and scoped error.message are the tool_calls kind, in span attributes and in the attributes of events other than content events. URL attributes with array values are sanitised per element (non-strings dropped, an empty result removed). `invalid_at_call_site`: an invalid object passed where an interaction or task opens must throw a type error from that call, before any tracking starts, never contained by the SDK's own error guards. Any case may carry `not_applicable`: {sdk: reason} for an SDK whose design makes the case impossible; that SDK's runner reports it as not applicable instead of running it.",
   "resolution": [
     {
       "name": "nothing_set",
@@ -638,6 +638,9 @@
           "tool_calls": true,
           "http": false
         }
+      },
+      "not_applicable": {
+        "go": "Go's typed options hold only booleans; there is nothing to coerce"
       }
     },
     {
@@ -662,6 +665,9 @@
           "tool_calls": false,
           "http": false
         }
+      },
+      "not_applicable": {
+        "go": "Go's typed options hold only booleans; there is nothing to coerce"
       }
     },
     {
@@ -692,6 +698,9 @@
           "tool_calls": false,
           "http": false
         }
+      },
+      "not_applicable": {
+        "go": "Go's typed options hold only booleans; there is nothing to coerce"
       }
     },
     {
@@ -716,6 +725,9 @@
           "tool_calls": true,
           "http": false
         }
+      },
+      "not_applicable": {
+        "go": "Go's typed options hold only booleans; there is nothing to coerce"
       }
     },
     {
@@ -760,6 +772,9 @@
       "name": "unknown_key",
       "capture_content": {
         "answer": true
+      },
+      "not_applicable": {
+        "go": "types enforce booleans; unknown keys don't compile"
       }
     },
     {
@@ -768,12 +783,18 @@
         "spans": {
           "urls": true
         }
+      },
+      "not_applicable": {
+        "go": "types enforce booleans; unknown keys don't compile"
       }
     },
     {
       "name": "non_boolean_feature",
       "capture_content": {
         "call_reason": "yes"
+      },
+      "not_applicable": {
+        "go": "types enforce booleans; unknown keys don't compile"
       }
     },
     {
@@ -782,12 +803,18 @@
         "spans": {
           "messages": 1
         }
+      },
+      "not_applicable": {
+        "go": "types enforce booleans; unknown keys don't compile"
       }
     },
     {
       "name": "spans_not_object",
       "capture_content": {
         "spans": "all"
+      },
+      "not_applicable": {
+        "go": "types enforce booleans; unknown keys don't compile"
       }
     }
   ],
@@ -1861,5 +1888,42 @@
         }
       }
     ]
-  }
+  },
+  "invalid_at_call_site": [
+    {
+      "name": "interaction_unknown_key",
+      "description": "An unknown key in an interaction's captureContent throws at the call that opens it, before any event is sent.",
+      "level": "interaction",
+      "capture_content": {
+        "answer": true
+      },
+      "not_applicable": {
+        "go": "types enforce booleans; unknown keys don't compile"
+      }
+    },
+    {
+      "name": "interaction_non_boolean_spans_flag",
+      "description": "A non-boolean nested spans flag in an interaction's captureContent throws at the call that opens it, before any event is sent.",
+      "level": "interaction",
+      "capture_content": {
+        "spans": {
+          "messages": "yes"
+        }
+      },
+      "not_applicable": {
+        "go": "types enforce booleans; unknown keys don't compile"
+      }
+    },
+    {
+      "name": "task_unknown_key",
+      "description": "The same for a task's options.",
+      "level": "task",
+      "capture_content": {
+        "answer": true
+      },
+      "not_applicable": {
+        "go": "types enforce booleans; unknown keys don't compile"
+      }
+    }
+  ]
 }
