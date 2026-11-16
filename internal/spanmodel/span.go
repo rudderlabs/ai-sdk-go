@@ -142,7 +142,7 @@ func cleanAttributes(a map[string]any, scope string, capture, all, masked bool) 
 			}
 		}
 		// Error text (exception.message, Mirascope's scoped error.message) is masked even in masked content.
-		if content && (!masked || k == "exception.message" || k == "error.message") {
+		if content && (!masked || k == "exception.message" || (k == "error.message" && contentAttribute(k, scope))) {
 			var ok bool
 			v, ok = mask(v)
 			if !ok {
