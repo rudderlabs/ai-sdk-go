@@ -43,6 +43,8 @@ var otelCalls = struct {
 type otelCall struct {
 	seq         uint64
 	interaction *rudderstackai.Interaction
+	// processor registered it; its Shutdown drops the entry so a stale span owns nothing.
+	processor *SpanProcessor
 }
 
 func init() {
@@ -64,21 +66,33 @@ func init() {
 
 // dedup keeps one span per model call: the outer of an SDK call span and an OTel model-call
 // span owns it. Spans off, it is never called.
-func dedup(ctx context.Context, s sdktrace.ReadWriteSpan, interaction *rudderstackai.Interaction) (covered bool) {
+func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, interaction *rudderstackai.Interaction) (covered bool) {
 	if interaction == nil || interaction.Ended() || spanRole(s) != "llm" {
 		return false
 	}
 	if hook.Tracing.SDKOwnsCall(ctx, interaction) {
 		return true
 	}
+	// Only a span this processor will export can own a call; otherwise the SDK sends its own.
+	if !s.SpanContext().IsSampled() || !p.exports(s) {
+		return false
+	}
 	otelCalls.mu.Lock()
 	defer otelCalls.mu.Unlock()
 	// Bounded like the SDK's other maps: past the cap a span is simply not joined.
 	if len(otelCalls.m) < max(hook.MaxMapEntries(), 1) {
-		otelCalls.m[key(s.SpanContext())] = otelCall{seq: hook.Tracing.NextSpanSeq(), interaction: interaction}
+		otelCalls.m[key(s.SpanContext())] = otelCall{seq: hook.Tracing.NextSpanSeq(), interaction: interaction, processor: p}
 		otelCalls.n.Store(int64(len(otelCalls.m)))
 	}
 	return false
+}
+
+// exports applies the exporter's filter to a span as it starts.
+func (p *SpanProcessor) exports(s sdktrace.ReadOnlySpan) bool {
+	if p.options.Filter != nil {
+		return p.options.Filter(s)
+	}
+	return p.options.ExportAllSpans || IsAISpan(s)
 }
 
 func forgetOTelCall(k spanKey) {
@@ -87,6 +101,21 @@ func forgetOTelCall(k spanKey) {
 	}
 	otelCalls.mu.Lock()
 	delete(otelCalls.m, k)
+	otelCalls.n.Store(int64(len(otelCalls.m)))
+	otelCalls.mu.Unlock()
+}
+
+// forgetOTelCalls drops every span a shut-down processor registered.
+func forgetOTelCalls(p *SpanProcessor) {
+	if otelCalls.n.Load() == 0 {
+		return
+	}
+	otelCalls.mu.Lock()
+	for k, c := range otelCalls.m {
+		if c.processor == p {
+			delete(otelCalls.m, k)
+		}
+	}
 	otelCalls.n.Store(int64(len(otelCalls.m)))
 	otelCalls.mu.Unlock()
 }
@@ -226,7 +255,7 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 				held[k] = v
 			}
 		}
-		covered := interaction != nil && hook.Tracing.EmitSpans() && dedup(ctx, s, interaction)
+		covered := interaction != nil && hook.Tracing.EmitSpans() && p.dedup(ctx, s, interaction)
 		p.remember(key(s.SpanContext()), spanState{tags: held, owner: interaction, covered: covered})
 		if IsAISpan(s) {
 			for k, v := range tags {
@@ -309,6 +338,7 @@ func (p *SpanProcessor) Shutdown(ctx context.Context) error {
 		waitErr = ctx.Err()
 	}
 	p.closed.Store(true)
+	forgetOTelCalls(p)
 	err := errors.Join(waitErr, p.inner.Shutdown(ctx))
 	p.mu.Lock()
 	p.states = map[spanKey]spanState{}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
 
@@ -20,6 +21,7 @@ type dedupNode struct {
 	Label             string      `json:"label"`
 	Operation         string      `json:"operation"`
 	EndBeforeChildren bool        `json:"end_before_children"`
+	Legacy            bool        `json:"legacy"`
 	Children          []dedupNode `json:"children"`
 }
 
@@ -54,7 +56,11 @@ func dedupRun(ctx context.Context, tracer trace.Tracer, n dedupNode) {
 		children(ctx)
 		s.End(nil)
 	case "otel":
-		ctx, s := tracer.Start(ctx, n.Label, trace.WithAttributes(attribute.String("gen_ai.operation.name", n.Operation), attribute.String("gen_ai.system", "openai")))
+		attrs := []attribute.KeyValue{attribute.String("gen_ai.operation.name", n.Operation), attribute.String("gen_ai.system", "openai")}
+		if n.Legacy {
+			attrs = []attribute.KeyValue{attribute.String("llm.request.type", n.Operation)}
+		}
+		ctx, s := tracer.Start(ctx, n.Label, trace.WithAttributes(attrs...))
 		if n.EndBeforeChildren {
 			s.End()
 		}
@@ -168,5 +174,116 @@ func TestSpanDedupNeverModifiesTheAppSpan(t *testing.T) {
 		if strings.HasPrefix(string(kv.Key), "gen_ai.usage.") || strings.HasPrefix(string(kv.Key), "gen_ai.input.") || kv.Key == "rudderstack.span_source" {
 			t.Errorf("the SDK wrote %s onto the app span", kv.Key)
 		}
+	}
+}
+
+// recordOnly samples spans as recording but not sampled: the processor sees them, the exporter never does.
+type recordOnly struct{}
+
+func (recordOnly) ShouldSample(p sdktrace.SamplingParameters) sdktrace.SamplingResult {
+	return sdktrace.SamplingResult{Decision: sdktrace.RecordOnly, Tracestate: trace.SpanContextFromContext(p.ParentContext).TraceState()}
+}
+func (recordOnly) Description() string { return "record-only" }
+
+// wrapperIn runs one wrapper call in ctx and reports whether it sent a span of its own.
+func wrapperIn(ctx context.Context, t *testing.T, i *rudderstackai.Interaction, events func() []object) bool {
+	t.Helper()
+	before := len(spanEvents(events()))
+	_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
+	hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "w", InputTokens: 1, OutputTokens: 1}, s, 200)
+	return len(spanEvents(events())) > before
+}
+
+func TestSpanDedupOwnerMustBeExported(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		options Options
+		more    []sdktrace.TracerProviderOption
+	}{
+		{name: "filter rejects it", options: Options{Simple: true, Filter: func(sdktrace.ReadOnlySpan) bool { return false }}},
+		{name: "record-only sampler", options: Options{Simple: true}, more: []sdktrace.TracerProviderOption{sdktrace.WithSampler(recordOnly{})}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, p, events := testProvider(t, c.options)
+			provider := sdktrace.NewTracerProvider(append(c.more, sdktrace.WithSpanProcessor(p))...)
+			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+				t.Fatal(err)
+			}
+			ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+			ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+			if !wrapperIn(ctx, t, i, events) {
+				t.Error("a span the processor never exports owned the call")
+			}
+			o.End()
+			i.End(rudderstackai.EndOptions{})
+		})
+	}
+}
+
+func TestSpanDedupEndedInteractionNeverJoins(t *testing.T) {
+	provider, _, events := testProvider(t, Options{Simple: true})
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	defer o.End()
+	i.End(rudderstackai.EndOptions{})
+	_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
+	if span, _ := s.(*rudderstackai.Span); span == nil || span.SpanID == o.SpanContext().SpanID().String() {
+		t.Fatalf("a wrapper of an ended interaction joined the OTel span: %v", s)
+	}
+	hook.Tracing.FinishRaw(s, "openai", "w", 200, time.Now(), nil)
+	if len(spanEvents(events())) != 1 {
+		t.Error("the wrapper sent no span of its own")
+	}
+}
+
+func TestSpanDedupJoinedWrapperKeepsItsSDKParent(t *testing.T) {
+	provider, _, events := testProvider(t, Options{Simple: true})
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	defer i.End(rudderstackai.EndOptions{})
+	ctx, manual := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{Name: "manual", Operation: "execute_tool"})
+	defer manual.End(nil)
+	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	retained, joined := hook.Tracing.BeginWrapper(ctx, i, time.Now())
+	hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "first"}, joined, 200)
+	o.End()
+	// A later call on the retained context, after both the joined call and the OTel span ended.
+	_, later := hook.Tracing.BeginWrapper(retained, i, time.Now())
+	hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "later"}, later, 200)
+	found := false
+	for _, e := range spanEvents(events()) {
+		p := e["properties"].(object)
+		if p["span_name"] != "chat later" {
+			continue
+		}
+		found = true
+		if p["parent_span_id"] != manual.SpanID {
+			t.Fatalf("later call parent %v, want the manual span %s", p["parent_span_id"], manual.SpanID)
+		}
+	}
+	if !found {
+		t.Fatal("the later call sent no span")
+	}
+}
+
+func TestSpanDedupShutdownForgetsItsSpans(t *testing.T) {
+	provider, p, events := testProvider(t, Options{Simple: true})
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	defer i.End(rudderstackai.EndOptions{})
+	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	defer o.End()
+	if err := p.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !wrapperIn(ctx, t, i, events) {
+		t.Error("a span of a shut-down processor owned the call")
 	}
 }

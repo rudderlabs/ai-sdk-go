@@ -54,6 +54,9 @@ type sdkSpanKey struct{}
 
 var spanSeq atomic.Uint64
 
+// emitSpans mirrors the EmitSpans setting for hot paths that must not copy the config.
+var emitSpans atomic.Bool
+
 // WithEmitSpans enables wrapper and manual ai_otel_span events. Off by default,
 // independent of WithLLMCallEvents; no OpenTelemetry dependency is required.
 func WithEmitSpans(on bool) ConfigOption {
@@ -171,10 +174,15 @@ func otelOwnedSpan(ctx context.Context, i *Interaction, started time.Time) *Span
 	if !ok || owner != any(i) {
 		return nil
 	}
-	if active := activeSDKSpan(ctx); active != nil && active.interaction == i && active.seq > seq {
+	active := activeSDKSpan(ctx)
+	if active != nil && active.interaction != i {
+		active = nil
+	}
+	if active != nil && active.seq > seq {
 		return nil
 	}
-	s := &Span{TraceID: traceID, SpanID: spanID, started: started, interaction: i, call: true, otelOwned: true}
+	// Keeps the active SDK parent, so work on a retained context still finds it once this ends.
+	s := &Span{TraceID: traceID, SpanID: spanID, started: started, interaction: i, parent: active, seq: spanSeq.Add(1), call: true, otelOwned: true}
 	i.mu.Lock()
 	s.llmCalls = i.capture.LLMCalls
 	i.mu.Unlock()
@@ -416,7 +424,7 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 	s.finish(strings.TrimSpace("chat "+first(call.RequestedModel, call.Model)), "chat", "wrapper", a, err, true, call.EndedAt)
 }
 func init() {
-	hook.Tracing.EmitSpans = func() bool { return cfg().emitSpans }
+	hook.Tracing.EmitSpans = emitSpans.Load
 	hook.Tracing.NextSpanSeq = func() uint64 { return spanSeq.Add(1) }
 	hook.Tracing.SDKOwnsCall = func(ctx context.Context, i any) bool {
 		active := activeSDKSpan(ctx)

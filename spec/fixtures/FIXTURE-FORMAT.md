@@ -296,8 +296,8 @@ Tree nodes have a `kind`, a `label` and optional `children`, run in order inside
 
 - `interaction`: an interaction whose `userId` is the label;
 - `wrapper`: one provider wrapper call for model `label`; children run inside the provider request, as an instrumentation would;
-- `otel`: an active OpenTelemetry span named `label` with `gen_ai.operation.name` set to `operation`; `end_before_children: true` ends it before its children run while its context stays active;
+- `otel`: an active OpenTelemetry span named `label` with `gen_ai.operation.name` set to `operation`; `end_before_children: true` ends it before its children run while its context stays active; `legacy: true` sets only the older OpenLLMetry `llm.request.type: "chat"`, a model call the default export filter does not export;
 - `manual`: a `span()` named `label` with `operation`;
-- `integration`: an integration model span (`operation: "chat"`) named `label`, its children running in its context.
+- `integration`: an integration span named `label` with `operation`, its children running in its context; `framework_parent` names an earlier integration span passed as its explicit framework parent.
 
 `expected_spans` lists every exported `ai_otel_span` by label (a wrapper span's `chat <model>` name maps to its model label) with the label of its parent span, or `null` for a root. `call_span` is the label of the span whose ID every `ai_llm_response_received.span_id` carries, or `null` when no call event carries one. `other_processors_see` lists the OpenTelemetry spans the plain processor receives: deduplication never hides a span from other processors.
