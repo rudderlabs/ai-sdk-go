@@ -279,7 +279,7 @@ With `WithEmitSpans(true)`, a retained wrapper call carries `span_id`, matching 
 spans. Two invocations with the same response ID each emit a span; the deduplicated call event
 keeps the first invocation's ID. Overflow aggregates omit `span_id`.
 
-Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is recorded. Totals belong on `ai_response_received`; do not add these to it.
+Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is recorded. Totals belong on `ai_response_received`; do not add these to it. A call reported by both a wrapper and a span is sent once; when the other report arrives after the call's event was sent, totals and `usage_breakdown` merge it, but the sent event is not updated.
 
 ```json
 {

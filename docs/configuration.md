@@ -159,6 +159,7 @@ err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{T
 - `RunInteraction` and `RunTask` leave a paused run paused when `fn` returns nil (an error still ends it). A paused run is off the open list: `Limits.InteractionTTL` and `Shutdown` never end it, and an abandoned one ends with its last `paused` event.
 - `PauseOptions`: `Reason` (default `PauseOther`), `ResponseText` (sent as `response_text` only with content capture on), `ExtraProperties`. Pausing again before a resume sends nothing and returns the same snapshot; after `End`, `ok` is false.
 - `End` while paused ends the run: the wait counts as paused time, and the final segment has no calls.
+- A call counted before a pause and reported again after the resume (a manual `RecordCall`, a late span) is deduplicated only when both reports carry the same response ID; otherwise it counts again, so counting is not exactly-once across a pause.
 
 ## Context values
 
