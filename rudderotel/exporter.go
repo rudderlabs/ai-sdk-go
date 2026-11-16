@@ -62,7 +62,9 @@ func (e *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 		}
 		safe("tracing.export", func() {
 			keep := IsAISpan(s)
-			if e.options.Filter != nil {
+			if d, decided := s.(decidedSpan); decided {
+				keep = d.export
+			} else if e.options.Filter != nil {
 				keep = e.options.Filter(s)
 			} else if e.options.ExportAllSpans {
 				keep = true

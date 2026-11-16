@@ -35,19 +35,19 @@ type spanState struct {
 // while they are open: an SDK call starting inside one joins it instead of sending its own span.
 var otelCalls = struct {
 	mu sync.Mutex
-	m  map[spanKey]otelCall
+	m  map[spanKey]*otelCall
 	// n mirrors len(m), so OnEnd skips the lock while nothing is registered (spans off).
 	n atomic.Int64
-}{m: map[spanKey]otelCall{}}
+}{m: map[spanKey]*otelCall{}}
 
 type otelCall struct {
 	seq         uint64
 	interaction *rudderstackai.Interaction
 	parentID    string
-	// owner holds the joined SDK spans' sends until OnEnd knows whether the span is exported.
+	// owner holds the joined SDK spans' sends until every registered processor decided.
 	owner *hook.OTelOwner
-	// processor registered it; its Shutdown drops the entry so a stale span owns nothing.
-	processor *SpanProcessor
+	// processors registered the span and have not decided yet; Shutdown decides for its own.
+	processors map[*SpanProcessor]struct{}
 }
 
 func init() {
@@ -83,16 +83,26 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	if !s.SpanContext().IsSampled() || !exported {
 		return false
 	}
+	k := key(s.SpanContext())
 	otelCalls.mu.Lock()
 	defer otelCalls.mu.Unlock()
-	// Bounded like the SDK's other maps: past the cap a span is simply not joined.
-	if len(otelCalls.m) < max(hook.MaxMapEntries(), 1) {
+	c := otelCalls.m[k]
+	if c == nil {
+		// Bounded like the SDK's other maps: past the cap a span cannot own a call.
+		if len(otelCalls.m) >= max(hook.MaxMapEntries(), 1) {
+			return false
+		}
 		parentID := ""
 		if s.Parent().IsValid() {
 			parentID = s.Parent().SpanID().String()
 		}
-		otelCalls.m[key(s.SpanContext())] = otelCall{seq: hook.Tracing.NextSpanSeq(), interaction: interaction, parentID: parentID, owner: &hook.OTelOwner{}, processor: p}
+		c = &otelCall{seq: hook.Tracing.NextSpanSeq(), interaction: interaction, parentID: parentID, owner: &hook.OTelOwner{}, processors: map[*SpanProcessor]struct{}{}}
+		otelCalls.m[k] = c
 		otelCalls.n.Store(int64(len(otelCalls.m)))
+	}
+	if _, in := c.processors[p]; !in {
+		c.processors[p] = struct{}{}
+		c.owner.Register()
 	}
 	return false
 }
@@ -105,37 +115,45 @@ func (p *SpanProcessor) exports(s sdktrace.ReadOnlySpan) bool {
 	return p.options.ExportAllSpans || IsAISpan(s)
 }
 
-// takeOTelCall removes and returns the owner p registered for a span that ended.
+// takeOTelCall removes p's registration of a span that ended and returns its owner, which p
+// must settle exactly once.
 func (p *SpanProcessor) takeOTelCall(k spanKey) *hook.OTelOwner {
 	if otelCalls.n.Load() == 0 {
 		return nil
 	}
 	otelCalls.mu.Lock()
 	defer otelCalls.mu.Unlock()
-	c, ok := otelCalls.m[k]
-	if !ok || c.processor != p {
+	c := otelCalls.m[k]
+	if c == nil {
 		return nil
 	}
-	delete(otelCalls.m, k)
-	otelCalls.n.Store(int64(len(otelCalls.m)))
+	if _, in := c.processors[p]; !in {
+		return nil
+	}
+	p.unregister(k, c)
 	return c.owner
 }
 
-// forgetOTelCalls drops every span a shut-down processor registered. They will not be
-// exported, so calls they owned send their own spans.
-func forgetOTelCalls(p *SpanProcessor) {
-	if otelCalls.n.Load() == 0 {
-		return
+// unregister removes p from an entry, and the entry once no processor is left. Holds the lock.
+func (p *SpanProcessor) unregister(k spanKey, c *otelCall) {
+	delete(c.processors, p)
+	if len(c.processors) == 0 {
+		delete(otelCalls.m, k)
+		otelCalls.n.Store(int64(len(otelCalls.m)))
 	}
+}
+
+// forgetOTelCalls settles every span a shut-down processor registered and has not decided on:
+// it will not export them.
+func forgetOTelCalls(p *SpanProcessor) {
 	var owners []*hook.OTelOwner
 	otelCalls.mu.Lock()
 	for k, c := range otelCalls.m {
-		if c.processor == p {
-			delete(otelCalls.m, k)
+		if _, in := c.processors[p]; in {
+			p.unregister(k, c)
 			owners = append(owners, c.owner)
 		}
 	}
-	otelCalls.n.Store(int64(len(otelCalls.m)))
 	otelCalls.mu.Unlock()
 	for _, o := range owners {
 		safe("tracing.owner", func() { o.Settle(false) })
@@ -300,17 +318,22 @@ type taggedSpan struct {
 
 func (s taggedSpan) Attributes() []attribute.KeyValue { return s.attrs }
 
+// decidedSpan carries the processor's one export decision for an owner span to its exporter,
+// which uses it instead of running the filter again.
+type decidedSpan struct {
+	sdktrace.ReadOnlySpan
+	export bool
+}
+
 // OnEnd records only spans of an open interaction and skips suppressed classifier spans.
 func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	defer p.finish(key(s.SpanContext()))
-	// An owner always settles: unless the filter accepts the finished span (a panic, a closed
-	// processor or any failure counts as a rejection), its joined calls send their own spans.
+	// An owner always settles once for this processor: unless the filter accepts the finished
+	// span (a panic, a closed processor or any failure counts as a rejection), it is not exported.
 	exported := false
-	if owner := p.takeOTelCall(key(s.SpanContext())); owner != nil {
+	owner := p.takeOTelCall(key(s.SpanContext()))
+	if owner != nil {
 		defer safe("tracing.owner", func() { owner.Settle(exported) })
-		if !p.closed.Load() {
-			defer safe("tracing.filter", func() { exported = p.exports(s) })
-		}
 	}
 	if p.closed.Load() {
 		return
@@ -329,6 +352,10 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 				}
 			}
 			s = taggedSpan{ReadOnlySpan: s, attrs: attrs}
+		}
+		if owner != nil {
+			safe("tracing.filter", func() { exported = p.exports(s) })
+			s = decidedSpan{ReadOnlySpan: s, export: exported}
 		}
 		if p.options.ProductEvents {
 			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
