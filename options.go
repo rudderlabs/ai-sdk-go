@@ -133,7 +133,7 @@ type Options struct {
 	ClientSeenWindow time.Duration
 	// CaptureContent sends masked call_reason and capability_detail capped at 200 characters,
 	// and feedback_text capped at 2000. Failed requests also carry error_message (masked, 200
-	// characters) when the final response is observed: see ObserveMCPTransport,
+	// characters) when the final response is observed: see ObserveMCPTransport, ObserveMCPHTTP,
 	// ruddermcpgo.ObserveHTTP and ruddermcpgo.ObserveStdio. False (the default) follows the global
 	// setting ([WithCaptureContent], [WithContentCapture]); turn it off for this server with
 	// ContentCapture: &ContentCapture{Default: Ptr(false)}.

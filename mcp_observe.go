@@ -60,31 +60,48 @@ func ObserveMCPTransport(ctx context.Context, t mcp.Transport) (context.Context,
 //
 //	http.Handle("/mcp", rudderstackai.ObserveMCPHTTP(mcp.NewStreamableHTTPHandler(getServer, opts)))
 //
-// It works for stateful and stateless handlers. The request's header map identifies it to the
-// server's handlers, which the go-sdk passes on as RequestExtra.Header; a middleware between the
-// two that copies the headers (Request.Clone) leaves error_message out, as do requests in
-// flight together that share one header map. Don't put it behind a middleware that reuses
-// header maps across stateless requests. Responses pass through
-// unchanged. A failed request's events are sent once its response is written, or without
-// error_message when the HTTP request ends first.
+// It works for stateful and stateless handlers. Wrap the outermost handler, so it reads the
+// bytes the client receives after any middleware. The request's header map identifies it to
+// the server's handlers, which the go-sdk passes on as RequestExtra.Header: if a middleware
+// inside it copies the headers (Request.Clone), wrap the handler again inside that middleware;
+// the inner wrapper defers to the outer one. Without that, error_message is left out, as it is
+// for requests in flight together that share one header map, and when a middleware between two
+// wrappers replaces the request context. A middleware that hands one header map to several
+// requests (which also races in net/http) is not supported, in front of the wrapper or inside
+// it. Responses pass through unchanged. A failed request's events are sent once its response is
+// written, or without error_message when the HTTP request ends first or the client leaves
+// before the response is sent.
 func ObserveMCPHTTP(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := headerKey(r.Header)
-		// Wrapped more than once around the same headers: the outermost wrapper observes. Behind a
-		// middleware that copied them, an inner one does.
-		observed, _ := r.Context().Value(observingHTTP{}).([]unsafe.Pointer)
-		if key == nil || slices.Contains(observed, key) {
+		outer, _ := r.Context().Value(observingHTTP{}).(*observingHTTPRequest)
+		if key == nil || (outer != nil && slices.Contains(outer.keys, key)) {
 			h.ServeHTTP(w, r)
 			return
 		}
+		session := r.Header.Get("Mcp-Session-Id")
+		if outer != nil {
+			// Behind a middleware that copied the headers: the outer wrapper reads the response,
+			// so the copy only needs to point at its observer.
+			defer observeHTTP(key, session, outer.responses)()
+			next := &observingHTTPRequest{responses: outer.responses, keys: append(slices.Clip(outer.keys), key)}
+			h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), observingHTTP{}, next)))
+			return
+		}
 		responses := mcpbridge.NewResponses()
-		defer observeHTTP(key, r.Header.Get("Mcp-Session-Id"), responses)()
-		ctx := context.WithValue(r.Context(), observingHTTP{}, append(slices.Clip(observed), key))
-		mcpbridge.ServeHTTP(h, w, r.WithContext(ctx), responses)
+		defer observeHTTP(key, session, responses)()
+		next := &observingHTTPRequest{responses: responses, keys: []unsafe.Pointer{key}}
+		mcpbridge.ServeHTTP(h, w, r.WithContext(context.WithValue(r.Context(), observingHTTP{}, next)), responses)
 	})
 }
 
 type observingHTTP struct{}
+
+// observingHTTPRequest is the outermost wrapper's observer and every header map registered for it.
+type observingHTTPRequest struct {
+	responses *mcpbridge.Responses
+	keys      []unsafe.Pointer
+}
 
 // httpObservers maps the header map of each HTTP request ObserveMCPHTTP is serving to its
 // observer. A stateful session runs every request on its own context, never the POST's, so the
@@ -92,6 +109,10 @@ type observingHTTP struct{}
 var (
 	httpObserversMu sync.Mutex
 	httpObservers   = map[unsafe.Pointer]*httpObserver{}
+	// httpSessions is the observer each session first matched. A request without a session
+	// header (initialize, stateless) only matches sessions it opened, never one seen before, so a
+	// call that outlived its own request can't take another session's response.
+	httpSessions weakMap[mcp.ServerSession, *mcpbridge.Responses]
 )
 
 type httpObserver struct {
@@ -113,7 +134,10 @@ func observeHTTP(key unsafe.Pointer, session string, responses *mcpbridge.Respon
 	if o == nil {
 		o = &httpObserver{responses: responses, session: session}
 		httpObservers[key] = o
-	} else {
+	} else if o.responses != nil {
+		// Another request already holds this map: its calls may have found the observer, so
+		// release them too.
+		o.responses.Close()
 		o.responses = nil
 	}
 	o.inFlight++
@@ -133,19 +157,43 @@ func headerKey(h http.Header) unsafe.Pointer {
 	return reflect.ValueOf(h).UnsafePointer()
 }
 
-// observedHTTP is the observer of the HTTP request with header map h, for a call in session, or
-// nil.
-func observedHTTP(h http.Header, session string) *mcpbridge.Responses {
+// observedHTTP is the observer of the HTTP request with header map h, for a call in session ss
+// (sessionID its ID), or nil.
+func observedHTTP(h http.Header, ss *mcp.ServerSession, sessionID string) *mcpbridge.Responses {
 	key := headerKey(h)
 	if key == nil {
 		return nil
 	}
 	httpObserversMu.Lock()
-	defer httpObserversMu.Unlock()
-	if o := httpObservers[key]; o != nil && (o.session == "" || session == "" || o.session == session) {
-		return o.responses
+	o := httpObservers[key]
+	var responses *mcpbridge.Responses
+	var session string
+	if o != nil {
+		responses, session = o.responses, o.session
 	}
-	return nil
+	httpObserversMu.Unlock()
+	if responses == nil || (session != "" && sessionID != "" && session != sessionID) {
+		return nil
+	}
+	if ss == nil {
+		return responses
+	}
+	matched := false
+	httpSessions.update(ss, func(first *mcpbridge.Responses, seen bool) *mcpbridge.Responses {
+		switch {
+		case !seen:
+			matched = true
+			return responses
+		case session != "" || first == responses:
+			// A request with the session's own header, or one the session opened.
+			matched = true
+		}
+		return first
+	})
+	if !matched {
+		return nil
+	}
+	return responses
 }
 
 type nopCloser struct{ io.Writer }

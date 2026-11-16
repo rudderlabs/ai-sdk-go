@@ -230,8 +230,10 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	}
 	r.SessionID = sessionIDOf(ss, extra)
 	if r.HTTP {
-		r.Responses = observedHTTP(extra.Header, r.SessionID)
-	} else {
+		r.Responses = observedHTTP(extra.Header, ss, r.SessionID)
+	}
+	if r.Responses == nil {
+		// ObserveMCPTransport, or ruddermcpgo.ObserveHTTP around a stateless handler.
 		r.Responses = mcpbridge.ResponsesFrom(ctx)
 	}
 	var info sessionInfo
