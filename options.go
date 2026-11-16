@@ -151,7 +151,7 @@ type Options struct {
 	// per server name, so give each distinct server its own name.
 	ServerName string
 	// Redact runs after the built-in masking of call_reason, capability_detail, error_message and feedback_text, for what
-	// the patterns cannot catch. For error_message, defaults to WithRedactHook.
+	// the patterns cannot catch.
 	// If it returns an error or panics, the field is not sent.
 	Redact func(text string) (string, error)
 	// DisableRedaction turns redaction off: the built-in masking and Redact.

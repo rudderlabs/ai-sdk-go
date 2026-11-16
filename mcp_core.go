@@ -1374,22 +1374,9 @@ func (o *options) errorMessage(failure map[string]any) string {
 	if text == "" {
 		return ""
 	}
-	masked, ok := o.maskErrorMessage(text)
+	masked, ok := o.mask(text)
 	if !ok || masked == "" || masked == redactionTimedOut || hasSensitive(masked) {
 		return ""
 	}
 	return capText(masked, maxTextLength)
-}
-
-// maskErrorMessage keeps the error message masking defaults separate from existing MCP fields.
-func (o *options) maskErrorMessage(text string) (string, bool) {
-	c := cfg()
-	if o.DisableRedaction || !c.redact {
-		return text, true
-	}
-	resolved := *o
-	if resolved.Redact == nil {
-		resolved.Redact = c.redactHook
-	}
-	return resolved.mask(text)
 }

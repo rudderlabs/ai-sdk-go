@@ -85,7 +85,7 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 | `MCPEvents`          | off        | Enables the experimental [MCP Events](#mcp-events-experimental) helpers.                                                                                                          |
 | `Transport`          | detected   | `TransportStdio` or `TransportSSE`, sent as `transport` on `mcp_client_seen`. Streamable HTTP is detected from the request headers; stdio and SSE look the same from inside the server. |
 | `ServerName`         | the server's | Overrides the name the server was created with, sent as `server_name`. State is kept per server name: give each distinct server its own. |
-| `Redact`             | none       | `func(text string) (string, error)`, run after the built-in masking of `call_reason`, `capability_detail`, `error_message` and `feedback_text`. For `error_message`, defaults to `WithRedactHook`. If it fails or panics, the field is not sent. |
+| `Redact`             | none       | `func(text string) (string, error)`, run after the built-in masking of `call_reason`, `capability_detail`, `error_message` and `feedback_text`. If it fails or panics, the field is not sent. |
 | `DisableRedaction`   | off        | Turns redaction off: the built-in masking and `Redact`. |
 
 ## Events

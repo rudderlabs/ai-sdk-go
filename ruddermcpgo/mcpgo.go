@@ -94,7 +94,7 @@ type Options struct {
 	Transport string
 	// ServerName overrides the server's own name, sent as server_name.
 	ServerName string
-	// Redact runs after the built-in masking of call_reason, capability_detail, error_message and feedback_text; for error_message, defaults to WithRedactHook. If it fails
+	// Redact runs after the built-in masking of call_reason, capability_detail, error_message and feedback_text. If it fails
 	// or panics, the field is not sent.
 	Redact func(text string) (string, error)
 	// DisableRedaction turns redaction off: the built-in masking and Redact.

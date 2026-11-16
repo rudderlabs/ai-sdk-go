@@ -107,9 +107,12 @@ func TestMCPErrorMessageCancelledOutcomes(t *testing.T) {
 }
 
 func TestMCPErrorMessageCapture(t *testing.T) {
+	s := mcp.NewServer(&mcp.Implementation{Name: "errors-mcp", Version: "1"}, nil)
 	for _, tc := range []struct {
 		name    string
+		text    string
 		opts    Options
+		config  []ConfigOption
 		success bool
 		want    string
 	}{
@@ -117,6 +120,13 @@ func TestMCPErrorMessageCapture(t *testing.T) {
 		{name: "default off"},
 		{name: "success", opts: Options{CaptureContent: true}, success: true},
 		{name: "hook", opts: Options{CaptureContent: true, Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil }}, want: "[system] timed out for [email]"},
+		{name: "global masking off", config: []ConfigOption{WithRedaction(false)}, opts: Options{CaptureContent: true}, want: "Warehouse timed out for [email]"},
+		{name: "global masking off with wrapper hook", text: "Warehouse timed out", config: []ConfigOption{WithRedaction(false)}, opts: Options{CaptureContent: true, Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil }}, want: "[system] timed out"},
+		{name: "global masking off with hook error", text: "Warehouse timed out", config: []ConfigOption{WithRedaction(false)}, opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "", errors.New("boom") }}},
+		{name: "global masking off with hook panic", text: "Warehouse timed out", config: []ConfigOption{WithRedaction(false)}, opts: Options{CaptureContent: true, Redact: func(string) (string, error) { panic("boom") }}},
+		{name: "global hook is not inherited", config: []ConfigOption{WithRedactHook(func(string) (string, error) { return "global hook", nil })}, opts: Options{CaptureContent: true}, want: "Warehouse timed out for [email]"},
+		{name: "wrapper hook with global hook", config: []ConfigOption{WithRedactHook(func(string) (string, error) { return "global hook", nil })}, opts: Options{CaptureContent: true, Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil }}, want: "[system] timed out for [email]"},
+		{name: "wrapper masking off skips hook", text: "Warehouse timed out", opts: Options{CaptureContent: true, DisableRedaction: true, Redact: func(string) (string, error) { return "hook called", nil }}, want: "Warehouse timed out"},
 		{name: "hook error", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "", errors.New("boom") }}},
 		{name: "hook panic", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { panic("boom") }}},
 		{name: "hook sensitive", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "jane@example.com", nil }}},
@@ -124,10 +134,13 @@ func TestMCPErrorMessageCapture(t *testing.T) {
 		{name: "mask off sensitive", opts: Options{CaptureContent: true, DisableRedaction: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			setupAI(t, WithCaptureContent(false))
-			s := mcp.NewServer(&mcp.Implementation{Name: "errors-mcp", Version: "1"}, nil)
+			setupAI(t, append([]ConfigOption{WithCaptureContent(false)}, tc.config...)...)
+			text := tc.text
+			if text == "" {
+				text = "Warehouse timed out for jane@example.com"
+			}
 			s.AddTool(&mcp.Tool{Name: "lookup", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				return &mcp.CallToolResult{IsError: !tc.success, Content: []mcp.Content{&mcp.TextContent{Text: "Warehouse timed out for jane@example.com"}}}, nil
+				return &mcp.CallToolResult{IsError: !tc.success, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil
 			})
 			r := wrap(t, s, tc.opts)
 			cs := connect(t, s, "2025-06-18", nil)
@@ -205,8 +218,8 @@ func TestMCPErrorMessageMaskingFailures(t *testing.T) {
 		config     []ConfigOption
 		want       string
 	}{
-		{name: "global hook", text: "Warehouse jane@example.com", config: []ConfigOption{WithRedactHook(func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil })}, want: "[system] [email]"},
-		{name: "global masking off", text: "jane@example.com", config: []ConfigOption{WithRedaction(false)}},
+		{name: "global hook", text: "Warehouse jane@example.com", config: []ConfigOption{WithRedactHook(func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil })}, want: "Warehouse [email]"},
+		{name: "global masking off", text: "jane@example.com", config: []ConfigOption{WithRedaction(false)}, want: "[email]"},
 		{name: "mask off safe", text: "plain failure", opts: Options{DisableRedaction: true}, want: "plain failure"},
 		{name: "too long", text: strings.Repeat("x", maxMaskedCodePoints+1)},
 		{name: "timeout", text: "failure", opts: Options{Redact: func(string) (string, error) { return redactionTimedOut, nil }}},
