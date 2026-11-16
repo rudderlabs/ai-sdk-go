@@ -306,3 +306,24 @@ func TestSDK6017HoldsTheEventOfAToolSettledWhilePaused(t *testing.T) {
 	sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"call_1", "success"}})
 	sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
 }
+
+func TestSDK6017WritesAnEmptyAgentKeyForAnAgentlessToolGivenAnAgentLater(t *testing.T) {
+	setupAI(t)
+	i := sdk6017Start()
+	i.RecordCall(sdk6017Call("", 10))
+	i.RecordToolCalls(ToolCall{ID: "keyless", Name: "approve_me"})
+	i.RecordToolCalls(ToolCall{ID: "keyless", Name: "approve_me", AgentName: "researcher"})
+	i.RecordToolCalls(ToolCall{ID: "plain", Name: "approve_me"})
+	i.RecordToolCalls(ToolCall{ID: "own", Name: "approve_me", AgentName: "planner"})
+	snapshot, _ := i.Pause(PauseOptions{})
+	var stored PausedInteraction
+	if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+		t.Fatal(err)
+	}
+	got := [][3]any{}
+	for _, p := range stored.PendingTools {
+		got = append(got, [3]any{p["tool_call_id"], p["agent_name"], p["agent_key"]})
+	}
+	// "plain": the key equals what restore falls back to, so it is left out.
+	sdk6017Expect(t, "pending_tools", got, [][3]any{{"keyless", "researcher", ""}, {"plain", nil, nil}, {"own", "planner", "planner"}})
+}

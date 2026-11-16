@@ -2717,7 +2717,8 @@ func pendingTool(c *recordedTool) map[string]any {
 	if c.agentName != "" {
 		p["agent_name"] = c.agentName
 	}
-	if c.agentKey != "" {
+	// An empty key differs from an agent named later: restore must not fall back to that name.
+	if c.agentKey != "" || (c.agentName != "" && !c.unkeyed) {
 		p["agent_key"] = c.agentKey
 	}
 	if c.mcpServer != "" {
