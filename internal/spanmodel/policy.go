@@ -23,12 +23,18 @@ var contentKeys = []string{
 	"model_request_parameters", "model_settings", "embedding_settings",
 	// Tool descriptions and schemas (GenAI semconv: opt-in, may be sensitive)
 	"gen_ai.tool.definitions",
+	// Mirascope ops: request and response messages, traced call arguments and outputs, annotations
+	"mirascope.response.messages", "mirascope.response.content", "mirascope.trace.arg_values",
+	"mirascope.trace.output", "mirascope.annotation.reasoning",
 }
 
 // scopedContentKeys are generic keys that are content only on spans from the named instrumentation scope.
 var scopedContentKeys = map[string][]string{
 	// Pydantic AI image generation prompts and embedding inputs
 	"pydantic-ai": {"prompt", "inputs"},
+	// Mirascope's native error text (its default tracer names); handled like exception.message
+	"mirascope.llm": {"error.message"},
+	"mirascope.ops": {"error.message"},
 }
 var contentPrefixes = []string{
 	"gen_ai.prompt", "gen_ai.completion", "llm.input_messages", "llm.output_messages", "llm.prompts",

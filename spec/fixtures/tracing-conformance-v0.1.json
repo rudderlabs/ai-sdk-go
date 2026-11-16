@@ -1466,6 +1466,352 @@
       }
     },
     {
+      "name": "Mirascope content keys and scoped error.message stripped by default",
+      "options": {},
+      "compare": "exact",
+      "span": {
+        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "spanId": "00f067aa0ba902b7",
+        "name": "chat gpt-5",
+        "kind": "client",
+        "startTimeUnixNano": "1760000000000000000",
+        "endTimeUnixNano": "1760000002500250001",
+        "resource": {
+          "service.name": "chat-api",
+          "telemetry.sdk.language": "fixture"
+        },
+        "scope": {
+          "name": "mirascope.llm",
+          "version": "2.8.2"
+        },
+        "status": {
+          "code": "error",
+          "message": "Order 123 lookup failed for jane@example.com"
+        },
+        "attributes": {
+          "gen_ai.operation.name": "chat",
+          "gen_ai.request.model": "gpt-5",
+          "mirascope.response.messages": "[{\"role\":\"user\",\"content\":\"Where is order 123?\"}]",
+          "mirascope.response.content": "[{\"type\":\"text\",\"text\":\"On its way\"}]",
+          "mirascope.trace.arg_values": "{\"order\":\"123\"}",
+          "mirascope.trace.output": "On its way",
+          "mirascope.annotation.reasoning": "Customer sounded upset about order 123",
+          "mirascope.response.model_id": "gpt-5",
+          "error.message": "Order 123 lookup failed for jane@example.com"
+        }
+      },
+      "expected": {
+        "event": "ai_otel_span",
+        "anonymousId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "messageId": "4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
+        "timestamp": "2025-10-09T08:53:22.500Z",
+        "properties": {
+          "schema_version": "0.1",
+          "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+          "span_id": "00f067aa0ba902b7",
+          "parent_span_id": null,
+          "span_name": "chat gpt-5",
+          "span_kind": "client",
+          "start_time": "2025-10-09T08:53:20.000Z",
+          "end_time": "2025-10-09T08:53:22.500Z",
+          "duration_ms": 2500.25,
+          "status_code": "error",
+          "gen_ai": {
+            "operation_name": "chat",
+            "request_model": "gpt-5"
+          },
+          "truncated": false,
+          "otlp": {
+            "resourceSpans": [
+              {
+                "resource": {
+                  "attributes": [
+                    {
+                      "key": "service.name",
+                      "value": {
+                        "stringValue": "chat-api"
+                      }
+                    },
+                    {
+                      "key": "telemetry.sdk.language",
+                      "value": {
+                        "stringValue": "fixture"
+                      }
+                    }
+                  ]
+                },
+                "scopeSpans": [
+                  {
+                    "scope": {
+                      "name": "mirascope.llm",
+                      "version": "2.8.2"
+                    },
+                    "spans": [
+                      {
+                        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                        "spanId": "00f067aa0ba902b7",
+                        "name": "chat gpt-5",
+                        "kind": 3,
+                        "startTimeUnixNano": "1760000000000000000",
+                        "endTimeUnixNano": "1760000002500250001",
+                        "attributes": [
+                          {
+                            "key": "gen_ai.operation.name",
+                            "value": {
+                              "stringValue": "chat"
+                            }
+                          },
+                          {
+                            "key": "gen_ai.request.model",
+                            "value": {
+                              "stringValue": "gpt-5"
+                            }
+                          },
+                          {
+                            "key": "mirascope.response.model_id",
+                            "value": {
+                              "stringValue": "gpt-5"
+                            }
+                          }
+                        ],
+                        "events": [],
+                        "links": [],
+                        "status": {
+                          "code": 2
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Mirascope error.message masked with captureContent",
+      "options": {
+        "captureContent": true
+      },
+      "compare": "exact",
+      "span": {
+        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "spanId": "00f067aa0ba902b7",
+        "name": "chat gpt-5",
+        "kind": "client",
+        "startTimeUnixNano": "1760000000000000000",
+        "endTimeUnixNano": "1760000002500250001",
+        "resource": {
+          "service.name": "chat-api",
+          "telemetry.sdk.language": "fixture"
+        },
+        "scope": {
+          "name": "mirascope.llm",
+          "version": "2.8.2"
+        },
+        "attributes": {
+          "gen_ai.operation.name": "chat",
+          "error.message": "Lookup failed for jane@example.com"
+        }
+      },
+      "expected": {
+        "event": "ai_otel_span",
+        "anonymousId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "messageId": "4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
+        "timestamp": "2025-10-09T08:53:22.500Z",
+        "properties": {
+          "schema_version": "0.1",
+          "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+          "span_id": "00f067aa0ba902b7",
+          "parent_span_id": null,
+          "span_name": "chat gpt-5",
+          "span_kind": "client",
+          "start_time": "2025-10-09T08:53:20.000Z",
+          "end_time": "2025-10-09T08:53:22.500Z",
+          "duration_ms": 2500.25,
+          "status_code": "unset",
+          "gen_ai": {
+            "operation_name": "chat"
+          },
+          "truncated": false,
+          "otlp": {
+            "resourceSpans": [
+              {
+                "resource": {
+                  "attributes": [
+                    {
+                      "key": "service.name",
+                      "value": {
+                        "stringValue": "chat-api"
+                      }
+                    },
+                    {
+                      "key": "telemetry.sdk.language",
+                      "value": {
+                        "stringValue": "fixture"
+                      }
+                    }
+                  ]
+                },
+                "scopeSpans": [
+                  {
+                    "scope": {
+                      "name": "mirascope.llm",
+                      "version": "2.8.2"
+                    },
+                    "spans": [
+                      {
+                        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                        "spanId": "00f067aa0ba902b7",
+                        "name": "chat gpt-5",
+                        "kind": 3,
+                        "startTimeUnixNano": "1760000000000000000",
+                        "endTimeUnixNano": "1760000002500250001",
+                        "attributes": [
+                          {
+                            "key": "gen_ai.operation.name",
+                            "value": {
+                              "stringValue": "chat"
+                            }
+                          },
+                          {
+                            "key": "error.message",
+                            "value": {
+                              "stringValue": "Lookup failed for [email]"
+                            }
+                          }
+                        ],
+                        "events": [],
+                        "links": [],
+                        "status": {
+                          "code": 0
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "error.message kept on spans from other instrumentation scopes",
+      "options": {},
+      "compare": "exact",
+      "span": {
+        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "spanId": "00f067aa0ba902b7",
+        "name": "chat gpt-5",
+        "kind": "client",
+        "startTimeUnixNano": "1760000000000000000",
+        "endTimeUnixNano": "1760000002500250001",
+        "resource": {
+          "service.name": "chat-api",
+          "telemetry.sdk.language": "fixture"
+        },
+        "scope": {
+          "name": "fixture-instrumentation",
+          "version": "1.0.0"
+        },
+        "attributes": {
+          "gen_ai.operation.name": "chat",
+          "gen_ai.request.model": "gpt-5",
+          "error.message": "rate limited"
+        }
+      },
+      "expected": {
+        "event": "ai_otel_span",
+        "anonymousId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "messageId": "4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
+        "timestamp": "2025-10-09T08:53:22.500Z",
+        "properties": {
+          "schema_version": "0.1",
+          "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+          "span_id": "00f067aa0ba902b7",
+          "parent_span_id": null,
+          "span_name": "chat gpt-5",
+          "span_kind": "client",
+          "start_time": "2025-10-09T08:53:20.000Z",
+          "end_time": "2025-10-09T08:53:22.500Z",
+          "duration_ms": 2500.25,
+          "status_code": "unset",
+          "gen_ai": {
+            "operation_name": "chat",
+            "request_model": "gpt-5"
+          },
+          "truncated": false,
+          "otlp": {
+            "resourceSpans": [
+              {
+                "resource": {
+                  "attributes": [
+                    {
+                      "key": "service.name",
+                      "value": {
+                        "stringValue": "chat-api"
+                      }
+                    },
+                    {
+                      "key": "telemetry.sdk.language",
+                      "value": {
+                        "stringValue": "fixture"
+                      }
+                    }
+                  ]
+                },
+                "scopeSpans": [
+                  {
+                    "scope": {
+                      "name": "fixture-instrumentation",
+                      "version": "1.0.0"
+                    },
+                    "spans": [
+                      {
+                        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                        "spanId": "00f067aa0ba902b7",
+                        "name": "chat gpt-5",
+                        "kind": 3,
+                        "startTimeUnixNano": "1760000000000000000",
+                        "endTimeUnixNano": "1760000002500250001",
+                        "attributes": [
+                          {
+                            "key": "gen_ai.operation.name",
+                            "value": {
+                              "stringValue": "chat"
+                            }
+                          },
+                          {
+                            "key": "gen_ai.request.model",
+                            "value": {
+                              "stringValue": "gpt-5"
+                            }
+                          },
+                          {
+                            "key": "error.message",
+                            "value": {
+                              "stringValue": "rate limited"
+                            }
+                          }
+                        ],
+                        "events": [],
+                        "links": [],
+                        "status": {
+                          "code": 0
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
       "name": "extra properties and a custom event name",
       "options": {
         "eventName": "llm_span",
