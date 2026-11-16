@@ -176,7 +176,8 @@
               "from_span": true,
               "matched": false,
               "started_at": 100,
-              "ended_at": 110
+              "ended_at": 110,
+              "raw_model": "example-model"
             },
             {
               "call_event_pending": true,
@@ -200,7 +201,8 @@
               "started_at": 200,
               "ended_at": 210,
               "last": true,
-              "last_ok": true
+              "last_ok": true,
+              "raw_model": "example-model"
             }
           ],
           "user_id": "u",

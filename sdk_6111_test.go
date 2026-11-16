@@ -618,7 +618,7 @@ func TestSDK6111WritesTheSharedPendingCallKeys(t *testing.T) {
 	if !reflect.DeepEqual(written, any(records["go"])) {
 		t.Fatalf("pending_calls = %v, want the fixture's go entry %v", written, records["go"])
 	}
-	// Every key Node.js writes has the same value here; raw_model and report_sequence are this SDK's own.
+	// Every key Node.js writes has the same value here; report_sequence is this SDK's own.
 	for n, node := range records["node"] {
 		record := records["go"][n].(map[string]any)
 		for key, want := range node.(map[string]any) {
@@ -627,7 +627,7 @@ func TestSDK6111WritesTheSharedPendingCallKeys(t *testing.T) {
 			}
 		}
 		for key := range record {
-			if _, shared := node.(map[string]any)[key]; !shared && key != "raw_model" && key != "report_sequence" {
+			if _, shared := node.(map[string]any)[key]; !shared && key != "report_sequence" {
 				t.Errorf("record %d has %s, which Node.js does not write", n, key)
 			}
 		}
@@ -705,6 +705,68 @@ func TestSDK6111GAEnrichingSameSourceRepeatRepricesRetainedUsage(t *testing.T) {
 					}
 				})
 			}
+		}
+	}
+}
+
+func TestSDK6111GBPendingRawModelSurvivesRestore(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		for _, rawFirst := range []bool{false, true} {
+			t.Run(fmt.Sprintf("json=%t/rawFirst=%t", restore, rawFirst), func(t *testing.T) {
+				var models []string
+				r := setupAI(t, WithCredits(func(c CreditCall) (*float64, error) {
+					models = append(models, c.Model)
+					if c.Model == "claude-sonnet-4-5-20250929" {
+						return Ptr(7.0), nil
+					}
+					return Ptr(1.0), nil
+				}))
+				client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+				_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+				first := "claude-sonnet-4-5"
+				if rawFirst {
+					first = "claude-sonnet-4-5-20250929"
+				}
+				call := sdk6111Window(LLMCall{Provider: "anthropic", Model: first, Integration: "openai", ResponseID: "resp_1", InputTokens: 10, OutputTokens: 2}, 100)
+				client.reenter = func() { i.RecordCall(call) }
+				snapshot, ok := i.Pause(PauseOptions{})
+				if !ok {
+					t.Fatal("pause")
+				}
+				if snapshot.PendingCalls[0]["model"] != "claude-sonnet-4-5" || snapshot.PendingCalls[0]["raw_model"] != first {
+					t.Fatalf("pending = %v", snapshot.PendingCalls)
+				}
+				if restore {
+					raw, err := json.Marshal(snapshot)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var stored PausedInteraction
+					if err := json.Unmarshal(raw, &stored); err != nil {
+						t.Fatal(err)
+					}
+					_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+				} else {
+					i.Resume()
+				}
+				call.Model = "claude-sonnet-4-5-20250929"
+				if rawFirst {
+					call.Model = "claude-sonnet-4-5"
+				}
+				call.CallPurpose = "answer"
+				i.RecordCall(call)
+				i.End(EndOptions{})
+				if !reflect.DeepEqual(models, []string{first, first}) {
+					t.Fatalf("models = %v", models)
+				}
+				want := 1.0
+				if rawFirst {
+					want = 7
+				}
+				if resp := lastResponse(t, r); sdk6111Num(resp["total_credits"]) != want || resp["primary_model"] != "claude-sonnet-4-5" {
+					t.Fatalf("response = %v", resp)
+				}
+			})
 		}
 	}
 }
