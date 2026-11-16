@@ -688,3 +688,45 @@ func TestSpanDedupFullBatchQueueKeepsTheOwnedCallsSpan(t *testing.T) {
 		t.Fatalf("the owned call has %d spans, want 1", calls)
 	}
 }
+
+func TestSpanDedupJoinedCallFixesTheSDKTraceAcrossPause(t *testing.T) {
+	for _, restore := range []string{"in-process", "json"} {
+		t.Run(restore, func(t *testing.T) {
+			provider, _, events := testProvider(t, Options{Simple: true})
+			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+				t.Fatal(err)
+			}
+			ctx, i, o := ownerSpan(provider.Tracer("app"))
+			ownerTrace := o.SpanContext().TraceID().String()
+			wrapperIn(ctx, t, i, events)
+			snapshot, ok := i.Pause(rudderstackai.PauseOptions{})
+			if !ok {
+				t.Fatal("pause failed")
+			}
+			o.End()
+			if snapshot.SDKTraceID != ownerTrace {
+				t.Errorf("snapshot SDK trace %q, want the owner's %q", snapshot.SDKTraceID, ownerTrace)
+			}
+			if restore == "json" {
+				data, err := json.Marshal(snapshot)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var stored rudderstackai.PausedInteraction
+				if err := json.Unmarshal(data, &stored); err != nil {
+					t.Fatal(err)
+				}
+				ctx, i = rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{Resume: &stored})
+			} else {
+				i.Resume()
+			}
+			wrapperIn(ctx, t, i, events)
+			i.End(rudderstackai.EndOptions{})
+			for _, e := range spanEvents(events()) {
+				if got := e["properties"].(object)["trace_id"]; got != ownerTrace {
+					t.Errorf("span on trace %v, want %s", got, ownerTrace)
+				}
+			}
+		})
+	}
+}
