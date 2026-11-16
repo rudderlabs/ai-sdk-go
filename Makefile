@@ -41,4 +41,4 @@ bench:
 
 # Sustained interactions and MCP calls through analytics-go to a local data plane.
 load:
-	$(GO) test -tags load -run TestLoad -count=1 -v ./internal/conformance
+	$(GO) test -tags load -run TestLoad -count=1 -v . ./internal/conformance

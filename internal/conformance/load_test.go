@@ -24,6 +24,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -135,7 +136,9 @@ func (f *fakeOpenAI) RoundTrip(req *http.Request) (*http.Response, error) {
 		toolResult = toolResult || m.Role == "tool"
 	}
 	if len(p.Tools) > 0 && !toolResult {
-		return reply(200, "application/json", head+`"object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant",`+
+		// Its own response ID: the SDK counts two responses with one ID as one call.
+		return reply(200, "application/json", strings.Replace(head, "chatcmpl-load", "chatcmpl-load-tool", 1)+
+			`"object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant",`+
 			`"content":null,"tool_calls":[{"id":"call_load","type":"function","function":{"name":"lookup_order","arguments":"{}"}}]},`+
 			`"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":20,"completion_tokens":8,"total_tokens":28}}`)
 	}

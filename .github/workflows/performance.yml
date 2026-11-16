@@ -89,7 +89,8 @@ jobs:
           check-latest: true
 
       - name: Run the load test
-        run: go test -tags load -run TestLoad -count=1 -v -timeout 15m ./internal/conformance
+        # TestLoadMCPMaps (root package) checks the SDK's own map sizes; TestLoad runs end to end.
+        run: go test -tags load -run TestLoad -count=1 -v -timeout 15m . ./internal/conformance
 
   fuzz:
     # The seed inputs run in every unit-test run; this explores beyond them.
