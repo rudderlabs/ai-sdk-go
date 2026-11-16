@@ -17,6 +17,8 @@ var (
 	Wrap func(name, version string, opts any) (Server, error)
 	// ErrorType maps an error to an error_type.
 	ErrorType func(err error) string
+	// CallerModel reads caller_model and its source from a request's _meta, or nil.
+	CallerModel func(meta map[string]any) map[string]any
 )
 
 // Request is what an adapter knows about one incoming request.
@@ -50,9 +52,9 @@ type Request struct {
 	HTTP bool
 	// UserAgent is the HTTP request header, used only by the built-in client fallback.
 	UserAgent string
-	// CallerModel is caller_model and its source, read from Meta by the adapter before any app code
-	// (schema marshalers, callbacks) runs; CallerModelRead reports that it did. Otherwise Begin
-	// reads Meta first.
+	// CallerModel is caller_model and its source for a tools/call, read by the adapter before any
+	// app code (marshalers, schema serialization, callbacks) runs; CallerModelRead reports that it
+	// did. Otherwise Begin reads Meta first.
 	CallerModel     map[string]any
 	CallerModelRead bool
 	// Responses observes the final responses written for this request's connection or HTTP

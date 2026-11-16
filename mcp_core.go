@@ -74,6 +74,7 @@ var owned = map[string]bool{
 
 func init() {
 	mcpbridge.ErrorType = errorType
+	mcpbridge.CallerModel = callerModel
 	mcpbridge.Wrap = func(name, version string, opts any) (mcpbridge.Server, error) {
 		o, _ := opts.(Options)
 		n, err := normalizeOptions(o)

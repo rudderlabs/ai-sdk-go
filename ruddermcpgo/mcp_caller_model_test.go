@@ -1,9 +1,11 @@
 package ruddermcpgo
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -52,6 +54,43 @@ func TestMCPGoCallerModelAbsent(t *testing.T) {
 	for _, key := range []string{"caller_model", "caller_model_source"} {
 		if _, ok := p[key]; ok {
 			t.Fatalf("%s without a model: %v", key, p)
+		}
+	}
+}
+
+// mutatingMeta changes the caller-model holder when marshaled, as an app value in _meta could.
+type mutatingMeta struct{ holder map[string]any }
+
+func (m mutatingMeta) MarshalJSON() ([]byte, error) {
+	m.holder["model"] = "server-mutated"
+	return []byte(`{}`), nil
+}
+
+func TestMCPGoCallerModelReadBeforeCopyingTheRequest(t *testing.T) {
+	for _, transport := range []string{"stdio", "http"} {
+		for _, key := range []string{"io.modelcontextprotocol/aiInvocation", "x-codex-turn-metadata"} {
+			t.Run(transport+"/"+key, func(t *testing.T) {
+				s := workspaceServer(t.Name(), nil)
+				hooks := &server.Hooks{}
+				server.WithHooks(hooks)(s)
+				hooks.AddBeforeAny(func(_ context.Context, _ any, method mcp.MCPMethod, message any) {
+					if req, ok := message.(*mcp.CallToolRequest); ok && method == "tools/call" {
+						holder, _ := req.Params.Meta.AdditionalFields[key].(map[string]any)
+						req.Params.Meta.AdditionalFields["app/unread"] = mutatingMeta{holder}
+					}
+				})
+				r := wrap(t, s, Options{})
+				var cs *sdk.ClientSession
+				if transport == "stdio" {
+					cs = connectStdio(t, s, "2025-11-25", nil)
+				} else {
+					cs = connectHTTP(t, s, "2025-11-25", nil)
+				}
+				callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, sdk.Meta{key: map[string]any{"model": "gpt-5.2-codex"}})
+				if p := r.props(t, "mcp_tool_called"); p["caller_model"] != "gpt-5.2-codex" {
+					t.Fatalf("caller_model = %v, want the client's", p["caller_model"])
+				}
+			})
 		}
 	}
 }
