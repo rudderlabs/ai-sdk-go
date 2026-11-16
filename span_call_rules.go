@@ -205,12 +205,8 @@ func (i *Interaction) filterSpanCallsLocked() {
 		now = i.eventClock()
 	}
 	skipped := skippedSpanCalls(i.calls, float64(now.UnixMilli()))
-	i.spanParents, i.spanParentOrder = nil, nil
 	before := slices.Clone(i.calls)
 	if len(skipped) == 0 {
-		for _, c := range before {
-			c.answerText = ""
-		}
 		return
 	}
 	removedBefore := func(sequence int) int {
@@ -262,30 +258,61 @@ func (i *Interaction) filterSpanCallsLocked() {
 			c.callIndex -= removed
 		}
 	}
-	var lastSpan *recordedCall
-	for _, c := range before {
-		if c.spanSource != nil && c.errorType == "" {
-			lastSpan = c
+	if skipped[i.spanAnswerSource] {
+		i.spanAnswer, i.spanAnswerSource = "", nil
+		for _, c := range i.calls {
+			if c.spanSource != nil && c.errorType == "" && i.capture.AnswerText {
+				i.spanAnswer, i.spanAnswerSource = c.answerText, c
+			}
 		}
 	}
-	if skipped[lastSpan] {
-		i.spanAnswer, i.answer = "", ""
+	if skipped[i.answerSource] {
+		i.answer, i.answerSource = "", nil
 		for _, c := range i.calls {
-			if c.errorType == "" {
-				if c.answerText != "" {
-					i.answer = c.answerText
-				}
-				if c.spanSource != nil && i.capture.AnswerText {
-					i.spanAnswer = c.answerText
-				}
+			if c.errorType == "" && c.answerText != "" {
+				i.answer, i.answerSource = c.answerText, c
 			}
 		}
 	}
 	for _, c := range before {
-		c.answerText = ""
 		if skipped[c] {
+			c.answerText = ""
 			c.content = nil
 			c.callEventPending = false
 		}
 	}
+}
+
+// Capture may record more calls or change the inferred answer. Reapply the rules
+// after each redaction and tool callback, keeping evidence until capture settles.
+// The caller holds mu; callbacks run unlocked and this returns with mu held.
+func (i *Interaction) captureResponseLocked(explicit string) (text string, ok bool) {
+	selected := first(explicit, i.spanAnswer)
+	drained := 0
+	for {
+		captured := selected
+		text, ok = "", false
+		i.mu.Unlock()
+		if captured != "" && i.capture.AnswerText {
+			text, ok = redactText(captured)
+		}
+		i.mu.Lock()
+		for drained < len(i.tools) {
+			tools := slices.Clone(i.tools[drained:])
+			drained = len(i.tools)
+			i.mu.Unlock()
+			i.fireToolEvents(tools, true)
+			i.mu.Lock()
+		}
+		i.filterSpanCallsLocked()
+		selected = first(explicit, i.spanAnswer)
+		if selected == captured {
+			break
+		}
+	}
+	i.spanParents, i.spanParentOrder = nil, nil
+	for _, c := range i.calls {
+		c.answerText = ""
+	}
+	return text, ok
 }

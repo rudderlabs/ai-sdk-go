@@ -198,3 +198,29 @@ func TestSpanRulesRicherParentSurvivesEmptyDescendant(t *testing.T) {
 		})
 	}
 }
+
+func TestSpanRulesNonTextOutput(t *testing.T) {
+	for _, key := range []string{
+		"ai.response.object", "ai.response.files", "ai.response.tool_calls", "final_result", "traceloop.entity.output",
+		"ai.response.reasoning", "ai.response.providerMetadata", "mirascope.trace.output", "gen_ai.tool.call.result",
+		"tool_response", "ai.toolCall.result", "ai.value", "ai.values", "ai.embedding", "ai.embeddings", "ai.ranking",
+		"reranker.output_documents.0.document.content", "gen_ai.completion.0.content", "llm.output_messages.0.message.content",
+	} {
+		t.Run(key, func(t *testing.T) {
+			provider, _, events := testProvider(t, Options{Simple: true, ProductEvents: true})
+			ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+			start := time.Now().Add(-time.Second)
+			tracer := provider.Tracer("test")
+			ctx, root := tracer.Start(ctx, "root")
+			defer root.End()
+			_, output := tracer.Start(ctx, "output", trace.WithTimestamp(start), trace.WithAttributes(attribute.String("openinference.span.kind", "LLM"), attribute.String("llm.model_name", "m"), attribute.String(key, "{}")))
+			output.End(trace.WithTimestamp(start.Add(10 * time.Millisecond)))
+			_, usage := tracer.Start(ctx, "usage", trace.WithTimestamp(start.Add(20*time.Millisecond)), trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat"), attribute.String("gen_ai.request.model", "m"), attribute.Int("gen_ai.usage.input_tokens", 7)))
+			usage.End(trace.WithTimestamp(start.Add(900 * time.Millisecond)))
+			i.End(rudderstackai.EndOptions{})
+			if answer := reviewAnswer(t, events()); answer["llm_call_count"] != float64(2) {
+				t.Fatal(answer)
+			}
+		})
+	}
+}

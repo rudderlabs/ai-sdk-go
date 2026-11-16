@@ -514,6 +514,7 @@ type Interaction struct {
 	restored               bool // from a snapshot: the request context never supplies the trace ID
 	integration            string
 	ended                  bool
+	ending                 bool // capture callbacks may record calls while finalization is in progress
 	firstToken             time.Duration
 	calls                  []*recordedCall
 	callCount              int
@@ -545,6 +546,9 @@ type Interaction struct {
 	spanAnswer             string // opt-in response text of the last successful span call
 	messages               any
 	background             chan struct{}
+	// Sources remain identifiable even when their call is folded into totals.
+	answerSource, spanAnswerSource *recordedCall
+
 	// callErrors are errors wrapped calls failed with, newest last, so the app returning one
 	// keeps its call's error_type.
 	callErrors []callError
@@ -1100,9 +1104,6 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	} else {
 		i.resumeLocked()
 	}
-	if call.ErrorType == "" {
-		i.keepAnswerLocked(call.OutputText, call.Integration == "tracing")
-	}
 	var latency, ttft *time.Duration
 	if !call.StartedAt.IsZero() {
 		ended := call.EndedAt
@@ -1147,10 +1148,25 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			return ""
 		}(),
 	}
+	if call.ErrorType == "" {
+		i.keepAnswerLocked(call.OutputText, r.fromSpan)
+		if r.fromSpan && i.capture.AnswerText {
+			i.spanAnswerSource = r
+		}
+		if call.OutputText != "" && i.keepsTextLocked() {
+			i.answerSource = r
+		}
+	}
 	// Select after the credit callback, which may itself record another report.
 	if twin := i.callTwinLocked(r); twin != nil {
 		// A twin that stands for more calls takes more places in call_index.
 		i.callSeq += max(0, r.callCount-twin.callCount)
+		if i.answerSource == r {
+			i.answerSource = twin
+		}
+		if i.spanAnswerSource == r {
+			i.spanAnswerSource = twin
+		}
 		mergeCallTwin(twin, r)
 		// A merge does not advance callCount, so discard a generic app hint that
 		// would otherwise hide the newly learned provider classification.
@@ -1903,7 +1919,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	defer i.releasePause()
 	i.mu.Lock()
-	if i.ended || !i.pausedAt.IsZero() {
+	if i.ended || i.ending || !i.pausedAt.IsZero() {
 		defer i.mu.Unlock()
 		return i.snapshotLocked()
 	}
@@ -1926,39 +1942,8 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	for _, fn := range hooks {
 		safely(fn)
 	}
-	var responseText string
-	var responseOK bool
 	i.mu.Lock()
-	capturedAnswer := first(o.ResponseText, i.spanAnswer)
-	i.mu.Unlock()
-	if capturedAnswer != "" && i.capture.AnswerText {
-		responseText, responseOK = redactText(capturedAnswer)
-	}
-	i.mu.Lock()
-	// Drain tools added by redaction or tool callbacks before capturing totals.
-	// Calls whose outcome never arrived are sent now, as unknown.
-	drained := 0
-	for drained < len(i.tools) {
-		tools := slices.Clone(i.tools[drained:])
-		drained = len(i.tools)
-		i.mu.Unlock()
-		i.fireToolEvents(tools, true)
-		i.mu.Lock()
-	}
-	i.filterSpanCallsLocked()
-	settledAnswer := first(o.ResponseText, i.spanAnswer)
-	if settledAnswer != capturedAnswer && i.capture.AnswerText {
-		i.mu.Unlock()
-		responseText, responseOK = redactText(settledAnswer)
-		i.mu.Lock()
-	}
-	for drained < len(i.tools) {
-		tools := slices.Clone(i.tools[drained:])
-		drained = len(i.tools)
-		i.mu.Unlock()
-		i.fireToolEvents(tools, true)
-		i.mu.Lock()
-	}
+	responseText, responseOK := i.captureResponseLocked(o.ResponseText)
 	defer i.unlock()
 	if i.ended {
 		snapshot, ok = i.snapshotLocked()
@@ -1982,6 +1967,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	i.tools, i.toolOverflow, i.toolsByID = nil, nil, map[string]*recordedTool{}
 	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
+	i.answerSource, i.spanAnswerSource = nil, nil
 	i.prompt, i.answer, i.spanAnswer, i.messages = "", "", "", nil // not in the snapshot, so not in an in-process resume
 	i.compactions = 0
 	snapshot, ok = i.snapshotLocked()
@@ -2504,7 +2490,7 @@ func (i *Interaction) end(o EndOptions) {
 		}
 	}
 	i.mu.Lock()
-	if i.ended || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) || (o.endReason == endReasonTTL && !ttlSelected(i)) {
+	if i.ended || i.ending || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) || (o.endReason == endReasonTTL && !ttlSelected(i)) {
 		i.endBlockedLocked(o)
 		return
 	}
@@ -2542,7 +2528,7 @@ func (i *Interaction) end(o EndOptions) {
 		o.Status = ""
 	}
 	i.mu.Lock()
-	if i.ended || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) || (o.endReason == endReasonTTL && !ttlSelected(i)) {
+	if i.ended || i.ending || i.pausing || (o.endReason != "" && !i.pausedAt.IsZero()) || (o.endReason == endReasonTTL && !ttlSelected(i)) {
 		i.endBlockedLocked(o)
 		return
 	}
@@ -2556,7 +2542,7 @@ func (i *Interaction) end(o EndOptions) {
 		return
 	}
 	i.filterSpanCallsLocked()
-	i.ended = true
+	i.ending = true
 	i.settled = true
 	// Ended while paused: the wait counts as paused time and the final segment starts now.
 	if !i.pausedAt.IsZero() {
@@ -2566,16 +2552,9 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	i.mu.Unlock()
 	i.checkDisconnected()
-	// Mask once after the paused branch, outside the lock.
-	var responseText string
-	var responseOK bool
 	i.mu.Lock()
-	capturedAnswer := first(o.ResponseText, i.spanAnswer)
-	i.mu.Unlock()
-	if capturedAnswer != "" && i.capture.AnswerText {
-		responseText, responseOK = redactText(capturedAnswer)
-	}
-	i.mu.Lock()
+	responseText, responseOK := i.captureResponseLocked(o.ResponseText)
+	i.ended, i.ending = true, false
 	var props map[string]any
 	i.emitPendingCallsLocked()
 	i.buildSafelyLocked(func() {
@@ -2593,6 +2572,7 @@ func (i *Interaction) end(o EndOptions) {
 			snap.toolNames = append(snap.toolNames, t.name)
 		}
 	}
+	i.answerSource, i.spanAnswerSource = nil, nil
 	i.prompt, i.answer, i.spanAnswer, i.messages = "", "", "", nil
 	i.unlock()
 	unregister(i)
@@ -3023,9 +3003,11 @@ func (i *Interaction) keepsTextLocked() bool {
 func (i *Interaction) keepAnswerLocked(text string, fromSpan bool) {
 	if fromSpan && i.capture.AnswerText {
 		i.spanAnswer = text
+		i.spanAnswerSource = nil
 	}
 	if text != "" && i.keepsTextLocked() {
 		i.answer = text
+		i.answerSource = nil
 	}
 }
 

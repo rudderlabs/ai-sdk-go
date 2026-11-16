@@ -18284,6 +18284,432 @@
           }
         }
       ]
+    },
+    {
+      "name": "sdk6898_prep_non_text_framework_outputs",
+      "description": "OpenInference LLM spans with structured objects, files, snake-case tool calls, Pydantic final results, Traceloop entity output or Mirascope trace output are real calls, even without usage or response IDs. An unrelated usage-bearing sibling must not suppress them.",
+      "config": {
+        "advanceClock": true,
+        "emitLlmCalls": true
+      },
+      "interaction": {
+        "interactionId": "int_fixture_1",
+        "conversationId": "conv_fixture_1",
+        "userId": "user_1",
+        "feature": "support_bot",
+        "promptText": "Where is my order 1234?"
+      },
+      "steps": [
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000b9",
+            "name": "ai.response.object",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000110000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "openinference.span.kind": "LLM",
+              "llm.model_name": "gpt-5",
+              "ai.response.object": "{\"result\":true}"
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000ba",
+            "name": "ai.response.files",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000110000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "openinference.span.kind": "LLM",
+              "llm.model_name": "gpt-5",
+              "ai.response.files": "{\"result\":true}"
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000bb",
+            "name": "ai.response.tool_calls",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000110000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "openinference.span.kind": "LLM",
+              "llm.model_name": "gpt-5",
+              "ai.response.tool_calls": "{\"result\":true}"
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000bc",
+            "name": "final_result",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000110000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "openinference.span.kind": "LLM",
+              "llm.model_name": "gpt-5",
+              "final_result": "{\"result\":true}"
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000bd",
+            "name": "traceloop.entity.output",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000110000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "openinference.span.kind": "LLM",
+              "llm.model_name": "gpt-5",
+              "traceloop.entity.output": "{\"result\":true}"
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000be",
+            "name": "mirascope.trace.output",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000110000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "openinference.span.kind": "LLM",
+              "llm.model_name": "gpt-5",
+              "mirascope.trace.output": "{\"result\":true}"
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000bf",
+            "name": "achat",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000120000000",
+            "endTimeUnixNano": "1760000000900000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "gen_ai.operation.name": "chat",
+              "gen_ai.request.model": "gpt-5",
+              "gen_ai.usage.input_tokens": 100
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": null,
+            "model": "gpt-5",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": null,
+            "model": "gpt-5",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": null,
+            "model": "gpt-5",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": null,
+            "model": "gpt-5",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": null,
+            "model": "gpt-5",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": null,
+            "model": "gpt-5",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": null,
+            "model": "gpt-5",
+            "input_tokens": 100,
+            "output_tokens": 0,
+            "total_tokens": 100,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-5",
+            "latency_ms": "<number>",
+            "llm_call_count": 7,
+            "tool_call_count": 0,
+            "total_input_tokens": 100,
+            "total_output_tokens": 0,
+            "total_tokens": 100,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": null,
+                "model": "gpt-5",
+                "call_count": 7,
+                "input_tokens": 100,
+                "output_tokens": 0,
+                "total_tokens": 100,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        }
+      ]
     }
   ]
 }

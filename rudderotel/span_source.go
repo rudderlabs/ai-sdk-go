@@ -8,6 +8,7 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/internal/spanmodel"
 )
 
 func hasModelUsage(s sdktrace.ReadOnlySpan) bool {
@@ -26,7 +27,7 @@ func hasModelOutput(s sdktrace.ReadOnlySpan, call rudderstackai.LLMCall) bool {
 	}
 	for _, a := range s.Attributes() {
 		name := string(a.Key)
-		if name == "gen_ai.output.messages" || strings.HasPrefix(name, "gen_ai.completion.") || strings.HasPrefix(name, "llm.output_messages.") || name == "output.value" || name == "mirascope.response.messages" || name == "mirascope.response.content" || name == "ai.response.text" || name == "ai.response.toolCalls" {
+		if spanmodel.OutputAttribute(name) {
 			return true
 		}
 	}

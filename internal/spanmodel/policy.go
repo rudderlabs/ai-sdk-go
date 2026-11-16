@@ -160,3 +160,23 @@ func contentEvent(name string) bool {
 	return name == "gen_ai.choice" || name == "gen_ai.client.inference.operation.details" ||
 		(strings.HasPrefix(name, "gen_ai.") && strings.HasSuffix(name, ".message") && len(name) > len("gen_ai..message"))
 }
+
+// OutputAttribute uses the supported content constants for prep-rule evidence.
+func OutputAttribute(key string) bool {
+	outputKeys := []string{
+		"gen_ai.output.messages", "gen_ai.tool.call.result", "output.value", "ai.toolCall.result",
+		"ai.value", "ai.values", "ai.embedding", "ai.embeddings", "ai.ranking", "ai.decision.answers",
+		"traceloop.entity.output", "pydantic_ai.all_messages", "all_messages_events", "final_result",
+		"tool_response", "pydantic_ai.decision.answers", "mirascope.response.messages",
+		"mirascope.response.content", "mirascope.trace.output", "mirascope.annotation.reasoning",
+	}
+	if slices.Contains(contentKeys, key) && (strings.HasPrefix(key, "ai.response.") || slices.Contains(outputKeys, key)) {
+		return true
+	}
+	for _, prefix := range contentPrefixes {
+		if slices.Contains([]string{"gen_ai.completion", "llm.output_messages", "embedding.embeddings", "reranker.output_documents"}, prefix) && strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
+}
