@@ -1134,7 +1134,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	responseBeforeCredits := i.seen[call.Provider+"\x00"+call.ResponseID]
 	liveTwin := responseBeforeCredits != nil && responseBeforeCredits.fromSpan != (call.Integration == "tracing") && !responseBeforeCredits.twinMatched
 	credits := creditsOf(call.Credits)
-	if call.Credits == nil && call.ResponseID != "" {
+	// Retained credits apply only when the new report keeps the retained usage.
+	replacesTwin := pricingTwin != nil && !call.UsageUnknown && call.ErrorType == "" &&
+		(call.Integration != "tracing" || pricingTwin.usageUnknown)
+	if call.Credits == nil && call.ResponseID != "" && !replacesTwin {
 		if earlier := i.seen[call.Provider+"\x00"+call.ResponseID]; earlier != nil {
 			credits = earlier.credits
 		}

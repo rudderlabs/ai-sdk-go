@@ -39,3 +39,39 @@ func TestSDK6942CreditCallbackPointersAreIsolated(t *testing.T) {
 		t.Fatal(b)
 	}
 }
+func TestSDK6942AuthoritativeTwinsReprice(t *testing.T) {
+	for _, id := range []string{"", "r"} {
+		for _, unknown := range []bool{false, true} {
+			for _, explicit := range []bool{false, true} {
+				t.Run(id+map[bool]string{false: "known", true: "unknown"}[unknown]+map[bool]string{false: "hook", true: "explicit"}[explicit], func(t *testing.T) {
+					priced := []int{}
+					r := setupAI(t, WithCredits(func(c CreditCall) (*float64, error) {
+						priced = append(priced, c.InputTokens)
+						return Ptr(float64(c.InputTokens)), nil
+					}))
+					_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+					c := sdk6942Call()
+					c.ResponseID = id
+					c.InputTokens = 3
+					c.UsageUnknown = unknown
+					if explicit {
+						c.Credits = Ptr(7.0)
+					}
+					i.RecordCall(c)
+					c.Integration = "openai"
+					c.InputTokens = 10
+					c.UsageUnknown = false
+					c.Credits = nil
+					i.RecordCall(c)
+					i.End(EndOptions{})
+					if lastResponse(t, r)["total_credits"] != 10.0 {
+						t.Fatal(lastResponse(t, r))
+					}
+					if len(priced) == 0 || priced[len(priced)-1] != 10 {
+						t.Fatal(priced)
+					}
+				})
+			}
+		}
+	}
+}
