@@ -167,8 +167,9 @@ func TestSpanRulesFilterAfterCaptureCallbacks(t *testing.T) {
 						if source == "redactor" && text == "parent answer" {
 							add()
 						}
+						// No ID: the pause does not wait on it (SDK-6017), so its rules run at pause.
 						if source == "tool callback" && text == "parent answer" && !added {
-							i.RecordToolCalls(ToolCall{ID: "lookup", Name: "lookup"})
+							i.RecordToolCalls(ToolCall{Name: "lookup"})
 						}
 						if source == "second redaction" && text == "parent answer" {
 							add()

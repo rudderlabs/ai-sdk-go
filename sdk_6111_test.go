@@ -231,7 +231,8 @@ func TestSDK6111ToolRecordedDuringPausedCallDeliveryIsCountedOnceWithItsEvent(t 
 	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
 	// A timed span's call event waits until pause delivers it.
 	i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "tracing", InputTokens: 10}, 100))
-	client.reenter = func() { i.RecordToolCalls(ToolCall{ID: "call_1", Name: "lookup"}) }
+	// No ID: the pause does not wait on it (SDK-6017), so it is counted now.
+	client.reenter = func() { i.RecordToolCalls(ToolCall{Name: "lookup"}) }
 	if _, ok := i.Pause(PauseOptions{}); !ok {
 		t.Fatal("pause")
 	}

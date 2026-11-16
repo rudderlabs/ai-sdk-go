@@ -470,6 +470,12 @@ type recordedTool struct {
 	args, result                                        any
 	hasResult, settled, fired                           bool
 	ruleOutcome                                         *toolRuleOutcome
+	// agentKey is its own agent, else the latest model call's when it was recorded: that agent's
+	// next call settles the wait (SDK-6017). order is its place in the segment; carried tools restart at 0.
+	agentKey string
+	order    int
+	// unkeyed: restored from a snapshot written before agent_key, so keyed by its own agent.
+	unkeyed bool
 }
 
 type pendingEvent struct {
@@ -590,6 +596,12 @@ type Interaction struct {
 
 	// callSeq is the calls reported so far across pauses: the base of call_index.
 	callSeq int
+
+	// order is that of the latest model or tool call in this segment, agentCalls that of each
+	// agent's latest model call, and lastAgent the latest call's agent ("" when it had none).
+	order      int
+	agentCalls map[string]int
+	lastAgent  string
 }
 
 type callError struct {
@@ -744,6 +756,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		traceID:           o.TraceID,
 		seen:              map[string]*recordedCall{},
 		toolsByID:         map[string]*recordedTool{},
+		agentCalls:        map[string]int{},
 		firstToken:        -1,
 		disconnected:      cv.disconnected,
 		resumed:           resumed,
@@ -1430,6 +1443,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		return !r.fromSpan
 	}
 	i.callCount++
+	i.stampCallLocked(r.agentName)
 	r.reportSequence = i.callCount
 	r.callIndex = i.callSeq + 1
 	i.callSeq += callCount
@@ -1490,6 +1504,13 @@ func (i *Interaction) noteCallOutcomeLocked(r *recordedCall) {
 			}
 		}
 	}
+}
+
+// stampCallLocked: a model call by an agent settles the wait on that agent's earlier tool calls (SDK-6017).
+func (i *Interaction) stampCallLocked(agentName string) {
+	i.order++
+	i.lastAgent = agentName
+	i.agentCalls[agentName] = i.order
 }
 
 func (i *Interaction) emitPendingCallLocked(r *recordedCall) {
@@ -1723,7 +1744,9 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 					i.foldToolLocked(&recordedTool{name: name, mcpServer: server, parentTool: call.ParentTool, agentName: call.AgentName, calls: 1})
 					continue
 				}
-				tool = &recordedTool{calls: 1}
+				// Wrappers record a call's tools right after it, so those take that call's agent.
+				i.order++
+				tool = &recordedTool{calls: 1, agentKey: first(call.AgentName, i.lastAgent), order: i.order}
 				i.tools = append(i.tools, tool)
 				if call.ID != "" {
 					i.toolsByID[call.ID] = tool
@@ -1895,7 +1918,9 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 	var jobs []job
 	i.mu.Lock()
 	for _, t := range tools {
-		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || t.fired || t.name == "" || (final && t.structuredPending()) || (!t.settled && !final) {
+		// A tool the pause waits on fires in the segment that runs it, or as unknown at final End.
+		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || t.fired || t.name == "" || (final && t.structuredPending()) ||
+			(final && i.pausing && i.awaitedLocked(t)) || (!t.settled && !final) {
 			continue
 		}
 		rule, ok := rules[first(t.rawName, t.name)]
@@ -1953,14 +1978,15 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolv
 
 // Freeze deferred rules after paused-event delivery. Callbacks and encoding run outside mu.
 // done runs under mu once nothing is left to prepare, so no tool slips in before the snapshot.
-func (i *Interaction) preparePendingRules(done func()) {
+// Tools the pause waits on are left out: their rules run when they settle.
+func (i *Interaction) preparePendingRules(awaited map[*recordedTool]bool, done func()) {
 	for {
 		i.mu.Lock()
 		var selected *recordedTool
 		var rule ToolEventRule
 		for _, t := range i.tools {
 			r, ok := cfg().toolRules[first(t.rawName, t.name)]
-			if !t.structuredPending() && !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
+			if !t.structuredPending() && !awaited[t] && !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
 				selected, rule = t, r
 				break
 			}
@@ -2290,10 +2316,13 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	// Move to the paused slot now, so callbacks below never see a free slot.
 	holdPausedSlot(i)
 	i.mu.Unlock()
+	var awaited map[*recordedTool]bool
 	defer func() {
 		// Includes writes accepted while unlocked delivery was in progress.
-		i.preparePendingRules(func() {
+		i.preparePendingRules(awaited, func() {
 			i.completeSpanAncestryLocked()
+			// Delivery can record calls and tools: order them as a JSON restore does.
+			i.restartOrderLocked()
 			snapshot, ok = i.snapshotLocked()
 			i.pausing = false
 		})
@@ -2312,8 +2341,9 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	// As in Node and Python, deliver held call events after redaction but before the totals: a call
 	// or tool the app records during delivery joins this segment (pausedAt is still zero), and its
 	// events go too.
-	for fired := len(i.tools); ; {
-		for fired < len(i.tools) {
+	for {
+		// From the first tool: a call recorded during delivery can end the wait on a carried one.
+		for fired := 0; fired < len(i.tools); {
 			tools := slices.Clone(i.tools[fired:])
 			fired = len(i.tools)
 			i.mu.Unlock()
@@ -2344,18 +2374,21 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	for key := range i.seen {
 		i.seen[key] = nil
 	}
-	structured := make([]*recordedTool, 0)
+	carried := make([]*recordedTool, 0)
+	awaited = map[*recordedTool]bool{}
 	for _, tool := range i.tools {
-		if tool.structuredPending() {
-			structured = append(structured, tool)
+		if i.carriedLocked(tool) {
+			carried = append(carried, tool)
+			awaited[tool] = i.awaitedLocked(tool)
 		}
 	}
-	i.tools, i.toolOverflow, i.toolsByID = structured, nil, map[string]*recordedTool{}
-	for _, tool := range structured {
+	i.tools, i.toolOverflow, i.toolsByID = carried, nil, map[string]*recordedTool{}
+	for _, tool := range carried {
 		if tool.id != "" {
 			i.toolsByID[tool.id] = tool
 		}
 	}
+	i.restartOrderLocked()
 	i.primary, i.hint, i.clientDisconnected, i.firstToken = nil, nil, false, -1
 	i.answerSource, i.spanAnswerSource = nil, nil
 	i.prompt, i.answer, i.spanAnswer, i.messages = "", "", "", nil // not in the snapshot, so not in an in-process resume
@@ -2683,6 +2716,9 @@ func pendingTool(c *recordedTool) map[string]any {
 	if c.agentName != "" {
 		p["agent_name"] = c.agentName
 	}
+	if c.agentKey != "" {
+		p["agent_key"] = c.agentKey
+	}
 	if c.mcpServer != "" {
 		p["mcp_server"] = c.mcpServer
 	}
@@ -2907,6 +2943,9 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		c.rawName = pendingText(p, "raw_name")
 		c.id = pendingText(p, "tool_call_id")
 		c.agentName = pendingText(p, "agent_name")
+		var keyed bool
+		c.agentKey, keyed = p["agent_key"].(string)
+		c.unkeyed = !keyed
 		c.mcpServer = pendingText(p, "mcp_server")
 		c.parentTool = pendingText(p, "parent_tool")
 		c.calls = int(pendingNumber(p, "call_count"))
@@ -2937,6 +2976,20 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		if c.id != "" {
 			i.toolsByID[c.id] = c
 		}
+	}
+	i.restartOrderLocked()
+}
+
+// restartOrderLocked: a segment after a pause starts with its carried and pending tools, then the
+// calls recorded during pause delivery: the order a JSON snapshot can rebuild, so both resume paths agree.
+func (i *Interaction) restartOrderLocked() {
+	i.order, i.lastAgent = 0, ""
+	clear(i.agentCalls)
+	for _, t := range i.tools {
+		t.order = 0
+	}
+	for _, c := range append(slices.Clone(i.calls), i.overflow...) {
+		i.stampCallLocked(c.agentName)
 	}
 }
 
@@ -3293,9 +3346,9 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	}
 	p["llm_call_count"] = sum(func(c *recordedCall) int { return c.callCount })
 	allTools := append(slices.Clone(i.tools), i.toolOverflow...)
-	// Pending forced tools stay in the snapshot; count them once their outcome is known.
+	// Pending forced tools and tools the pause waits on stay in the snapshot; a later segment counts them.
 	if status == StatusPaused {
-		allTools = slices.DeleteFunc(allTools, func(tool *recordedTool) bool { return tool.structuredPending() })
+		allTools = slices.DeleteFunc(allTools, i.carriedLocked)
 	}
 	tools := 0
 	for _, t := range allTools {
@@ -3802,6 +3855,21 @@ func creditedTotal(calls []*recordedCall) (float64, bool) {
 // structuredPending is decided only by final End; pause retains these calls.
 func (t *recordedTool) structuredPending() bool {
 	return t.structuredCandidate && !t.resultSeen && !t.eventEmitted
+}
+
+// awaitedLocked: requested by the model and not run yet (awaiting an approval), and its agent made
+// no later call: the pause waits on it, so the segment that runs it counts it (SDK-6017).
+func (i *Interaction) awaitedLocked(t *recordedTool) bool {
+	key := t.agentKey
+	if t.unkeyed {
+		key = t.agentName
+	}
+	return t.id != "" && !t.settled && !t.resultSeen && !t.fired && !t.structuredCandidate && i.agentCalls[key] <= t.order
+}
+
+// carriedLocked tools are left out of a paused segment and kept for the next one.
+func (i *Interaction) carriedLocked(t *recordedTool) bool {
+	return t.structuredPending() || i.awaitedLocked(t)
 }
 
 // hasStructuredTools reports whether model spans may complete a pending candidate.

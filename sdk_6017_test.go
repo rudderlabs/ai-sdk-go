@@ -1,0 +1,292 @@
+package rudderstackai
+
+// SDK-6017 (D2): a tool call the pause waits on is counted once, in the segment that runs it.
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+)
+
+func sdk6017Call(agentName string, inputTokens int) LLMCall {
+	return LLMCall{Provider: "openai", Model: "gpt-4o", InputTokens: inputTokens, AgentName: agentName}
+}
+
+func sdk6017Start() *Interaction {
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	return i
+}
+
+// sdk6017Continue pauses, then continues in process or in an interaction restored from the JSON snapshot.
+func sdk6017Continue(t *testing.T, i *Interaction, restore bool) *Interaction {
+	t.Helper()
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("pause")
+	}
+	return round3Resume(t, i, snapshot, restore)
+}
+
+func sdk6017ToolCounts(r *recorder) []int {
+	out := []int{}
+	for _, e := range r.named("ai_response_received") {
+		out = append(out, int(sdk6111Num(e.Properties["tool_call_count"])))
+	}
+	return out
+}
+
+func sdk6017ToolEvents(r *recorder, event string) [][2]any {
+	out := [][2]any{}
+	for _, e := range r.named(event) {
+		out = append(out, [2]any{e.Properties["tool_call_id"], e.Properties["tool_status"]})
+	}
+	return out
+}
+
+func sdk6017Expect(t *testing.T, what string, got, want any) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("%s = %v, want %v", what, got, want)
+	}
+}
+
+func sdk6017Rules(tools map[string]string) ConfigOption {
+	rules := map[string]ToolEventRule{}
+	for name, event := range tools {
+		rules[name] = ToolEventRule{Event: event}
+	}
+	return WithEventRules(EventRules{Tools: rules})
+}
+
+func TestSDK6017AwaitedTool(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		mode := map[bool]string{false: "in-process", true: "json"}[restore]
+		t.Run(mode+"/is counted once, after resume, with its declared event fired once", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}), WithToolBreakdown(true))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me"})
+			i := sdk6017Continue(t, first, restore)
+			i.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me", Result: "ok", Error: Ptr(false)})
+			i.RecordCall(sdk6017Call("", 20))
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			segments := r.named("ai_response_received")
+			if _, ok := segments[0].Properties["tool_breakdown"]; ok {
+				t.Fatalf("paused tool_breakdown = %v, want absent", segments[0].Properties["tool_breakdown"])
+			}
+			sdk6017Expect(t, "tool_breakdown", mustJSON(segments[1].Properties["tool_breakdown"]), `[{"call_count":1,"error_count":0,"tool_name":"approve_me"}]`)
+			sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"call_1", "success"}})
+		})
+
+		t.Run(mode+"/counts a denied execution once, with its error, after resume", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}), WithToolBreakdown(true))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me"})
+			i := sdk6017Continue(t, first, restore)
+			i.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me", Error: Ptr(true), ErrorType: "denied"})
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			sdk6017Expect(t, "tool_breakdown", mustJSON(lastResponse(t, r)["tool_breakdown"]), `[{"call_count":1,"error_count":1,"error_types":{"denied":1},"tool_name":"approve_me"}]`)
+			sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"call_1", "denied"}})
+		})
+
+		t.Run(mode+"/merges a RecordToolResult after resume into the carried tool", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me"})
+			i := sdk6017Continue(t, first, restore)
+			i.RecordToolResult("call_1", ToolResult{Result: "ok", Error: Ptr(false), Duration: Ptr(5 * time.Millisecond)})
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"call_1", "success"}})
+		})
+
+		t.Run(mode+"/counts a tool still unresolved at the resumed End there, as unknown", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me"})
+			i := sdk6017Continue(t, first, restore)
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"call_1", "unknown"}})
+		})
+
+		t.Run(mode+"/counts a tool from an agent's earlier call at pause and carries one from its latest call", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"lookup": "Looked Up"}))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("researcher", 10))
+			first.RecordToolCalls(ToolCall{ID: "early", Name: "lookup"})
+			first.RecordCall(sdk6017Call("researcher", 10))
+			first.RecordToolCalls(ToolCall{ID: "late", Name: "lookup"})
+			i := sdk6017Continue(t, first, restore)
+			sdk6017Expect(t, "Looked Up at pause", sdk6017ToolEvents(r, "Looked Up"), [][2]any{{"early", "unknown"}})
+			i.RecordToolCalls(ToolCall{ID: "late", Name: "lookup", Result: "ok", Error: Ptr(false)})
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{1, 1})
+			sdk6017Expect(t, "Looked Up", sdk6017ToolEvents(r, "Looked Up"), [][2]any{{"early", "unknown"}, {"late", "success"}})
+		})
+
+		t.Run(mode+"/inherits the previous call's agent and is re-evaluated at a second pause", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"search": "Searched"}))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("researcher", 10))
+			// No agent of its own: the researcher's, so the planner's later call leaves it pending.
+			first.RecordToolCalls(ToolCall{ID: "r1", Name: "search"})
+			first.RecordCall(sdk6017Call("planner", 10))
+			second := sdk6017Continue(t, first, restore)
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0})
+			second.RecordCall(sdk6017Call("planner", 10))
+			third := sdk6017Continue(t, second, restore)
+			// Still no later researcher call: carried again.
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 0})
+			third.RecordCall(sdk6017Call("researcher", 10))
+			third.Pause(PauseOptions{})
+			// The researcher moved on without running it: counted at this pause, as unknown.
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 0, 1})
+			sdk6017Expect(t, "Searched", sdk6017ToolEvents(r, "Searched"), [][2]any{{"r1", "unknown"}})
+		})
+
+		t.Run(mode+"/runs its declared rules when it settles after resume, not at pause", func(t *testing.T) {
+			whenCalls, propertiesCalls := 0, 0
+			r := setupAI(t, WithEventRules(EventRules{Tools: map[string]ToolEventRule{"search": {
+				Event: "Searched",
+				When:  func(map[string]any, any) bool { whenCalls++; return true },
+				Properties: func(args map[string]any, result any) map[string]any {
+					propertiesCalls++
+					query, ok := args["q"].(string)
+					if !ok {
+						query = "none"
+					}
+					return map[string]any{"query": query, "kind": fmt.Sprintf("%T", result)}
+				},
+			}}}))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{ID: "call_1", Name: "search", Args: map[string]any{"q": "raw-query"}})
+			snapshot, ok := first.Pause(PauseOptions{})
+			if !ok {
+				t.Fatal("pause")
+			}
+			if whenCalls != 0 || propertiesCalls != 0 {
+				t.Fatalf("rules ran at pause: when %d, properties %d", whenCalls, propertiesCalls)
+			}
+			if len(snapshot.PendingTools) != 1 {
+				t.Fatalf("pending_tools = %v, want 1 record", snapshot.PendingTools)
+			}
+			if outcome, ok := snapshot.PendingTools[0]["rule_outcome"]; ok {
+				t.Fatalf("rule_outcome = %v, want absent", outcome)
+			}
+			if strings.Contains(mustJSON(snapshot), "raw-query") {
+				t.Fatal("snapshot carries the tool arguments")
+			}
+			i := round3Resume(t, first, snapshot, restore)
+			i.RecordToolCalls(ToolCall{ID: "call_1", Name: "search", Result: "ok", Error: Ptr(false)})
+			i.End(EndOptions{})
+			if whenCalls != 1 {
+				t.Fatalf("When ran %d times, want 1", whenCalls)
+			}
+			// Snapshots carry no arguments: after a JSON restore only the execution record's are seen.
+			want := map[bool]string{false: "raw-query", true: "none"}[restore]
+			p := r.props(t, "Searched")
+			if p["query"] != want || p["kind"] != "string" || p["tool_status"] != "success" {
+				t.Fatalf("Searched = %v, want query %q, kind string, tool_status success", p, want)
+			}
+		})
+
+		t.Run(mode+"/counts tools without an ID or with an outcome at pause, as before", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"lookup": "Looked Up"}))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{Name: "lookup"}, ToolCall{ID: "done", Name: "lookup", Result: "ok", Error: Ptr(false)})
+			i := sdk6017Continue(t, first, restore)
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{2, 0})
+			sdk6017Expect(t, "Looked Up", sdk6017ToolEvents(r, "Looked Up"), [][2]any{{"done", "success"}, {nil, "unknown"}})
+		})
+	}
+}
+
+func TestSDK6017NeverCountsAPendingToolOfARunThatIsNotResumed(t *testing.T) {
+	r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}))
+	i := sdk6017Start()
+	i.RecordCall(sdk6017Call("", 10))
+	i.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me"})
+	snapshot, _ := i.Pause(PauseOptions{})
+	sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0})
+	if n := len(r.named("Approved")); n != 0 {
+		t.Fatalf("Approved = %d, want 0", n)
+	}
+	if len(snapshot.PendingTools) != 1 {
+		t.Fatalf("pending_tools = %v, want 1 record", snapshot.PendingTools)
+	}
+	p := snapshot.PendingTools[0]
+	if p["tool_call_id"] != "call_1" || p["tool_name"] != "approve_me" || p["settled"] != false {
+		t.Fatalf("pending tool = %v", p)
+	}
+}
+
+func TestSDK6017CallRecordedDuringPauseDeliveryEndsTheWait(t *testing.T) {
+	r := setupAI(t, WithLLMCallEvents(true), sdk6017Rules(map[string]string{"lookup": "Looked Up"}))
+	client := &sdk6111ReenterClient{recorder: r, event: "ai_llm_response_received"}
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+	// A timed span's call event waits until pause delivers it.
+	i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "tracing", InputTokens: 10, AgentName: "a"}, 100))
+	i.RecordToolCalls(ToolCall{ID: "t1", Name: "lookup"})
+	// Its agent's next call, recorded during that delivery, ends the wait: the paused segment counts it, as in Node.
+	client.reenter = func() {
+		i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "openai", InputTokens: 20, AgentName: "a"}, 300))
+	}
+	i.Pause(PauseOptions{})
+	i.Resume()
+	i.End(EndOptions{})
+	sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{1, 0})
+	sdk6017Expect(t, "Looked Up", sdk6017ToolEvents(r, "Looked Up"), [][2]any{{"t1", "unknown"}})
+}
+
+// sdk6017RestoredWithoutAgentKey restores from a snapshot whose pending tool lacks agent_key, as
+// snapshots written before that field do.
+func sdk6017RestoredWithoutAgentKey(t *testing.T, agentName string) *Interaction {
+	t.Helper()
+	first := sdk6017Start()
+	first.RecordCall(sdk6017Call("planner", 10))
+	first.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me", AgentName: agentName})
+	snapshot, _ := first.Pause(PauseOptions{})
+	var stored PausedInteraction
+	if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+		t.Fatal(err)
+	}
+	if len(stored.PendingTools) != 1 || stored.PendingTools[0]["agent_key"] != "planner" {
+		t.Fatalf("pending_tools = %v, want one record with agent_key planner", stored.PendingTools)
+	}
+	delete(stored.PendingTools[0], "agent_key")
+	_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	return i
+}
+
+func TestSDK6017SnapshotWrittenBeforeAgentKey(t *testing.T) {
+	t.Run("restores its pending tool and counts it once with its outcome", func(t *testing.T) {
+		r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}))
+		i := sdk6017RestoredWithoutAgentKey(t, "")
+		i.RecordToolResult("call_1", ToolResult{Error: Ptr(false)})
+		i.End(EndOptions{})
+		sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+		sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"call_1", "success"}})
+	})
+
+	t.Run("keys a pending tool by its own agent_name", func(t *testing.T) {
+		r := setupAI(t)
+		i := sdk6017RestoredWithoutAgentKey(t, "planner")
+		// The planner's next call settles its wait, so a later pause counts the tool.
+		i.RecordCall(sdk6017Call("planner", 10))
+		i.Pause(PauseOptions{})
+		sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+	})
+}

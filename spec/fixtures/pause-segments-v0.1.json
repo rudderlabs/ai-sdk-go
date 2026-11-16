@@ -6193,6 +6193,1388 @@
       }
     },
     {
+      "name": "tool awaiting approval, resumed in process",
+      "description": "A tool with an ID and no outcome, requested by its agent's latest call, is what the pause waits on: the paused segment leaves it out and sends no event for it. Its execution after resume counts it once, in the resumed segment, with its real outcome.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "call_1",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "call_1",
+              "name": "approve",
+              "result": "ok",
+              "error": false
+            }
+          ]
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "llm_call_count": 1,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Approved",
+            "tool_call_id": "call_1",
+            "tool_status": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tool awaiting approval, then JSON restore",
+      "description": "The awaited tool is written to the snapshot's pending_tools and merges with its execution after restore.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "call_1",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "call_1",
+              "name": "approve",
+              "result": "ok",
+              "error": false
+            }
+          ]
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "llm_call_count": 1,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Approved",
+            "tool_call_id": "call_1",
+            "tool_status": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "awaited tools of several agents",
+      "description": "A tool waits only on its own agent's next call. The planner's tool is followed by a later planner call, so the paused segment counts it as unknown. The researcher's tool has no agent of its own and takes the preceding researcher call's; no researcher call follows it, so it is carried and counted after resume.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "plan": "Planned",
+            "search": "Searched"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "agent_name": "planner"
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "p1",
+              "name": "plan",
+              "agent_name": "planner"
+            }
+          ]
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "agent_name": "researcher"
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "r1",
+              "name": "search"
+            }
+          ]
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 30,
+          "agent_name": "planner"
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "r1",
+              "name": "search",
+              "result": "ok",
+              "error": false
+            }
+          ]
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 3,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Planned",
+            "tool_call_id": "p1",
+            "tool_status": "unknown"
+          },
+          {
+            "event": "Searched",
+            "tool_call_id": "r1",
+            "tool_status": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "parallel branches awaiting approval, then JSON restore",
+      "description": "Two agents each wait on a tool at the pause. Both are carried through the restore and counted after it with their own outcomes.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "agent_name": "a"
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "a1",
+              "name": "approve",
+              "agent_name": "a"
+            }
+          ]
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "agent_name": "b"
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "b1",
+              "name": "approve",
+              "agent_name": "b"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "a1",
+              "name": "approve",
+              "result": "ok",
+              "error": false
+            }
+          ]
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "b1",
+              "name": "approve",
+              "error": true,
+              "error_type": "denied"
+            }
+          ]
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "tool_call_count": 0
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 2
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Approved",
+            "tool_call_id": "a1",
+            "tool_status": "success"
+          },
+          {
+            "event": "Approved",
+            "tool_call_id": "b1",
+            "tool_status": "denied"
+          }
+        ]
+      }
+    },
+    {
+      "name": "awaited tool of a run that never resumes",
+      "description": "The tool never ran: it is never counted and sends no event.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "call_1",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "wrapper-only tools without results",
+      "description": "A wrapper records the tool IDs of each call and never their results. At the pause, the earlier call's tool counts as unknown; the latest call's tool is carried and counts as unknown at the resumed segment's end.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "t1",
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "t2",
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 30
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 1,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": "t1",
+            "tool_status": "unknown"
+          },
+          {
+            "event": "Looked Up",
+            "tool_call_id": "t2",
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "awaited tool resolved by record_tool_result after JSON restore",
+      "description": "An outcome reported for the tool's ID after restore merges into the carried tool.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "call_1",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "record_tool_result",
+          "id": "call_1",
+          "result": "ok",
+          "error": false
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Approved",
+            "tool_call_id": "call_1",
+            "tool_status": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "awaited tool re-evaluated at later pauses",
+      "description": "A carried tool starts the next segment before every new call and is evaluated again at each pause. Another agent's call leaves it waiting; its own agent's later call (the researcher's, taken from the call that preceded it and kept through the JSON restore) makes that pause count it as unknown.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "search": "Searched"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "agent_name": "researcher"
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "r1",
+              "name": "search"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "agent_name": "planner"
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 30,
+          "agent_name": "researcher"
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Searched",
+            "tool_call_id": "r1",
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "awaited tool given an agent later, then JSON restore",
+      "description": "A tool recorded without an agent after an agentless call takes the empty agent key and keeps it when a later record names its agent. The snapshot writes that key as an empty agent_key, so the restored run, like the in-process one, counts the tool at the next pause, after another agentless call.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "t1",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "t1",
+              "name": "approve",
+              "agent_name": "researcher"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Approved",
+            "tool_call_id": "t1",
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "awaited tool given an agent later, resumed in process",
+      "description": "The in-process twin of the case above: the tool keeps the empty agent key, so the agentless call after the resume ends its wait.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "t1",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "t1",
+              "name": "approve",
+              "agent_name": "researcher"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Approved",
+            "tool_call_id": "t1",
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "awaited tool of a run cancelled while paused",
+      "description": "The approval is denied and the app ends the run as cancelled without resuming it. The tool the pause waited on never ran: no segment counts it and no declared event is sent.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "t1",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "end",
+          "status": "cancelled"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 0,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "awaited tool of a run ended while paused",
+      "description": "A plain end while paused is not a resume either: the tool the pause waited on is never counted and sends no event.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "t1",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "response_status": "success",
+            "llm_call_count": 0,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "denial recorded while paused, then the run is cancelled",
+      "description": "Of two tools the pause waits on, one is reported denied while the run is still paused: it has an outcome, so the final segment counts it and sends its event. The other never ran and is never counted.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "t1",
+              "name": "approve"
+            },
+            {
+              "id": "t2",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "record_tool_result",
+          "id": "t1",
+          "error": true,
+          "error_type": "denied"
+        },
+        {
+          "op": "end",
+          "status": "cancelled"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 0,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Approved",
+            "tool_call_id": "t1",
+            "tool_status": "denied"
+          }
+        ]
+      }
+    },
+    {
+      "name": "agentless call named by its span twin before its tool",
+      "description": "A wrapper reports a call without an agent and the span twin of that call names the researcher. The tool recorded next has no agent of its own and takes the researcher's, not the stale empty key, so the researcher's later call ends its wait and the paused segment counts it.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "search": "Searched"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 1000,
+          "ended_ms": 2000
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 1000,
+          "ended_ms": 2000,
+          "agent_name": "researcher"
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "s1",
+              "name": "search"
+            }
+          ]
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "started_ms": 3000,
+          "ended_ms": 4000,
+          "agent_name": "researcher"
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Searched",
+            "tool_call_id": "s1",
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "agentless call named by its span twin after its tool",
+      "description": "The other arrival order: the tool is recorded right after the agentless wrapper call and the span twin names the researcher afterwards. The tool took that call's agent, so it follows the call to the researcher, whose later call ends its wait.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "search": "Searched"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 1000,
+          "ended_ms": 2000
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "s1",
+              "name": "search"
+            }
+          ]
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 1000,
+          "ended_ms": 2000,
+          "agent_name": "researcher"
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "started_ms": 3000,
+          "ended_ms": 4000,
+          "agent_name": "researcher"
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Searched",
+            "tool_call_id": "s1",
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "span twin names another agent than the tool's later caller, then JSON restore",
+      "description": "After a JSON restore, the span twin names the planner for an agentless wrapper call. The tool recorded after it takes the planner's key, so a later agentless call no longer ends its wait: it is carried through the next restore and counted when it runs.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "search": "Searched"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 5
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 1000,
+          "ended_ms": 2000
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 1000,
+          "ended_ms": 2000,
+          "agent_name": "planner"
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "s1",
+              "name": "search"
+            }
+          ]
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "started_ms": 3000,
+          "ended_ms": 4000
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "record_tool_result",
+          "id": "s1",
+          "result": "ok",
+          "error": false
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "tool_call_count": 0
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Searched",
+            "tool_call_id": "s1",
+            "tool_status": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "approval-tool-past-cap-counted-once-in-process",
+      "config": {
+        "max_calls_per_interaction": 1,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up",
+            "approve_me": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "m",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "done",
+              "name": "lookup",
+              "result": "ok",
+              "error": false
+            }
+          ]
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "wait",
+              "name": "approve_me"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_tool_result",
+          "id": "wait",
+          "result": "ok",
+          "error": false
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 1
+          },
+          {
+            "response_status": "success",
+            "llm_call_count": 0,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": "done",
+            "tool_status": "success"
+          },
+          {
+            "event": "Approved",
+            "tool_call_id": "wait",
+            "tool_status": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "approval-tool-past-cap-counted-once-json",
+      "config": {
+        "max_calls_per_interaction": 1,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up",
+            "approve_me": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "m",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "done",
+              "name": "lookup",
+              "result": "ok",
+              "error": false
+            }
+          ]
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "wait",
+              "name": "approve_me"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "record_tool_result",
+          "id": "wait",
+          "result": "ok",
+          "error": false
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 1
+          },
+          {
+            "response_status": "success",
+            "llm_call_count": 0,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": "done",
+            "tool_status": "success"
+          },
+          {
+            "event": "Approved",
+            "tool_call_id": "wait",
+            "tool_status": "success"
+          }
+        ]
+      }
+    },
+    {
       "name": "cancelled restored non-explicit credits json span retained 0 unchanged end late None",
       "config": {
         "emit_llm_calls": true

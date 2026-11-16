@@ -40,6 +40,9 @@ type pauseSegmentsStep struct {
 	OutputText           string              `json:"output_text"`
 	SpanID               string              `json:"span_id"`
 	ParentSpan           string              `json:"parent_span_id"`
+	ID                   string              `json:"id"`
+	Result               any                 `json:"result"`
+	Error                *bool               `json:"error"`
 	Event                string              `json:"event"`
 	Steps                []pauseSegmentsStep `json:"steps"`
 	JSON                 bool                `json:"json"`
@@ -50,6 +53,7 @@ type pauseSegmentsStep struct {
 		Result    any      `json:"result"`
 		Error     *bool    `json:"error"`
 		AgentName string   `json:"agent_name"`
+		ErrorType string   `json:"error_type"`
 	} `json:"calls"`
 }
 
@@ -232,9 +236,11 @@ func TestPauseSegmentsFixture(t *testing.T) {
 					case "record_tool_call":
 						calls := make([]ToolCall, 0, len(step.Calls))
 						for _, c := range step.Calls {
-							calls = append(calls, ToolCall{ID: c.ID, Name: c.Name, AgentName: c.AgentName, Result: c.Result, Error: c.Error})
+							calls = append(calls, ToolCall{ID: c.ID, Name: c.Name, AgentName: c.AgentName, Result: c.Result, Error: c.Error, ErrorType: c.ErrorType})
 						}
 						i.RecordToolCalls(calls...)
+					case "record_tool_result":
+						i.RecordToolResult(step.ID, ToolResult{Result: step.Result, Error: step.Error, ErrorType: step.ErrorType})
 					case "on_event":
 						client.mu.Lock()
 						client.hooks = append(client.hooks, pauseSegmentsHook{step.Event, step.Steps})
