@@ -3,6 +3,7 @@ package ruddermcpgo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -143,15 +144,23 @@ func (o *observedWriter) commit() {
 	}
 }
 
-// finish delivers a JSON body, and SSE events not yet flushed, once the handler is done.
+// finish delivers a JSON body, and SSE events not yet flushed, once the handler is done. Some
+// mcp-go versions (v0.55.1) write the final SSE event without flushing it, so the stream is
+// flushed here first: an event is delivered only once committed.
 func (o *observedWriter) finish() {
 	o.mu.Lock()
-	failed, body := o.failed, o.body
+	failed, body, sse, pending := o.failed, o.body, o.sse, len(o.events) > 0
 	o.mu.Unlock()
 	if failed {
 		return
 	}
-	if !o.sse && len(body) > 0 {
+	if sse && pending {
+		if err := http.NewResponseController(o.ResponseWriter).Flush(); err != nil && !errors.Is(err, http.ErrNotSupported) {
+			o.fail()
+			return
+		}
+	}
+	if !sse && len(body) > 0 {
 		o.responses.DeliverJSON(body)
 	}
 	o.commit()
