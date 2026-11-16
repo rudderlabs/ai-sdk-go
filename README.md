@@ -425,6 +425,7 @@ No API was removed.
 
 ## Known limitations
 
+- Mastra is a Node.js-only framework and has no Go integration.
 - Provider integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients. There are no OpenAI Agents SDK, Claude Agent SDK, LangChain, LangGraph or Vercel AI SDK integrations (they have no Go version). The optional `rudderotel` module provides an OpenTelemetry span processor and exporter.
 - Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `Interaction.Pause` or `EndOptions`.
 - Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint. A cancelled Chat Completions stream keeps 0 tokens (usage arrives only at the end).
