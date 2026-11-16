@@ -2082,19 +2082,26 @@ func (i *Interaction) resumeAtLocked(start time.Time) {
 }
 
 // backdate moves the current segment's start back to startedAt, for an adapter that reads a
-// resumed segment's events after they happened. The time moves from the latest pause to the
-// segment, so never before that pause began. No-op while paused.
+// segment's events after they happened. A first segment moves back freely; a resumed one takes the
+// time from the latest pause, so never before that pause began. No-op while paused.
 func (i *Interaction) backdate(startedAt time.Time) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if i.ended || !i.pausedAt.IsZero() || startedAt.IsZero() {
 		return
 	}
-	shift := min(i.started.Sub(startedAt), i.lastPause)
+	first := !i.restored && i.pauseCount == 0
+	shift := i.started.Sub(startedAt)
+	if !first {
+		shift = min(shift, i.lastPause)
+	}
 	if shift <= 0 {
 		return
 	}
 	i.started = i.started.Add(-shift)
+	if first {
+		return
+	}
 	i.pausedTotal -= shift
 	i.lastPause -= shift
 }

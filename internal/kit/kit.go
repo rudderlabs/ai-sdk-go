@@ -72,6 +72,10 @@ func KeepAnswer(i *rudderstackai.Interaction, text string) { hook.KeepAnswer(i, 
 // the latest pause.
 func Backdate(i *rudderstackai.Interaction, startedAt time.Time) { hook.Backdate(i, startedAt) }
 
+// AppErrorType is the error_type of an error the app's own code ended an answer with: app_error
+// for one without a provider signal.
+func AppErrorType(err error) string { return hook.AppErrorType(err) }
+
 // ContextConversation is the conversation ID a context carries (rudderstackai.WithValues), or "".
 func ContextConversation(ctx context.Context) string { return hook.ContextConversation(ctx) }
 

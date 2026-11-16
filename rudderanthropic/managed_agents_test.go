@@ -14,10 +14,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
@@ -588,5 +590,205 @@ func TestManagedAgentsKeepsAResumedSegmentReadFromHistoryToItsOwnLatency(t *test
 	latency, paused := got[1]["latency_ms"].(float64), got[1]["total_paused_ms"].(float64)
 	if latency < 600 || latency > 1600 || paused > 600 {
 		t.Fatalf("latency %v, paused %v", latency, paused)
+	}
+}
+
+// hookClient is an analytics client that runs a user hook as each event is enqueued.
+type hookClient struct {
+	*recorder
+	hook func(analytics.Track)
+}
+
+func (h *hookClient) Enqueue(m analytics.Message) error {
+	if tr, ok := m.(analytics.Track); ok && h.hook != nil {
+		h.hook(tr)
+	}
+	return h.recorder.Enqueue(m)
+}
+
+// maFixtureScenario is the named scenario of the shared fixture.
+func maFixtureScenario(t *testing.T, name string) (maFixture, maScenario) {
+	t.Helper()
+	f := loadMAFixture(t)
+	for _, s := range f.Scenarios {
+		if s.Name == name {
+			return f, s
+		}
+	}
+	t.Fatalf("no scenario %s", name)
+	return f, maScenario{}
+}
+
+// maCappedTurn is a user.message and three calls, one second apart.
+func maCappedTurn(t *testing.T, prefix string) *sliceStream {
+	t.Helper()
+	raw := []string{fmt.Sprintf(`{"id":"%s_u","type":"user.message","content":[],"processed_at":"2026-11-16T10:00:00.000Z"}`, prefix)}
+	for n := 1; n <= 3; n++ {
+		raw = append(raw, fmt.Sprintf(`{"id":"%s_%d","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},"processed_at":"2026-11-16T10:00:0%d.000Z"}`, prefix, n, n))
+	}
+	return maEvents(t, raw...)
+}
+
+func TestManagedAgentsWaitsForTheEventBeingReadWhenAHookClosesTheStream(t *testing.T) {
+	rec := &recorder{}
+	hooked := &hookClient{recorder: rec}
+	setup(t, rudderstackai.WithAnalytics(hooked), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 2}))
+	resetMA(t)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maCappedTurn(t, "sevt_hook"), rudderanthropic.WithSessionID("sesn_hook_close"))
+	// The spill at the second call opens the answer: its prompt event's hook closes the stream.
+	hooked.hook = func(tr analytics.Track) {
+		if tr.Event == "ai_user_prompt_created" {
+			_ = events.Close()
+		}
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for events.Next() {
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("deadlock: Close from a hook blocked on the event being read")
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["response_status"] != "cancelled" || got[0]["llm_call_count"] != float64(2) {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestManagedAgentsCloseFromAnotherGoroutineDoesNotWaitForAHook(t *testing.T) {
+	rec := &recorder{}
+	hooked := &hookClient{recorder: rec}
+	setup(t, rudderstackai.WithAnalytics(hooked), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 2}))
+	resetMA(t)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maCappedTurn(t, "sevt_hookg"), rudderanthropic.WithSessionID("sesn_hook_goroutine"))
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	hooked.hook = func(tr analytics.Track) {
+		if tr.Event == "ai_user_prompt_created" {
+			once.Do(func() { close(entered); <-release })
+		}
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for events.Next() {
+		}
+	}()
+	<-entered
+	closed := make(chan error, 1)
+	go func() { closed <- events.Close() }()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("Close blocked while a hook ran")
+	}
+	close(release)
+	<-done
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["response_status"] != "cancelled" {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestManagedAgentsLeavesTheEventsUntrackedWhenAnOptionPanics(t *testing.T) {
+	_, sc := maFixtureScenario(t, "text_turn_capture")
+	_, rec := setup(t)
+	resetMA(t)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)},
+		rudderanthropic.PanickingOption())
+	n := 0
+	for events.Next() {
+		n++
+	}
+	if n != len(sc.Streams[0].Events) || len(rec.events(t)) != 0 {
+		t.Fatalf("read %d, events %v", n, rec.events(t))
+	}
+}
+
+func TestManagedAgentsKeepsAWaitingToolOutOfASpillSoTheResumedSegmentCountsIt(t *testing.T) {
+	f, sc := maFixtureScenario(t, "custom_tool_error_after_resume")
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 1}))
+	resetMA(t)
+	session := rudderanthropic.WithSession(withID(f.Session, "sesn_spill_pause"))
+	for _, s := range sc.Streams {
+		events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, s.Events)}, session)
+		for events.Next() {
+		}
+		_ = events.Close()
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 2 || got[0]["tool_call_count"] != float64(0) || got[1]["tool_call_count"] != float64(1) {
+		t.Fatalf("%v", got)
+	}
+	breakdown := got[1]["tool_breakdown"].([]any)[0].(map[string]any)
+	if breakdown["call_count"] != float64(1) || breakdown["error_count"] != float64(1) || breakdown["duration_ms"] != float64(1600) {
+		t.Fatalf("%v", breakdown)
+	}
+}
+
+func TestManagedAgentsKeepsAHistoryTurnsLatencyAfterASpill(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 2}))
+	resetMA(t)
+	at := func(n int) string { return fmt.Sprintf(`"processed_at":"2026-11-16T10:00:0%d.000Z"`, n) }
+	raw := []string{`{"id":"sevt_hist_u","type":"user.message","content":[],` + at(0) + `}`}
+	for n := 1; n <= 5; n++ {
+		raw = append(raw, fmt.Sprintf(`{"id":"sevt_hist_%d","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},%s}`, n, at(n)))
+	}
+	raw = append(raw, `{"id":"sevt_hist_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at(6)+`}`)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t, raw...), rudderanthropic.WithSessionID("sesn_hist_spill"))
+	for events.Next() {
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 {
+		t.Fatalf("%v", got)
+	}
+	if latency := got[0]["latency_ms"].(float64); latency < 5990 || latency >= 6500 {
+		t.Fatalf("latency %v", latency)
+	}
+}
+
+func TestManagedAgentsKeepsAResumedHistorySegmentsLatencyAfterASpill(t *testing.T) {
+	f, sc := maFixtureScenario(t, "custom_tool_pause_resume")
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 1}))
+	resetMA(t)
+	session := rudderanthropic.WithSession(withID(f.Session, "sesn_hist_resume_spill"))
+	// A fake clock: the 60 s between the streams cost no real time.
+	synctest.Test(t, func(t *testing.T) {
+		for n, s := range sc.Streams {
+			if n > 0 {
+				time.Sleep(60 * time.Second) // the app reads the rest from history later
+			}
+			events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, s.Events)}, session)
+			for events.Next() {
+			}
+			_ = events.Close()
+		}
+	})
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 2 {
+		t.Fatalf("%v", got)
+	}
+	// The segment ran 610 ms on the server; the rest of the 60 s wait stays paused.
+	latency, paused := got[1]["latency_ms"].(float64), got[1]["total_paused_ms"].(float64)
+	if latency < 600 || latency > 1100 || paused < 59390 || paused > 59800 {
+		t.Fatalf("latency %v, paused %v", latency, paused)
+	}
+}
+
+func TestManagedAgentsEndsATurnTheAppsOwnExceptionStoppedAsAppError(t *testing.T) {
+	_, sc := maFixtureScenario(t, "text_turn_capture")
+	_, rec := setup(t)
+	resetMA(t)
+	src := &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)[:3], err: errors.New("boom")}
+	events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSessionID("sesn_app_error"))
+	for events.Next() {
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["response_status"] != "error" || got[0]["error_type"] != "app_error" {
+		t.Fatalf("%v", got)
 	}
 }

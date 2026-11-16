@@ -49,6 +49,8 @@ var (
 	OnBeforeEnd func(interaction any, fn func())
 	// StatusForErrorType maps an error type to a response status.
 	StatusForErrorType func(errorType string) string
+	// AppErrorType is the error_type of an error the app's own code ended an answer with.
+	AppErrorType func(err error) string
 	// NoteCallError remembers the error a wrapped call failed with, recorded under errorType.
 	NoteCallError func(interaction any, err error, errorType string)
 	// RegisterErrorClassifier adds an integration's error mapping.
