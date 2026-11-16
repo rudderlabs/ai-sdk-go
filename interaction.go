@@ -2744,11 +2744,12 @@ func pendingTool(c *recordedTool) map[string]any {
 		}
 		p["rule_outcome"] = outcome
 	}
+	// Seen without an outcome (a duration-only result) still ends a wait: restore needs it.
+	if c.resultSeen {
+		p["result_seen"] = true
+	}
 	if c.structuredCandidate {
 		p["structured_candidate"] = true
-		if c.resultSeen {
-			p["result_seen"] = true
-		}
 		if c.eventEmitted {
 			p["tool_event_emitted"] = true
 		}

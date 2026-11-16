@@ -327,3 +327,35 @@ func TestSDK6017WritesAnEmptyAgentKeyForAnAgentlessToolGivenAnAgentLater(t *test
 	// "plain": the key equals what restore falls back to, so it is left out.
 	sdk6017Expect(t, "pending_tools", got, [][3]any{{"keyless", "researcher", ""}, {"plain", nil, nil}, {"own", "planner", "planner"}})
 }
+
+func TestSDK6017DurationOnlyResultEndsTheWait(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		mode := map[bool]string{false: "in-process", true: "json"}[restore]
+		t.Run(mode+"/recorded while paused", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}))
+			first := sdk6017Start()
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me"})
+			first.Pause(PauseOptions{})
+			first.RecordToolResult("call_1", ToolResult{Duration: Ptr(5 * time.Millisecond)})
+			// A fresh snapshot: the one taken at the pause predates the result.
+			i := sdk6017Continue(t, first, restore)
+			i.Pause(PauseOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"call_1", "unknown"}})
+		})
+
+		t.Run(mode+"/recorded during paused delivery", func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}))
+			client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+			_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me"})
+			client.reenter = func() { first.RecordToolResult("call_1", ToolResult{Duration: Ptr(5 * time.Millisecond)}) }
+			i := sdk6017Continue(t, first, restore)
+			i.Pause(PauseOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"call_1", "unknown"}})
+		})
+	}
+}
