@@ -638,6 +638,9 @@
           "tool_calls": true,
           "http": false
         }
+      },
+      "not_applicable": {
+        "go": "Go's typed options hold only booleans; there is nothing to coerce"
       }
     },
     {
@@ -662,6 +665,9 @@
           "tool_calls": false,
           "http": false
         }
+      },
+      "not_applicable": {
+        "go": "Go's typed options hold only booleans; there is nothing to coerce"
       }
     },
     {
@@ -692,6 +698,9 @@
           "tool_calls": false,
           "http": false
         }
+      },
+      "not_applicable": {
+        "go": "Go's typed options hold only booleans; there is nothing to coerce"
       }
     },
     {
@@ -716,6 +725,9 @@
           "tool_calls": true,
           "http": false
         }
+      },
+      "not_applicable": {
+        "go": "Go's typed options hold only booleans; there is nothing to coerce"
       }
     },
     {

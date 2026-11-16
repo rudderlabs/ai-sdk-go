@@ -139,8 +139,7 @@ func TestResolutionFixture(t *testing.T) {
 			notApplicable(t, c.NotApplicable)
 			ls, ok := levels(t, c.Levels)
 			if !ok {
-				// Coercion cases (strings, numbers): Node.js and Python read them with Boolean()/bool().
-				t.Skip("N/A for Go: a non-boolean, non-object level; Go's types cannot hold it")
+				t.Fatal("a non-boolean, non-object level without not_applicable for go")
 			}
 			r := Resolve(ls...)
 			e := c.Expected
