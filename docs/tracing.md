@@ -141,6 +141,9 @@ active SDK span decides. Limits:
   matched.
 - An owning span the exporter drops because it cannot fit `rudderotel.Options.MaxEventBytes`
   leaves the call without a span.
+- Past `Limits.MaxMapEntries` open owner spans, a new span cannot own a call, and past that many
+  held SDK spans under one owner, a further call has no span; both are reported to `WithOnError`
+  as `limit_reached`.
 - A span that already ended, or that started in another interaction, is never joined.
 - An exported child of a dropped OpenTelemetry span keeps that span as its `parent_span_id`,
   although RudderStack never received it.
