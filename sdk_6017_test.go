@@ -758,3 +758,38 @@ func TestSDK6017UnsettledToolKeepsItsRulesWhenAPausedRunIsSnapshottedAgain(t *te
 		})
 	}
 }
+
+func TestSDK6017ApprovalToolFloodIsBoundedAtTwiceTheCap(t *testing.T) {
+	for _, cap := range []int{1, 3} {
+		for _, restore := range []bool{false, true} {
+			t.Run(fmt.Sprintf("cap=%d/json=%t", cap, restore), func(t *testing.T) {
+				r := setupAI(t, WithLimits(Limits{MaxCallsPerInteraction: cap}), WithToolBreakdown(true))
+				i := sdk6017Start()
+				i.RecordCall(sdk6017Call("", 10))
+				flood := 20 * cap
+				for n := range flood {
+					i.RecordToolCalls(ToolCall{ID: fmt.Sprintf("wait%d", n), Name: "approve_me"})
+				}
+				snapshot, ok := i.Pause(PauseOptions{})
+				if !ok {
+					t.Fatal("pause")
+				}
+				sdk6017Expect(t, "pending_tools", len(snapshot.PendingTools), 2*cap)
+				again, ok := i.Pause(PauseOptions{})
+				if !ok {
+					t.Fatal("repeated pause")
+				}
+				sdk6017Expect(t, "repeated pending_tools", len(again.PendingTools), 2*cap)
+				sdk6017Expect(t, "paused counts", sdk6017ToolCounts(r), []int{flood - 2*cap})
+				i = round3Resume(t, i, snapshot, restore)
+				for n := range 2 * cap {
+					i.RecordToolResult(fmt.Sprintf("wait%d", n), ToolResult{Result: "ok", Error: Ptr(false)})
+				}
+				i.End(EndOptions{})
+				counts := sdk6017ToolCounts(r)
+				sdk6017Expect(t, "tool_call_count", counts, []int{flood - 2*cap, 2 * cap})
+				sdk6017Expect(t, "total tool calls", counts[0]+counts[1], flood)
+			})
+		}
+	}
+}
