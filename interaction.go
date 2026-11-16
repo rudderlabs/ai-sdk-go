@@ -2059,7 +2059,8 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolv
 // Freeze deferred rules after paused-event delivery. Callbacks and encoding run outside mu.
 // done runs under mu once nothing is left to prepare, so no tool slips in before the snapshot.
 // A tool the pause waits on now, whenever it was recorded, is left out: its rules run when it settles.
-func (i *Interaction) preparePendingRules(done func()) {
+// settledOnly also leaves out tools without an outcome, for a later snapshot of a paused run.
+func (i *Interaction) preparePendingRules(settledOnly bool, done func()) {
 	for {
 		i.mu.Lock()
 		// Delivery can record calls and tools: order them as a JSON restore does, which also
@@ -2069,7 +2070,7 @@ func (i *Interaction) preparePendingRules(done func()) {
 		var rule ToolEventRule
 		for _, t := range i.tools {
 			r, ok := cfg().toolRules[first(t.rawName, t.name)]
-			if !t.structuredPending() && !i.awaitedLocked(t) && !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
+			if !t.structuredPending() && !i.awaitedLocked(t) && (t.settled || !settledOnly) && !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
 				selected, rule = t, r
 				break
 			}
@@ -2394,9 +2395,10 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	if !i.pausedAt.IsZero() {
 		// A tool settled since the pause has its result only here: its rules freeze into the snapshot.
+		// One still without an outcome keeps them for its result.
 		i.pausing = true
 		i.mu.Unlock()
-		i.preparePendingRules(func() {
+		i.preparePendingRules(true, func() {
 			snapshot, ok = i.snapshotLocked()
 			i.pausing = false
 		})
@@ -2411,7 +2413,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	i.mu.Unlock()
 	defer func() {
 		// Includes writes accepted while unlocked delivery was in progress.
-		i.preparePendingRules(func() {
+		i.preparePendingRules(false, func() {
 			i.completeSpanAncestryLocked()
 			snapshot, ok = i.snapshotLocked()
 			i.pausing = false

@@ -736,3 +736,25 @@ func TestSDK6017ToolRecordedPastTheCallCap(t *testing.T) {
 		sdk6017Expect(t, "Approved", len(r.named("Approved")), 0)
 	})
 }
+
+func TestSDK6017UnsettledToolKeepsItsRulesWhenAPausedRunIsSnapshottedAgain(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		mode := map[bool]string{false: "in-process", true: "json"}[restore]
+		t.Run(mode, func(t *testing.T) {
+			var when []any
+			r := setupAI(t, sdk6017ResultRule(&when))
+			i := sdk6017Start()
+			i.RecordCall(sdk6017Call("", 10))
+			i.RecordToolCalls(ToolCall{ID: "call_1", Name: "search"})
+			i.Pause(PauseOptions{})
+			// Seen, so no longer waited on, but without an outcome yet.
+			i.RecordToolResult("call_1", ToolResult{Duration: Ptr(5 * time.Millisecond)})
+			i = sdk6017Continue(t, i, restore)
+			sdk6017Expect(t, "when calls at the second snapshot", len(when), 0)
+			i.RecordToolResult("call_1", ToolResult{Result: "raw-result", Error: Ptr(false)})
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			sdk6017Expect(t, "Searched", sdk6017ToolEvents(r, "Searched"), [][2]any{{"call_1", "success"}})
+		})
+	}
+}
