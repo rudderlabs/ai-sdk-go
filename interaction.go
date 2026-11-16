@@ -1980,15 +1980,18 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolv
 
 // Freeze deferred rules after paused-event delivery. Callbacks and encoding run outside mu.
 // done runs under mu once nothing is left to prepare, so no tool slips in before the snapshot.
-// Tools the pause waits on are left out: their rules run when they settle.
-func (i *Interaction) preparePendingRules(awaited map[*recordedTool]bool, done func()) {
+// A tool the pause waits on now, whenever it was recorded, is left out: its rules run when it settles.
+func (i *Interaction) preparePendingRules(done func()) {
 	for {
 		i.mu.Lock()
+		// Delivery can record calls and tools: order them as a JSON restore does, which also
+		// decides the tools that still wait.
+		i.restartOrderLocked()
 		var selected *recordedTool
 		var rule ToolEventRule
 		for _, t := range i.tools {
 			r, ok := cfg().toolRules[first(t.rawName, t.name)]
-			if !t.structuredPending() && !awaited[t] && !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
+			if !t.structuredPending() && !i.awaitedLocked(t) && !t.fired && t.ruleOutcome == nil && ok && (r.When != nil || r.Properties != nil || t.hasResult) {
 				selected, rule = t, r
 				break
 			}
@@ -2318,13 +2321,10 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	// Move to the paused slot now, so callbacks below never see a free slot.
 	holdPausedSlot(i)
 	i.mu.Unlock()
-	var awaited map[*recordedTool]bool
 	defer func() {
 		// Includes writes accepted while unlocked delivery was in progress.
-		i.preparePendingRules(awaited, func() {
+		i.preparePendingRules(func() {
 			i.completeSpanAncestryLocked()
-			// Delivery can record calls and tools: order them as a JSON restore does.
-			i.restartOrderLocked()
 			snapshot, ok = i.snapshotLocked()
 			i.pausing = false
 		})
@@ -2377,11 +2377,9 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		i.seen[key] = nil
 	}
 	carried := make([]*recordedTool, 0)
-	awaited = map[*recordedTool]bool{}
 	for _, tool := range i.tools {
 		if i.carriedLocked(tool) {
 			carried = append(carried, tool)
-			awaited[tool] = i.awaitedLocked(tool)
 		}
 	}
 	i.tools, i.toolOverflow, i.toolsByID = carried, nil, map[string]*recordedTool{}

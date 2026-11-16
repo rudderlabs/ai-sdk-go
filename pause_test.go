@@ -1503,7 +1503,7 @@ func TestPendingEventOnlyRuleKeepsResultSize(t *testing.T) {
 	i.pausing, i.pausedAt = true, time.Now() // paused-response delivery in progress
 	i.mu.Unlock()
 	i.RecordToolCalls(ToolCall{Name: "late", Result: "abcdef"})
-	i.preparePendingRules(nil, func() {})
+	i.preparePendingRules(func() {})
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if len(i.tools) != 1 || i.tools[0].ruleOutcome == nil || i.tools[0].ruleOutcome.resultSize != 6 {

@@ -390,3 +390,62 @@ func TestSDK6017NeverCountsAnAwaitedToolWhenTheRunEndsWhilePaused(t *testing.T) 
 		sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"denied", "denied"}})
 	})
 }
+
+// sdk6017ResultRule passes only the real result, so an outcome frozen without it suppresses the event.
+func sdk6017ResultRule(calls *[]any) ConfigOption {
+	return WithEventRules(EventRules{Tools: map[string]ToolEventRule{"search": {Event: "Searched", When: func(_ map[string]any, result any) bool {
+		*calls = append(*calls, result)
+		return result == "raw-result"
+	}}}})
+}
+
+func TestSDK6017DeclaredRulesAroundAPause(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		mode := map[bool]string{false: "in-process", true: "json"}[restore]
+		// Continues from a fresh snapshot: the one taken at the pause predates what was recorded since.
+		continued := func(t *testing.T, i *Interaction) *Interaction {
+			t.Helper()
+			snapshot, ok := i.Pause(PauseOptions{})
+			if !ok {
+				t.Fatal("pause")
+			}
+			if strings.Contains(mustJSON(snapshot), "raw-result") {
+				t.Fatalf("snapshot carries the result: %s", mustJSON(snapshot))
+			}
+			return round3Resume(t, i, snapshot, restore)
+		}
+
+		t.Run(mode+"/run when a tool recorded unresolved during paused delivery settles after resume", func(t *testing.T) {
+			var when []any
+			r := setupAI(t, sdk6017ResultRule(&when))
+			client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+			_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+			first.RecordCall(sdk6017Call("", 10))
+			client.reenter = func() { first.RecordToolCalls(ToolCall{ID: "late", Name: "search"}) }
+			i := continued(t, first)
+			sdk6017Expect(t, "when calls at pause", len(when), 0)
+			i.RecordToolResult("late", ToolResult{Result: "raw-result", Error: Ptr(false)})
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			sdk6017Expect(t, "Searched", sdk6017ToolEvents(r, "Searched"), [][2]any{{"late", "success"}})
+			sdk6017Expect(t, "when calls", when, []any{"raw-result"})
+		})
+
+		t.Run(mode+"/are frozen with the result when an awaited tool settles during paused delivery", func(t *testing.T) {
+			var when []any
+			r := setupAI(t, sdk6017ResultRule(&when))
+			client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+			_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+			first.RecordCall(sdk6017Call("", 10))
+			first.RecordToolCalls(ToolCall{ID: "call_1", Name: "search"})
+			client.reenter = func() {
+				first.RecordToolResult("call_1", ToolResult{Result: "raw-result", Error: Ptr(false)})
+			}
+			i := continued(t, first)
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			sdk6017Expect(t, "Searched", sdk6017ToolEvents(r, "Searched"), [][2]any{{"call_1", "success"}})
+			sdk6017Expect(t, "when calls", when, []any{"raw-result"})
+		})
+	}
+}
