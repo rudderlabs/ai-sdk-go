@@ -2977,6 +2977,661 @@
       ]
     },
     {
+      "name": "capture_policy_feature_on_default_off",
+      "description": "captureContent as an object: answer text on while the default is off, so feedback_text is dropped.",
+      "config": {
+        "capture_content": {
+          "default": false,
+          "answer_text": true
+        }
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_capture_policy_feature_on_default_off",
+            "feature": "parity",
+            "prompt_text": "Where is my refund?"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "end",
+              "response_text": "Mock answer: Where is my refund?"
+            }
+          ]
+        },
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "feedback_given",
+            "interaction_id": "$last",
+            "conversation_id": "conv_capture_policy_feature_on_default_off",
+            "user_id": "user_1",
+            "action_details": {
+              "feedback_type": "thumbs",
+              "feedback_value": 1,
+              "feedback_text": "great"
+            }
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_feature_on_default_off",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "prompt_text": "Where is my refund?"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_feature_on_default_off",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "response_text": "Mock answer: Where is my refund?"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_feature_on_default_off",
+            "interaction_id": "$int1",
+            "action_type": "feedback_given",
+            "action_details": {
+              "feedback_type": "thumbs",
+              "feedback_value": 1
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "capture_policy_feature_off_default_on",
+      "description": "captureContent as an object: answer text off while the default is on; feedback_text is still sent.",
+      "config": {
+        "capture_content": {
+          "default": true,
+          "answer_text": false
+        }
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_capture_policy_feature_off_default_on",
+            "feature": "parity",
+            "prompt_text": "Where is my refund?"
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "end",
+              "response_text": "Mock answer: Where is my refund?"
+            }
+          ]
+        },
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "feedback_given",
+            "interaction_id": "$last",
+            "conversation_id": "conv_capture_policy_feature_off_default_on",
+            "user_id": "user_1",
+            "action_details": {
+              "feedback_type": "thumbs",
+              "feedback_value": 1,
+              "feedback_text": "great"
+            }
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_feature_off_default_on",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_feature_off_default_on",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_feature_off_default_on",
+            "interaction_id": "$int1",
+            "action_type": "feedback_given",
+            "action_details": {
+              "feedback_type": "thumbs",
+              "feedback_value": 1,
+              "feedback_text": "great"
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "capture_policy_interaction_falls_through",
+      "description": "An interaction policy without answer_text inherits it from the global policy; track_action outside the interaction follows the global setting.",
+      "config": {
+        "capture_content": {
+          "answer_text": true
+        }
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_capture_policy_interaction_falls_through",
+            "feature": "parity",
+            "prompt_text": "Where is my refund?",
+            "capture_content": {
+              "feedback_text": true
+            }
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "end",
+              "response_text": "Mock answer: Where is my refund?"
+            }
+          ]
+        },
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "feedback_given",
+            "interaction_id": "$last",
+            "conversation_id": "conv_capture_policy_interaction_falls_through",
+            "user_id": "user_1",
+            "action_details": {
+              "feedback_type": "thumbs",
+              "feedback_value": 1,
+              "feedback_text": "great"
+            }
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_interaction_falls_through",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "prompt_text": "Where is my refund?"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_interaction_falls_through",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "response_text": "Mock answer: Where is my refund?"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_interaction_falls_through",
+            "interaction_id": "$int1",
+            "action_type": "feedback_given",
+            "action_details": {
+              "feedback_type": "thumbs",
+              "feedback_value": 1
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "capture_policy_interaction_default_overrides",
+      "description": "An interaction default beats a global feature key; track_action outside the interaction follows the global setting.",
+      "config": {
+        "capture_content": {
+          "answer_text": true,
+          "feedback_text": true
+        }
+      },
+      "replies": {
+        "openai.chat": [
+          {
+            "json": {
+              "id": "chatcmpl-1",
+              "object": "chat.completion",
+              "created": 1,
+              "model": "gpt-4.1-mini",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "Mock answer: Where is my refund?"
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 25,
+                "completion_tokens": 12,
+                "total_tokens": 37,
+                "prompt_tokens_details": {
+                  "cached_tokens": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "steps": [
+        {
+          "op": "interaction",
+          "options": {
+            "user_id": "user_1",
+            "conversation_id": "conv_capture_policy_interaction_default_overrides",
+            "feature": "parity",
+            "prompt_text": "Where is my refund?",
+            "capture_content": {
+              "default": false
+            }
+          },
+          "steps": [
+            {
+              "op": "call",
+              "api": "openai.chat",
+              "params": {
+                "model": "gpt-4.1-mini",
+                "messages": [
+                  {
+                    "role": "user",
+                    "content": "Where is my refund?"
+                  }
+                ]
+              }
+            },
+            {
+              "op": "end",
+              "response_text": "Mock answer: Where is my refund?"
+            }
+          ]
+        },
+        {
+          "op": "track_action",
+          "options": {
+            "action_type": "feedback_given",
+            "interaction_id": "$last",
+            "conversation_id": "conv_capture_policy_interaction_default_overrides",
+            "user_id": "user_1",
+            "action_details": {
+              "feedback_type": "thumbs",
+              "feedback_value": 1,
+              "feedback_text": "great"
+            }
+          }
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_interaction_default_overrides",
+            "interaction_id": "$int1",
+            "feature": "parity"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_interaction_default_overrides",
+            "interaction_id": "$int1",
+            "feature": "parity",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-4.1-mini",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 25,
+            "total_output_tokens": 12,
+            "total_tokens": 37,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "gpt-4.1-mini",
+                "call_count": 1,
+                "input_tokens": 25,
+                "output_tokens": 12,
+                "total_tokens": 37,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_user_action",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_capture_policy_interaction_default_overrides",
+            "interaction_id": "$int1",
+            "action_type": "feedback_given",
+            "action_details": {
+              "feedback_type": "thumbs",
+              "feedback_value": 1,
+              "feedback_text": "great"
+            }
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "manual"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "content_capture_off",
       "description": "Content capture off (default): no text is sent.",
       "config": {},

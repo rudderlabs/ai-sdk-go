@@ -181,6 +181,7 @@ func configure(t *testing.T, c obj, rec *recorder) {
 	opts := []rudderstackai.ConfigOption{
 		rudderstackai.WithAnalytics(rec),
 		rudderstackai.WithCaptureContent(boolOr(c["capture_content"], false)),
+		withContentCapture(c["capture_content"]),
 		rudderstackai.WithLLMCallEvents(boolOr(c["emit_llm_calls"], false)),
 		rudderstackai.WithEmitSpans(boolOr(c["emit_spans"], false)),
 		rudderstackai.WithTaskStartedEvents(boolOr(c["emit_task_started"], false)),
@@ -603,6 +604,7 @@ func interactionOptions(o obj) rudderstackai.InteractionOptions {
 	if n, ok := o["attachment_count"].(float64); ok {
 		out.AttachmentCount = rudderstackai.Ptr(int(n))
 	}
+	out.CaptureContent, out.ContentCapture = capturePolicy(o["capture_content"])
 	out.Cookies, out.CookieValues = cookies(o["cookies"])
 	return out
 }
@@ -618,7 +620,40 @@ func taskOptions(o obj) rudderstackai.TaskOptions {
 	if v, has := o["parent_interaction_id"]; has && v == nil {
 		out.NoParent = true
 	}
+	out.CaptureContent, out.ContentCapture = capturePolicy(o["capture_content"])
 	return out
+}
+
+// capturePolicy is a fixture capture_content level: a bool, or a snake_case policy object.
+func capturePolicy(v any) (*bool, *rudderstackai.ContentCapture) {
+	if b, ok := v.(bool); ok {
+		return &b, nil
+	}
+	o, ok := v.(obj)
+	if !ok {
+		return nil, nil
+	}
+	p := &rudderstackai.ContentCapture{
+		Default: boolPtr(o["default"]), AnswerText: boolPtr(o["answer_text"]), LLMCalls: boolPtr(o["llm_calls"]),
+		FeedbackText: boolPtr(o["feedback_text"]), ScoreExplanation: boolPtr(o["score_explanation"]),
+		IntentSummary: boolPtr(o["intent_summary"]), CallReason: boolPtr(o["call_reason"]), ErrorMessage: boolPtr(o["error_message"]),
+	}
+	switch spans := o["spans"].(type) {
+	case bool:
+		p.Spans = &rudderstackai.SpanCapture{Default: &spans}
+	case obj:
+		p.Spans = &rudderstackai.SpanCapture{Default: boolPtr(spans["default"]), Messages: boolPtr(spans["messages"]), ToolCalls: boolPtr(spans["tool_calls"]), HTTP: boolPtr(spans["http"])}
+	}
+	return nil, p
+}
+
+// withContentCapture applies an object capture_content; a bool is WithCaptureContent's.
+func withContentCapture(v any) rudderstackai.ConfigOption {
+	_, p := capturePolicy(v)
+	if p == nil {
+		p = &rudderstackai.ContentCapture{}
+	}
+	return rudderstackai.WithContentCapture(*p)
 }
 
 func intPtr(v any) *int {

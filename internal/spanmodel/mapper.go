@@ -9,6 +9,7 @@ import (
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
@@ -23,8 +24,11 @@ const (
 
 // Options controls the normalized mapper without an OTel runtime dependency.
 type Options struct {
-	CaptureContent *bool
-	ContentMasked  bool
+	// Capture is the span content kept, as resolved (SDK spans). Without it, CaptureLevel (the
+	// exporter's own setting) resolves against the global one.
+	Capture       *capture.Spans
+	CaptureLevel  *capture.Policy
+	ContentMasked bool
 	// SDKIdentity uses the identity captured by the SDK, without OTel fallbacks.
 	SDKIdentity                 bool
 	MessageContext              map[string]any
@@ -42,12 +46,14 @@ func iso(t time.Time) string {
 // SpanToTrack maps one ended span; nil means it could not fit the event budget.
 // It does not apply the export filter. The original span is never mutated.
 func ToTrack(s Span, options Options) (*analytics.Track, error) {
-	capture := hook.Tracing.CaptureContent()
-	if options.CaptureContent != nil {
-		capture = *options.CaptureContent
+	var kinds capture.Spans
+	if options.Capture != nil {
+		kinds = *options.Capture
+	} else {
+		kinds = capture.Resolve(hook.Tracing.CaptureLevel(), options.CaptureLevel).Spans
 	}
-	s.Attributes = cleanAttributes(s.Attributes, s.Scope.Name, capture, false, options.ContentMasked)
-	otlp, candidates := toOTLP(s, capture, options.ContentMasked, s.Attributes)
+	s.Attributes = cleanKinds(s.Attributes, s.Scope.Name, kinds, false, toolSpan(s.Attributes), options.ContentMasked)
+	otlp, candidates := toOTLP(s, kinds, options.ContentMasked, s.Attributes)
 	sc := s.Context
 	var parent any
 	if s.Parent.SpanID != "" {

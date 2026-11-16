@@ -619,7 +619,7 @@ func (rc *reqCtx) reportedContext(v any) map[string]any {
 	if s := str(m["user_sentiment"]); opts.userSentiment && slices.Contains(sentiments, s) {
 		out["user_sentiment"] = s
 	}
-	if reason, ok := m["call_reason"].(string); ok && opts.CaptureContent {
+	if reason, ok := m["call_reason"].(string); ok && opts.capture().CallReason {
 		if masked, ok := opts.mask(strings.TrimSpace(reason)); ok && masked != "" {
 			out["call_reason"] = capText(masked, maxTextLength)
 		}
@@ -642,7 +642,7 @@ func (rc *reqCtx) Capability(args map[string]json.RawMessage) string {
 	}
 	p["capability"] = capability
 	var detail string
-	if json.Unmarshal(args["detail"], &detail) == nil && capability == "other" && rc.opts.CaptureContent {
+	if json.Unmarshal(args["detail"], &detail) == nil && capability == "other" && rc.opts.capture().FeedbackText {
 		// Withheld, not sent, when it still looks sensitive after masking.
 		if masked, ok := rc.opts.mask(strings.TrimSpace(detail)); ok && masked != "" && (rc.opts.DisableRedaction || !hasSensitive(masked)) {
 			p["capability_detail"] = capText(masked, maxTextLength)
@@ -654,6 +654,7 @@ func (rc *reqCtx) Capability(args map[string]json.RawMessage) string {
 
 // Feedback validates a submit_feedback call before sending any event.
 func (rc *reqCtx) Feedback(args map[string]json.RawMessage) (string, bool) {
+	feedback := rc.opts.capture().FeedbackText
 	values := map[string]string{}
 	keys := make([]string, 0, len(args))
 	for key := range args {
@@ -661,7 +662,7 @@ func (rc *reqCtx) Feedback(args map[string]json.RawMessage) (string, bool) {
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		if key != "category" && key != "tool_name" && key != "capability" && (key != "feedback" || !rc.opts.CaptureContent) {
+		if key != "category" && key != "tool_name" && key != "capability" && (key != "feedback" || !feedback) {
 			return "Remove unknown arguments; use only the fields in the tool schema.", true
 		}
 		var value string
@@ -684,7 +685,7 @@ func (rc *reqCtx) Feedback(args map[string]json.RawMessage) (string, bool) {
 	if _, given := values["capability"]; given && category != "feature_request" {
 		return "Use capability only with feature_request.", true
 	}
-	if rc.opts.CaptureContent {
+	if feedback {
 		text := values["feedback"]
 		if !strings.ContainsFunc(text, func(r rune) bool { return unicode.IsGraphic(r) && !unicode.IsSpace(r) }) {
 			return "Provide non-empty feedback in plain text.", true
@@ -705,7 +706,7 @@ func (rc *reqCtx) Feedback(args map[string]json.RawMessage) (string, bool) {
 		}
 		p["capability"] = capability
 	}
-	if rc.opts.CaptureContent {
+	if feedback {
 		if masked, ok := rc.opts.mask(strings.TrimSpace(values["feedback"])); ok && masked != "" && (rc.opts.DisableRedaction || !hasSensitive(masked)) {
 			p["feedback_text"] = capText(masked, feedbackMaxLength)
 		}
@@ -934,7 +935,7 @@ func (rc *reqCtx) send(event string, p map[string]any, send func()) {
 	if h := rc.held; h != nil && h.add(send) {
 		return
 	}
-	if rc.responses != nil && rc.opts.CaptureContent && failureEvents[event] &&
+	if rc.responses != nil && rc.opts.capture().ErrorMessage && failureEvents[event] &&
 		p["tool_status"] == "error" && p["error_type"] != "cancelled" {
 		h := &heldEvents{props: p, tool: event == "mcp_tool_called", mask: rc.opts.mask, sends: []func(){send}, sent: make(chan struct{})}
 		if rc.responses.Await(rc.rawID, h.flush) {
@@ -994,7 +995,7 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 			keys := slices.Sorted(maps.Keys(out))
 			for _, k := range keys {
 				v := out[k]
-				if !allowToolEventProperty(k, rc.opts.CaptureContent) {
+				if !allowToolEventProperty(k, rc.opts.capture()) {
 					continue
 				}
 				switch canon := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(k)); canon {
@@ -1170,7 +1171,7 @@ func requestContextSchema(opts *options) map[string]any {
 			"description": "The user's mood in their latest message.",
 		}
 	}
-	if opts.CaptureContent {
+	if opts.capture().CallReason {
 		props["call_reason"] = map[string]any{
 			"type": "string", "maxLength": maxTextLength,
 			"description": "One short sentence on why you are making this call. No personal data.",
@@ -1200,7 +1201,7 @@ func (w *wrapped) CapabilityTool() *mcpbridge.ToolDef {
 			"description": "The missing capability; 'other' when none fits.",
 		},
 	}
-	if opts.CaptureContent {
+	if opts.capture().FeedbackText {
 		props["detail"] = map[string]any{
 			"type": "string", "maxLength": maxTextLength,
 			"description": "For 'other' only: a short description of the need. No personal data.",
@@ -1232,14 +1233,15 @@ func (w *wrapped) FeedbackTool() *mcpbridge.ToolDef {
 	}
 	required := []string{"category"}
 	description := feedbackDesc
-	if opts.CaptureContent {
+	feedback := opts.capture().FeedbackText
+	if feedback {
 		props["feedback"] = map[string]any{"type": "string", "maxLength": feedbackMaxLength, "description": "What happened and what you expected, or what worked well, in plain text."}
 		required = append(required, "feedback")
 		description += feedbackCaptureDesc
 	}
 	return &mcpbridge.ToolDef{
 		Name: feedbackTool, Title: feedbackTitle, Description: description, Reply: feedbackReply,
-		Annotations: mcpbridge.ToolAnnotations{Title: feedbackTitle, ReadOnlyHint: feedbackReadOnlyHint, DestructiveHint: feedbackDestructiveHint, IdempotentHint: feedbackIdempotentHint, OpenWorldHint: opts.CaptureContent},
+		Annotations: mcpbridge.ToolAnnotations{Title: feedbackTitle, ReadOnlyHint: feedbackReadOnlyHint, DestructiveHint: feedbackDestructiveHint, IdempotentHint: feedbackIdempotentHint, OpenWorldHint: feedback},
 		Schema:      map[string]any{"type": "object", "properties": props, "required": required, "additionalProperties": false},
 	}
 }

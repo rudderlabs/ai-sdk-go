@@ -6,6 +6,7 @@ import (
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
@@ -25,7 +26,7 @@ func init() {
 	hook.Tracing.AdoptAnalytics = func(i any, c analytics.Client) { i.(*Interaction).adoptAnalytics(c) }
 	hook.Tracing.RecordTool = func(i, call any) { i.(*Interaction).recordToolCalls(true, call.(ToolCall)) }
 	hook.Tracing.Analytics = func() analytics.Client { return cfg().analytics }
-	hook.Tracing.CaptureContent = func() bool { return cfg().captureContent }
+	hook.Tracing.CaptureLevel = func() *capture.Policy { return cfg().captureLevel() }
 	hook.Tracing.Redact = redactText
 	hook.Tracing.StripBinary = stripBinary
 	hook.Tracing.NormalizeValue = normalizeSpanValue

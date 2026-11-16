@@ -11,6 +11,8 @@ import (
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 )
 
 // config is the process-wide configuration of the AI interaction events.
@@ -18,6 +20,7 @@ type config struct {
 	credits             CreditsFunc
 	analytics           analytics.Client
 	captureContent      bool
+	contentCapture      *capture.Policy
 	emitLLMCalls        bool
 	emitSpans           bool
 	emitTaskStarted     bool
@@ -113,8 +116,9 @@ func WithAnalytics(client analytics.Client) ConfigOption {
 	}
 }
 
-// WithCaptureContent sends prompt_text, response_text and feedback_text (masked). Off by
-// default: treat these as personal data.
+// WithCaptureContent sends every kind of agent and user text (masked): prompt and answer text,
+// per-call content, span content, feedback, score explanations and MCP text. Off by default:
+// treat these as personal data. Per kind with [WithContentCapture], whose keys win over this.
 func WithCaptureContent(on bool) ConfigOption {
 	return func(c *config, _ *pending) error {
 		c.captureContent = on

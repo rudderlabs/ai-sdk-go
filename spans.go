@@ -13,6 +13,7 @@ import (
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 	"github.com/rudderlabs/ai-sdk-go/internal/spanmodel"
 )
@@ -38,8 +39,10 @@ type Span struct {
 	interaction                                        *Interaction
 	client                                             analytics.Client
 	userID, anonymousID, interactionID, conversationID string
-	capture                                            bool
-	msgContext                                         map[string]any
+	// capture: span content kinds kept; llmCalls: the call event carries its content.
+	capture    capture.Spans
+	llmCalls   bool
+	msgContext map[string]any
 }
 type sdkSpanKey struct{}
 
@@ -90,7 +93,7 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
 		i = nil
 	}
 	c := cfg()
-	s := &Span{started: started, interaction: i, attributes: map[string]any{}, capture: c.captureContent, client: c.analytics}
+	s := &Span{started: started, interaction: i, attributes: map[string]any{}, capture: capture.Resolve(c.captureLevel()).Spans, client: c.analytics}
 	parent := activeSDKSpan(ctx)
 	if parent != nil && parent.interaction != i {
 		parent = nil
@@ -116,7 +119,7 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
 		}
 		s.TraceID = i.sdkTraceID
 		s.userID, s.anonymousID, s.interactionID, s.conversationID = i.userID, i.anonymousID, i.id, i.conversationID
-		s.client, s.capture = i.analytics(), i.captureContent
+		s.client, s.capture, s.llmCalls = i.analytics(), i.capture.Spans, i.capture.LLMCalls
 		msgContext = i.msgContext
 		i.mu.Unlock()
 	} else {
@@ -313,7 +316,7 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 		if s.client == nil {
 			return
 		}
-		m, e := spanmodel.ToTrack(n, spanmodel.Options{CaptureContent: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version})
+		m, e := spanmodel.ToTrack(n, spanmodel.Options{Capture: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version})
 		if e != nil {
 			report(KindInternal, "span.map", e)
 			return
@@ -331,6 +334,10 @@ func (i *Interaction) recordWrapperCall(call LLMCall, s *Span, status int) bool 
 	call.httpStatus = status
 	return i.RecordCall(call)
 }
+
+// capturesContent: the call's content is acquired, for this span or its call event.
+func (s *Span) capturesContent() bool { return s.capture.Content() || s.llmCalls }
+
 func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 	if s == nil {
 		return
@@ -373,7 +380,7 @@ func init() {
 	hook.Tracing.EmitSpans = func() bool { return cfg().emitSpans }
 	hook.Tracing.WrapperCaptureContent = func(value any) bool {
 		s, _ := value.(*Span)
-		return s != nil && s.capture
+		return s != nil && s.capturesContent()
 	}
 	hook.Tracing.WrapperMetadata = func(value any, provider, model string) {
 		s, _ := value.(*Span)

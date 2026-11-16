@@ -5,6 +5,8 @@ import (
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 )
 
 // Tracing is the core's integration API for span inputs. It contains no OTel types.
@@ -23,7 +25,7 @@ var Tracing struct {
 	AdoptAnalytics        func(any, analytics.Client)
 	RecordTool            func(any, any)
 	Analytics             func() analytics.Client
-	CaptureContent        func() bool
+	CaptureLevel          func() *capture.Policy
 	Redact                func(string) (string, bool)
 	StripBinary           func(any) any
 	NormalizeValue        func(any) (any, bool)

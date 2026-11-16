@@ -1,0 +1,1430 @@
+{
+  "fixture_version": 1,
+  "spec_version": "0.4.0",
+  "description": "captureContent policy resolution (SDK-6888). Each case lists levels most general first (global, then interaction, mcp or exporter); every SDK resolves them with the same rules and must produce `expected`. Keys are snake_case; Node.js and Go map them to their own names. `capture_content: null` means the level sets nothing. `intent_summary: null` means not set at any level (sent as before the policy). `invalid` values must be rejected where captureContent is accepted (Go: not applicable, the type checks it). `custom_properties`: whether a custom event property with a content name is kept under the resolved policy: intent_summary follows an explicit intent_summary key at any level, else the default chain (boolean false drops it, as today); other names follow their own key. `spans`: one span's content and, per resolved span kinds, the content exported with built-in masking on. Kept kinds are masked, other content removed; content events, the status message and ai.response.toolCalls are the messages kind; `tool_call_keys` (equal to span-content-keys toolCallAttributeKeys) are the tool_calls kind; with http, url.path and full URLs are kept without query or fragment and masked; url.query, user agents, client addresses and headers never. A span-kind case with its own `input` uses it instead of `spans.input`. On a tool-execution span (attribute gen_ai.operation.name execute_tool, or openinference.span.kind TOOL), content attributes other than exception.message, exception.stacktrace and scoped error.message are the tool_calls kind. URL attributes with array values are sanitised per element (non-strings dropped, an empty result removed).",
+  "resolution": [
+    {
+      "name": "nothing_set",
+      "description": "No level sets capture_content: every feature is off.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": null
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "global_true",
+      "description": "A boolean is {default: b}: every feature on, intent_summary and spans.http stay unset.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": true
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "global_false_interaction_true",
+      "description": "A boolean at a lower level overrides everything above.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": false
+        },
+        {
+          "level": "interaction",
+          "capture_content": true
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "global_true_interaction_false",
+      "description": "Overrides work in both directions.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": true
+        },
+        {
+          "level": "interaction",
+          "capture_content": false
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "default_off_feature_on",
+      "description": "A feature key beats default at the same level.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": false,
+            "call_reason": true,
+            "error_message": true
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "default_on_feature_off",
+      "description": "A feature can be off while the default is on.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true,
+            "llm_calls": false
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": false,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "unset_key_falls_through",
+      "description": "A level without the key or a default inherits the level above.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true
+          }
+        },
+        {
+          "level": "mcp",
+          "capture_content": {
+            "call_reason": false
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": false,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "lower_default_beats_upper_feature",
+      "description": "A lower level's default beats an upper level's feature key.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "answer_text": true
+          }
+        },
+        {
+          "level": "interaction",
+          "capture_content": {
+            "default": false
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "upper_feature_kept_when_lower_silent",
+      "description": "Only keys the lower level sets change.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "answer_text": true
+          }
+        },
+        {
+          "level": "interaction",
+          "capture_content": {
+            "llm_calls": true
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "exporter_object_over_global_boolean",
+      "description": "Exporter policy over a global boolean.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": true
+        },
+        {
+          "level": "exporter",
+          "capture_content": {
+            "spans": {
+              "messages": false
+            }
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "intent_summary_explicit_only",
+      "description": "default and booleans never set intent_summary; only its own key does.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": false
+          }
+        },
+        {
+          "level": "interaction",
+          "capture_content": true
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "intent_summary_off",
+      "description": "An explicit intent_summary key gates it.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": true
+        },
+        {
+          "level": "interaction",
+          "capture_content": {
+            "intent_summary": false
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": false,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "intent_summary_inherited",
+      "description": "intent_summary falls through like any key.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "intent_summary": true
+          }
+        },
+        {
+          "level": "interaction",
+          "capture_content": false
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": true,
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "spans_boolean",
+      "description": "spans as a boolean sets message and tool-call content, not http.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "spans": true
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "spans_default_then_kind",
+      "description": "Inside spans, a kind beats spans.default.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "spans": {
+              "default": true,
+              "tool_calls": false
+            }
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "spans_kind_falls_to_level_default",
+      "description": "An unset span kind follows spans.default, then the level default.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true,
+            "spans": {
+              "messages": false
+            }
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "spans_http_opt_in",
+      "description": "spans.http is off unless set; default and spans.default do not turn it on.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true,
+            "spans": {
+              "default": true,
+              "http": true
+            }
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": true
+        }
+      }
+    },
+    {
+      "name": "spans_http_not_from_booleans",
+      "description": "A boolean captureContent or spans never turns http on.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "spans": {
+              "http": true
+            }
+          }
+        },
+        {
+          "level": "exporter",
+          "capture_content": true
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": true
+        }
+      }
+    },
+    {
+      "name": "spans_http_explicit_off",
+      "description": "A lower level can turn http back off.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "spans": {
+              "http": true
+            }
+          }
+        },
+        {
+          "level": "exporter",
+          "capture_content": {
+            "spans": {
+              "http": false
+            }
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "spans_default_leaves_http_off",
+      "description": "spans.default does not turn http on.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "spans": {
+              "default": true
+            }
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "object_default_leaves_http_off",
+      "description": "An object's default does not turn http on.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "coerced_string_false",
+      "description": "A non-object value is read with Boolean(), as before the object form: the string 'false' is on.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": "false"
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "coerced_empty_string",
+      "description": "Boolean('') is off.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": ""
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "coerced_zero",
+      "description": "Boolean(0) is off, even below an object.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "answer_text": true
+          }
+        },
+        {
+          "level": "interaction",
+          "capture_content": 0
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "coerced_one",
+      "description": "Boolean(1) is on.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": 1
+        }
+      ],
+      "expected": {
+        "answer_text": true,
+        "llm_calls": true,
+        "feedback_text": true,
+        "score_explanation": true,
+        "call_reason": true,
+        "error_message": true,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    },
+    {
+      "name": "spans_lower_object_falls_through",
+      "description": "A lower spans object without the kind inherits it from above.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "spans": {
+              "messages": true
+            }
+          }
+        },
+        {
+          "level": "exporter",
+          "capture_content": {
+            "spans": {
+              "tool_calls": true
+            }
+          }
+        }
+      ],
+      "expected": {
+        "answer_text": false,
+        "llm_calls": false,
+        "feedback_text": false,
+        "score_explanation": false,
+        "call_reason": false,
+        "error_message": false,
+        "intent_summary": null,
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "unknown_key",
+      "capture_content": {
+        "answer": true
+      }
+    },
+    {
+      "name": "unknown_span_key",
+      "capture_content": {
+        "spans": {
+          "urls": true
+        }
+      }
+    },
+    {
+      "name": "non_boolean_feature",
+      "capture_content": {
+        "call_reason": "yes"
+      }
+    },
+    {
+      "name": "non_boolean_span_kind",
+      "capture_content": {
+        "spans": {
+          "messages": 1
+        }
+      }
+    },
+    {
+      "name": "spans_not_object",
+      "capture_content": {
+        "spans": "all"
+      }
+    }
+  ],
+  "custom_properties": [
+    {
+      "name": "explicit_on_over_default_off",
+      "description": "An explicit intent_summary key decides.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": false,
+            "intent_summary": true
+          }
+        }
+      ],
+      "property": "intent_summary",
+      "sent": true
+    },
+    {
+      "name": "explicit_off_over_default_on",
+      "description": "An explicit intent_summary key decides.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true,
+            "intent_summary": false
+          }
+        }
+      ],
+      "property": "intent_summary",
+      "sent": false
+    },
+    {
+      "name": "explicit_upper_over_lower_default",
+      "description": "An explicit key at any level beats every default for intent_summary.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "intent_summary": true
+          }
+        },
+        {
+          "level": "interaction",
+          "capture_content": {
+            "default": false
+          }
+        }
+      ],
+      "property": "intent_summary",
+      "sent": true
+    },
+    {
+      "name": "default_chain_on",
+      "description": "No explicit key: the default chain decides.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true
+          }
+        }
+      ],
+      "property": "intent_summary",
+      "sent": true
+    },
+    {
+      "name": "boolean_true",
+      "description": "No explicit key: a boolean is the default.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": true
+        }
+      ],
+      "property": "intent_summary",
+      "sent": true
+    },
+    {
+      "name": "boolean_false",
+      "description": "No explicit key: boolean false drops it, as today.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": false
+        }
+      ],
+      "property": "intent_summary",
+      "sent": false
+    },
+    {
+      "name": "nothing_set",
+      "description": "Nothing set: dropped, as today.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": null
+        }
+      ],
+      "property": "intent_summary",
+      "sent": false
+    },
+    {
+      "name": "lower_boolean_over_upper_default",
+      "description": "The default chain walks levels like any key.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true
+          }
+        },
+        {
+          "level": "interaction",
+          "capture_content": false
+        }
+      ],
+      "property": "intent_summary",
+      "sent": false
+    },
+    {
+      "name": "call_reason_follows_its_key",
+      "description": "Other content fields follow their own key.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": false,
+            "call_reason": true
+          }
+        }
+      ],
+      "property": "call_reason",
+      "sent": true
+    },
+    {
+      "name": "capability_detail_follows_feedback_text",
+      "description": "capability_detail follows feedback_text.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "default": true,
+            "feedback_text": false
+          }
+        }
+      ],
+      "property": "capability_detail",
+      "sent": false
+    },
+    {
+      "name": "response_text_follows_answer_text",
+      "description": "prompt_text and response_text follow answer_text.",
+      "levels": [
+        {
+          "level": "global",
+          "capture_content": {
+            "answer_text": true
+          }
+        }
+      ],
+      "property": "response_text",
+      "sent": true
+    }
+  ],
+  "spans": {
+    "tool_call_keys": [
+      "gen_ai.tool.call.arguments",
+      "gen_ai.tool.call.result",
+      "ai.toolCall.args",
+      "ai.toolCall.result",
+      "tool_arguments",
+      "tool_response"
+    ],
+    "input": {
+      "attributes": {
+        "gen_ai.request.model": "gpt-4.1-mini",
+        "gen_ai.input.messages": "[{\"role\":\"user\",\"content\":\"refund for jane@example.com\"}]",
+        "gen_ai.tool.call.arguments": "{\"order\":\"A-1\",\"email\":\"jane@example.com\"}",
+        "gen_ai.tool.call.result": "{\"status\":\"refunded\"}",
+        "ai.toolCall.args": "{\"order\":\"A-2\"}",
+        "ai.toolCall.result": "{\"status\":\"pending\"}",
+        "tool_arguments": "{\"order\":\"A-3\"}",
+        "tool_response": "{\"status\":\"shipped\"}",
+        "ai.response.toolCalls": "[{\"toolName\":\"refund\",\"args\":{\"order\":\"A-1\"}}]",
+        "exception.message": "lookup failed for jane@example.com",
+        "http.route": "/v1/chat",
+        "http.response.status_code": 200,
+        "url.full": "https://api.example.com/v1/users/jane@example.com/chat?key=secret#top",
+        "url.path": "/v1/users/jane@example.com/chat",
+        "url.query": "key=secret",
+        "http.target": "/v1/chat?key=secret",
+        "user_agent.original": "curl/8.4.0",
+        "client.address": "203.0.113.7",
+        "http.request.header.authorization": "Bearer secret"
+      },
+      "events": [
+        {
+          "name": "gen_ai.choice",
+          "attributes": {
+            "index": 0,
+            "message": "Refund sent to jane@example.com"
+          }
+        },
+        {
+          "name": "exception",
+          "attributes": {
+            "exception.type": "Error",
+            "exception.message": "boom"
+          }
+        }
+      ],
+      "status": {
+        "code": 2,
+        "message": "failed for jane@example.com"
+      }
+    },
+    "cases": [
+      {
+        "name": "spans_all_off",
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.request.model": "gpt-4.1-mini",
+            "http.route": "/v1/chat",
+            "http.response.status_code": 200
+          },
+          "events": [
+            {
+              "name": "exception",
+              "attributes": {
+                "exception.type": "Error"
+              }
+            }
+          ],
+          "status": {
+            "code": 2
+          }
+        }
+      },
+      {
+        "name": "spans_messages_only",
+        "spans": {
+          "messages": true,
+          "tool_calls": false,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.request.model": "gpt-4.1-mini",
+            "gen_ai.input.messages": "[{\"role\":\"user\",\"content\":\"refund for [email]\"}]",
+            "ai.response.toolCalls": "[{\"toolName\":\"refund\",\"args\":{\"order\":\"A-1\"}}]",
+            "exception.message": "lookup failed for [email]",
+            "http.route": "/v1/chat",
+            "http.response.status_code": 200
+          },
+          "events": [
+            {
+              "name": "gen_ai.choice",
+              "attributes": {
+                "index": 0,
+                "message": "Refund sent to [email]"
+              }
+            },
+            {
+              "name": "exception",
+              "attributes": {
+                "exception.type": "Error",
+                "exception.message": "boom"
+              }
+            }
+          ],
+          "status": {
+            "code": 2,
+            "message": "failed for [email]"
+          }
+        }
+      },
+      {
+        "name": "spans_tool_calls_only",
+        "spans": {
+          "messages": false,
+          "tool_calls": true,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.request.model": "gpt-4.1-mini",
+            "gen_ai.tool.call.arguments": "{\"order\":\"A-1\",\"email\":\"[email]\"}",
+            "gen_ai.tool.call.result": "{\"status\":\"refunded\"}",
+            "ai.toolCall.args": "{\"order\":\"A-2\"}",
+            "ai.toolCall.result": "{\"status\":\"pending\"}",
+            "tool_arguments": "{\"order\":\"A-3\"}",
+            "tool_response": "{\"status\":\"shipped\"}",
+            "http.route": "/v1/chat",
+            "http.response.status_code": 200
+          },
+          "events": [
+            {
+              "name": "exception",
+              "attributes": {
+                "exception.type": "Error"
+              }
+            }
+          ],
+          "status": {
+            "code": 2
+          }
+        }
+      },
+      {
+        "name": "spans_messages_and_tool_calls",
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.request.model": "gpt-4.1-mini",
+            "gen_ai.input.messages": "[{\"role\":\"user\",\"content\":\"refund for [email]\"}]",
+            "gen_ai.tool.call.arguments": "{\"order\":\"A-1\",\"email\":\"[email]\"}",
+            "gen_ai.tool.call.result": "{\"status\":\"refunded\"}",
+            "ai.toolCall.args": "{\"order\":\"A-2\"}",
+            "ai.toolCall.result": "{\"status\":\"pending\"}",
+            "tool_arguments": "{\"order\":\"A-3\"}",
+            "tool_response": "{\"status\":\"shipped\"}",
+            "ai.response.toolCalls": "[{\"toolName\":\"refund\",\"args\":{\"order\":\"A-1\"}}]",
+            "exception.message": "lookup failed for [email]",
+            "http.route": "/v1/chat",
+            "http.response.status_code": 200
+          },
+          "events": [
+            {
+              "name": "gen_ai.choice",
+              "attributes": {
+                "index": 0,
+                "message": "Refund sent to [email]"
+              }
+            },
+            {
+              "name": "exception",
+              "attributes": {
+                "exception.type": "Error",
+                "exception.message": "boom"
+              }
+            }
+          ],
+          "status": {
+            "code": 2,
+            "message": "failed for [email]"
+          }
+        }
+      },
+      {
+        "name": "spans_http_only",
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": true
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.request.model": "gpt-4.1-mini",
+            "http.route": "/v1/chat",
+            "http.response.status_code": 200,
+            "url.full": "https://api.example.com/v1/users/[email]/chat",
+            "url.path": "/v1/users/[email]/chat",
+            "http.target": "/v1/chat"
+          },
+          "events": [
+            {
+              "name": "exception",
+              "attributes": {
+                "exception.type": "Error"
+              }
+            }
+          ],
+          "status": {
+            "code": 2
+          }
+        }
+      },
+      {
+        "name": "spans_all_on",
+        "spans": {
+          "messages": true,
+          "tool_calls": true,
+          "http": true
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.request.model": "gpt-4.1-mini",
+            "gen_ai.input.messages": "[{\"role\":\"user\",\"content\":\"refund for [email]\"}]",
+            "gen_ai.tool.call.arguments": "{\"order\":\"A-1\",\"email\":\"[email]\"}",
+            "gen_ai.tool.call.result": "{\"status\":\"refunded\"}",
+            "ai.toolCall.args": "{\"order\":\"A-2\"}",
+            "ai.toolCall.result": "{\"status\":\"pending\"}",
+            "tool_arguments": "{\"order\":\"A-3\"}",
+            "tool_response": "{\"status\":\"shipped\"}",
+            "ai.response.toolCalls": "[{\"toolName\":\"refund\",\"args\":{\"order\":\"A-1\"}}]",
+            "exception.message": "lookup failed for [email]",
+            "http.route": "/v1/chat",
+            "http.response.status_code": 200,
+            "url.full": "https://api.example.com/v1/users/[email]/chat",
+            "url.path": "/v1/users/[email]/chat",
+            "http.target": "/v1/chat"
+          },
+          "events": [
+            {
+              "name": "gen_ai.choice",
+              "attributes": {
+                "index": 0,
+                "message": "Refund sent to [email]"
+              }
+            },
+            {
+              "name": "exception",
+              "attributes": {
+                "exception.type": "Error",
+                "exception.message": "boom"
+              }
+            }
+          ],
+          "status": {
+            "code": 2,
+            "message": "failed for [email]"
+          }
+        }
+      },
+      {
+        "name": "tool_span_messages_only",
+        "description": "On a tool-execution span (gen_ai.operation.name execute_tool), message-content attributes are the tool_calls kind; exception text, content events and the status message stay messages.",
+        "input": {
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "refund",
+            "gen_ai.input.messages": "{\"order\":\"A-1\",\"email\":\"jane@example.com\"}",
+            "gen_ai.output.messages": "{\"status\":\"refunded\"}",
+            "exception.message": "failed for jane@example.com"
+          },
+          "events": [
+            {
+              "name": "gen_ai.choice",
+              "attributes": {
+                "message": "done"
+              }
+            }
+          ],
+          "status": {
+            "code": 2,
+            "message": "failed for jane@example.com"
+          }
+        },
+        "spans": {
+          "messages": true,
+          "tool_calls": false,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "refund",
+            "exception.message": "failed for [email]"
+          },
+          "events": [
+            {
+              "name": "gen_ai.choice",
+              "attributes": {
+                "message": "done"
+              }
+            }
+          ],
+          "status": {
+            "code": 2,
+            "message": "failed for [email]"
+          }
+        }
+      },
+      {
+        "name": "tool_span_tool_calls_only",
+        "description": "The same tool span with only tool_calls: its message attributes are kept and masked.",
+        "input": {
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "refund",
+            "gen_ai.input.messages": "{\"order\":\"A-1\",\"email\":\"jane@example.com\"}",
+            "gen_ai.output.messages": "{\"status\":\"refunded\"}",
+            "exception.message": "failed for jane@example.com"
+          },
+          "events": [
+            {
+              "name": "gen_ai.choice",
+              "attributes": {
+                "message": "done"
+              }
+            }
+          ],
+          "status": {
+            "code": 2,
+            "message": "failed for jane@example.com"
+          }
+        },
+        "spans": {
+          "messages": false,
+          "tool_calls": true,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "refund",
+            "gen_ai.input.messages": "{\"order\":\"A-1\",\"email\":\"[email]\"}",
+            "gen_ai.output.messages": "{\"status\":\"refunded\"}"
+          },
+          "events": [],
+          "status": {
+            "code": 2
+          }
+        }
+      },
+      {
+        "name": "openinference_tool_span_messages_only",
+        "description": "An OpenInference TOOL span (openinference.span.kind TOOL) is a tool-execution span too.",
+        "input": {
+          "attributes": {
+            "openinference.span.kind": "TOOL",
+            "tool.name": "refund",
+            "input.value": "order A-1 for jane@example.com",
+            "output.value": "refunded"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": true,
+          "tool_calls": false,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "openinference.span.kind": "TOOL",
+            "tool.name": "refund"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "openinference_tool_span_tool_calls_only",
+        "description": "Its input.value and output.value follow tool_calls.",
+        "input": {
+          "attributes": {
+            "openinference.span.kind": "TOOL",
+            "tool.name": "refund",
+            "input.value": "order A-1 for jane@example.com",
+            "output.value": "refunded"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": false,
+          "tool_calls": true,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "openinference.span.kind": "TOOL",
+            "tool.name": "refund",
+            "input.value": "order A-1 for [email]",
+            "output.value": "refunded"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "http_array_values",
+        "description": "An array-valued URL attribute is sanitised per element: query and fragment cut, masked, non-string elements dropped; an array left empty is removed.",
+        "input": {
+          "attributes": {
+            "http.route": "/x",
+            "url.full": [
+              "https://a.example.com/x?y=1#f",
+              "https://b.example.com/jane@example.com?q",
+              7
+            ],
+            "http.url": [
+              1,
+              2
+            ],
+            "url.path": [
+              "/x"
+            ]
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": false,
+          "tool_calls": false,
+          "http": true
+        },
+        "expected": {
+          "attributes": {
+            "http.route": "/x",
+            "url.full": [
+              "https://a.example.com/x",
+              "https://b.example.com/[email]"
+            ],
+            "url.path": [
+              "/x"
+            ]
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        }
+      }
+    ]
+  }
+}

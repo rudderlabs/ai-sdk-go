@@ -31,7 +31,7 @@ type Score struct {
 	Evaluator string
 	// Sampled: the interaction was picked by sampling rather than scored every time.
 	Sampled *bool
-	// Explanation is why the score was given. Sent only with content capture on, masked and
+	// Explanation is why the score was given. Sent only with ContentCapture.ScoreExplanation (or content capture) on, masked and
 	// capped at 280 characters.
 	Explanation string
 }
@@ -94,7 +94,7 @@ func scheduleEvaluation(i *Interaction, snap turnSnapshot, evaluate EvaluateFunc
 			return
 		}
 		for _, s := range scores {
-			p, err := scoreProperties(s, i.captureContent)
+			p, err := scoreProperties(s, i.capture.ScoreExplanation)
 			if err != nil {
 				warnf("ai_interaction_scored dropped: %v", err)
 				continue
@@ -141,11 +141,7 @@ func TrackScore(ctx context.Context, o TrackScoreOptions) {
 			warnf("ai_interaction_scored dropped: InteractionID and ConversationID are required")
 			return
 		}
-		capture := cfg().captureContent
-		if i := FromContext(ctx); i != nil {
-			capture = i.captureContent
-		}
-		score, err := scoreProperties(o.Score, capture)
+		score, err := scoreProperties(o.Score, currentCapture(ctx).ScoreExplanation)
 		if err != nil {
 			warnf("ai_interaction_scored dropped: %v", err)
 			return
@@ -247,7 +243,10 @@ func TrackClassification(ctx context.Context, o TrackClassificationOptions) {
 		}
 		p := map[string]any{"conversation_id": conversation, "interaction_id": o.InteractionID}
 		p["intent"], p["outcome"] = normaliseLabels(cfg().classifier, o.Intent, o.Outcome)
-		put(p, "intent_summary", summaryOf(o.IntentSummary))
+		// Only an explicit ContentCapture.IntentSummary gates it (unset: sent as before the policy).
+		if currentCapture(ctx).SendsIntentSummary() {
+			put(p, "intent_summary", summaryOf(o.IntentSummary))
+		}
 		switch o.Classifier {
 		case "", ClassifierModel:
 			p["classifier"] = ClassifierModel

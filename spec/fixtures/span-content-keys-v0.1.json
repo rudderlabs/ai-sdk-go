@@ -1,5 +1,5 @@
 {
-  "description": "Span content policy lists, identical in every SDK. attributeKeys and attributePrefixes (plain prefix match) are content on every span; scopedAttributeKeys are content only on spans whose instrumentation scope name is the map key. eventNames and eventNamePattern name span events dropped unless capture is on. Content is removed with capture off and masked with capture on. Each SDK asserts its lists equal this file.",
+  "description": "Span content policy lists, identical in every SDK. attributeKeys and attributePrefixes (plain prefix match) are content on every span; scopedAttributeKeys are content only on spans whose instrumentation scope name is the map key. eventNames and eventNamePattern name span events dropped unless capture is on. Content is removed with capture off and masked with capture on. Each SDK asserts its lists equal this file. toolCallAttributeKeys are the content keys of the toolCalls span kind (captureContent.spans.toolCalls); every other content key and content event is the messages kind. httpAttributeKeys are the always-stripped keys kept with captureContent.spans.http, url.path as is and the others with the query string and fragment cut.",
   "attributeKeys": [
     "exception.message",
     "exception.stacktrace",
@@ -88,5 +88,19 @@
     "gen_ai.choice",
     "gen_ai.client.inference.operation.details"
   ],
-  "eventNamePattern": "^gen_ai\\..+\\.message$"
+  "eventNamePattern": "^gen_ai\\..+\\.message$",
+  "toolCallAttributeKeys": [
+    "gen_ai.tool.call.arguments",
+    "gen_ai.tool.call.result",
+    "ai.toolCall.args",
+    "ai.toolCall.result",
+    "tool_arguments",
+    "tool_response"
+  ],
+  "httpAttributeKeys": [
+    "url.path",
+    "url.full",
+    "http.url",
+    "http.target"
+  ]
 }

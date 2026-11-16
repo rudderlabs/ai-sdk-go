@@ -7,6 +7,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 	"github.com/rudderlabs/ai-sdk-go/internal/spanmodel"
 )
 
@@ -25,8 +26,11 @@ type Identity struct{ UserID, AnonymousID string }
 // Options configures a span exporter, processor, or the setup helper.
 // Pointer booleans distinguish an explicit false from inherited defaults.
 type Options struct {
-	Analytics           analytics.Client
-	CaptureContent      *bool
+	Analytics      analytics.Client
+	CaptureContent *bool
+	// ContentCapture keeps span content per kind (Spans: Messages, ToolCalls, HTTP); unset keys
+	// fall back to CaptureContent, then to the global setting, read at export.
+	ContentCapture      *rudderstackai.ContentCapture
 	ExportAllSpans      bool
 	Filter              func(sdktrace.ReadOnlySpan) bool
 	ResolveIdentity     func(sdktrace.ReadOnlySpan) Identity
@@ -57,5 +61,5 @@ func SpanToTrack(s sdktrace.ReadOnlySpan, options Options) (*analytics.Track, er
 	if options.ResolveIdentity != nil {
 		safe("tracing.resolveIdentity", func() { id = options.ResolveIdentity(s) })
 	}
-	return spanmodel.ToTrack(normalizedSpan(s), spanmodel.Options{CaptureContent: options.CaptureContent, MaxEventBytes: options.MaxEventBytes, EventName: options.EventName, ExtraProperties: extra, UserID: id.UserID, AnonymousID: id.AnonymousID, LibraryName: rudderstackai.LibraryName, LibraryVersion: rudderstackai.Version})
+	return spanmodel.ToTrack(normalizedSpan(s), spanmodel.Options{CaptureLevel: capture.Level(options.CaptureContent, options.ContentCapture), MaxEventBytes: options.MaxEventBytes, EventName: options.EventName, ExtraProperties: extra, UserID: id.UserID, AnonymousID: id.AnonymousID, LibraryName: rudderstackai.LibraryName, LibraryVersion: rudderstackai.Version})
 }

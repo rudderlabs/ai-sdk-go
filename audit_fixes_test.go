@@ -30,11 +30,11 @@ func TestAuditContentPropertyVariants(t *testing.T) {
 				t.Errorf("propertyName(%q) = %q, want %q", key, propertyName(key), name)
 			}
 			for range 2 {
-				if !dropContentProperty(key, false) {
+				if !dropContentProperty(key, captureAll(false)) {
 					t.Errorf("%q retained without capture", key)
 				}
 			}
-			if dropContentProperty(key, true) {
+			if dropContentProperty(key, captureAll(true)) {
 				t.Errorf("%q dropped with capture", key)
 			}
 			if n := logs.count("custom property " + key + " was dropped"); n != 1 {
@@ -43,7 +43,7 @@ func TestAuditContentPropertyVariants(t *testing.T) {
 		}
 	}
 	for _, key := range []string{"promptLength", "promptSource", "responseTimeMs", "cardKinds", "PromptLength", "card-kinds"} {
-		if dropContentProperty(key, false) {
+		if dropContentProperty(key, captureAll(false)) {
 			t.Errorf("unrelated key %q dropped", key)
 		}
 	}

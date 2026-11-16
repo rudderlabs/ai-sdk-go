@@ -18,6 +18,8 @@ func TestContentKeysMatchSharedFixture(t *testing.T) {
 		AttributePrefixes   []string            `json:"attributePrefixes"`
 		ScopedAttributeKeys map[string][]string `json:"scopedAttributeKeys"`
 		EventNames          []string            `json:"eventNames"`
+		ToolCallKeys        []string            `json:"toolCallAttributeKeys"`
+		HTTPKeys            []string            `json:"httpAttributeKeys"`
 	}
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
@@ -30,6 +32,12 @@ func TestContentKeysMatchSharedFixture(t *testing.T) {
 	}
 	if !reflect.DeepEqual(scopedContentKeys, fixture.ScopedAttributeKeys) {
 		t.Errorf("scoped content keys %v, want %v", scopedContentKeys, fixture.ScopedAttributeKeys)
+	}
+	if !reflect.DeepEqual(toolCallKeys, fixture.ToolCallKeys) {
+		t.Errorf("tool call keys %v, want %v", toolCallKeys, fixture.ToolCallKeys)
+	}
+	if !reflect.DeepEqual(httpKeys, fixture.HTTPKeys) {
+		t.Errorf("http keys %v, want %v", httpKeys, fixture.HTTPKeys)
 	}
 	for _, name := range fixture.EventNames {
 		if !contentEvent(name) {

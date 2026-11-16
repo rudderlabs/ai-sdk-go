@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 )
 
 var (
@@ -22,8 +24,10 @@ func propertyName(key string) string {
 // Content names shared by the Node.js, Python and Go SDKs.
 var contentProperties = set("prompt_text", "response_text", "feedback_text", "intent_summary", "explanation", "call_reason", "capability_detail", "error_message")
 
-func dropContentProperty(key string, capture bool) bool {
-	if capture || !contentProperties[propertyName(key)] {
+// dropContentProperty drops a custom content property when its kind of capture is off.
+func dropContentProperty(key string, policy capture.Resolved) bool {
+	name := propertyName(key)
+	if !contentProperties[name] || policy.Field(name) {
 		return false
 	}
 	warnOnce("content-property:"+key, fmt.Sprintf("custom property %s was dropped because content capture is off; use a non-content property name", key), 0)

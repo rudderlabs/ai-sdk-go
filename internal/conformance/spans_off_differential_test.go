@@ -33,6 +33,10 @@ func TestSpansOffOriginMainDifferential(t *testing.T) {
 		if unsupported(sc.Steps) != "" || gaps[sc.Name] != "" || (!hasProviderCall(sc.Steps) && sc.Name != "per_call_content_binary_never_sent") {
 			continue
 		}
+		// An object capture_content (SDK-6888) did not exist on origin/main: no recording.
+		if _, policy := sc.Config["capture_content"].(obj); policy {
+			continue
+		}
 		seen++
 		t.Run(sc.Name, func(t *testing.T) {
 			rec := &recorder{}

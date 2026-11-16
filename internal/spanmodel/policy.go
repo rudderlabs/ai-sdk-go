@@ -3,6 +3,9 @@ package spanmodel
 import (
 	"slices"
 	"strings"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 // Lists match the Node and Python tracing privacy constants, except error text
@@ -50,6 +53,93 @@ var strippedKeys = []string{
 }
 var strippedPrefixes = []string{"ai.request.headers.", "http.request.header.", "http.response.header."}
 
+// toolCallKeys are the content keys of the ToolCalls span kind; every other content key and
+// content event is the Messages kind.
+var toolCallKeys = []string{
+	"gen_ai.tool.call.arguments", "gen_ai.tool.call.result", "ai.toolCall.args", "ai.toolCall.result",
+	"tool_arguments", "tool_response",
+}
+
+// httpKeys are the always-stripped keys kept with SpanCapture.HTTP: url.path as is, the full URLs
+// without the query string and fragment.
+var httpKeys = []string{"url.path", "url.full", "http.url", "http.target"}
+
+// toolSpan reports a tool-execution span, whose message content is the tool's arguments and result.
+func toolSpan(a map[string]any) bool {
+	return a["gen_ai.operation.name"] == "execute_tool" || a["openinference.span.kind"] == "TOOL"
+}
+
+// errorKeys keep the Messages kind even on a tool span.
+var errorKeys = []string{"exception.message", "exception.stacktrace", "error.message"}
+
+// cleanKinds is cleanAttributes per span content kind. In a content event (all) every attribute
+// is the Messages kind; on a tool-execution span's own attributes (tool) all content is ToolCalls.
+func cleanKinds(a map[string]any, scope string, kinds capture.Spans, all, tool, masked bool) map[string]any {
+	if !kinds.HTTP && kinds.Messages == kinds.ToolCalls {
+		return cleanAttributes(a, scope, kinds.Messages, all, masked)
+	}
+	keep := make(map[string]any, len(a))
+	for k, v := range a {
+		if all || !contentAttribute(k, scope) {
+			keep[k] = v
+			continue
+		}
+		if slices.Contains(toolCallKeys, k) || tool && !slices.Contains(errorKeys, k) {
+			if kinds.ToolCalls {
+				keep[k] = v
+			}
+		} else if kinds.Messages {
+			keep[k] = v
+		}
+	}
+	// Content of a kind turned off is gone, so the rest is cleaned as captured.
+	out := cleanAttributes(keep, scope, !all || kinds.Messages, all, masked)
+	if kinds.HTTP {
+		for _, k := range httpKeys {
+			if v, ok := httpValue(k, a[k]); ok {
+				out[k] = v
+			}
+		}
+	}
+	return out
+}
+
+// httpValue is a kept URL attribute: without its query string and fragment (url.path as is),
+// masked; arrays element by element, non-strings dropped.
+func httpValue(key string, v any) (any, bool) {
+	url := func(s string) (string, bool) {
+		if key != "url.path" {
+			if cut := strings.IndexAny(s, "?#"); cut >= 0 {
+				s = s[:cut]
+			}
+		}
+		masked, ok := hook.Tracing.Redact(s)
+		return masked, ok && masked != ""
+	}
+	switch x := v.(type) {
+	case string:
+		return url(x)
+	case []string:
+		out := []any{}
+		for _, e := range x {
+			if m, ok := url(e); ok {
+				out = append(out, m)
+			}
+		}
+		return out, len(out) > 0
+	case []any:
+		out := []any{}
+		for _, e := range x {
+			if s, ok := e.(string); ok {
+				if m, ok := url(s); ok {
+					out = append(out, m)
+				}
+			}
+		}
+		return out, len(out) > 0
+	}
+	return nil, false
+}
 func hasPrefix(key string, prefixes []string) bool {
 	for _, p := range prefixes {
 		if strings.HasPrefix(key, p) {

@@ -231,6 +231,7 @@ and also offers `ForceFlush(context.Context) error`. Constants expose `DefaultEv
 | --- | --- | --- |
 | `Analytics` | core's configured client | Required if no client was configured. |
 | `CaptureContent *bool` | core's `WithCaptureContent`, read at export | An explicit pointer wins, including false. |
+| `ContentCapture *rudderstackai.ContentCapture` | core's `WithContentCapture`, read at export | Span content per kind (`Spans: &SpanCapture{Messages, ToolCalls, HTTP}`); its keys win over `CaptureContent`. See [Content capture](configuration.md#content-capture). |
 | `ExportAllSpans` | false | Export HTTP/database spans too. |
 | `Filter func(sdktrace.ReadOnlySpan) bool` | `IsAISpan` | Replaces the default filter and `ExportAllSpans`. |
 | `ResolveIdentity func(sdktrace.ReadOnlySpan) Identity` | attribute/resource identity | Empty identity or a panic falls back to defaults. |

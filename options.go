@@ -9,6 +9,8 @@ import (
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
+
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -130,10 +132,15 @@ type Options struct {
 	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
 	// CaptureContent sends masked call_reason and capability_detail capped at 200 characters,
-	// and feedback_text capped at 2000. Off by default. Failed requests also carry error_message
-	// (masked, 200 characters) when the final response is observed: see ObserveMCPTransport,
-	// ruddermcpgo.ObserveHTTP and ruddermcpgo.ObserveStdio.
+	// and feedback_text capped at 2000. Failed requests also carry error_message (masked, 200
+	// characters) when the final response is observed: see ObserveMCPTransport,
+	// ruddermcpgo.ObserveHTTP and ruddermcpgo.ObserveStdio. False (the default) follows the global
+	// setting ([WithCaptureContent], [WithContentCapture]); turn it off for this server with
+	// ContentCapture: &ContentCapture{Default: Ptr(false)}.
 	CaptureContent bool
+	// ContentCapture is the policy per kind (CallReason, FeedbackText, ErrorMessage); unset keys
+	// fall back to CaptureContent, then to the global setting, read on every request.
+	ContentCapture *ContentCapture
 	// CapabilityRequests adds the request_capability tool, recorded as
 	// mcp_capability_requested. Nil (the default) leaves it out.
 	//
@@ -184,6 +191,15 @@ func (o *options) resolveName(reflected, version string) {
 	if o.name == "" {
 		o.name = "unknown"
 	}
+}
+
+// capture is the content capture policy in force now: the global setting, then this server's.
+func (o *options) capture() capture.Resolved {
+	var on *bool
+	if o.CaptureContent {
+		on = Ptr(true)
+	}
+	return capture.Resolve(cfg().captureLevel(), capture.Level(on, o.ContentCapture))
 }
 
 // mask masks one opt-in text field; ok is false when it must not be sent.

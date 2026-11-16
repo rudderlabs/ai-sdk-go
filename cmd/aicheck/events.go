@@ -45,7 +45,7 @@ var (
 	answerBound = []string{"ai_user_action", "ai_interaction_scored", "ai_interaction_classified", "ai_llm_response_received"}
 	tracing     = []string{"tracing", "tracing/vercel-ai-sdk"}          // integrations of span events, which carry no specVersion
 	turnEvents  = set("ai_user_prompt_created", "ai_response_received") // the surface of a turn comes from these
-	// intent_summary is not here: the classifier's own intent_summary option sends it, whatever the capture switch
+	// intent_summary is not here: the classifier's own option sends it unless the policy sets intent_summary: false
 	content   = set("prompt_text", "response_text", "explanation", "call_reason", "capability_detail", "feedback_text", "error_message")
 	rawMCP    = set("arguments", "args", "params", "result", "results", "content", "structuredContent", "uri", "request")
 	runFields = []string{"task_name", "trigger_source", "trigger_event_id", "conversation_id", "account_id",
@@ -64,7 +64,7 @@ func set(items ...string) map[string]bool {
 
 // options are the check flags.
 type options struct {
-	captureContent    bool
+	capture           capturePolicy
 	expectLegacy      []string
 	noAIEvents        bool
 	absent            []string
@@ -267,10 +267,18 @@ func check(messages []*Object, sch *schemas, opts options, out io.Writer) (int, 
 			!in(props.Get("surface"), opts.surface) {
 			fail("%s: surface %s not in %s", where, repr(props.Get("surface")), reprList(opts.surface))
 		}
-		if !opts.captureContent {
-			leaked := present(props, content)
-			if obj(props.Get("action_details")).Has("feedback_text") {
+		{
+			var leaked []string
+			for _, k := range present(props, content) {
+				if !opts.capture.keeps(k) {
+					leaked = append(leaked, k)
+				}
+			}
+			if !opts.capture.keeps("feedback_text") && obj(props.Get("action_details")).Has("feedback_text") {
 				leaked = append(leaked, "feedback_text")
+			}
+			if opts.capture.intentSummaryOff() && props.Has("intent_summary") {
+				leaked = append(leaked, "intent_summary")
 			}
 			if len(leaked) > 0 {
 				fail("%s: content sent with capture off: %s", where, reprList(sortedSet(leaked)))

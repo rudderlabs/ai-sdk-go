@@ -76,10 +76,14 @@ type Options struct {
 	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
 	// CaptureContent sends masked call_reason and capability_detail capped at 200 characters,
-	// and feedback_text capped at 2000. Off by default. Failed requests also carry error_message
-	// (masked, 200 characters) when the final response is observed with ObserveHTTP or
-	// ObserveStdio.
+	// and feedback_text capped at 2000. Failed requests also carry error_message (masked, 200
+	// characters) when the final response is observed with ObserveHTTP or ObserveStdio. False (the
+	// default) follows the global setting; turn it off for this server with ContentCapture:
+	// &rudderstackai.ContentCapture{Default: rudderstackai.Ptr(false)}.
 	CaptureContent bool
+	// ContentCapture is the policy per kind (CallReason, FeedbackText, ErrorMessage); unset keys
+	// fall back to CaptureContent, then to the global setting.
+	ContentCapture *rudderstackai.ContentCapture
 	// CapabilityRequests registers the request_capability tool, recorded as
 	// mcp_capability_requested. Nil (the default) leaves it out.
 	//
@@ -106,7 +110,7 @@ type Options struct {
 func (o Options) root() rudderstackai.Options {
 	r := rudderstackai.Options{
 		Analytics: o.Analytics, EventRules: o.EventRules, RequestContext: o.RequestContext,
-		ClientSeenWindow: o.ClientSeenWindow, CaptureContent: o.CaptureContent,
+		ClientSeenWindow: o.ClientSeenWindow, CaptureContent: o.CaptureContent, ContentCapture: o.ContentCapture,
 		CapabilityRequests: o.CapabilityRequests, FeedbackRequests: o.FeedbackRequests, MCPEvents: o.MCPEvents, Transport: o.Transport,
 		ServerName: o.ServerName, Redact: o.Redact, DisableRedaction: o.DisableRedaction,
 	}

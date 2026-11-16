@@ -2222,6 +2222,60 @@
       "stdout": "events: {'ai_user_prompt_created': 2, 'ai_response_received': 2, 'ai_interaction_classified': 1, 'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 3}\ninteractions: 1\nFAIL: #3 ai_user_prompt_created: content sent with capture off: ['prompt_text']\nFAIL: #5 ai_user_action: content sent with capture off: ['feedback_text']\nRESULT: FAIL\n"
     },
     {
+      "name": "capture policy: answer text on, feedback text off",
+      "command": "check",
+      "captures": [
+        "review_content"
+      ],
+      "args": [
+        "--capture-policy",
+        "{\"default\": false, \"answer_text\": true}"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 2, 'ai_response_received': 2, 'ai_interaction_classified': 1, 'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 3}\ninteractions: 1\nFAIL: #5 ai_user_action: content sent with capture off: ['feedback_text']\nRESULT: FAIL\n"
+    },
+    {
+      "name": "capture policy: feature off while default on",
+      "command": "check",
+      "captures": [
+        "review_content"
+      ],
+      "args": [
+        "--capture-policy",
+        "{\"default\": true, \"answer_text\": false}"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 2, 'ai_response_received': 2, 'ai_interaction_classified': 1, 'ai_user_action': 1}\nlegacy or other events (no wrapperLibrary): {}\nsdks: {'@rudderstack/ai': 3}\ninteractions: 1\nFAIL: #3 ai_user_prompt_created: content sent with capture off: ['prompt_text']\nRESULT: FAIL\n"
+    },
+    {
+      "name": "capture policy: intent_summary explicitly off",
+      "command": "check",
+      "captures": [
+        "intent_summary"
+      ],
+      "args": [
+        "--expect-legacy",
+        "chatTurnCompleted",
+        "--capture-policy",
+        "{\"intent_summary\": false}"
+      ],
+      "exit_code": 1,
+      "stdout": "events: {'ai_user_prompt_created': 4, 'ai_response_received': 4, 'ai_user_action': 2, 'ai_interaction_classified': 1}\nlegacy or other events (no wrapperLibrary): {'chatTurnCompleted': 1}\nsdks: {'rudderstack-ai': 6}\ninteractions: 2\nFAIL: #11 ai_interaction_classified: content sent with capture off: ['intent_summary']\nRESULT: FAIL\n"
+    },
+    {
+      "name": "capture policy: unknown key",
+      "command": "check",
+      "captures": [
+        "review_content"
+      ],
+      "args": [
+        "--capture-policy",
+        "{\"answer\": true}"
+      ],
+      "exit_code": 2,
+      "stdout": ""
+    },
+    {
       "name": "stale browser ID with --client-surface",
       "command": "check",
       "captures": [
