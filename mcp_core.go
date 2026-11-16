@@ -882,16 +882,21 @@ type heldEvents struct {
 	mask  func(string) (string, bool)
 	sends []func()
 	done  bool
+	sent  chan struct{} // closed once flush has sent the held events
 }
 
+// add queues send behind the held events. Once flushing has begun it waits until they are sent
+// and returns false, so the caller sends afterwards and the order holds.
 func (h *heldEvents) add(send func()) bool {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.done {
-		return false
+	if !h.done {
+		h.sends = append(h.sends, send)
+		h.mu.Unlock()
+		return true
 	}
-	h.sends = append(h.sends, send)
-	return true
+	h.mu.Unlock()
+	<-h.sent
+	return false
 }
 
 // flush sets error_message from the response the client received: its JSON-RPC error, or a
@@ -915,6 +920,7 @@ func (h *heldEvents) flush(response map[string]any) {
 			}
 		})
 	}
+	defer close(h.sent)
 	for _, send := range sends {
 		safely(send)
 	}
@@ -930,7 +936,7 @@ func (rc *reqCtx) send(event string, p map[string]any, send func()) {
 	}
 	if rc.responses != nil && rc.opts.CaptureContent && failureEvents[event] &&
 		p["tool_status"] == "error" && p["error_type"] != "cancelled" {
-		h := &heldEvents{props: p, tool: event == "mcp_tool_called", mask: rc.opts.mask, sends: []func(){send}}
+		h := &heldEvents{props: p, tool: event == "mcp_tool_called", mask: rc.opts.mask, sends: []func(){send}, sent: make(chan struct{})}
 		if rc.responses.Await(rc.rawID, h.flush) {
 			rc.held = h
 			return

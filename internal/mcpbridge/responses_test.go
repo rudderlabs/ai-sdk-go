@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -89,24 +90,26 @@ func TestResponsesNilAndContext(t *testing.T) {
 	}
 }
 
-// A client may reuse an id once the server removed it from its in-flight set: the earlier
-// request's waiter is dropped and its pending response is not taken for the new request's.
+// MCP forbids reusing an id within a session; if a client does while a response is awaited,
+// the earlier request's event is released without a response, and nothing is kept for it.
 func TestResponsesReusedID(t *testing.T) {
 	r := NewResponses()
-	var first, second map[string]any
+	var first map[string]any
 	firstCalls := 0
 	r.Await(int64(1), func(m map[string]any) { firstCalls++; first = m })
 	r.Incoming([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}`))
 	if firstCalls != 1 || first != nil {
 		t.Fatalf("first waiter: calls=%d msg=%v", firstCalls, first)
 	}
-	if !r.Await(int64(1), func(m map[string]any) { second = m }) {
-		t.Fatal("await reused id")
-	}
+	// Idle traffic afterwards, including the earlier request's late response.
 	r.DeliverJSON([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":0,"message":"first"}}`))
-	if second != nil {
-		t.Fatalf("second took the first response: %v", second)
+	r.Incoming([]byte(`{"jsonrpc":"2.0","id":2,"method":"ping"}`))
+	if n := r.size(); n != 0 || r.Waiting() {
+		t.Fatalf("state kept after reuse: %d", n)
 	}
+	// A later failed request with the same id still gets its own response.
+	var second map[string]any
+	r.Await(int64(1), func(m map[string]any) { second = m })
 	r.DeliverJSON([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":0,"message":"second"}}`))
 	if second["error"].(map[string]any)["message"] != "second" {
 		t.Fatalf("second: %v", second)
@@ -117,6 +120,32 @@ func TestResponsesReusedID(t *testing.T) {
 	r.Incoming([]byte(`[{"jsonrpc":"2.0","id":"x","result":{}},{"jsonrpc":"2.0","method":"notifications/initialized"}]`))
 	if called {
 		t.Fatal("waiter dropped by a non-request")
+	}
+}
+
+// Closing an observer stops its context callback, so a long-lived context keeps nothing alive.
+func TestResponsesCloseReleasesContextCallback(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	released := make(chan struct{})
+	func() {
+		r := NewResponses()
+		r.CloseWhenDone(ctx)
+		runtime.AddCleanup(r, func(ch chan struct{}) { close(ch) }, released)
+		r.Close()
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		runtime.GC()
+		select {
+		case <-released:
+			return
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("closed observer still retained by its context")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

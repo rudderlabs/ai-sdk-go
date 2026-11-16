@@ -47,7 +47,7 @@ func ObserveHTTP(h http.Handler) http.Handler {
 // Held events are sent without error_message when ctx ends.
 func ObserveStdio(ctx context.Context, r io.Reader, w io.Writer) (context.Context, io.Reader, io.Writer) {
 	responses := mcpbridge.NewResponses()
-	context.AfterFunc(ctx, responses.Close)
+	responses.CloseWhenDone(ctx)
 	rc, ok := r.(io.ReadCloser)
 	if !ok {
 		rc = io.NopCloser(r)

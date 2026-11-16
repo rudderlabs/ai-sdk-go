@@ -19,9 +19,8 @@ var ResponseTimeout = 10 * time.Second
 type Responses struct {
 	mu      sync.Mutex
 	waiting map[string]*waiter
-	// stale counts responses still to be written for requests whose id a client reused.
-	stale  map[string]int
-	closed bool
+	closed  bool
+	stop    func() bool // stops the CloseWhenDone callback
 }
 
 type waiter struct {
@@ -31,7 +30,7 @@ type waiter struct {
 
 // NewResponses returns an open observer.
 func NewResponses() *Responses {
-	return &Responses{waiting: map[string]*waiter{}, stale: map[string]int{}}
+	return &Responses{waiting: map[string]*waiter{}}
 }
 
 // Await registers done for the response to request id. It returns false, and never calls done,
@@ -100,50 +99,18 @@ func (r *Responses) Deliver(msg map[string]any) {
 	if !result && !failed {
 		return
 	}
-	key, ok := IDKey(msg["id"])
-	if !ok {
-		return
-	}
-	r.mu.Lock()
-	if r.stale[key] > 0 {
-		// The earlier request's response, written after its id was reused.
-		if r.stale[key]--; r.stale[key] == 0 {
-			delete(r.stale, key)
-		}
-		r.mu.Unlock()
-		return
-	}
-	w := r.waiting[key]
-	delete(r.waiting, key)
-	r.mu.Unlock()
-	if w != nil {
-		w.timer.Stop()
+	if w := r.pop(msg["id"]); w != nil {
 		w.done(msg)
 	}
 }
 
-// Incoming reads a message the client sent. A request reusing an id whose response is still
-// awaited (the server frees an id before writing its response) drops that waiter, and the
-// response written for it is then skipped rather than matched to the new request.
+// Incoming reads a message the client sent. MCP forbids reusing a request id within a session;
+// a request that does so while an earlier response is awaited releases that waiter without a
+// response, so the earlier event goes out without error_message.
 func (r *Responses) Incoming(data []byte) {
 	for _, msg := range decode(data) {
-		if _, ok := msg["method"]; !ok {
-			continue
-		}
-		key, ok := IDKey(msg["id"])
-		if !ok {
-			continue
-		}
-		r.mu.Lock()
-		w := r.waiting[key]
-		if w != nil {
-			delete(r.waiting, key)
-			r.stale[key]++
-		}
-		r.mu.Unlock()
-		if w != nil {
-			w.timer.Stop()
-			w.done(nil)
+		if _, ok := msg["method"]; ok {
+			r.Fail(msg["id"])
 		}
 	}
 }
@@ -189,12 +156,29 @@ func (r *Responses) Close() {
 	r.closed = true
 	waiting := r.waiting
 	r.waiting = map[string]*waiter{}
-	r.stale = map[string]int{}
+	stop := r.stop
 	r.mu.Unlock()
+	if stop != nil {
+		stop()
+	}
 	for _, w := range waiting {
 		w.timer.Stop()
 		w.done(nil)
 	}
+}
+
+// CloseWhenDone closes r when ctx ends; Close stops the callback, so ctx keeps nothing alive.
+func (r *Responses) CloseWhenDone(ctx context.Context) {
+	stop := context.AfterFunc(ctx, r.Close)
+	r.mu.Lock()
+	r.stop = stop
+	r.mu.Unlock()
+}
+
+func (r *Responses) size() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.waiting)
 }
 
 // IDKey is a comparable form of a JSON-RPC id: strings and numbers stay distinct ("1" is not 1),

@@ -41,7 +41,7 @@ func ObserveMCPTransport(ctx context.Context, t mcp.Transport) (context.Context,
 		return ctx, t
 	}
 	responses := mcpbridge.NewResponses()
-	context.AfterFunc(ctx, responses.Close)
+	responses.CloseWhenDone(ctx) // the connection closing also closes it
 	observed.Reader = mcpbridge.NewReader(observed.Reader, responses)
 	observed.Writer = mcpbridge.NewWriter(observed.Writer, responses)
 	// The go-sdk derives every request's context from the one passed to Server.Connect.

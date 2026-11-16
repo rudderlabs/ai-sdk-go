@@ -249,3 +249,42 @@ func TestObserveMCPTransportUnsupportedUnchanged(t *testing.T) {
 		t.Errorf("stdio: %#v", got)
 	}
 }
+
+// A flush (response, close or timeout) racing a later event of the same request still sends
+// the held event first.
+func TestHeldEventsKeepOrderDuringFlush(t *testing.T) {
+	setupAI(t)
+	s := workspaceServer("order-mcp", nil)
+	wrap(t, s, Options{CaptureContent: true})
+	w, _ := instances.get(s)
+	responses := mcpbridge.NewResponses()
+	rc := w.begin(mcpbridge.Request{Ctx: context.Background(), RequestID: int64(9), Responses: responses})
+	var mu sync.Mutex
+	var order []string
+	record := func(name string) {
+		mu.Lock()
+		defer mu.Unlock()
+		order = append(order, name)
+	}
+	started, release := make(chan struct{}), make(chan struct{})
+	rc.send("mcp_tool_called", map[string]any{"tool_status": "error", "error_type": "api_error"}, func() {
+		close(started)
+		<-release
+		record("mcp_tool_called")
+	})
+	go responses.Close()
+	<-started
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		rc.send("lookup_failed", map[string]any{"tool_status": "error"}, func() { record("lookup_failed") })
+	}()
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 2 || order[0] != "mcp_tool_called" {
+		t.Errorf("order: %v", order)
+	}
+}
