@@ -300,6 +300,38 @@
       }
     },
     {
+      "input": "input_messages",
+      "expected": {
+        "normalized": "input_messages",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "outputText",
+      "expected": {
+        "normalized": "output_text",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "output_tool_calls",
+      "expected": {
+        "normalized": "output_tool_calls",
+        "content": true,
+        "reserved": false
+      }
+    },
+    {
+      "input": "input_truncated",
+      "expected": {
+        "normalized": "input_truncated",
+        "content": false,
+        "reserved": false
+      }
+    },
+    {
       "input": "callReason",
       "expected": {
         "normalized": "call_reason",

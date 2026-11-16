@@ -517,7 +517,8 @@ func classify(i *Interaction, turn ClassifyTurn, c *classifierConfig) {
 	}
 	p := map[string]any{}
 	p["intent"], p["outcome"] = normaliseLabels(c, out.parsed.Intent, out.parsed.Outcome)
-	if c.Classify != nil || c.IntentSummary {
+	// Only an explicit ContentCapture.IntentSummary gates it (unset: sent as before the policy).
+	if (c.Classify != nil || c.IntentSummary) && i.capture.SendsIntentSummary() {
 		put(p, "intent_summary", summaryOf(out.parsed.IntentSummary))
 	}
 	p["classifier"] = "custom"

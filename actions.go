@@ -64,10 +64,7 @@ func TrackAction(ctx context.Context, o TrackActionOptions) {
 		put(p, "surface", string(first2(surfaceOf(o.Surface), surfaceOf(cv.surface))))
 		if o.ActionDetails != nil {
 			details := maps.Clone(o.ActionDetails)
-			capture := c.captureContent
-			if i := FromContext(ctx); i != nil {
-				capture = i.captureContent
-			}
+			capture := currentCapture(ctx)
 			for key := range details {
 				if dropContentProperty(key, capture) {
 					delete(details, key)

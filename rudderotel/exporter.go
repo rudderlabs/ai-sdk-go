@@ -10,6 +10,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
@@ -36,6 +37,7 @@ func NewExporter(options Options) (*Exporter, error) {
 		return nil, errors.New("rudderotel: MaxEventBytes must be positive")
 	}
 	hook.Tracing.RememberClient(client)
+	options.ContentCapture = capture.Clone(options.ContentCapture) // read at export: not the caller's values
 	return &Exporter{options: options, client: client}, nil
 }
 

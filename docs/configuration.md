@@ -44,6 +44,7 @@ err := rudderstackai.Configure(
 | --------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `WithAnalytics(client)`                 | none    | Default RudderStack client. Nil clears it.                                                                                    |
 | `WithCaptureContent(on)`                | off     | Send `prompt_text`, `response_text`, `action_details.feedback_text`, score `explanation` and, with call events, per-call `input_messages`, `output_text` and `output_tool_calls`, [masked](#privacy-and-masking). |
+| `WithContentCapture(policy)`            | none    | The same per kind; its keys win over `WithCaptureContent`. See [Content capture](#content-capture). |
 | `WithEmitSpans(on)` | off | Emit wrapper and manual spans; independent of call events. |
 | `WithLLMCallEvents(on)`                 | off     | Also send one [`ai_llm_response_received`](events.md#ai_llm_response_received) per model call.                                |
 | `WithTaskStartedEvents(on)`             | off     | Also send [`ai_task_started`](events.md#ai_task_started) when a `RunTask` run starts (not when it resumes).                   |
@@ -82,6 +83,7 @@ For `StartInteraction` and `RunInteraction`. Every field is optional.
 | `TriggerSource`, `TaskName`, `TriggerEventID`, `ParentInteractionID` | Background and chaining fields; [`RunTask`](#taskoptions) sets them for you          |
 | `Analytics`                                 | RudderStack client for this interaction                                                                     |
 | `CaptureContent`, `ToolBreakdown`, `IdentityFromCookies` | `*bool` overrides of the global settings                                                       |
+| `ContentCapture`                                         | `*ContentCapture`: [content capture](#content-capture) per kind for this interaction            |
 | `Classify`                                  | `*bool`; default on for user-triggered interactions, off for system ones                                    |
 | `Context`                                   | Extra message context for every event of the interaction; replaces the context's `Context`                 |
 | `Request`, `Cookies`, `CookieValues`        | Cookie sources for [identity](#identity-and-cookies)                                                        |
@@ -214,11 +216,44 @@ err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID)
 
 `WithTraceIDFrom(fn func(context.Context) string)` is consulted with the context given to `StartInteraction` / `RunInteraction`, then with the context of each integration call until it returns a non-empty ID. `rudderotel.TraceID(ctx)` returns the trace ID of the span in `ctx`, or "". No span is created or exported. Without `WithTraceIDFrom`, `trace_id` comes only from `TraceID` / `SetTraceID`.
 
+## Content capture
+
+Content capture is off by default: no prompt, answer, feedback or failure text is sent. `WithCaptureContent(true)` turns every kind on. `ContentCapture` turns kinds on one at a time; a nil key takes `Default`, then the level above:
+
+```go
+err := rudderstackai.Configure(rudderstackai.WithContentCapture(rudderstackai.ContentCapture{
+	Default: rudderstackai.Ptr(false), CallReason: rudderstackai.Ptr(true), ErrorMessage: rudderstackai.Ptr(true),
+}))
+ctx, i := rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{
+	ContentCapture: &rudderstackai.ContentCapture{LLMCalls: rudderstackai.Ptr(false)}, // the rest follows Configure
+})
+```
+
+| Field              | Sends                                                                                                       |
+| ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `Default`          | Every key not set at this level (not `IntentSummary` or `Spans.HTTP`).                                      |
+| `AnswerText`       | `prompt_text` and `response_text`.                                                                          |
+| `LLMCalls`         | `input_messages`, `input_truncated`, `output_text` and `output_tool_calls` (with `WithLLMCallEvents`).      |
+| `Spans`            | Span content: `&SpanCapture{Default, Messages, ToolCalls, HTTP}`, see below.                                |
+| `FeedbackText`     | `feedback_text` (`TrackAction`, MCP `submit_feedback`) and `capability_detail`.                             |
+| `ScoreExplanation` | Score `explanation`.                                                                                        |
+| `IntentSummary`    | `intent_summary`, only when set: false drops it; nil keeps the classifier's own `IntentSummary` option.      |
+| `CallReason`       | MCP `call_reason`, and its field in `request_context`.                                                      |
+| `ErrorMessage`     | MCP `error_message`.                                                                                        |
+
+`Spans` covers the [tracing exporter](tracing.md) and SDK spans:
+- `Messages` is prompt, completion, instruction, retrieval and error text, `gen_ai.*.message` and `gen_ai.choice` events and the status message.
+- `ToolCalls` is tool arguments and results, and all other content of a tool-execution span (`gen_ai.operation.name` `execute_tool`, OpenInference `TOOL`, Traceloop or LangSmith `tool`, or Vercel `ai.toolCall`) except error text.
+- Nil kinds take `Spans.Default`, then `Default`.
+- `HTTP: Ptr(true)` (off unless set) keeps `url.path` and `url.full` / `http.url` / `http.target` without the query string, masked. `url.query`, the user agent, client addresses and headers are never sent.
+
+Levels, most general first: `Configure`, then the interaction or task (resolved when it starts), the MCP wrapper, or the tracing exporter (both read `Configure` on each request or export). At each level the bool `CaptureContent` option is shorthand for `Default`, and `ContentCapture` keys win over it, so existing bool settings behave exactly as before. Custom properties named like a content field follow that field's key. Masking and length caps always apply. The MCP wrappers' `CaptureContent: false` (the default) now follows the global setting; turn one server off with `ContentCapture: &rudderstackai.ContentCapture{Default: rudderstackai.Ptr(false)}`.
+
 ## Privacy and masking
 
 Sent by default: IDs, models, token counts, latency, cost, status, tool names. Never sent by default: prompt, answer and feedback text, score explanations, tool arguments and results.
 
-Custom response extras, declared tool properties and action details drop content-named keys when capture is off: `prompt_text`, `response_text`, `feedback_text`, `intent_summary`, `explanation`, `call_reason` and `capability_detail`. The check recognizes camelCase, PascalCase, uppercase, hyphens and spaces, and warns once per original key. Unrelated names such as `promptLength` and `cardKinds` are kept. SDK-owned property names are reserved under those same spellings even with capture on. Use the dedicated prompt/response fields for those properties.
+Custom response extras, declared tool properties and action details drop content-named keys when their kind of capture is off: `prompt_text`, `response_text`, `feedback_text`, `intent_summary`, `explanation`, `call_reason`, `capability_detail`, `error_message`, and `input_messages`, `output_text` and `output_tool_calls` (`LLMCalls`). The check recognizes camelCase, PascalCase, uppercase, hyphens and spaces, and warns once per original key. Unrelated names such as `promptLength` and `cardKinds` are kept. SDK-owned property names are reserved under those same spellings even with capture on. Use the dedicated prompt/response fields for those properties.
 
 With content capture on (`WithCaptureContent(true)`, or `CaptureContent` per interaction or task), `prompt_text`, `response_text`, `action_details.feedback_text` and `explanation` are sent, and, with `WithLLMCallEvents`, each call's `input_messages`, `output_text` and `output_tool_calls`. They, and the classifier's `intent_summary`, are masked first:
 

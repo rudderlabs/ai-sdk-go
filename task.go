@@ -48,6 +48,8 @@ type TaskOptions struct {
 	Resume         *PausedInteraction
 	Analytics      analytics.Client
 	CaptureContent *bool
+	// ContentCapture is the content capture policy per kind ([InteractionOptions.ContentCapture]).
+	ContentCapture *ContentCapture
 	ToolBreakdown  *bool
 	// Classify classifies the task when a classifier is configured. Off by default.
 	Classify *bool
@@ -113,7 +115,7 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 		UserID: o.UserID, AnonymousID: o.AnonymousID, ConversationID: conversation, InteractionID: o.InteractionID, OneShot: o.OneShot, Feature: o.Feature,
 		Surface: o.Surface, TraceID: o.TraceID, AccountID: o.AccountID, OnBehalfOf: o.OnBehalfOf, AgentVersion: o.AgentVersion, Variant: o.Variant,
 		TriggerSource: triggerSource, TriggerEventID: o.TriggerEventID, TaskName: taskName,
-		ParentInteractionID: parent, Analytics: o.Analytics, CaptureContent: o.CaptureContent,
+		ParentInteractionID: parent, Analytics: o.Analytics, CaptureContent: o.CaptureContent, ContentCapture: o.ContentCapture,
 		ToolBreakdown: o.ToolBreakdown, Classify: o.Classify, Context: o.Context,
 		Trigger: TriggerSystem, NoPromptEvent: true, IdentityFromCookies: Ptr(false), Resume: o.Resume,
 	}, func(ctx context.Context, i *Interaction) error {

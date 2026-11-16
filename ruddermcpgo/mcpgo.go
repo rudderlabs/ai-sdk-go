@@ -76,10 +76,14 @@ type Options struct {
 	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
 	// CaptureContent sends masked call_reason and capability_detail capped at 200 characters,
-	// and feedback_text capped at 2000. Off by default. Failed requests also carry error_message
-	// (masked, 200 characters) when the final response is observed with ObserveHTTP or
-	// ObserveStdio.
+	// and feedback_text capped at 2000. Failed requests also carry error_message (masked, 200
+	// characters) when the final response is observed with ObserveHTTP or ObserveStdio. False (the
+	// default) follows the global setting; turn it off for this server with ContentCapture:
+	// &rudderstackai.ContentCapture{Default: rudderstackai.Ptr(false)}.
 	CaptureContent bool
+	// ContentCapture is the policy per kind (CallReason, FeedbackText, ErrorMessage); unset keys
+	// fall back to CaptureContent, then to the global setting.
+	ContentCapture *rudderstackai.ContentCapture
 	// CapabilityRequests registers the request_capability tool, recorded as
 	// mcp_capability_requested. Nil (the default) leaves it out.
 	//
@@ -106,7 +110,7 @@ type Options struct {
 func (o Options) root() rudderstackai.Options {
 	r := rudderstackai.Options{
 		Analytics: o.Analytics, EventRules: o.EventRules, RequestContext: o.RequestContext,
-		ClientSeenWindow: o.ClientSeenWindow, CaptureContent: o.CaptureContent,
+		ClientSeenWindow: o.ClientSeenWindow, CaptureContent: o.CaptureContent, ContentCapture: o.ContentCapture,
 		CapabilityRequests: o.CapabilityRequests, FeedbackRequests: o.FeedbackRequests, MCPEvents: o.MCPEvents, Transport: o.Transport,
 		ServerName: o.ServerName, Redact: o.Redact, DisableRedaction: o.DisableRedaction,
 	}
@@ -340,12 +344,7 @@ func (t *tracked) syncCapability(s *server.MCPServer) {
 		t.capability = nil
 		return
 	}
-	listed := mcp.Tool{Name: def.Name, Title: def.Title, Description: def.Description, Annotations: mcp.ToolAnnotation{
-		Title: def.Annotations.Title, ReadOnlyHint: &def.Annotations.ReadOnlyHint,
-		DestructiveHint: &def.Annotations.DestructiveHint, IdempotentHint: &def.Annotations.IdempotentHint,
-		OpenWorldHint: &def.Annotations.OpenWorldHint,
-	}}
-	listed.RawInputSchema, _ = json.Marshal(def.Schema)
+	listed := listedTool(def)
 	t.capability = &listed
 	reply := def.Reply
 	registered := listed
@@ -353,6 +352,17 @@ func (t *tracked) syncCapability(s *server.MCPServer) {
 	s.AddTool(registered, func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultText(reply), nil
 	})
+}
+
+// listedTool is an injected tool as tools/list shows it.
+func listedTool(def *mcpbridge.ToolDef) mcp.Tool {
+	listed := mcp.Tool{Name: def.Name, Title: def.Title, Description: def.Description, Annotations: mcp.ToolAnnotation{
+		Title: def.Annotations.Title, ReadOnlyHint: &def.Annotations.ReadOnlyHint,
+		DestructiveHint: &def.Annotations.DestructiveHint, IdempotentHint: &def.Annotations.IdempotentHint,
+		OpenWorldHint: &def.Annotations.OpenWorldHint,
+	}}
+	listed.RawInputSchema, _ = json.Marshal(def.Schema)
+	return listed
 }
 
 func (t *tracked) ownCapability() *mcp.Tool {
@@ -380,12 +390,7 @@ func (t *tracked) syncFeedback(s *server.MCPServer) {
 		t.feedback = nil
 		return
 	}
-	listed := mcp.Tool{Name: def.Name, Title: def.Title, Description: def.Description, Annotations: mcp.ToolAnnotation{
-		Title: def.Annotations.Title, ReadOnlyHint: &def.Annotations.ReadOnlyHint,
-		DestructiveHint: &def.Annotations.DestructiveHint, IdempotentHint: &def.Annotations.IdempotentHint,
-		OpenWorldHint: &def.Annotations.OpenWorldHint,
-	}}
-	listed.RawInputSchema, _ = json.Marshal(def.Schema)
+	listed := listedTool(def)
 	t.feedback = &listed
 	reply := def.Reply
 	registered := listed
@@ -785,12 +790,17 @@ func (t *tracked) toolsList(c *call, r *mcp.ListToolsResult) {
 	listed := make([]mcpbridge.Tool, 0, len(r.Tools))
 	index := make([]int, 0, len(r.Tools))
 	for i, tool := range r.Tools {
+		// Ours: built now, so the schema follows the live content capture policy, as validation does.
 		if feedback != nil && tool.Name == feedbackTool && tool.Description == feedback.Description {
-			r.Tools[i] = *feedback
+			if def := t.srv.FeedbackTool(); def != nil {
+				r.Tools[i] = listedTool(def)
+			}
 			continue
 		}
 		if own != nil && tool.Name == capabilityTool {
-			r.Tools[i] = *own
+			if def := t.srv.CapabilityTool(); def != nil {
+				r.Tools[i] = listedTool(def)
+			}
 			continue
 		}
 		var m map[string]any

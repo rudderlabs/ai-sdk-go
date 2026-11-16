@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 	"github.com/rudderlabs/ai-sdk-go/internal/spanmodel"
 )
@@ -67,7 +68,7 @@ func TestWrapperSpanContentPolicyAndException(t *testing.T) {
 			s.Attributes["http.request.header.authorization"] = "secret"
 			s.Events = []spanmodel.Event{{Name: "exception", Time: s.End, Attributes: map[string]any{"exception.type": "string", "exception.message": s.StatusMessage}}, {Name: "gen_ai.assistant.message", Time: s.End, Attributes: map[string]any{"content": "person@example.com"}}}
 			before, _ := json.Marshal(s)
-			track, err := spanmodel.ToTrack(s, spanmodel.Options{CaptureContent: &capture})
+			track, err := spanmodel.ToTrack(s, spanmodel.Options{Capture: kinds(capture)})
 			if err != nil || track == nil {
 				t.Fatalf("mapping failed: %v", err)
 			}
@@ -100,7 +101,7 @@ func TestWrapperSpanBudgetTruncatesUnicodeAndDropsWhenTooSmall(t *testing.T) {
 	s := wrapperSpan()
 	s.Attributes["gen_ai.output.messages"] = strings.Repeat("界", 4000)
 	capture := true
-	track, err := spanmodel.ToTrack(s, spanmodel.Options{CaptureContent: &capture, ContentMasked: true, MaxEventBytes: 3000})
+	track, err := spanmodel.ToTrack(s, spanmodel.Options{Capture: kinds(capture), ContentMasked: true, MaxEventBytes: 3000})
 	if err != nil || track == nil {
 		t.Fatalf("truncation failed: %v", err)
 	}
@@ -114,7 +115,7 @@ func TestWrapperSpanBudgetTruncatesUnicodeAndDropsWhenTooSmall(t *testing.T) {
 	if s.Attributes["gen_ai.output.messages"] != strings.Repeat("界", 4000) {
 		t.Fatal("truncation mutated provider content")
 	}
-	dropped, err := spanmodel.ToTrack(s, spanmodel.Options{CaptureContent: &capture, ContentMasked: true, MaxEventBytes: 1})
+	dropped, err := spanmodel.ToTrack(s, spanmodel.Options{Capture: kinds(capture), ContentMasked: true, MaxEventBytes: 1})
 	if err != nil || dropped != nil {
 		t.Fatalf("impossible budget must drop the span: %v, %v", dropped, err)
 	}
@@ -128,7 +129,7 @@ func TestSummaryUsesNormalizedBinaryStrippedAttributes(t *testing.T) {
 			s := wrapperSpan()
 			s.Attributes["gen_ai.response.finish_reasons"] = []any{"stop", []byte("PRIVATE"), map[string]any{"bytes": []byte("PRIVATE"), "reason": "tool_calls"}}
 			s.Attributes["gen_ai.usage.input_tokens"] = uint16(7)
-			track, err := spanmodel.ToTrack(s, spanmodel.Options{CaptureContent: &capture, ContentMasked: masked})
+			track, err := spanmodel.ToTrack(s, spanmodel.Options{Capture: kinds(capture), ContentMasked: masked})
 			if err != nil || track == nil {
 				t.Fatalf("mapping: %v", err)
 			}
@@ -167,7 +168,7 @@ func TestSpanByteBudgetIncludesTrackContextAndIdentity(t *testing.T) {
 	s := wrapperSpan()
 	s.Attributes["gen_ai.output.messages"] = strings.Repeat("x", 32000)
 	capture := true
-	options := spanmodel.Options{CaptureContent: &capture, ContentMasked: true, SDKIdentity: true,
+	options := spanmodel.Options{Capture: kinds(capture), ContentMasked: true, SDKIdentity: true,
 		UserID: strings.Repeat("u", 2000), AnonymousID: strings.Repeat("a", 1000),
 		MessageContext: map[string]any{"traits": map[string]any{"description": strings.Repeat("t", 2000)}}}
 	track, err := spanmodel.ToTrack(s, options)
@@ -186,4 +187,9 @@ func TestSpanByteBudgetIncludesTrackContextAndIdentity(t *testing.T) {
 	if err != nil || track != nil {
 		t.Fatal("untruncatable track context exceeded budget")
 	}
+}
+
+func kinds(on bool) *capture.Spans {
+	k := capture.All(on)
+	return &k
 }

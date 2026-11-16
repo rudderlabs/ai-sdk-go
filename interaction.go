@@ -18,6 +18,8 @@ import (
 
 	"github.com/google/uuid"
 	analytics "github.com/rudderlabs/analytics-go/v4"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 )
 
 // InteractionOptions configures [StartInteraction] and [RunInteraction].
@@ -69,8 +71,11 @@ type InteractionOptions struct {
 	// Analytics is the RudderStack client for this interaction. Wins over the context and the
 	// global client.
 	Analytics analytics.Client
-	// CaptureContent overrides the global setting for this interaction.
+	// CaptureContent overrides the global setting for this interaction: every kind of text.
 	CaptureContent *bool
+	// ContentCapture overrides the global setting per kind; unset keys fall back to
+	// CaptureContent, then to the global setting. See [ContentCapture].
+	ContentCapture *ContentCapture
 	// ToolBreakdown overrides the global setting for this interaction.
 	ToolBreakdown *bool
 	// Classify classifies this interaction when a classifier is configured. Default: on for
@@ -470,10 +475,12 @@ type Interaction struct {
 	surface                                                                Surface
 	trigger                                                                Trigger
 	accountID, onBehalfOf, triggerSource, taskName, triggerEventID, parent string
-	captureContent, toolBreakdown, classify                                bool
-	explicitAnalytics                                                      analytics.Client
-	msgContext                                                             map[string]any
-	sessionID                                                              int64
+	toolBreakdown, classify                                                bool
+	// capture is the content capture policy, resolved when the interaction started.
+	capture           capture.Resolved
+	explicitAnalytics analytics.Client
+	msgContext        map[string]any
+	sessionID         int64
 	// resumed: continued from a Resume snapshot.
 	resumed bool
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
@@ -679,7 +686,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		taskName:          o.TaskName,
 		triggerEventID:    o.TriggerEventID,
 		parent:            o.ParentInteractionID,
-		captureContent:    boolOr(o.CaptureContent, c.captureContent),
+		capture:           capture.Resolve(c.captureLevel(), capture.Level(o.CaptureContent, o.ContentCapture)),
 		toolBreakdown:     boolOr(o.ToolBreakdown, c.toolBreakdown),
 		classify:          boolOr(o.Classify, trigger == TriggerUser),
 		explicitAnalytics: analyticsClient,
@@ -902,7 +909,7 @@ func (i *Interaction) emitPrompt(o InteractionOptions) {
 	// Masked now, outside the lock.
 	var promptText string
 	var promptOK bool
-	if o.PromptText != "" && i.captureContent {
+	if o.PromptText != "" && i.capture.AnswerText {
 		promptText, promptOK = redactText(o.PromptText)
 	}
 	i.mu.Lock()
@@ -947,12 +954,15 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	var content *callContent
 
 	i.mu.Lock()
-	capture := i.captureContent && !i.untracked && (!i.ended || call.wrapperSpan != nil)
+	// Sent on the call event only with LLMCalls; a wrapper span may carry it without.
+	eventContent := i.capture.LLMCalls && !i.untracked && !i.ended && c.emitLLMCalls
 	i.mu.Unlock()
+	build := eventContent
 	if call.wrapperSpan != nil {
-		capture = call.wrapperSpan.capture
+		build = call.wrapperSpan.capturesContent()
+		eventContent = call.wrapperSpan.llmCalls
 	}
-	if capture && (c.emitLLMCalls || call.wrapperSpan != nil) {
+	if build {
 		content = captureCallContent(call.InputMessages, call.OutputText, call.OutputToolCalls)
 	}
 	i.mu.Lock()
@@ -1109,7 +1119,12 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		cacheWrite1: min(nonNegative(call.CacheWrite1hTokens), cacheWrite), serviceTier: tier,
 		serverToolCallCount: serverToolCalls, serverToolCostUSD: serverToolCost, costUSD: cost,
 		finishReason: call.FinishReason, errorType: call.ErrorType, responseID: call.ResponseID,
-		content: content,
+		content: func() *callContent {
+			if eventContent {
+				return content
+			}
+			return nil
+		}(),
 		spanID: func() string {
 			if call.wrapperSpan != nil {
 				return call.wrapperSpan.SpanID
@@ -1484,7 +1499,7 @@ var reservedProperties = set(
 )
 
 // customProperties are the extra properties without SDK-owned names.
-func customProperties(extra map[string]any, capture bool, owned map[string]any) map[string]any {
+func customProperties(extra map[string]any, capture capture.Resolved, owned map[string]any) map[string]any {
 	props := map[string]any{}
 	for k, v := range extra {
 		name := propertyName(k)
@@ -1504,7 +1519,7 @@ var toolEventReserved = func() map[string]bool {
 	return m
 }()
 
-func allowToolEventProperty(key string, capture bool) bool {
+func allowToolEventProperty(key string, capture capture.Resolved) bool {
 	return !dropContentProperty(key, capture) && !toolEventReserved[propertyName(key)]
 }
 
@@ -1544,7 +1559,7 @@ type toolRuleOutcome struct {
 	resultSize int
 }
 
-func evaluateToolRule(rule ToolEventRule, t recordedTool, capture bool) *toolRuleOutcome {
+func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolved) *toolRuleOutcome {
 	args, _ := t.args.(map[string]any)
 	if rule.When != nil {
 		send := false
@@ -1601,7 +1616,7 @@ func (i *Interaction) preparePendingRules(done func()) {
 		// Reserve it against reentrant preparation; final outcome is installed after evaluation.
 		selected.ruleOutcome = &toolRuleOutcome{suppressed: true, properties: map[string]any{}, resultSize: -1}
 		i.mu.Unlock()
-		outcome := evaluateToolRule(rule, tool, i.captureContent)
+		outcome := evaluateToolRule(rule, tool, i.capture)
 		i.mu.Lock()
 		selected.ruleOutcome = outcome
 		selected.args, selected.result, selected.hasResult = nil, nil, false
@@ -1612,7 +1627,7 @@ func (i *Interaction) preparePendingRules(done func()) {
 func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool) {
 	outcome := t.ruleOutcome
 	if outcome == nil {
-		outcome = evaluateToolRule(rule, t, i.captureContent)
+		outcome = evaluateToolRule(rule, t, i.capture)
 	}
 	if outcome.suppressed {
 		return
@@ -1887,7 +1902,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	i.mu.Lock()
 	capturedAnswer := first(o.ResponseText, i.spanAnswer)
 	i.mu.Unlock()
-	if capturedAnswer != "" && i.captureContent {
+	if capturedAnswer != "" && i.capture.AnswerText {
 		responseText, responseOK = redactText(capturedAnswer)
 	}
 	i.mu.Lock()
@@ -1908,7 +1923,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	var props map[string]any
 	i.buildSafelyLocked(func() {
 		owned := i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false)
-		props = customProperties(o.ExtraProperties, i.captureContent, owned)
+		props = customProperties(o.ExtraProperties, i.capture, owned)
 		maps.Copy(props, owned)
 	})
 	// Finalization belongs to segment latency, not the subsequent paused interval.
@@ -2498,7 +2513,7 @@ func (i *Interaction) end(o EndOptions) {
 	i.mu.Lock()
 	capturedAnswer := first(o.ResponseText, i.spanAnswer)
 	i.mu.Unlock()
-	if capturedAnswer != "" && i.captureContent {
+	if capturedAnswer != "" && i.capture.AnswerText {
 		responseText, responseOK = redactText(capturedAnswer)
 	}
 	i.mu.Lock()
@@ -2506,7 +2521,7 @@ func (i *Interaction) end(o EndOptions) {
 	i.emitPendingCallsLocked()
 	i.buildSafelyLocked(func() {
 		owned := i.buildLocked(o, responseText, responseOK, true)
-		props = customProperties(o.ExtraProperties, i.captureContent, owned)
+		props = customProperties(o.ExtraProperties, i.capture, owned)
 		maps.Copy(props, owned)
 	})
 	if props != nil {
@@ -2947,7 +2962,7 @@ func (i *Interaction) keepsTextLocked() bool {
 }
 
 func (i *Interaction) keepAnswerLocked(text string, fromSpan bool) {
-	if fromSpan && i.captureContent {
+	if fromSpan && i.capture.AnswerText {
 		i.spanAnswer = text
 	}
 	if text != "" && i.keepsTextLocked() {
@@ -3051,7 +3066,8 @@ func (i *Interaction) keepMessages(messages any) {
 func (i *Interaction) capturesCallContent() bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return !i.ended && !i.untracked && i.captureContent && (cfg().emitLLMCalls || cfg().emitSpans)
+	return !i.ended && !i.untracked &&
+		((i.capture.LLMCalls && cfg().emitLLMCalls) || (i.capture.Spans.Content() && cfg().emitSpans))
 }
 
 func (i *Interaction) keepsText() bool {

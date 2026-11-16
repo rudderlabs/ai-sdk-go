@@ -27,6 +27,8 @@ check flags (repeat the list flags once per value):
   --spec <file>                 AI events spec schema (default: the one this SDK emits)
   --client-schema <file>        browser AI events schema (default: the one shipped with this SDK)
   --capture-content             the plan sets capture_content: true
+  --capture-policy <json>       the plan's capture_content object, snake_case keys
+                                ({"default": false, "call_reason": true}); over --capture-content
   --expect-legacy <event>       legacy event that must still be sent
   --absent <event>              legacy event that must not appear (its switch is off)
   --no-ai-events                captured with the AI events switch off: no AI event may appear
@@ -105,6 +107,10 @@ func dispatch(args []string, stdout io.Writer) (int, error) {
 	if _, userID := p.lists["mcp-user-id"]; userID && p.bools["mcp-anonymous"] {
 		return 0, usageErr("argument --mcp-anonymous: not allowed with argument --mcp-user-id")
 	}
+	policy, err := parseCapturePolicy(p.last("capture-policy"))
+	if err != nil {
+		return 0, err
+	}
 	events, err := load(p.positionals[0])
 	if err != nil {
 		return 0, err
@@ -122,7 +128,7 @@ func dispatch(args []string, stdout io.Writer) (int, error) {
 		return 0, err
 	}
 	return check(events, sch, options{
-		captureContent:    p.bools["capture-content"],
+		capture:           capturePolicy{on: p.bools["capture-content"], policy: policy},
 		expectLegacy:      p.lists["expect-legacy"],
 		noAIEvents:        p.bools["no-ai-events"],
 		absent:            p.lists["absent"],
