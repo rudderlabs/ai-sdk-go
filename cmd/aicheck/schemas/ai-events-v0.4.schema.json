@@ -1451,7 +1451,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 64,
-          "description": "The model calling the tool, as the client asserts it in the request's _meta (io.modelcontextprotocol/aiInvocation, then x-codex-turn-metadata). Unverified; unknown when it is not a bounded model ID (spec/fixtures/mcp-caller-model-v0.1.json). Absent when the client sends none."
+          "description": "The model calling the tool, client-asserted in request _meta (io.modelcontextprotocol/aiInvocation, then x-codex-turn-metadata), unverified. After trimming Unicode White_Space, keep at most 64 characters matching ^([A-Za-z0-9][A-Za-z0-9_-]*/)?[A-Za-z0-9][A-Za-z0-9._:+-]*(@[0-9]+)?$ (at most one provider/ segment, no dots or colons in provider); otherwise send unknown. Also send unknown for ASCII case-insensitive arn: prefixes or endings .gguf, .ggml, .bin, .safetensors, .onnx, .pt, .pth, .ckpt, .tflite, .mlmodel, .mlpackage. Absent when no model is sent (spec/fixtures/mcp-caller-model-v0.1.json)."
         },
         "caller_model_source": {
           "enum": [

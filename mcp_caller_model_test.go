@@ -14,10 +14,12 @@ import (
 
 func TestCallerModelSharedFixture(t *testing.T) {
 	var fixture struct {
-		MetaKeys  []string `json:"meta_keys"`
-		Pattern   string   `json:"model_pattern"`
-		MaxLength int      `json:"max_length"`
-		Cases     []struct {
+		MetaKeys          []string `json:"meta_keys"`
+		Pattern           string   `json:"model_pattern"`
+		MaxLength         int      `json:"max_length"`
+		UnknownPrefixes   []string `json:"unknown_prefixes"`
+		UnknownExtensions []string `json:"unknown_extensions"`
+		Cases             []struct {
 			Name     string         `json:"name"`
 			Meta     any            `json:"meta"`
 			Expected map[string]any `json:"expected"`
@@ -31,8 +33,10 @@ func TestCallerModelSharedFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(fixture.MetaKeys, []string{metaAIInvocation, metaCodexTurn}) ||
-		fixture.Pattern != callerModelPattern.String() || fixture.MaxLength != maxLabelLength {
-		t.Fatal("keys, pattern or bound differ from shared fixture")
+		fixture.Pattern != callerModelPattern.String() || fixture.MaxLength != maxLabelLength ||
+		!reflect.DeepEqual(fixture.UnknownPrefixes, callerModelUnknownPrefixes) ||
+		!reflect.DeepEqual(fixture.UnknownExtensions, callerModelUnknownExtensions) {
+		t.Fatal("keys, pattern, exclusions or bound differ from shared fixture")
 	}
 	for _, tc := range fixture.Cases {
 		t.Run(tc.Name, func(t *testing.T) {

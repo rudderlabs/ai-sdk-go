@@ -62,7 +62,9 @@ func snapshotMeta(meta map[string]any) map[string]any {
 	return out
 }
 
-var callerModelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/+-]*(@[0-9]+)?$`)
+var callerModelPattern = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9_-]*/)?[A-Za-z0-9][A-Za-z0-9._:+-]*(@[0-9]+)?$`)
+var callerModelUnknownPrefixes = []string{"arn:"}
+var callerModelUnknownExtensions = []string{".gguf", ".ggml", ".bin", ".safetensors", ".onnx", ".pt", ".pth", ".ckpt", ".tflite", ".mlmodel", ".mlpackage"}
 
 // callerModel is caller_model and caller_model_source from the known _meta keys' `model` only
 // (spec/fixtures/mcp-caller-model-v0.1.json), or nil. Client-asserted.
@@ -77,7 +79,10 @@ func callerModel(meta map[string]any) map[string]any {
 		if value == "" {
 			continue
 		}
-		if len(value) > maxLabelLength || !callerModelPattern.MatchString(value) {
+		lower := strings.ToLower(value)
+		if len(value) > maxLabelLength || !callerModelPattern.MatchString(value) ||
+			slices.ContainsFunc(callerModelUnknownPrefixes, func(prefix string) bool { return strings.HasPrefix(lower, prefix) }) ||
+			slices.ContainsFunc(callerModelUnknownExtensions, func(extension string) bool { return strings.HasSuffix(lower, extension) }) {
 			value = "unknown"
 		}
 		return map[string]any{"caller_model": value, "caller_model_source": "client_metadata"}

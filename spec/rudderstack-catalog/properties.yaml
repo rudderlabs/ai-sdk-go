@@ -770,7 +770,7 @@ spec:
     - id: caller_model
       name: caller_model
       type: string
-      description: The model calling an MCP tool, as the client asserts it in the request's _meta; unverified, unknown when not a bounded model ID.
+      description: "The model calling the tool, client-asserted in request _meta (io.modelcontextprotocol/aiInvocation, then x-codex-turn-metadata), unverified. After trimming Unicode White_Space, keep at most 64 characters matching ^([A-Za-z0-9][A-Za-z0-9_-]*/)?[A-Za-z0-9][A-Za-z0-9._:+-]*(@[0-9]+)?$ (at most one provider/ segment, no dots or colons in provider); otherwise send unknown. Also send unknown for ASCII case-insensitive arn: prefixes or endings .gguf, .ggml, .bin, .safetensors, .onnx, .pt, .pth, .ckpt, .tflite, .mlmodel, .mlpackage. Absent when no model is sent (spec/fixtures/mcp-caller-model-v0.1.json)."
     - id: caller_model_source
       name: caller_model_source
       type: string
