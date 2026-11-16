@@ -1051,6 +1051,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	// Retain the pre-hook response entry so a pause during the callback can be
 	// distinguished from a duplicate first recorded by the callback itself.
 	responseBeforeCredits := i.seen[call.Provider+"\x00"+call.ResponseID]
+	liveTwin := responseBeforeCredits != nil && responseBeforeCredits.fromSpan != (call.Integration == "tracing") && !responseBeforeCredits.twinMatched
 	credits := creditsOf(call.Credits)
 	if call.Credits == nil && call.ResponseID != "" {
 		if earlier := i.seen[call.Provider+"\x00"+call.ResponseID]; earlier != nil {
@@ -1096,10 +1097,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		}
 	}
 	if call.ResponseID != "" {
-		// A pre-existing response turned into a tombstone while the hook ran:
+		// The other source's unmatched twin turned into a tombstone while the hook ran:
 		// its segment closed, so admit this in-flight report in the current one.
-		// A live entry still deduplicates reports accepted in the current segment.
-		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok && (earlier != nil || responseBeforeCredits == nil) &&
+		// A same-source repeat stays one, and a live entry still deduplicates this segment's reports.
+		if earlier, ok := i.seen[call.Provider+"\x00"+call.ResponseID]; ok && (earlier != nil || !liveTwin) &&
 			(earlier == nil || earlier.fromSpan == (call.Integration == "tracing") || earlier.twinMatched) {
 			if earlier == nil {
 				return false

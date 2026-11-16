@@ -345,3 +345,53 @@ func TestSDK6111CreditsHookThatPausesPricesTheReportAlone(t *testing.T) {
 		}
 	}
 }
+
+// A repeat of a counted response from the same source stays a repeat when its credits hook
+// pauses: only the other source's twin is admitted as a new call, as in Node and Python.
+func TestSDK6111SameSourceRepeatWhoseCreditsHookPausesIsDropped(t *testing.T) {
+	for _, source := range []string{"openai", "tracing"} {
+		for _, pauser := range []string{"hook", "another goroutine"} {
+			t.Run(source+"/"+pauser, func(t *testing.T) {
+				var i *Interaction
+				hookCalls := 0
+				r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(CreditCall) (*float64, error) {
+					hookCalls++
+					if hookCalls == 2 {
+						if pauser == "hook" {
+							i.Pause(PauseOptions{})
+						} else {
+							done := make(chan struct{})
+							go func() { defer close(done); i.Pause(PauseOptions{}) }()
+							<-done
+						}
+					}
+					// No credits, so the repeat is priced again.
+					return nil, nil
+				}))
+				_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+				call := LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: source, ResponseID: "resp_1", InputTokens: 10}
+				if !i.RecordCall(call) {
+					t.Fatal("first report was not recorded")
+				}
+				if i.RecordCall(call) {
+					t.Error("the repeat was recorded as a new call")
+				}
+				if hookCalls != 2 {
+					t.Fatalf("hook calls = %d, want 2", hookCalls)
+				}
+				i.End(EndOptions{})
+				var calls, tokens float64
+				for _, e := range r.named("ai_response_received") {
+					calls += sdk6111Num(e.Properties["llm_call_count"])
+					tokens += sdk6111Num(e.Properties["total_input_tokens"])
+				}
+				if calls != 1 || tokens != 10 {
+					t.Errorf("llm_call_count=%g total_input_tokens=%g across segments, want 1 and 10", calls, tokens)
+				}
+				if n := len(r.named("ai_llm_response_received")); n != 1 {
+					t.Errorf("call events = %d, want 1", n)
+				}
+			})
+		}
+	}
+}
