@@ -64,7 +64,7 @@ func (e *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 		safe("tracing.export", func() {
 			keep := IsAISpan(s)
 			if e.options.Filter != nil {
-				keep = e.options.Filter(s)
+				keep = filterSpan(e.options.Filter, s)
 			} else if e.options.ExportAllSpans {
 				keep = true
 			}
@@ -77,6 +77,17 @@ func (e *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 		})
 	}
 	return errors.Join(failures...)
+}
+
+// filterSpan runs the app's Filter; a panic rejects the span and is reported as user_callback.
+func filterSpan(filter func(sdktrace.ReadOnlySpan) bool, s sdktrace.ReadOnlySpan) (keep bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			keep = false
+			hook.Report(rudderstackai.KindUserCallback, "tracing.filter", fmt.Errorf("rudderotel: Filter panicked (%T)", r))
+		}
+	}()
+	return filter(s)
 }
 
 // send maps one span and enqueues it; a transport panic is an export failure, like an Enqueue error.

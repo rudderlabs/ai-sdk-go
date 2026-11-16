@@ -3,6 +3,7 @@ package rudderotel
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -728,5 +729,40 @@ func TestSpanDedupJoinedCallFixesTheSDKTraceAcrossPause(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSpanDedupPanickingFilterIsAUserCallbackError(t *testing.T) {
+	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
+		if !s.EndTime().IsZero() {
+			panic("filter exploded")
+		}
+		return IsAISpan(s)
+	}})
+	var mu sync.Mutex
+	kinds := map[string]string{}
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true), rudderstackai.WithOnError(func(_ error, info rudderstackai.ErrorInfo) {
+		mu.Lock()
+		defer mu.Unlock()
+		kinds[info.Where] = info.Kind
+	})); err != nil {
+		t.Fatal(err)
+	}
+	ctx, i, o := ownerSpan(provider.Tracer("app"))
+	wrapperIn(ctx, t, i, events)
+	o.End()
+	i.End(rudderstackai.EndOptions{})
+	mu.Lock()
+	defer mu.Unlock()
+	for where, kind := range kinds {
+		if strings.Contains(where, "filter") && kind != rudderstackai.KindUserCallback {
+			t.Errorf("%s reported as %s, want user_callback", where, kind)
+		}
+	}
+	if !slices.Contains(slices.Collect(maps.Values(kinds)), rudderstackai.KindUserCallback) {
+		t.Errorf("the filter panic was not reported as user_callback: %v", kinds)
+	}
+	if spans := spanEvents(events()); len(spans) != 1 {
+		t.Errorf("want the SDK span in the rejected owner's place, got %d", len(spans))
 	}
 }
