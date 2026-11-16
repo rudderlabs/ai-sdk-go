@@ -90,6 +90,7 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	if c == nil {
 		// Bounded like the SDK's other maps: past the cap a span cannot own a call.
 		if len(otelCalls.m) >= max(hook.MaxMapEntries(), 1) {
+			hook.Report(rudderstackai.KindLimitReached, "MaxMapEntries (span owners)", errors.New("rudderstackai: MaxMapEntries (span owners) reached"))
 			return false
 		}
 		parentID := ""

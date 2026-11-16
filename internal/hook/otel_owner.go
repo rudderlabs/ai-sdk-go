@@ -1,6 +1,9 @@
 package hook
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
 // OTelCall is an active OTel model-call span a span processor registered: an SDK call
 // starting inside it joins it instead of sending its own span.
@@ -31,14 +34,19 @@ func (o *OTelOwner) Register() {
 }
 
 // Defer sends now when the owner settled with no exporter, holds the send while it is unsettled,
-// and drops it when a processor exported the owner. Holds at most MaxMapEntries sends.
+// and drops it when a processor exported the owner. Holds at most MaxMapEntries sends; past that
+// a call has no span, reported as limit_reached.
 func (o *OTelOwner) Defer(send func()) {
 	o.mu.Lock()
 	if !o.settled {
-		if len(o.held) < max(MaxMapEntries(), 1) {
+		full := len(o.held) >= max(MaxMapEntries(), 1)
+		if !full {
 			o.held = append(o.held, send)
 		}
 		o.mu.Unlock()
+		if full && Report != nil {
+			Report("limit_reached", "MaxMapEntries (held spans)", errors.New("rudderstackai: MaxMapEntries (held spans) reached"))
+		}
 		return
 	}
 	exported := o.exported

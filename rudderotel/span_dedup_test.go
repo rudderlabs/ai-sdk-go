@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -489,6 +490,44 @@ func TestSpanDedupProcessorsSettleTogether(t *testing.T) {
 			want := map[bool]int{true: 1, false: 0}[c.wantFallback]
 			if fallbacks != want || len(spans) != 1 {
 				t.Fatalf("spans=%d fallbacks=%d, want 1 span and %d fallbacks", len(spans), fallbacks, want)
+			}
+		})
+	}
+}
+
+func TestSpanDedupCapsReportLimitReached(t *testing.T) {
+	for _, where := range []string{"span owners", "held spans"} {
+		t.Run(where, func(t *testing.T) {
+			provider, _, events := testProvider(t, Options{Simple: true, Filter: rejectErrors})
+			var mu sync.Mutex
+			var reported []string
+			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 1}),
+				rudderstackai.WithOnError(func(_ error, info rudderstackai.ErrorInfo) {
+					mu.Lock()
+					defer mu.Unlock()
+					if info.Kind == rudderstackai.KindLimitReached {
+						reported = append(reported, info.Where)
+					}
+				})); err != nil {
+				t.Fatal(err)
+			}
+			ctx, i, o := ownerSpan(provider.Tracer("app"))
+			if where == "span owners" {
+				_, o2 := provider.Tracer("app").Start(ctx, "chat 2", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+				o2.End()
+			} else {
+				for range 2 {
+					_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
+					hook.Tracing.FinishRaw(s, "openai", "m", 200, time.Now(), nil)
+				}
+			}
+			o.End()
+			i.End(rudderstackai.EndOptions{})
+			_ = events
+			mu.Lock()
+			defer mu.Unlock()
+			if !slices.ContainsFunc(reported, func(w string) bool { return strings.Contains(w, where) }) {
+				t.Errorf("no limit_reached for %s: %v", where, reported)
 			}
 		})
 	}
