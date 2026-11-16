@@ -1000,6 +1000,10 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	if credits == nil && earlier.errorType != "" && earlier.errorType != "cancelled" {
 		credits = earlier.credits
 	}
+	priorCredits := earlier.credits
+	// Publish before unlocking so nested repeats see the combined metadata.
+	earlier.agentName, earlier.callPurpose = agent, purpose
+	earlier.fallbackUsed, earlier.byok = fallback, byok
 	if credits == nil && !earlier.creditsExplicit && hook != nil && earlier.errorType == "" && !earlier.usageUnknown {
 		basis := CreditCall{
 			Provider: earlier.provider, Model: first(earlier.rawModel, earlier.model),
@@ -1016,8 +1020,9 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	if i.ended || !slices.Contains(i.calls, earlier) {
 		return
 	}
-	earlier.agentName, earlier.callPurpose = agent, purpose
-	earlier.fallbackUsed, earlier.byok = fallback, byok
+	if earlier.agentName != agent || earlier.callPurpose != purpose || earlier.fallbackUsed != fallback || earlier.byok != byok || earlier.credits != priorCredits {
+		return // newer enrichment already priced the combined metadata
+	}
 	if !earlier.creditsExplicit {
 		earlier.credits, earlier.creditsExplicit = credits, explicit
 	}

@@ -1060,6 +1060,85 @@ func sdk6111ReviewPending(t *testing.T, r *recorder, mode string, record func(*I
 	}
 	return i
 }
+func TestSDK6111R3RepeatHooksRetainNewerEnrichmentAndPricing(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, source := range []string{"openai", "tracing"} {
+			for _, threaded := range []bool{false, true} {
+				for field := 0; field < 4; field++ {
+					t.Run(fmt.Sprintf("%s/%s/thread=%t/field=%d", mode, source, threaded, field), func(t *testing.T) {
+						var i *Interaction
+						inject := false
+						inner := (field + 1) % 4
+						call := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", InputTokens: 10, OutputTokens: 2, ResponseID: "r3", Integration: source}, 100)
+						enrich := func(c *LLMCall, f int) {
+							switch f {
+							case 0:
+								c.AgentName = "answer"
+							case 1:
+								c.CallPurpose = "answer"
+							case 2:
+								c.FallbackUsed = Ptr(true)
+							case 3:
+								c.BYOK = Ptr(true)
+							}
+						}
+						r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+							if inject {
+								inject = false
+								record := func() { later := call; enrich(&later, inner); i.RecordCall(later) }
+								if threaded {
+									done := make(chan struct{})
+									go func() { defer close(done); record() }()
+									select {
+									case <-done:
+									case <-time.After(2 * time.Second):
+										t.Fatal("credits hook deadlocked")
+									}
+								} else {
+									record()
+								}
+							}
+							present := []bool{c.AgentName != "", c.CallPurpose != "", c.FallbackUsed != nil, c.BYOK != nil}
+							if present[field] && present[inner] {
+								return Ptr(7.0), nil
+							}
+							return Ptr(1.0), nil
+						}))
+						i = sdk6111ReviewPending(t, r, mode, func(i *Interaction) { i.RecordCall(call) })
+						inject = true
+						later := call
+						enrich(&later, field)
+						i.RecordCall(later)
+						i.End(EndOptions{})
+						resp := lastResponse(t, r)
+						if sdk6111Num(resp["llm_call_count"]) != 1 || sdk6111Num(resp["total_input_tokens"]) != 10 || sdk6111Num(resp["total_credits"]) != 7 {
+							t.Fatal(resp)
+						}
+						var calls float64
+						for _, e := range r.named("ai_response_received") {
+							calls += sdk6111Num(e.Properties["llm_call_count"])
+						}
+						if calls != 1 {
+							t.Fatal(calls)
+						}
+						if source == "tracing" {
+							event := r.named("ai_llm_response_received")[0].Properties
+							names := []string{"agent_name", "call_purpose", "fallback_used", "byok"}
+							for _, f := range []int{field, inner} {
+								if _, ok := event[names[f]]; !ok {
+									t.Fatal(event)
+								}
+							}
+							if sdk6111Num(event["credits"]) != 7 {
+								t.Fatal(event)
+							}
+						}
+					})
+				}
+			}
+		}
+	}
+}
 
 func TestSDK6111R1CreditsFollowRetainedStatusAndTwinReplacement(t *testing.T) {
 	for _, mode := range []string{"segment", "in-process", "json"} {
