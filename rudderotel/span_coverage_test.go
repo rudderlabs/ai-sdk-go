@@ -87,3 +87,42 @@ func TestSpanCoverageIsSharedAcrossProcessors(t *testing.T) {
 		})
 	}
 }
+
+// A manual span between the wrapper call and the provider's OTel model span does not hide the
+// call: the OTel span is still dropped, whatever the middleware's operation or depth.
+func TestSpanCoverageManualMiddlewareDoesNotHideTheCall(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		ops  []string
+	}{
+		{"tool", []string{"execute_tool"}},
+		{"retrieval", []string{"retrieval"}},
+		{"agent", []string{"invoke_agent"}},
+		{"nested", []string{"invoke_agent", "execute_tool"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			provider, _, events := testProvider(t, Options{Simple: true})
+			configureSpans(t)
+			ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+			started := time.Now()
+			wrapped, s := hook.Tracing.BeginWrapper(ctx, i, started)
+			inner := wrapped
+			var manual []*rudderstackai.Span
+			for _, op := range tc.ops {
+				var m *rudderstackai.Span
+				inner, m = rudderstackai.StartSpan(inner, rudderstackai.SpanOptions{Name: "mw-" + op, Operation: op})
+				manual = append(manual, m)
+			}
+			modelSpan(inner, provider.Tracer("app"), "provider").End()
+			for j := len(manual) - 1; j >= 0; j-- {
+				manual[j].End(nil)
+			}
+			hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "m", InputTokens: 1, OutputTokens: 1, StartedAt: started, EndedAt: time.Now()}, s, 200)
+			i.End(rudderstackai.EndOptions{})
+			names := spanNames(events())
+			if countName(names, "provider") != 0 || countName(names, "chat m") != 1 || len(names) != 1+len(tc.ops) {
+				t.Errorf("spans %v, want the wrapper's chat span and the manual spans only", names)
+			}
+		})
+	}
+}

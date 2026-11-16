@@ -49,6 +49,21 @@ type Span struct {
 	// call: a provider wrapper's model call.
 	call bool
 }
+// ownsCall reports whether an active SDK call span of interaction i encloses ctx's innermost
+// active SDK span, or is it. A manual span inside the call does not hide it; the walk stops at
+// the interaction boundary.
+func ownsCall(ctx context.Context, i any) bool {
+	for s := activeSDKSpan(ctx); s != nil && any(s.interaction) == i; s = s.parent {
+		s.mu.Lock()
+		ended := s.ended
+		s.mu.Unlock()
+		if !ended && s.call {
+			return true
+		}
+	}
+	return false
+}
+
 type sdkSpanKey struct{}
 
 var spanSeq atomic.Uint64
@@ -436,8 +451,7 @@ func init() {
 	hook.Tracing.EmitSpans = emitSpans.Load
 	hook.Tracing.NextSpanSeq = func() uint64 { return spanSeq.Add(1) }
 	hook.Tracing.SDKOwnsCall = func(ctx context.Context, i any) bool {
-		active := activeSDKSpan(ctx)
-		return active != nil && any(active.interaction) == i && active.call
+		return ownsCall(ctx, i)
 	}
 	hook.Tracing.WrapperCaptureContent = func(value any) bool {
 		s, _ := value.(*Span)
