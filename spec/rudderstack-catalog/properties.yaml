@@ -676,7 +676,9 @@ spec:
     - id: auth_method
       name: auth_method
       type: string
-      description: How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none).
+      description: How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none). At most 64 characters.
+      config:
+        max_length: 64
     - id: oauth_client_id
       name: oauth_client_id
       type: string
@@ -689,7 +691,9 @@ spec:
     - id: country
       name: country
       type: string
-      description: Coarse country derived from the request IP, which is never sent.
+      description: Coarse country derived from the request IP, which is never sent. At most 64 characters.
+      config:
+        max_length: 64
     - id: request_id
       name: request_id
       type: string
