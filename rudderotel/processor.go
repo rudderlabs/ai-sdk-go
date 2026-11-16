@@ -43,24 +43,27 @@ var otelCalls = struct {
 type otelCall struct {
 	seq         uint64
 	interaction *rudderstackai.Interaction
+	parentID    string
+	// owner holds the joined SDK spans' sends until OnEnd knows whether the span is exported.
+	owner *hook.OTelOwner
 	// processor registered it; its Shutdown drops the entry so a stale span owns nothing.
 	processor *SpanProcessor
 }
 
 func init() {
-	hook.Tracing.OTelCallOwner = func(ctx context.Context) (string, string, uint64, any, bool) {
+	hook.Tracing.OTelCallOwner = func(ctx context.Context) (hook.OTelCall, bool) {
 		s := trace.SpanFromContext(ctx)
 		if !s.IsRecording() {
-			return "", "", 0, nil, false
+			return hook.OTelCall{}, false
 		}
 		sc := s.SpanContext()
 		otelCalls.mu.Lock()
 		c, ok := otelCalls.m[key(sc)]
 		otelCalls.mu.Unlock()
 		if !ok {
-			return "", "", 0, nil, false
+			return hook.OTelCall{}, false
 		}
-		return sc.TraceID().String(), sc.SpanID().String(), c.seq, c.interaction, true
+		return hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: c.parentID, Seq: c.seq, Interaction: c.interaction, Owner: c.owner}, true
 	}
 }
 
@@ -81,7 +84,11 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	defer otelCalls.mu.Unlock()
 	// Bounded like the SDK's other maps: past the cap a span is simply not joined.
 	if len(otelCalls.m) < max(hook.MaxMapEntries(), 1) {
-		otelCalls.m[key(s.SpanContext())] = otelCall{seq: hook.Tracing.NextSpanSeq(), interaction: interaction, processor: p}
+		parentID := ""
+		if s.Parent().IsValid() {
+			parentID = s.Parent().SpanID().String()
+		}
+		otelCalls.m[key(s.SpanContext())] = otelCall{seq: hook.Tracing.NextSpanSeq(), interaction: interaction, parentID: parentID, owner: &hook.OTelOwner{}, processor: p}
 		otelCalls.n.Store(int64(len(otelCalls.m)))
 	}
 	return false
@@ -95,29 +102,41 @@ func (p *SpanProcessor) exports(s sdktrace.ReadOnlySpan) bool {
 	return p.options.ExportAllSpans || IsAISpan(s)
 }
 
-func forgetOTelCall(k spanKey) {
+// takeOTelCall removes and returns the owner p registered for a span that ended.
+func (p *SpanProcessor) takeOTelCall(k spanKey) *hook.OTelOwner {
 	if otelCalls.n.Load() == 0 {
-		return
+		return nil
 	}
 	otelCalls.mu.Lock()
+	defer otelCalls.mu.Unlock()
+	c, ok := otelCalls.m[k]
+	if !ok || c.processor != p {
+		return nil
+	}
 	delete(otelCalls.m, k)
 	otelCalls.n.Store(int64(len(otelCalls.m)))
-	otelCalls.mu.Unlock()
+	return c.owner
 }
 
-// forgetOTelCalls drops every span a shut-down processor registered.
+// forgetOTelCalls drops every span a shut-down processor registered. They will not be
+// exported, so calls they owned send their own spans.
 func forgetOTelCalls(p *SpanProcessor) {
 	if otelCalls.n.Load() == 0 {
 		return
 	}
+	var owners []*hook.OTelOwner
 	otelCalls.mu.Lock()
 	for k, c := range otelCalls.m {
 		if c.processor == p {
 			delete(otelCalls.m, k)
+			owners = append(owners, c.owner)
 		}
 	}
 	otelCalls.n.Store(int64(len(otelCalls.m)))
 	otelCalls.mu.Unlock()
+	for _, o := range owners {
+		safe("tracing.owner", func() { o.Settle(false) })
+	}
 }
 
 // SpanProcessor adds interaction identity and optionally records product calls before export.
@@ -280,8 +299,11 @@ func (s taggedSpan) Attributes() []attribute.KeyValue { return s.attrs }
 // OnEnd records only spans of an open interaction and skips suppressed classifier spans.
 func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	defer p.finish(key(s.SpanContext()))
-	forgetOTelCall(key(s.SpanContext()))
+	owner := p.takeOTelCall(key(s.SpanContext()))
 	if p.closed.Load() {
+		if owner != nil {
+			safe("tracing.owner", func() { owner.Settle(false) })
+		}
 		return
 	}
 	safe("tracing.onEnd", func() {
@@ -301,6 +323,10 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 		}
 		if p.options.ProductEvents {
 			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
+		}
+		// An owner the filter rejects now (its final status or attributes) sends its joined calls' spans.
+		if owner != nil {
+			owner.Settle(p.exports(s))
 		}
 		if !state.covered {
 			p.inner.OnEnd(s)

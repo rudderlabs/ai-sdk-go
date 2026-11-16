@@ -32,7 +32,7 @@ err = rudderstackai.Configure(rudderstackai.WithAnalytics(client), rudderstackai
 
 Already exporting OpenTelemetry spans and adding `WithEmitSpans(true)`? Keep the processor: each
 model call is still sent once ([one span per call](#one-span-per-call-with-the-span-processor)).
-Examples: [`openai`](../examples/openai) (product only; `EMIT_SPANS=1` for both) and
+Examples: [`openai`](../examples/openai) (product only; `EMIT_SPANS=1` adds spans) and
 [`tracing`](../examples/tracing) (traces only).
 
 ## Wrapper and manual spans
@@ -119,8 +119,9 @@ call:
   inside a wrapper call is not exported by the `rudderotel` processor. Your other processors and
   exporters still receive it, and `ProductEvents` still counts the call once.
 - A wrapper call that starts inside such an OpenTelemetry span of the same interaction sends no
-  span of its own, provided the processor will export that span (sampled, and passing the export
-  filter when it starts). Its `ai_llm_response_received.span_id` is the OpenTelemetry span's ID.
+  span of its own, provided the processor exports that span: it must be sampled and pass the
+  export filter when it starts. If it fails the filter when it ends, the SDK span is sent in its
+  place, with its IDs. Its `ai_llm_response_received.span_id` is the OpenTelemetry span's ID.
   No wrapper usage or content is copied onto your span; the processor's usual identity attributes
   still apply.
 - Any other span in between keeps both: a wrapper call inside a `StartSpan` span that is itself
@@ -134,6 +135,8 @@ active SDK span decides. Limits:
 - The bare `Exporter` has no start hook and cannot deduplicate; use the processor.
 - A span is classified when it starts: one that gets its model-call attributes later is not
   matched.
+- An owning span the exporter drops because it cannot fit `rudderotel.Options.MaxEventBytes`
+  leaves the call without a span.
 - A span that already ended, or that started in another interaction, is never joined.
 - An exported child of a dropped OpenTelemetry span keeps that span as its `parent_span_id`,
   although RudderStack never received it.

@@ -47,8 +47,9 @@ type Span struct {
 	// seq: start order, compared with OTel model-call spans to tell which one is nested.
 	seq uint64
 	// call: a provider wrapper's model call. otelOwned: it joined an enclosing OTel
-	// model-call span, taking its IDs, and sends nothing.
+	// model-call span, taking its IDs; owner sends it only if that span is not exported.
 	call, otelOwned bool
+	owner           *hook.OTelOwner
 }
 type sdkSpanKey struct{}
 
@@ -170,22 +171,26 @@ func otelOwnedSpan(ctx context.Context, i *Interaction, started time.Time) *Span
 	if hook.Tracing.OTelCallOwner == nil || i == nil || i.Ended() {
 		return nil
 	}
-	traceID, spanID, seq, owner, ok := hook.Tracing.OTelCallOwner(ctx)
-	if !ok || owner != any(i) {
+	o, ok := hook.Tracing.OTelCallOwner(ctx)
+	if !ok || o.Interaction != any(i) {
 		return nil
 	}
 	active := activeSDKSpan(ctx)
 	if active != nil && active.interaction != i {
 		active = nil
 	}
-	if active != nil && active.seq > seq {
+	if active != nil && active.seq > o.Seq {
 		return nil
 	}
 	// Keeps the active SDK parent, so work on a retained context still finds it once this ends.
-	s := &Span{TraceID: traceID, SpanID: spanID, started: started, interaction: i, parent: active, seq: spanSeq.Add(1), call: true, otelOwned: true}
+	// Sent in the owner's place, with its IDs and parent, if the processor does not export it.
+	s := &Span{TraceID: o.TraceID, SpanID: o.SpanID, parentID: o.ParentID, started: started, interaction: i, attributes: map[string]any{}, parent: active, seq: spanSeq.Add(1), call: true, otelOwned: true, owner: o.Owner}
 	i.mu.Lock()
-	s.llmCalls = i.capture.LLMCalls
+	s.userID, s.anonymousID, s.interactionID, s.conversationID = i.userID, i.anonymousID, i.id, i.conversationID
+	s.client, s.capture, s.llmCalls = i.analytics(), i.capture.Spans, i.capture.LLMCalls
+	msgContext := i.msgContext
 	i.mu.Unlock()
+	s.msgContext, _ = stripBinary(msgContext).(map[string]any)
 	return s
 }
 
@@ -321,10 +326,6 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 	pendingWrapperSpans.mu.Lock()
 	delete(pendingWrapperSpans.spans, s)
 	pendingWrapperSpans.mu.Unlock()
-	if s.otelOwned {
-		s.mu.Unlock()
-		return
-	}
 	attrs := maps.Clone(s.attributes)
 	s.mu.Unlock()
 	if attrs == nil {
@@ -359,22 +360,32 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 			return fmt.Sprintf("%T", err)
 		}(), "exception.message": n.StatusMessage}}}
 	}
-	safely(func() {
-		if s.client == nil {
-			return
+	send := func() { safely(func() { s.send(n, masked) }) }
+	if s.otelOwned {
+		if s.owner != nil {
+			s.owner.Defer(send)
 		}
-		m, e := spanmodel.ToTrack(n, spanmodel.Options{Capture: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version})
-		if e != nil {
-			report(KindInternal, "span.map", e)
-			return
+		return
+	}
+	send()
+}
+
+// send maps and enqueues a finished SDK span.
+func (s *Span) send(n spanmodel.Span, masked bool) {
+	if s.client == nil {
+		return
+	}
+	m, e := spanmodel.ToTrack(n, spanmodel.Options{Capture: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version})
+	if e != nil {
+		report(KindInternal, "span.map", e)
+		return
+	}
+	if m != nil {
+		rememberClient(s.client)
+		if e := s.client.Enqueue(*m); e != nil {
+			report(KindInternal, "span.track", e)
 		}
-		if m != nil {
-			rememberClient(s.client)
-			if e := s.client.Enqueue(*m); e != nil {
-				report(KindInternal, "span.track", e)
-			}
-		}
-	})
+	}
 }
 func (i *Interaction) recordWrapperCall(call LLMCall, s *Span, status int) bool {
 	call.wrapperSpan = s
