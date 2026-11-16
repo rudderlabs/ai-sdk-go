@@ -57,6 +57,8 @@ func lowerHex(s string, n int) bool {
 	return true
 }
 
+func anyHex(s string, n int) bool { return lowerHex(strings.ToLower(s), n) }
+
 func FuzzTraceparent(f *testing.F) {
 	const trace, parent = "4bf92f3577b34da6a3ce929d0e0e4736", "00f067aa0ba902b7"
 	for _, seed := range [][5]string{
@@ -66,6 +68,8 @@ func FuzzTraceparent(f *testing.F) {
 		{"00", strings.ToUpper(trace), parent, "01", ""},
 		{"00", strings.Repeat("0", 32), parent, "01", ""},
 		{"00", trace, strings.Repeat("0", 16), "01", ""},
+		{"00", trace, strings.ToUpper(parent), "01", ""},
+		{"00", trace, parent, "0A", ""},
 		{"00", trace, parent, "0", "1"},
 	} {
 		f.Add(seed[0], seed[1], seed[2], seed[3], seed[4])
@@ -88,7 +92,9 @@ func FuzzTraceparent(f *testing.F) {
 		if valid && got != traceID {
 			t.Fatalf("valid traceparent read as %q, want %q", got, traceID)
 		}
-		if !valid && got != "" && lowerHex(version, 2) && lowerHex(traceID, 32) && lowerHex(parentID, 16) && lowerHex(flags, 2) &&
+		// With every field hex of its length (in any case), the header splits one way only, so the
+		// parser must reject whatever the rule rejects: uppercase, version ff, all-zero IDs.
+		if !valid && got != "" && anyHex(version, 2) && anyHex(traceID, 32) && anyHex(parentID, 16) && anyHex(flags, 2) &&
 			(rest == "" || rest[0] == '-') {
 			t.Fatalf("invalid traceparent (version %q, IDs %q %q) read as %q", version, traceID, parentID, got)
 		}

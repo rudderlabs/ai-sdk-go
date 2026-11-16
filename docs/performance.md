@@ -22,7 +22,7 @@ The overhead is the median (p50) of the same call with and without the SDK. "CI"
 | `WithEmitSpans`, added per streamed chunk                              | ≤ +1.5 µs                   | +0.6 µs             | under 1 µs          |
 | `WithCaptureContent` with `WithLLMCallEvents`, 8 KB of prompt and answer | ≤ 8 ms                    | 3.7 ms              | 3.3 ms              |
 
-An MCP call's wrapper work runs mostly off the request's path: on CI it leaves the round trip's time unchanged while using about 131 µs of CPU, which is why that row has a CPU budget too. Masking captured text is the slowest step, in the `regexp2` engine; SDK-6932 tracks making it faster, after which the content budget will tighten.
+On CI the MCP round trip's p50 did not change measurably (the go-sdk in-memory round trip alone takes 118 µs and varies more than that), while process CPU, which counts every goroutine, rose by about 131 µs per call; that row therefore has a CPU budget too. Masking captured text is the slowest step, in the `regexp2` engine; SDK-6932 tracks making it faster, after which the content budget will tighten.
 
 Extra allocations per call repeat exactly from run to run and are gated in CI: about 300 for an interaction with one wrapped call, 315 for an MCP call, 48 per streamed chunk and 700 with content capture. Each must stay within `internal/benchreport/alloc_budget.json`, set at the measurement plus 25%. Timings are a published target, not a CI gate.
 
@@ -32,7 +32,7 @@ Extra allocations per call repeat exactly from run to run and are gated in CI: a
 
 | Scenario                          | What runs                                                                                              |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `interaction/manual`              | `RunInteraction` with one `RecordCall`                                                                 |
+| `interaction/manual`              | `RunInteraction` with one `RecordCall`: all of it is SDK work, so it has no baseline                  |
 | `interaction/openai`              | `RunInteraction` with one wrapped chat completion                                                      |
 | `interaction/openai-stream`       | The same, streamed: 100 content chunks                                                                 |
 | `interaction/openai+content`      | A 4 KB prompt and a 4 KB answer, `WithCaptureContent` and `WithLLMCallEvents` on, all masked           |
@@ -44,7 +44,7 @@ Each benchmark reports, beside `ns/op`, `B/op` and `allocs/op`, the p50 and p99 
 
 ## Load
 
-`make load` runs `TestLoad` in `internal/conformance` (build tag `load`): 200 goroutines at 500 interactions per second. Each interaction makes two wrapped OpenAI calls with a tool call between them (every tenth one streams, and every fiftieth provider request fails with HTTP 429), followed by an MCP `tools/call` carrying the interaction's ID. Events go through analytics-go to a local data plane. A second phase repeats the workload while the data plane answers HTTP 500.
+`make load` runs `TestLoad` in `internal/conformance` (build tag `load`): 200 goroutines at 500 interactions per second. Nine in ten interactions make two wrapped OpenAI calls with a tool call between them, and every tenth makes one streamed call instead; every fiftieth provider request fails with HTTP 429. Each interaction is followed by an MCP `tools/call` carrying the interaction's ID. Events go through analytics-go to a local data plane. A second phase repeats the workload while the data plane answers HTTP 500.
 
 The run fails if any prompt, answer or tool-call event goes missing while the data plane is healthy, the SDK reports an `internal` error, the MCP maps never reach their cap (lowered to 2,000 so a short run evicts), the heap after garbage collection grows more than 25% (plus 8 MB) from the end of warm-up, the data plane rejected nothing in the second phase, or the flush after it recovers does not finish. On CI, 30 seconds at 500 interactions per second delivered all 15,000 answers and 15,000 tool calls; the heap went from 10.3 MB after warm-up to 4.2 MB at the end. Pull requests run 30 seconds; `main` and a nightly job run 5 minutes. `LOAD_SECONDS`, `LOAD_RATE` and `LOAD_WORKERS` change the run.
 
@@ -60,7 +60,7 @@ On the laptop, 5,000 interactions per second (about 15,000 events per second) we
 | Entries per in-memory map (MCP and integrations) | 10,000                  | `MaxMapEntries`                                                  |
 | Event properties                                 | 30,000 serialized bytes | fixed ([details](events.md))                                     |
 
-Reaching a limit is reported to `WithOnError` as `limit_reached`; nothing panics into your code. An interaction leaves nothing behind once it ends; MCP keeps a few entries per session or interaction (call positions and argument hashes for `retry_count`), up to `MaxMapEntries` per map.
+What happens at each cap is in [Limits](configuration.md#limits); an event over the size budget loses its captured text first ([events](events.md)). Nothing panics into your code. An interaction leaves nothing behind once it ends; MCP keeps a few entries per session or interaction (call positions and argument hashes for `retry_count`), up to `MaxMapEntries` per map.
 
 ## Fuzz tests
 
@@ -69,7 +69,7 @@ Go's native fuzzing covers the parsers the Node.js and Python SDKs check with pr
 | Target | Package | Checks |
 | --- | --- | --- |
 | `FuzzJoinIDs` | root | Any `_meta` JSON gives bounded IDs, and a valid `traceparent` wins over `com.rudderstack/trace_id` |
-| `FuzzTraceparent` | root | A `traceparent` gives a trace ID exactly when it is valid W3C (version 00 with extra fields is left out until SDK-6930) |
+| `FuzzTraceparent` | root | A `traceparent` whose fields are hex of the right length gives a trace ID exactly when it is valid W3C; any other gives a 32-digit lowercase ID or none (version 00 with extra fields is left out until SDK-6930) |
 | `FuzzChatUsage`, `FuzzMessagesUsage`, `FuzzUsage` | `rudderopenai`, `rudderanthropic`, `ruddergenai` | Whatever a response carries as usage, the app gets the provider SDK's result unchanged, and every event validates with non-negative integer token totals |
 | `FuzzChatStreamSplit`, `FuzzResponsesStreamSplit`, `FuzzMessagesStreamSplit` | `rudderopenai`, `rudderanthropic` | A recorded stream gives the same chunks and events however its bytes are split |
 | `FuzzChatStreamCut`, `FuzzResponsesStreamCut`, `FuzzMessagesStreamCut` | `rudderopenai`, `rudderanthropic` | A cut or corrupted stream reaches the app exactly as the provider SDK alone delivers it, and still ends in one conforming answer |
