@@ -22,6 +22,7 @@ type joinStep struct {
 
 type joinScenario struct {
 	Name      string     `json:"name"`
+	Requires  string     `json:"requires"`
 	EmitSpans bool       `json:"emit_spans"`
 	Steps     []joinStep `json:"steps"`
 	Expected  struct {
@@ -29,8 +30,9 @@ type joinScenario struct {
 		OtherAnswers int            `json:"other_answers"`
 		Warnings     int            `json:"warnings"`
 		Spans        []struct {
-			Label  string  `json:"label"`
-			Parent *string `json:"parent"`
+			Label       string  `json:"label"`
+			Parent      *string `json:"parent"`
+			Interaction string  `json:"interaction"`
 		} `json:"spans"`
 	} `json:"expected"`
 }
@@ -63,6 +65,9 @@ func TestSharedExplicitContextFixture(t *testing.T) {
 	loadFixture(t, "spec/fixtures/explicit-context-v0.1.json", &fixture)
 	for _, sc := range fixture.Scenarios {
 		t.Run(sc.Name, func(t *testing.T) {
+			if sc.Requires == "integration" {
+				t.Skip("platform limit: Go has no framework integrations")
+			}
 			r := setupAI(t, WithEmitSpans(sc.EmitSpans))
 			rearmJoinWarnings()
 			logs := captureLogs(t)
@@ -163,8 +168,12 @@ func TestSharedExplicitContextFixture(t *testing.T) {
 					if (want.Parent == nil && parent != "") || (want.Parent != nil && got != *want.Parent) {
 						t.Errorf("%s: parent %q, want %v", want.Label, got, want.Parent)
 					}
-					if labels[e.Properties["interaction_id"].(string)] != first {
-						t.Errorf("%s belongs to %v, want %s", want.Label, e.Properties["interaction_id"], first)
+					owner := first
+					if want.Interaction != "" {
+						owner = want.Interaction
+					}
+					if labels[e.Properties["interaction_id"].(string)] != owner {
+						t.Errorf("%s belongs to %v, want %s", want.Label, e.Properties["interaction_id"], owner)
 					}
 				}
 				if !found {
@@ -235,24 +244,6 @@ func TestJoinInteractionEdgeCases(t *testing.T) {
 	}
 }
 
-func TestJoinInteractionNeverJoinsAPausingInteraction(t *testing.T) {
-	r := setupAI(t)
-	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
-	var during context.Context
-	r.onEnqueue = func(m analytics.Message) {
-		if track, ok := m.(analytics.Track); ok && track.Event == "ai_response_received" && during == nil {
-			during = JoinInteraction(context.Background(), i.ID(), JoinOptions{})
-		}
-	}
-	i.Pause(PauseOptions{})
-	if during == nil || FromContext(during) == i {
-		t.Error("a pausing interaction was joinable")
-	}
-	if FromContext(JoinInteraction(context.Background(), i.ID(), JoinOptions{})) == i {
-		t.Error("a paused interaction was joinable")
-	}
-}
-
 func TestJoinInteractionRestoresTheInteractionScope(t *testing.T) {
 	for _, after := range []string{"open", "ended"} {
 		t.Run("interaction "+after, func(t *testing.T) {
@@ -298,5 +289,23 @@ func TestJoinInteractionNewestOwnsAReusedID(t *testing.T) {
 	defer newer.End(EndOptions{})
 	if got := FromContext(JoinInteraction(context.Background(), "dup", JoinOptions{})); got != newer {
 		t.Error("the older interaction owned the reused ID")
+	}
+}
+
+func TestJoinInteractionNeverJoinsAPausingInteraction(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
+	var during context.Context
+	r.onEnqueue = func(m analytics.Message) {
+		if track, ok := m.(analytics.Track); ok && track.Event == "ai_response_received" && during == nil {
+			during = JoinInteraction(context.Background(), i.ID(), JoinOptions{})
+		}
+	}
+	i.Pause(PauseOptions{})
+	if during == nil || FromContext(during) == i {
+		t.Error("a pausing interaction was joinable")
+	}
+	if FromContext(JoinInteraction(context.Background(), i.ID(), JoinOptions{})) == i {
+		t.Error("a paused interaction was joinable")
 	}
 }
