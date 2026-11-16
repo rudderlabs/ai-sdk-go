@@ -177,3 +177,20 @@ func TestCallContentPropertiesFollowLLMCalls(t *testing.T) {
 		}
 	}
 }
+
+// Resolved values and clones never share the caller's pointers.
+func TestResolveAndCloneCopyValues(t *testing.T) {
+	on := true
+	p := &Policy{IntentSummary: &on, Spans: &SpanPolicy{HTTP: &on}}
+	r, c := Resolve(p), Clone(p)
+	on = false
+	if r.IntentSummary == nil || !*r.IntentSummary {
+		t.Fatal("resolved intent_summary follows the caller's value")
+	}
+	if !*c.IntentSummary || !*c.Spans.HTTP {
+		t.Fatal("clone follows the caller's values")
+	}
+	if Clone(nil) != nil {
+		t.Fatal("clone of nil")
+	}
+}

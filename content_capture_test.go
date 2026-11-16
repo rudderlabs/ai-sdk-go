@@ -141,3 +141,85 @@ func TestCallContentFollowsLLMCalls(t *testing.T) {
 		})
 	}
 }
+
+// The injected submit_feedback schema and request_context follow the live policy after wrapping.
+func TestInjectedSchemasFollowLiveGlobalPolicy(t *testing.T) {
+	for _, before := range []bool{false, true} {
+		t.Run(map[bool]string{false: "off then on", true: "on then off"}[before], func(t *testing.T) {
+			globalCapture(t, WithCaptureContent(before))
+			server := workspaceServer("feedback-live-mcp", nil)
+			r := wrap(t, server, Options{RequestContext: RequestContextOptions{Enabled: true}, FeedbackRequests: &FeedbackRequestOptions{}})
+			cs := connect(t, server, "2025-06-18", nil)
+			if err := Configure(WithCaptureContent(!before)); err != nil {
+				t.Fatal(err)
+			}
+			if got := offered(t, cs, "call_reason"); got != !before {
+				t.Fatalf("call_reason offered = %v", got)
+			}
+			tools, err := cs.ListTools(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var schema map[string]any
+			for _, tool := range tools.Tools {
+				if tool.Name == feedbackTool {
+					schema = tool.InputSchema.(map[string]any)
+				}
+			}
+			_, has := schema["properties"].(map[string]any)["feedback"]
+			if has != !before {
+				t.Fatalf("feedback offered = %v", has)
+			}
+			args := map[string]any{"category": "bug_report"}
+			if has {
+				args["feedback"] = "The export button does nothing."
+			}
+			if res := callTool(t, cs, feedbackTool, args, nil); res.IsError {
+				t.Fatalf("call matching the advertised schema rejected: %s", mustJSON(res))
+			}
+			if _, sent := r.props(t, "mcp_feedback_submitted")["feedback_text"]; sent != has {
+				t.Fatalf("feedback_text sent = %v, want %v", sent, has)
+			}
+		})
+	}
+}
+
+// The policy is fixed when the interaction starts: changing the caller's values afterwards, even
+// concurrently with classification, changes nothing.
+func TestInteractionPolicyIsCopiedAtStart(t *testing.T) {
+	r := setupAI(t)
+	p := &ContentCapture{IntentSummary: Ptr(true), Spans: &SpanCapture{Messages: Ptr(true)}}
+	ctx, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", ContentCapture: p})
+	done := make(chan struct{})
+	go func() {
+		*p.IntentSummary = false
+		*p.Spans.Messages = false
+		close(done)
+	}()
+	TrackClassification(ctx, TrackClassificationOptions{InteractionID: "i", ConversationID: "c", Intent: "x", Outcome: "resolved", IntentSummary: "Refund question."})
+	<-done
+	TrackClassification(ctx, TrackClassificationOptions{InteractionID: "i", ConversationID: "c", Intent: "x", Outcome: "resolved", IntentSummary: "Refund question."})
+	for _, m := range r.named("ai_interaction_classified") {
+		if _, ok := m.Properties["intent_summary"]; !ok {
+			t.Fatalf("intent_summary withheld after the caller changed its policy: %v", m.Properties)
+		}
+	}
+	if !i.capture.Spans.Messages {
+		t.Fatal("span policy changed after start")
+	}
+	i.End(EndOptions{})
+}
+
+// WithContentCapture keeps its own copy: changing the caller's values later changes nothing.
+func TestGlobalPolicyIsCopied(t *testing.T) {
+	setupAI(t)
+	p := ContentCapture{AnswerText: Ptr(true), Spans: &SpanCapture{HTTP: Ptr(true)}}
+	if err := Configure(WithContentCapture(p)); err != nil {
+		t.Fatal(err)
+	}
+	*p.AnswerText, *p.Spans.HTTP = false, false
+	got := capture.Resolve(cfg().captureLevel())
+	if !got.AnswerText || !got.Spans.HTTP {
+		t.Fatalf("global policy follows the caller's values: %+v", got)
+	}
+}

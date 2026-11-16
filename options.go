@@ -249,6 +249,7 @@ func normalizeOptions(o Options) (*options, error) {
 		rules[tool] = rule
 	}
 	n := &options{Options: o, rules: rules, userSentiment: !o.RequestContext.DisableUserSentiment}
+	n.ContentCapture = capture.Clone(o.ContentCapture) // read on every request: not the caller's values
 	if len(o.RequestContext.Intents) > 0 {
 		n.intents = closedList(o.RequestContext.Intents)
 	}

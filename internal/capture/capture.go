@@ -106,6 +106,31 @@ func or(v ...*bool) *bool {
 
 func on(v *bool) bool { return v != nil && *v }
 
+// copied is v's value in a new pointer, so the caller's later changes cannot reach it.
+func copied(v *bool) *bool {
+	if v == nil {
+		return nil
+	}
+	b := *v
+	return &b
+}
+
+// Clone is p with every value copied, for policies stored past the call that set them.
+func Clone(p *Policy) *Policy {
+	if p == nil {
+		return nil
+	}
+	out := Policy{
+		Default: copied(p.Default), AnswerText: copied(p.AnswerText), LLMCalls: copied(p.LLMCalls),
+		FeedbackText: copied(p.FeedbackText), ScoreExplanation: copied(p.ScoreExplanation),
+		IntentSummary: copied(p.IntentSummary), CallReason: copied(p.CallReason), ErrorMessage: copied(p.ErrorMessage),
+	}
+	if s := p.Spans; s != nil {
+		out.Spans = &SpanPolicy{Default: copied(s.Default), Messages: copied(s.Messages), ToolCalls: copied(s.ToolCalls), HTTP: copied(s.HTTP)}
+	}
+	return &out
+}
+
 func spanKind(kind func(*SpanPolicy) *bool) func(*Policy) *bool {
 	return func(p *Policy) *bool {
 		if p.Spans == nil {
@@ -129,7 +154,7 @@ func Resolve(levels ...*Policy) Resolved {
 		ScoreExplanation: feature(func(p *Policy) *bool { return p.ScoreExplanation }),
 		CallReason:       feature(func(p *Policy) *bool { return p.CallReason }),
 		ErrorMessage:     feature(func(p *Policy) *bool { return p.ErrorMessage }),
-		IntentSummary:    walk(levels, func(p *Policy) *bool { return p.IntentSummary }),
+		IntentSummary:    copied(walk(levels, func(p *Policy) *bool { return p.IntentSummary })),
 		Fallback:         on(walk(levels, func(p *Policy) *bool { return p.Default })),
 		Spans: Spans{
 			Messages:  on(walk(levels, spanKind(func(s *SpanPolicy) *bool { return s.Messages }))),

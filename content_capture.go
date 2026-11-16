@@ -33,7 +33,7 @@ type SpanCapture = capture.SpanPolicy
 // over [WithCaptureContent]; see [ContentCapture].
 func WithContentCapture(p ContentCapture) ConfigOption {
 	return func(c *config, _ *pending) error {
-		c.contentCapture = &p
+		c.contentCapture = capture.Clone(&p)
 		return nil
 	}
 }

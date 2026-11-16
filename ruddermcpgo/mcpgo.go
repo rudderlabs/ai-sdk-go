@@ -344,12 +344,7 @@ func (t *tracked) syncCapability(s *server.MCPServer) {
 		t.capability = nil
 		return
 	}
-	listed := mcp.Tool{Name: def.Name, Title: def.Title, Description: def.Description, Annotations: mcp.ToolAnnotation{
-		Title: def.Annotations.Title, ReadOnlyHint: &def.Annotations.ReadOnlyHint,
-		DestructiveHint: &def.Annotations.DestructiveHint, IdempotentHint: &def.Annotations.IdempotentHint,
-		OpenWorldHint: &def.Annotations.OpenWorldHint,
-	}}
-	listed.RawInputSchema, _ = json.Marshal(def.Schema)
+	listed := listedTool(def)
 	t.capability = &listed
 	reply := def.Reply
 	registered := listed
@@ -357,6 +352,17 @@ func (t *tracked) syncCapability(s *server.MCPServer) {
 	s.AddTool(registered, func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultText(reply), nil
 	})
+}
+
+// listedTool is an injected tool as tools/list shows it.
+func listedTool(def *mcpbridge.ToolDef) mcp.Tool {
+	listed := mcp.Tool{Name: def.Name, Title: def.Title, Description: def.Description, Annotations: mcp.ToolAnnotation{
+		Title: def.Annotations.Title, ReadOnlyHint: &def.Annotations.ReadOnlyHint,
+		DestructiveHint: &def.Annotations.DestructiveHint, IdempotentHint: &def.Annotations.IdempotentHint,
+		OpenWorldHint: &def.Annotations.OpenWorldHint,
+	}}
+	listed.RawInputSchema, _ = json.Marshal(def.Schema)
+	return listed
 }
 
 func (t *tracked) ownCapability() *mcp.Tool {
@@ -384,12 +390,7 @@ func (t *tracked) syncFeedback(s *server.MCPServer) {
 		t.feedback = nil
 		return
 	}
-	listed := mcp.Tool{Name: def.Name, Title: def.Title, Description: def.Description, Annotations: mcp.ToolAnnotation{
-		Title: def.Annotations.Title, ReadOnlyHint: &def.Annotations.ReadOnlyHint,
-		DestructiveHint: &def.Annotations.DestructiveHint, IdempotentHint: &def.Annotations.IdempotentHint,
-		OpenWorldHint: &def.Annotations.OpenWorldHint,
-	}}
-	listed.RawInputSchema, _ = json.Marshal(def.Schema)
+	listed := listedTool(def)
 	t.feedback = &listed
 	reply := def.Reply
 	registered := listed
@@ -789,12 +790,17 @@ func (t *tracked) toolsList(c *call, r *mcp.ListToolsResult) {
 	listed := make([]mcpbridge.Tool, 0, len(r.Tools))
 	index := make([]int, 0, len(r.Tools))
 	for i, tool := range r.Tools {
+		// Ours: built now, so the schema follows the live content capture policy, as validation does.
 		if feedback != nil && tool.Name == feedbackTool && tool.Description == feedback.Description {
-			r.Tools[i] = *feedback
+			if def := t.srv.FeedbackTool(); def != nil {
+				r.Tools[i] = listedTool(def)
+			}
 			continue
 		}
 		if own != nil && tool.Name == capabilityTool {
-			r.Tools[i] = *own
+			if def := t.srv.CapabilityTool(); def != nil {
+				r.Tools[i] = listedTool(def)
+			}
 			continue
 		}
 		var m map[string]any
