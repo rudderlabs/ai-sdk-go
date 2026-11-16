@@ -14,6 +14,7 @@ Both send the same events with the same options, defaults and properties. `rudde
 - [Events](#events)
 - [Protocol revisions](#protocol-revisions)
 - [Identity](#identity)
+- [Auth providers](#auth-providers)
 - [Joining the calling agent](#joining-the-calling-agent)
 - [Agent-reported context](#agent-reported-context)
 - [Declared tool events](#declared-tool-events)
@@ -139,6 +140,83 @@ On stateless HTTP or servers built per request, client name and version are reme
 Remembered details fill absent client details on non-initialize requests (and on initialize when no fallback is configured), after initialize params, per-request `_meta` clientInfo, connection/session state and `ClientInfo`. Expiry is fixed at initialize receipt time plus the `ClientSeenWindow` in force then (default 24 hours); reads do not refresh it, and later window changes or rewrapping neither extend nor shorten existing entries. Go's zero `ClientSeenWindow` retains the 24-hour default. Remembering has no opt-out. Entries are bounded to 10,000 per server name, with the least recently stored evicted. Only name and version are remembered, never protocol version or capabilities. One user running two clients under the same OAuth client can be attributed to whichever initialized last. `mcp_session_id` is still absent on stateless endpoints.
 
 For a tool result with `isError: true`, `ClassifyToolError` may return `rate_limit`, `timeout`, `cancelled`, `denied`, `auth_error`, `invalid_request`, `connection_error` or `api_error`. Other values, an empty return or a panic are ignored. The default reads the first numeric HTTP status from `result._meta["com.rudderstack/http_status"]`, `structuredContent.status`, then `structuredContent.statusCode`: 401 → `auth_error`, 403 → `denied`, 408/504 → `timeout`, 429 → `rate_limit`, other 4xx → `invalid_request`, 5xx → `api_error`. Without a mapped status, schema-invalid arguments use `invalid_request`, otherwise `api_error`. Schema-invalid argument names remain in `invalid_arguments` regardless of the classifier or HTTP status's chosen `error_type`. Error text is never sent. Retry counting is unchanged: repeats count regardless of success or failure.
+
+## Auth providers
+
+When Clerk, WorkOS, Auth0 or Stytch protects your server, each request already carries a verified user and, when selected, an organisation. Verify the token in HTTP middleware, then map its subject to `UserID` and its organisation ID to `AccountID` in `Identify`, so MCP usage joins the rest of your product data. Never send the token itself.
+
+Clerk issues OAuth access tokens to MCP clients as JWTs by default; `sub` is the Clerk user ID (`user_...`). Enable `user:org:read` on the OAuth application, list it in the protected resource metadata's `scopes_supported`, and have the client request it. Only then does the access token carry a top-level `org_id`: the user selects the organisation on the consent screen, or Clerk uses their last active organisation when consent is disabled. Without that scope, `AccountID` stays unset. See [Clerk's organisation scope](https://clerk.com/changelog/2026-05-14-oauth-organizations).
+
+For JWT tokens, use `github.com/golang-jwt/jwt/v5@v5.3.1` and `github.com/MicahParks/keyfunc/v3@v3.9.2`. This handler checks the signature, expiry, issuer and audience (the MCP resource URL) before reading claims; replace `issuer` and `resource` with your URLs and pass a server and analytics client from [Setup](#setup).
+
+```go
+import (
+	"context"
+	"net/http"
+	"strings"
+
+	"github.com/MicahParks/keyfunc/v3"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/modelcontextprotocol/go-sdk/auth"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	analytics "github.com/rudderlabs/analytics-go/v4"
+)
+
+func clerkHandler(ctx context.Context, server *mcp.Server, client analytics.Client) (http.Handler, error) {
+	const issuer = "https://your-instance.clerk.accounts.dev"
+	const resource = "https://mcp.example.com/mcp"
+	keys, err := keyfunc.NewDefaultCtx(ctx, []string{issuer + "/.well-known/jwks.json"})
+	if err != nil {
+		return nil, err
+	}
+	verifier := func(ctx context.Context, raw string, _ *http.Request) (*auth.TokenInfo, error) {
+		claims := struct {
+			jwt.RegisteredClaims
+			Scope    string   `json:"scope"`
+			Scopes   []string `json:"scp"`
+			OrgID    string   `json:"org_id"`
+			ClientID string   `json:"client_id"`
+		}{}
+		_, err := jwt.ParseWithClaims(raw, &claims, keys.KeyfuncCtx(ctx),
+			jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer(issuer),
+			jwt.WithAudience(resource), jwt.WithExpirationRequired())
+		if err != nil || claims.Subject == "" {
+			return nil, auth.ErrInvalidToken
+		}
+		if claims.Scopes == nil {
+			claims.Scopes = strings.Fields(claims.Scope)
+		}
+		return &auth.TokenInfo{
+			UserID: claims.Subject, Scopes: claims.Scopes,
+			Expiration: claims.ExpiresAt.Time,
+			Extra:      map[string]any{"org_id": claims.OrgID, "client_id": claims.ClientID},
+		}, nil
+	}
+	identify := func(_ context.Context, token *auth.TokenInfo) (rudderstackai.Identity, error) {
+		if token == nil {
+			return rudderstackai.Identity{}, nil
+		}
+		orgID, _ := token.Extra["org_id"].(string)
+		clientID, _ := token.Extra["client_id"].(string)
+		return rudderstackai.Identity{UserID: token.UserID, AccountID: orgID, OAuthClientID: clientID}, nil
+	}
+	if err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{Analytics: client, Identify: identify}); err != nil {
+		return nil, err
+	}
+	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+	return auth.RequireBearerToken(verifier, &auth.RequireBearerTokenOptions{
+		ResourceMetadataURL: "https://mcp.example.com/.well-known/oauth-protected-resource/mcp",
+	})(h), nil
+}
+```
+
+`OAuthClientID` has no default; the sample carries the token's `client_id` through `Extra`. For a runnable Node.js version, see [mcp-server-clerk](https://github.com/rudderlabs/ai-sdk-node/tree/main/examples/mcp-server-clerk).
+
+- [WorkOS AuthKit](https://workos.com/docs/authkit/sessions): access-token `sub` is the user; `org_id` is the selected organisation, when present.
+- [Auth0](https://auth0.com/docs/manage-users/organizations/using-tokens): user access-token `sub` is the user; `org_id` is present when issued for an Auth0 Organization.
+- Stytch: [Connected Apps access-token](https://stytch.com/docs/api-reference/consumer/api/connected-apps/tokens/connected-app-access-token-object) `sub` is the user; with [B2B session auth](https://stytch.com/docs/api-reference/b2b/api/sessions/authenticate-jwt), map the verified session's `member_id` and `organization_id` to `UserID` and `AccountID`.
+- For mcp-go, put the verified user and organisation in context with `server.WithHTTPContextFunc` and read them in `Identify(ctx)`.
 
 ## Joining the calling agent
 
