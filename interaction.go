@@ -377,8 +377,11 @@ type PausedInteraction struct {
 	Intent              string     `json:"intent,omitempty"`
 	TraceID             string     `json:"trace_id,omitempty"`
 	SDKTraceID          string     `json:"sdk_trace_id,omitempty"`
-	Outcome             string     `json:"outcome,omitempty"`
-	Integration         string     `json:"integration,omitempty"`
+	// Primary and OutcomeHint use Node's object encoding; readers also accept legacy lists.
+	Primary     any    `json:"primary,omitempty"`
+	OutcomeHint any    `json:"outcome_hint,omitempty"`
+	Outcome     string `json:"outcome,omitempty"`
+	Integration string `json:"integration,omitempty"`
 	// SeenResponseIDs retains provider/response ID pairs already counted. Since v0.4.
 	SeenResponseIDs [][2]string `json:"seen_response_ids,omitempty"`
 	// LastFailedCallType retains the latest failed model call's category for resumed RunTask errors.
@@ -473,10 +476,17 @@ type pendingEvent struct {
 	pinned bool
 }
 
+type primarySelection struct {
+	model, provider string
+	calls           int
+	persistent      bool
+}
+
 type outcomeHint struct {
-	status    ResponseStatus
-	errorType string
-	calls     int
+	status      ResponseStatus
+	errorType   string
+	calls       int
+	pauseReason PauseReason
 }
 
 // Interaction is one user prompt and the one answer it gets, however many model calls, tools or
@@ -543,6 +553,7 @@ type Interaction struct {
 	capPending             bool
 	buildErrors            []error
 	toolsByID              map[string]*recordedTool
+	primary                *primarySelection
 	hint                   *outcomeHint
 	clientDisconnected     bool
 	disconnected           func() bool
@@ -2108,7 +2119,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 			i.toolsByID[tool.id] = tool
 		}
 	}
-	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
+	i.primary, i.hint, i.clientDisconnected, i.firstToken = nil, nil, false, -1
 	i.answerSource, i.spanAnswerSource = nil, nil
 	i.prompt, i.answer, i.spanAnswer, i.messages = "", "", "", nil // not in the snapshot, so not in an in-process resume
 	i.compactions = 0
@@ -2201,6 +2212,20 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		AgentVersion: i.agentVersion, Variant: i.variant, Confidence: i.confidence,
 		TriggerEventID: i.triggerEventID, ParentInteractionID: i.parent, Intent: i.intent, TraceID: i.traceID, SDKTraceID: i.sdkTraceID,
 		Outcome: i.outcome, Integration: i.integration, LastFailedCallType: i.lastFailedCallType,
+	}
+	if i.primary != nil {
+		p := map[string]any{"model": i.primary.model, "calls": i.primary.calls}
+		put(p, "provider", i.primary.provider)
+		if i.primary.persistent {
+			p["persistent"] = true
+		}
+		snapshot.Primary = p
+	}
+	if i.hint != nil {
+		h := map[string]any{"status": string(i.hint.status), "calls": i.hint.calls}
+		put(h, "errorType", i.hint.errorType)
+		put(h, "pauseReason", string(i.hint.pauseReason))
+		snapshot.OutcomeHint = h
 	}
 	if i.callCount > 0 {
 		snapshot.ReportCount = Ptr(i.callCount)
@@ -2448,6 +2473,40 @@ func pendingTool(c *recordedTool) map[string]any {
 	return p
 }
 
+// selectionObject normalizes the positional metadata Python wrote before SDK-6111.
+func selectionObject(value any, primary bool) map[string]any {
+	if object, ok := value.(map[string]any); ok {
+		return object
+	}
+	list, ok := value.([]any)
+	if !ok || len(list) < 3 || len(list) > 4 {
+		return nil
+	}
+	if primary {
+		p := map[string]any{"provider": list[0], "model": list[1], "calls": list[2]}
+		if len(list) == 4 {
+			p["persistent"] = list[3]
+		}
+		return p
+	}
+	h := map[string]any{"status": list[0], "errorType": list[1], "calls": list[2]}
+	if len(list) == 4 {
+		h["pauseReason"] = list[3]
+	}
+	return h
+}
+
+func selectionCalls(p map[string]any) (int, bool) {
+	switch value := p["calls"].(type) {
+	case int:
+		return value, value >= 0
+	case float64:
+		return int(value), value >= 0 && value <= 9007199254740991 && math.Trunc(value) == value
+	default:
+		return 0, false
+	}
+}
+
 func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	i.lastFailedCallType = snapshot.LastFailedCallType
 	if validSDKTrace(snapshot.SDKTraceID) {
@@ -2557,6 +2616,19 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		}
 	} else if i.lastOK != nil {
 		i.successfulCallSequence = i.callCount
+	}
+	if p := selectionObject(snapshot.Primary, true); p != nil {
+		if calls, ok := selectionCalls(p); ok {
+			if model, valid := p["model"].(string); valid {
+				i.primary = &primarySelection{model: model, provider: pendingText(p, "provider"), calls: calls, persistent: pendingBool(p, "persistent")}
+			}
+		}
+	}
+	if h := selectionObject(snapshot.OutcomeHint, false); h != nil {
+		status := ResponseStatus(pendingText(h, "status"))
+		if calls, ok := selectionCalls(h); ok && responseStatuses[status] {
+			i.hint = &outcomeHint{status: status, errorType: first(pendingText(h, "errorType"), pendingText(h, "error_type")), calls: calls, pauseReason: PauseReason(first(pendingText(h, "pauseReason"), pendingText(h, "pause_reason")))}
+		}
 	}
 	for _, p := range snapshot.PendingTools {
 		c := &recordedTool{}
@@ -2689,6 +2761,9 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	pausingHint := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
 	if o.endReason == "" && (o.Status == StatusPaused || pausingHint) {
+		if o.PauseReason == "" && pausingHint {
+			o.PauseReason = i.hint.pauseReason
+		}
 		if o.ClientDisconnected {
 			i.clientDisconnected = true
 		}
@@ -2730,6 +2805,9 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	hintedPause := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
 	if o.endReason == "" && (o.Status == StatusPaused || hintedPause) {
+		if o.PauseReason == "" && hintedPause {
+			o.PauseReason = i.hint.pauseReason
+		}
 		i.mu.Unlock()
 		i.pause(PauseOptions{Reason: o.PauseReason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
 		return
@@ -2876,6 +2954,9 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	if status == "" && i.hint != nil && i.hint.calls == i.callCount {
 		status = i.hint.status
 		errorType = first(errorType, i.hint.errorType)
+		if pauseReason == "" {
+			pauseReason = i.hint.pauseReason
+		}
 	}
 	if status == "" {
 		finished := ""
@@ -2921,7 +3002,10 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	if named == nil {
 		named = last
 	}
-	if named != nil {
+	if i.primary != nil && (i.primary.persistent || i.successfulCallSequence <= i.primary.calls) {
+		put(p, "primary_model", i.primary.model)
+		put(p, "primary_provider", i.primary.provider)
+	} else if named != nil {
 		put(p, "primary_model", named.model)
 		put(p, "primary_provider", named.provider)
 	}

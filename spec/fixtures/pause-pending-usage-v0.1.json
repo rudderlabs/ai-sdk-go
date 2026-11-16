@@ -140,7 +140,7 @@
     }
   },
   "cross_sdk": {
-    "description": "A pending_calls record uses the same keys and value types in the three SDKs: matched, usage_known, and started_at / ended_at in epoch milliseconds. Each snapshot holds the same two calls recorded during paused-response delivery with emitLlmCalls on, as its written_by SDK writes them: a span with known usage and a wrapper call with unknown usage, both unmatched and timed. The two entries marked before SDK-6111 use the keys Python (started_ns, ended_ns) and Go (twin_matched, usage_unknown, RFC 3339 times) wrote until then, which every reader still accepts. For each snapshot: restore it with emitLlmCalls on, record reports in order (source wrapper or span, started_ms / ended_ms in epoch milliseconds), then end. Each report merges into its pending twin in the restored run, so expected.response is a subset of the final ai_response_received and expected.call_events lists a subset of each ai_llm_response_received, in order. Each SDK also writes the scenario itself and compares its pending_calls with its own entry.",
+    "description": "A pending_calls record uses the same keys and value types in the three SDKs: matched, usage_known, and started_at / ended_at in epoch milliseconds. Each snapshot holds the same two calls recorded during paused-response delivery with emitLlmCalls on, as its written_by SDK writes them: a span with known usage and a wrapper call with unknown usage, both unmatched and timed. The two entries marked before SDK-6111 use the keys Python (started_ns, ended_ns) and Go (twin_matched, usage_unknown, RFC 3339 times) wrote until then, which every reader still accepts. For each snapshot: restore it with emitLlmCalls on, record reports in order (source wrapper or span, started_ms / ended_ms in epoch milliseconds), then end. Each report merges into its pending twin in the restored run, so expected.response is a subset of the final ai_response_received and expected.call_events lists a subset of each ai_llm_response_received, in order. Each SDK also writes the scenario itself and compares its pending_calls with its own entry. Top-level primary and outcome_hint use Node objects in current snapshots, legacy positional lists in the old entries; a persistent primary override and a cancelled outcome survive twin merges in either arrival order.",
     "snapshots": [
       {
         "written_by": "node",
@@ -206,7 +206,18 @@
             }
           ],
           "user_id": "u",
-          "integration": "tracing"
+          "integration": "tracing",
+          "primary": {
+            "model": "selected-model",
+            "provider": "aws.bedrock",
+            "calls": 2,
+            "persistent": true
+          },
+          "outcome_hint": {
+            "status": "cancelled",
+            "errorType": "cancelled",
+            "calls": 2
+          }
         }
       },
       {
@@ -271,7 +282,18 @@
               "last": true,
               "last_ok": true
             }
-          ]
+          ],
+          "primary": {
+            "model": "selected-model",
+            "provider": "aws.bedrock",
+            "calls": 2,
+            "persistent": true
+          },
+          "outcome_hint": {
+            "status": "cancelled",
+            "errorType": "cancelled",
+            "calls": 2
+          }
         }
       },
       {
@@ -339,7 +361,18 @@
           ],
           "report_count": 2,
           "successful_call_sequence": 2,
-          "call_sequence": 2
+          "call_sequence": 2,
+          "primary": {
+            "model": "selected-model",
+            "provider": "aws.bedrock",
+            "calls": 2,
+            "persistent": true
+          },
+          "outcome_hint": {
+            "status": "cancelled",
+            "errorType": "cancelled",
+            "calls": 2
+          }
         }
       },
       {
@@ -404,6 +437,18 @@
               "started_ns": 200000000,
               "ended_ns": 210000000
             }
+          ],
+          "primary": [
+            "aws.bedrock",
+            "selected-model",
+            2,
+            true
+          ],
+          "outcome_hint": [
+            "cancelled",
+            "cancelled",
+            2,
+            null
           ]
         }
       },
@@ -472,7 +517,19 @@
           ],
           "report_count": 2,
           "successful_call_sequence": 2,
-          "call_sequence": 2
+          "call_sequence": 2,
+          "primary": [
+            "aws.bedrock",
+            "selected-model",
+            2,
+            true
+          ],
+          "outcome_hint": [
+            "cancelled",
+            "cancelled",
+            2,
+            null
+          ]
         }
       }
     ],
@@ -502,7 +559,11 @@
         "pause_count": 1,
         "llm_call_count": 2,
         "total_input_tokens": 30,
-        "total_output_tokens": 6
+        "total_output_tokens": 6,
+        "primary_model": "selected-model",
+        "primary_provider": "aws.bedrock",
+        "response_status": "cancelled",
+        "error_type": "cancelled"
       },
       "call_events": [
         {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -549,44 +550,50 @@ func sdk6111CrossSDKFixture(t *testing.T) sdk6111CrossSDK {
 func TestSDK6111RestoresThePendingCallsEachSDKWroteAndMergesTheirTwins(t *testing.T) {
 	fixture := sdk6111CrossSDKFixture(t)
 	for _, entry := range fixture.Snapshots {
-		t.Run(entry.WrittenBy, func(t *testing.T) {
-			r := setupAI(t, WithLLMCallEvents(true))
-			var stored PausedInteraction
-			if err := json.Unmarshal(entry.Snapshot, &stored); err != nil {
-				t.Fatal(err)
-			}
-			_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
-			for _, report := range fixture.Reports {
-				call := LLMCall{
-					Provider: report.Provider, Model: report.Model, Integration: "openai", InputTokens: report.InputTokens, OutputTokens: report.OutputTokens,
-					StartedAt: time.UnixMilli(report.StartedMS), EndedAt: time.UnixMilli(report.EndedMS),
+		for _, reverse := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/reverse=%t", entry.WrittenBy, reverse), func(t *testing.T) {
+				r := setupAI(t, WithLLMCallEvents(true))
+				var stored PausedInteraction
+				if err := json.Unmarshal(entry.Snapshot, &stored); err != nil {
+					t.Fatal(err)
 				}
-				if report.Source == "span" {
-					call.Integration = "tracing"
+				_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+				reports := slices.Clone(fixture.Reports)
+				if reverse {
+					slices.Reverse(reports)
 				}
-				i.RecordCall(call)
-			}
-			i.End(EndOptions{})
-			segments := r.named("ai_response_received")
-			last := pauseSegmentsJSON(t, segments[len(segments)-1].Properties).(map[string]any)
-			for key, want := range fixture.Expected.Response {
-				if !reflect.DeepEqual(last[key], want) {
-					t.Errorf("response %s = %v, want %v", key, last[key], want)
+				for _, report := range reports {
+					call := LLMCall{
+						Provider: report.Provider, Model: report.Model, Integration: "openai", InputTokens: report.InputTokens, OutputTokens: report.OutputTokens,
+						StartedAt: time.UnixMilli(report.StartedMS), EndedAt: time.UnixMilli(report.EndedMS),
+					}
+					if report.Source == "span" {
+						call.Integration = "tracing"
+					}
+					i.RecordCall(call)
 				}
-			}
-			calls := r.named("ai_llm_response_received")
-			if len(calls) != len(fixture.Expected.CallEvents) {
-				t.Fatalf("call events = %d, want %d", len(calls), len(fixture.Expected.CallEvents))
-			}
-			for n, want := range fixture.Expected.CallEvents {
-				got := pauseSegmentsJSON(t, calls[n].Properties).(map[string]any)
-				for key, value := range want {
-					if !reflect.DeepEqual(got[key], value) {
-						t.Errorf("call event %d %s = %v, want %v", n, key, got[key], value)
+				i.End(EndOptions{})
+				segments := r.named("ai_response_received")
+				last := pauseSegmentsJSON(t, segments[len(segments)-1].Properties).(map[string]any)
+				for key, want := range fixture.Expected.Response {
+					if !reflect.DeepEqual(last[key], want) {
+						t.Errorf("response %s = %v, want %v", key, last[key], want)
 					}
 				}
-			}
-		})
+				calls := r.named("ai_llm_response_received")
+				if len(calls) != len(fixture.Expected.CallEvents) {
+					t.Fatalf("call events = %d, want %d", len(calls), len(fixture.Expected.CallEvents))
+				}
+				for n, want := range fixture.Expected.CallEvents {
+					got := pauseSegmentsJSON(t, calls[n].Properties).(map[string]any)
+					for key, value := range want {
+						if !reflect.DeepEqual(got[key], value) {
+							t.Errorf("call event %d %s = %v, want %v", n, key, got[key], value)
+						}
+					}
+				}
+			})
+		}
 	}
 }
 
@@ -599,10 +606,29 @@ func TestSDK6111WritesTheSharedPendingCallKeys(t *testing.T) {
 		// Accepted during paused delivery: a timed span, and a timed wrapper call with unknown usage.
 		i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "example-model", Integration: "tracing", InputTokens: 3}, 100))
 		i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "example-model", Integration: "openai", UsageUnknown: true}, 200))
+		i.mu.Lock()
+		i.primary = &primarySelection{model: "selected-model", provider: "aws.bedrock", calls: i.callCount, persistent: true}
+		i.mu.Unlock()
+		i.hintOutcome(StatusCancelled, "cancelled")
 	}
 	snapshot, ok := i.Pause(PauseOptions{})
 	if !ok {
 		t.Fatal("pause")
+	}
+	full := pauseSegmentsJSON(t, snapshot).(map[string]any)
+	for _, entry := range fixture.Snapshots {
+		if entry.WrittenBy != "go" {
+			continue
+		}
+		var own map[string]any
+		if err := json.Unmarshal(entry.Snapshot, &own); err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range []string{"primary", "outcome_hint"} {
+			if !reflect.DeepEqual(full[key], own[key]) {
+				t.Fatalf("%s = %v, want %v", key, full[key], own[key])
+			}
+		}
 	}
 	written := pauseSegmentsJSON(t, snapshot.PendingCalls)
 	records := map[string][]any{}
@@ -768,6 +794,94 @@ func TestSDK6111GBPendingRawModelSurvivesRestore(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestSDK6111GCPrimaryAndOutcomeHintsPreserveCallOrdering(t *testing.T) {
+	for _, restore := range []bool{false, true} {
+		for _, hintFirst := range []bool{false, true} {
+			t.Run(fmt.Sprintf("json=%t/hintFirst=%t", restore, hintFirst), func(t *testing.T) {
+				r := setupAI(t)
+				client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+				_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+				client.reenter = func() {
+					// Seed a portable selection before the call, exactly as another SDK's snapshot does.
+					var selection PausedInteraction
+					if err := json.Unmarshal([]byte(`{"primary":{"model":"selected-model","provider":"aws.bedrock","calls":0,"persistent":true}}`), &selection); err != nil {
+						t.Fatal(err)
+					}
+					i.restorePending(&selection)
+					if hintFirst {
+						i.hintOutcome(StatusBlocked, "content_filter")
+					}
+					i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "openai", ResponseID: "resp_1", InputTokens: 10}, 100))
+					if !hintFirst {
+						i.hintOutcome(StatusBlocked, "content_filter")
+					}
+				}
+				snapshot, ok := i.Pause(PauseOptions{})
+				if !ok {
+					t.Fatal("pause")
+				}
+				written := pauseSegmentsJSON(t, snapshot).(map[string]any)
+				wantPrimary := map[string]any{"model": "selected-model", "provider": "aws.bedrock", "calls": float64(0), "persistent": true}
+				if !reflect.DeepEqual(written["primary"], wantPrimary) {
+					t.Fatalf("primary = %v", written["primary"])
+				}
+				if restore {
+					raw, err := json.Marshal(snapshot)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var stored PausedInteraction
+					if err := json.Unmarshal(raw, &stored); err != nil {
+						t.Fatal(err)
+					}
+					_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+				} else {
+					i.Resume()
+				}
+				i.End(EndOptions{})
+				resp := lastResponse(t, r)
+				wantStatus := "blocked"
+				if hintFirst {
+					wantStatus = "success"
+				}
+				if resp["primary_model"] != "selected-model" || resp["primary_provider"] != "aws.bedrock" || resp["response_status"] != wantStatus {
+					t.Fatalf("response = %v", resp)
+				}
+			})
+		}
+	}
+}
+
+func TestSDK6111GCRestoresPauseReasonFromSelectionMetadata(t *testing.T) {
+	for _, form := range []string{"object", "snake_case", "list"} {
+		t.Run(form, func(t *testing.T) {
+			r := setupAI(t)
+			s := map[string]any{"interaction_id": "selection-run", "conversation_id": "selection-thread", "trigger": "user", "user_id": "u", "pause_count": 1, "total_paused_ms": 0, "paused_at": 1, "primary": map[string]any{"model": "selected-model", "provider": "aws.bedrock", "calls": 0}, "outcome_hint": map[string]any{"status": "paused", "calls": 0, "pauseReason": "approval"}}
+			if form == "list" {
+				s["primary"] = []any{"aws.bedrock", "selected-model", 0}
+				s["outcome_hint"] = []any{"paused", nil, 0, "approval"}
+			}
+			if form == "snake_case" {
+				s["outcome_hint"] = map[string]any{"status": "paused", "calls": 0, "pause_reason": "approval"}
+			}
+			raw, err := json.Marshal(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var stored PausedInteraction
+			if err := json.Unmarshal(raw, &stored); err != nil {
+				t.Fatal(err)
+			}
+			_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+			i.End(EndOptions{})
+			resp := lastResponse(t, r)
+			if resp["response_status"] != "paused" || resp["pause_reason"] != "approval" || resp["primary_model"] != "selected-model" || resp["primary_provider"] != "aws.bedrock" {
+				t.Fatalf("response = %v", resp)
+			}
+		})
 	}
 }
 
