@@ -1919,7 +1919,8 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 	i.mu.Lock()
 	for _, t := range tools {
 		// A tool the pause waits on fires in the segment that runs it, or as unknown at final End.
-		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || t.fired || t.name == "" || (final && t.structuredPending()) ||
+		// While paused, a settled tool's event waits for the run to go on, as in Node.
+		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || (!final && !i.pausedAt.IsZero()) || t.fired || t.name == "" || (final && t.structuredPending()) ||
 			(final && i.pausing && i.awaitedLocked(t)) || (!t.settled && !final) {
 			continue
 		}

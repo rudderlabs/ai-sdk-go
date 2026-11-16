@@ -290,3 +290,19 @@ func TestSDK6017SnapshotWrittenBeforeAgentKey(t *testing.T) {
 		sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
 	})
 }
+
+// As in Node, a tool settled while the run is paused sends its event only once the run goes on.
+func TestSDK6017HoldsTheEventOfAToolSettledWhilePaused(t *testing.T) {
+	r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}))
+	i := sdk6017Start()
+	i.RecordCall(sdk6017Call("", 10))
+	i.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me"})
+	if _, ok := i.Pause(PauseOptions{}); !ok {
+		t.Fatal("pause")
+	}
+	i.RecordToolResult("call_1", ToolResult{Error: Ptr(false)})
+	sdk6017Expect(t, "Approved while paused", len(r.named("Approved")), 0)
+	i.End(EndOptions{})
+	sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"call_1", "success"}})
+	sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+}
