@@ -1,10 +1,14 @@
 package rudderstackai
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,26 +19,25 @@ import (
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
 
-// connectMaybeObserved connects a client over in-memory transports, the server side wrapped
+// connectMaybeObserved connects a client over pipes, the server side an IOTransport wrapped
 // with ObserveMCPTransport when observe is set.
 func connectMaybeObserved(t *testing.T, server *mcp.Server, observe bool) *mcp.ClientSession {
 	t.Helper()
-	ct, st := mcp.NewInMemoryTransports()
-	var transport mcp.Transport = st
-	if observe {
-		transport = ObserveMCPTransport(st)
-	}
-	return connectOver(t, server, transport, ct)
+	c1, c2 := net.Pipe()
+	return connectOver(t, server, &mcp.IOTransport{Reader: c2, Writer: c2}, &mcp.IOTransport{Reader: c1, Writer: c1}, observe)
 }
 
-func connectOver(t *testing.T, server *mcp.Server, st, ct mcp.Transport) *mcp.ClientSession {
+func connectOver(t *testing.T, server *mcp.Server, st, ct mcp.Transport, observe bool) *mcp.ClientSession {
 	t.Helper()
 	ctx := context.Background()
+	if observe {
+		ctx, st = ObserveMCPTransport(ctx, st)
+	}
 	ss, err := server.Connect(ctx, st, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cs, err := mcp.NewClient(testClientInfo, nil).Connect(ctx, ct, &mcp.ClientSessionOptions{ProtocolVersion: "2025-06-18"})
+	cs, err := mcp.NewClient(testClientInfo, nil).Connect(context.Background(), ct, &mcp.ClientSessionOptions{ProtocolVersion: "2025-06-18"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,29 +99,22 @@ func TestObserveMCPTransportDeclaredEventFollows(t *testing.T) {
 	}
 }
 
-// failingConn fails every error response write.
-type failingConn struct{ mcp.Connection }
+// failingWriter fails every write of an error response.
+type failingWriter struct{ net.Conn }
 
-func (c failingConn) Write(ctx context.Context, msg jsonrpc.Message) error {
-	if r, ok := msg.(*jsonrpc.Response); ok && r.Error != nil {
-		return errors.New("write failed")
+func (w failingWriter) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), `"error"`) {
+		return 0, errors.New("write failed")
 	}
-	return c.Connection.Write(ctx, msg)
-}
-
-type failingTransport struct{ mcp.Transport }
-
-func (t failingTransport) Connect(ctx context.Context) (mcp.Connection, error) {
-	c, err := t.Transport.Connect(ctx)
-	return failingConn{c}, err
+	return w.Conn.Write(p)
 }
 
 func TestObserveMCPTransportFailedWriteSendsWithoutMessage(t *testing.T) {
 	setupAI(t)
 	s := failingServer("failed-write-mcp")
 	r := wrap(t, s, Options{CaptureContent: true})
-	ct, st := mcp.NewInMemoryTransports()
-	cs := connectOver(t, s, ObserveMCPTransport(failingTransport{st}), ct)
+	c1, c2 := net.Pipe()
+	cs := connectOver(t, s, &mcp.IOTransport{Reader: c2, Writer: failingWriter{c2}}, &mcp.IOTransport{Reader: c1, Writer: c1}, true)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if _, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "lookup", Arguments: map[string]any{"text": "never sent"}}); err == nil {
@@ -130,6 +126,48 @@ func TestObserveMCPTransportFailedWriteSendsWithoutMessage(t *testing.T) {
 	}
 	if _, ok := p["error_message"]; ok {
 		t.Errorf("error_message without a delivered response: %v", p)
+	}
+}
+
+// Observing keeps go-sdk's own connection, so a JSON-RPC batch is still refused after the
+// session negotiates 2025-06-18.
+func TestObserveMCPTransportKeepsBatchRefusal(t *testing.T) {
+	for _, observe := range []bool{false, true} {
+		t.Run(map[bool]string{false: "plain", true: "observed"}[observe], func(t *testing.T) {
+			setupAI(t)
+			s := failingServer("batch-mcp")
+			wrap(t, s, Options{CaptureContent: true})
+			client, server := net.Pipe()
+			ctx := context.Background()
+			var st mcp.Transport = &mcp.IOTransport{Reader: server, Writer: server}
+			if observe {
+				ctx, st = ObserveMCPTransport(ctx, st)
+			}
+			ss, err := s.Connect(ctx, st, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = ss.Close(); _ = client.Close() })
+			lines := bufio.NewScanner(client)
+			send := func(msg string) {
+				t.Helper()
+				_ = client.SetWriteDeadline(time.Now().Add(2 * time.Second))
+				if _, err := io.WriteString(client, msg+"\n"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"c","version":"1"}}}`)
+			_ = client.SetReadDeadline(time.Now().Add(2 * time.Second))
+			if !lines.Scan() || !strings.Contains(lines.Text(), `"protocolVersion":"2025-06-18"`) {
+				t.Fatalf("initialize: %q %v", lines.Text(), lines.Err())
+			}
+			send(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)
+			send(`[{"jsonrpc":"2.0","id":2,"method":"ping"},{"jsonrpc":"2.0","id":3,"method":"ping"}]`)
+			_ = client.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+			if lines.Scan() {
+				t.Fatalf("batch answered: %q", lines.Text())
+			}
+		})
 	}
 }
 
@@ -196,17 +234,18 @@ func TestObserveMCPTransportFixtureParity(t *testing.T) {
 	}
 }
 
-func TestObserveMCPTransportNilAndVersions(t *testing.T) {
-	if ObserveMCPTransport(nil) != nil {
-		t.Error("nil transport wrapped")
+func TestObserveMCPTransportUnsupportedUnchanged(t *testing.T) {
+	ctx := context.Background()
+	_, inMemory := mcp.NewInMemoryTransports()
+	for _, tr := range []mcp.Transport{nil, inMemory, &mcp.StreamableServerTransport{}, (*mcp.IOTransport)(nil), &mcp.IOTransport{}} {
+		gotCtx, got := ObserveMCPTransport(ctx, tr)
+		if got != tr || gotCtx != ctx {
+			t.Errorf("%T changed", tr)
+		}
 	}
-	st := &mcp.StreamableServerTransport{}
-	v, ok := ObserveMCPTransport(st).(mcp.ProtocolVersionSupporter)
-	if !ok || v.SupportsProtocolVersion("2026-07-28") != st.SupportsProtocolVersion("2026-07-28") {
-		t.Error("protocol versions not forwarded")
-	}
-	_, inner := mcp.NewInMemoryTransports()
-	if !ObserveMCPTransport(inner).(mcp.ProtocolVersionSupporter).SupportsProtocolVersion("2025-06-18") {
-		t.Error("transport without a supporter should support every version")
+	stdio := &mcp.StdioTransport{MaxLineLength: 42}
+	_, got := ObserveMCPTransport(ctx, stdio)
+	if io, ok := got.(*mcp.IOTransport); !ok || io.MaxLineLength != 42 {
+		t.Errorf("stdio: %#v", got)
 	}
 }

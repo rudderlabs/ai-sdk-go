@@ -11,10 +11,6 @@ import (
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
 
-// maxObserved bounds the response bytes kept per message while reading it; a longer message
-// leaves error_message out.
-const maxObserved = 1 << 20
-
 // ObserveHTTP wraps the handler serving a server wrapped with [WrapServer] (typically
 // server.NewStreamableHTTPServer), so that failed requests carry error_message (with
 // CaptureContent on) taken from the final JSON-RPC response written to the client, as JSON or as
@@ -41,70 +37,22 @@ func ObserveHTTP(h http.Handler) http.Handler {
 	})
 }
 
-// ObserveStdio returns the context and writer to pass to StdioServer.Listen, so that failed
-// requests carry error_message as with [ObserveHTTP], read from the newline-delimited responses:
+// ObserveStdio returns the context, reader and writer to pass to StdioServer.Listen, so that
+// failed requests carry error_message as with [ObserveHTTP], read from the newline-delimited
+// responses. The reader notices a client reusing a request id before its response is written.
 //
-//	ctx, out := ruddermcpgo.ObserveStdio(ctx, os.Stdout)
-//	err := server.NewStdioServer(s).Listen(ctx, os.Stdin, out)
+//	ctx, in, out := ruddermcpgo.ObserveStdio(ctx, os.Stdin, os.Stdout)
+//	err := server.NewStdioServer(s).Listen(ctx, in, out)
 //
 // Held events are sent without error_message when ctx ends.
-func ObserveStdio(ctx context.Context, w io.Writer) (context.Context, io.Writer) {
+func ObserveStdio(ctx context.Context, r io.Reader, w io.Writer) (context.Context, io.Reader, io.Writer) {
 	responses := mcpbridge.NewResponses()
 	context.AfterFunc(ctx, responses.Close)
-	return mcpbridge.WithResponses(ctx, responses), &lineWriter{w: w, responses: responses}
-}
-
-// lineWriter reads newline-delimited JSON-RPC messages as they are written.
-type lineWriter struct {
-	mu        sync.Mutex
-	w         io.Writer
-	responses *mcpbridge.Responses
-	line      lines
-}
-
-func (l *lineWriter) Write(p []byte) (int, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	n, err := l.w.Write(p)
-	safely(func() { l.line.feed(p[:n], l.responses, l.responses.DeliverJSON) })
-	return n, err
-}
-
-// lines splits written bytes into lines, keeping a line only when a request awaits its response
-// at the line's start.
-type lines struct {
-	buf      []byte
-	started  bool
-	keep     bool
-	overflow bool
-}
-
-func (s *lines) feed(p []byte, responses *mcpbridge.Responses, line func([]byte)) {
-	for len(p) > 0 {
-		if !s.started {
-			s.started, s.keep, s.overflow, s.buf = true, responses.Waiting(), false, s.buf[:0]
-		}
-		i := bytes.IndexByte(p, '\n')
-		chunk := p
-		if i >= 0 {
-			chunk = p[:i]
-		}
-		if s.keep && !s.overflow {
-			if len(s.buf)+len(chunk) > maxObserved {
-				s.overflow, s.buf = true, nil
-			} else {
-				s.buf = append(s.buf, chunk...)
-			}
-		}
-		if i < 0 {
-			return
-		}
-		if s.keep && !s.overflow {
-			line(bytes.TrimSuffix(s.buf, []byte("\r")))
-		}
-		s.started = false
-		p = p[i+1:]
+	rc, ok := r.(io.ReadCloser)
+	if !ok {
+		rc = io.NopCloser(r)
 	}
+	return mcpbridge.WithResponses(ctx, responses), mcpbridge.NewReader(rc, responses), mcpbridge.NewWriter(w, responses)
 }
 
 type observedWriter struct {
@@ -115,7 +63,7 @@ type observedWriter struct {
 	decided   bool
 	keep      bool
 	body      []byte
-	line      lines
+	line      mcpbridge.Lines
 	data      []byte
 }
 
@@ -136,11 +84,11 @@ func (o *observedWriter) observe(p []byte) {
 		o.keep = o.responses.Waiting()
 	}
 	if o.sse {
-		o.line.feed(p, o.responses, o.sseLine)
+		o.line.Feed(p, o.responses, o.sseLine)
 		return
 	}
 	if o.keep {
-		if len(o.body)+len(p) > maxObserved {
+		if len(o.body)+len(p) > mcpbridge.MaxObserved {
 			o.keep, o.body = false, nil
 			return
 		}
@@ -177,3 +125,8 @@ func (o *observedWriter) finish() {
 type flushingWriter struct{ *observedWriter }
 
 func (f flushingWriter) Flush() { f.ResponseWriter.(http.Flusher).Flush() }
+
+// FlushError keeps http.ResponseController.Flush reporting the underlying writer's errors.
+func (f flushingWriter) FlushError() error {
+	return http.NewResponseController(f.ResponseWriter).Flush()
+}

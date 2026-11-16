@@ -2,6 +2,7 @@ package ruddermcpgo
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,11 +21,11 @@ func connectStdioObserved(t *testing.T, s *server.MCPServer) *sdk.ClientSession 
 	serverIn, clientOut := io.Pipe()
 	clientIn, serverOut := io.Pipe()
 	ctx, cancel := context.WithCancel(context.Background())
-	listenCtx, out := ObserveStdio(ctx, serverOut)
+	listenCtx, in, out := ObserveStdio(ctx, serverIn, serverOut)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = server.NewStdioServer(s).Listen(listenCtx, serverIn, out)
+		_ = server.NewStdioServer(s).Listen(listenCtx, in, out)
 	}()
 	cs, err := sdk.NewClient(testClient, nil).Connect(context.Background(),
 		&sdk.IOTransport{Reader: clientIn, Writer: clientOut}, &sdk.ClientSessionOptions{ProtocolVersion: "2025-06-18"})
@@ -173,5 +174,21 @@ func TestObserveHTTPKeepsWriterInterfaces(t *testing.T) {
 	h.ServeHTTP(plainWriter{httptest.NewRecorder()}, httptest.NewRequest(http.MethodPost, "/plain", nil))
 	if !flusher || plain {
 		t.Errorf("flusher=%v plain=%v", flusher, plain)
+	}
+}
+
+type failingFlusher struct{ *httptest.ResponseRecorder }
+
+func (failingFlusher) FlushError() error { return errFlush }
+
+var errFlush = errors.New("flush failed")
+
+func TestObserveHTTPReportsFlushErrors(t *testing.T) {
+	var got error
+	ObserveHTTP(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		got = http.NewResponseController(w).Flush()
+	})).ServeHTTP(failingFlusher{httptest.NewRecorder()}, httptest.NewRequest(http.MethodPost, "/", nil))
+	if !errors.Is(got, errFlush) {
+		t.Errorf("flush error = %v", got)
 	}
 }

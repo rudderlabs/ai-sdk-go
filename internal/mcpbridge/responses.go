@@ -19,7 +19,9 @@ var ResponseTimeout = 10 * time.Second
 type Responses struct {
 	mu      sync.Mutex
 	waiting map[string]*waiter
-	closed  bool
+	// stale counts responses still to be written for requests whose id a client reused.
+	stale  map[string]int
+	closed bool
 }
 
 type waiter struct {
@@ -28,7 +30,9 @@ type waiter struct {
 }
 
 // NewResponses returns an open observer.
-func NewResponses() *Responses { return &Responses{waiting: map[string]*waiter{}} }
+func NewResponses() *Responses {
+	return &Responses{waiting: map[string]*waiter{}, stale: map[string]int{}}
+}
 
 // Await registers done for the response to request id. It returns false, and never calls done,
 // when r is nil or closed, the id is not a JSON-RPC id, or the id is already awaited.
@@ -96,28 +100,79 @@ func (r *Responses) Deliver(msg map[string]any) {
 	if !result && !failed {
 		return
 	}
-	if w := r.pop(msg["id"]); w != nil {
+	key, ok := IDKey(msg["id"])
+	if !ok {
+		return
+	}
+	r.mu.Lock()
+	if r.stale[key] > 0 {
+		// The earlier request's response, written after its id was reused.
+		if r.stale[key]--; r.stale[key] == 0 {
+			delete(r.stale, key)
+		}
+		r.mu.Unlock()
+		return
+	}
+	w := r.waiting[key]
+	delete(r.waiting, key)
+	r.mu.Unlock()
+	if w != nil {
+		w.timer.Stop()
 		w.done(msg)
 	}
 }
 
-// DeliverJSON decodes one message or a batch and delivers each response in it.
-func (r *Responses) DeliverJSON(data []byte) {
+// Incoming reads a message the client sent. A request reusing an id whose response is still
+// awaited (the server frees an id before writing its response) drops that waiter, and the
+// response written for it is then skipped rather than matched to the new request.
+func (r *Responses) Incoming(data []byte) {
+	for _, msg := range decode(data) {
+		if _, ok := msg["method"]; !ok {
+			continue
+		}
+		key, ok := IDKey(msg["id"])
+		if !ok {
+			continue
+		}
+		r.mu.Lock()
+		w := r.waiting[key]
+		if w != nil {
+			delete(r.waiting, key)
+			r.stale[key]++
+		}
+		r.mu.Unlock()
+		if w != nil {
+			w.timer.Stop()
+			w.done(nil)
+		}
+	}
+}
+
+// decode reads one JSON-RPC message or a batch.
+func decode(data []byte) (out []map[string]any) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	var v any
 	if dec.Decode(&v) != nil {
-		return
+		return nil
 	}
 	switch x := v.(type) {
 	case map[string]any:
-		r.Deliver(x)
+		out = append(out, x)
 	case []any:
 		for _, item := range x {
 			if m, ok := item.(map[string]any); ok {
-				r.Deliver(m)
+				out = append(out, m)
 			}
 		}
+	}
+	return out
+}
+
+// DeliverJSON decodes one message or a batch and delivers each response in it.
+func (r *Responses) DeliverJSON(data []byte) {
+	for _, msg := range decode(data) {
+		r.Deliver(msg)
 	}
 }
 
@@ -134,6 +189,7 @@ func (r *Responses) Close() {
 	r.closed = true
 	waiting := r.waiting
 	r.waiting = map[string]*waiter{}
+	r.stale = map[string]int{}
 	r.mu.Unlock()
 	for _, w := range waiting {
 		w.timer.Stop()

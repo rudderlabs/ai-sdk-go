@@ -1,8 +1,11 @@
 package mcpbridge
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -85,3 +88,69 @@ func TestResponsesNilAndContext(t *testing.T) {
 		t.Fatal("context round trip")
 	}
 }
+
+// A client may reuse an id once the server removed it from its in-flight set: the earlier
+// request's waiter is dropped and its pending response is not taken for the new request's.
+func TestResponsesReusedID(t *testing.T) {
+	r := NewResponses()
+	var first, second map[string]any
+	firstCalls := 0
+	r.Await(int64(1), func(m map[string]any) { firstCalls++; first = m })
+	r.Incoming([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}`))
+	if firstCalls != 1 || first != nil {
+		t.Fatalf("first waiter: calls=%d msg=%v", firstCalls, first)
+	}
+	if !r.Await(int64(1), func(m map[string]any) { second = m }) {
+		t.Fatal("await reused id")
+	}
+	r.DeliverJSON([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":0,"message":"first"}}`))
+	if second != nil {
+		t.Fatalf("second took the first response: %v", second)
+	}
+	r.DeliverJSON([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":0,"message":"second"}}`))
+	if second["error"].(map[string]any)["message"] != "second" {
+		t.Fatalf("second: %v", second)
+	}
+	// Incoming responses (to server requests) and notifications never drop a waiter.
+	called := false
+	r.Await("x", func(map[string]any) { called = true })
+	r.Incoming([]byte(`[{"jsonrpc":"2.0","id":"x","result":{}},{"jsonrpc":"2.0","method":"notifications/initialized"}]`))
+	if called {
+		t.Fatal("waiter dropped by a non-request")
+	}
+}
+
+func TestLineWriterAndReader(t *testing.T) {
+	r := NewResponses()
+	var got map[string]any
+	r.Await("w", func(m map[string]any) { got = m })
+	var out bytes.Buffer
+	w := NewWriter(nopWriteCloser{&out}, r)
+	// Split across writes, with a line written before anything awaited it.
+	for _, chunk := range []string{`{"jsonrpc":"2.0","id":"w",`, `"result":{"isError":true}}` + "\n"} {
+		if _, err := io.WriteString(w, chunk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got == nil || out.Len() == 0 {
+		t.Fatalf("writer: got=%v out=%q", got, out.String())
+	}
+	reused := false
+	r.Await("r", func(map[string]any) { reused = true })
+	rd := NewReader(io.NopCloser(strings.NewReader(`{"jsonrpc":"2.0","id":"r","method":"ping"}`+"\n")), r)
+	if _, err := io.ReadAll(rd); err != nil {
+		t.Fatal(err)
+	}
+	if !reused {
+		t.Fatal("reader did not see the reused id")
+	}
+	closed := false
+	r.Await("c", func(map[string]any) { closed = true })
+	if err := w.Close(); err != nil || !closed {
+		t.Fatalf("close: %v %v", err, closed)
+	}
+}
+
+type nopWriteCloser struct{ io.Writer }
+
+func (nopWriteCloser) Close() error { return nil }

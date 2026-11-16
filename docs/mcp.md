@@ -74,13 +74,14 @@ With `CaptureContent`, a failed `mcp_tool_called`, `mcp_resource_read` or `mcp_p
 
 | Library | Wrap | API |
 | --- | --- | --- |
-| go-sdk, `Server.Run` / `Server.Connect` (stdio, in-memory, custom transports) | the transport | `rudderstackai.ObserveMCPTransport(t mcp.Transport) mcp.Transport` |
+| go-sdk, `Server.Run` / `Server.Connect` with `*mcp.StdioTransport` or `*mcp.IOTransport` | the context and transport | `rudderstackai.ObserveMCPTransport(ctx context.Context, t mcp.Transport) (context.Context, mcp.Transport)` |
 | mcp-go, `server.NewStreamableHTTPServer` | the HTTP handler | `ruddermcpgo.ObserveHTTP(h http.Handler) http.Handler` |
-| mcp-go, `StdioServer.Listen` | the context and output | `ruddermcpgo.ObserveStdio(ctx context.Context, w io.Writer) (context.Context, io.Writer)` |
+| mcp-go, `StdioServer.Listen` | the context, input and output | `ruddermcpgo.ObserveStdio(ctx context.Context, r io.Reader, w io.Writer) (context.Context, io.Reader, io.Writer)` |
 
 ```go
-// go-sdk over stdio
-err := server.Run(ctx, rudderstackai.ObserveMCPTransport(&mcp.StdioTransport{}))
+// go-sdk over stdio: pass the returned context to Run or Connect
+ctx, t := rudderstackai.ObserveMCPTransport(ctx, &mcp.StdioTransport{})
+err := server.Run(ctx, t)
 
 // mcp-go over streamable HTTP
 s := server.NewMCPServer("rudderstack-mcp", version, opts...)
@@ -90,11 +91,11 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{Analytics: client, Captu
 http.Handle("/mcp", ruddermcpgo.ObserveHTTP(server.NewStreamableHTTPServer(s)))
 
 // mcp-go over stdio
-ctx, out := ruddermcpgo.ObserveStdio(ctx, os.Stdout)
-err := server.NewStdioServer(s).Listen(ctx, os.Stdin, out)
+ctx, in, out := ruddermcpgo.ObserveStdio(ctx, os.Stdin, os.Stdout)
+err := server.NewStdioServer(s).Listen(ctx, in, out)
 ```
 
-Messages pass through unchanged. A failed request's event, and any declared tool event after it, is sent once its response is written; when the write fails, the connection or HTTP request ends, or no response follows within 10 seconds, it is sent without `error_message`. Cancelled requests never carry it. `ObserveHTTP` reads JSON responses and SSE `data:` frames of the request it wraps (mcp-go's legacy SSE transport answers on another stream, so it gets no `error_message`); a response over 1 MiB is not read. The go-sdk's `StreamableHTTPHandler` builds its transports internally, so go-sdk HTTP servers cannot opt in yet ([SDK-6904](https://linear.app/rudderstack/issue/SDK-6904/mcp-ai-events-error-message-for-go-sdk-streamablehttphandler-apps)). On the go-sdk, `ObserveMCPTransport` hides the stdio connection's protocol-version updates, so JSON-RPC batches are no longer refused after 2025-06-18.
+Messages pass through unchanged, and the libraries' own connections and protocol handling stay in place: the go-sdk wrapper observes the transport's reader and writer, not its connection. A failed request's event, and any declared tool event after it, is held until its response is written. **The hold lasts at most 10 seconds: if no response is written by then, the event goes out without `error_message`**, as it does when the connection, the context or the HTTP request ends first. A client reusing a request id before the earlier response is written also sends the earlier event without it. Cancelled requests never carry it. `ObserveHTTP` reads JSON responses and SSE `data:` frames of the request it wraps (mcp-go's legacy SSE transport answers on another stream, so it gets no `error_message`); a response over 1 MiB is not read. The go-sdk's `StreamableHTTPHandler` builds its transports internally, so go-sdk HTTP servers cannot opt in yet ([SDK-6904](https://linear.app/rudderstack/issue/SDK-6904/mcp-ai-events-error-message-for-go-sdk-streamablehttphandler-apps)). On the go-sdk, other transports (in-memory, SSE, streamable HTTP, custom) are returned unchanged.
 
 ## Options
 
@@ -349,7 +350,7 @@ deliver := rudderstackai.WrapMCPEventSender(server, func(ctx context.Context, d 
 ## Limits
 
 - Only MCP servers are tracked, on the two libraries above.
-- Neither library exposes the server's name to the integration, and the go-sdk not the JSON-RPC request ID either; the integration reads them through reflection, tested against the versions above (a test fails when the go-sdk's internals change). If a future version changes them, set `Options.ServerName`; otherwise `server_name` falls back to `unknown` and `request_id` is left out rather than failing. `ObserveMCPTransport` finds a session's connection the same way; if that changes, `error_message` is left out.
+- Neither library exposes the server's name to the integration, and the go-sdk not the JSON-RPC request ID either; the integration reads them through reflection, tested against the versions above (a test fails when the go-sdk's internals change). If a future version changes them, set `Options.ServerName`; otherwise `server_name` falls back to `unknown` and `request_id` is left out rather than failing.
 - `transport` is detected only for streamable HTTP; set `Options.Transport` for stdio and SSE.
 - State is in memory, per server name, per process: the `mcp_client_seen` windows, remembered client names and versions, `call_index`, `retry_count` and `ms_since_previous_call` counters, argument hashes, tool schemas, resource names, pending `input_required` elicitations and MCP Events expiry timers (at most 10,000 entries each, 1,000 resource templates, 1,000 server names; the least recently used go first). Every server of one name in the process shares it, so a server built per request keeps counting, and re-wrapping keeps it while replacing the options; give each distinct server a unique name (`Options.ServerName`). Nothing is shared between processes: each replica and each restart emits its own `mcp_client_seen` and starts its counters again. The integration holds no reference to a wrapped server, so servers built per request are released.
 - `resource_name` needs the resource list or template list from a `resources/list` or `resources/templates/list` this process answered; otherwise it is `unknown`.
