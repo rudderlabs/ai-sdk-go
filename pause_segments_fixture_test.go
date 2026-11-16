@@ -23,6 +23,7 @@ type pauseSegmentsStep struct {
 	InputTokens int                 `json:"input_tokens"`
 	StartedMS   *int64              `json:"started_ms"`
 	EndedMS     *int64              `json:"ended_ms"`
+	OutputText  string              `json:"output_text"`
 	Event       string              `json:"event"`
 	Steps       []pauseSegmentsStep `json:"steps"`
 	JSON        bool                `json:"json"`
@@ -92,8 +93,9 @@ func TestPauseSegmentsFixture(t *testing.T) {
 		Cases []struct {
 			Name   string `json:"name"`
 			Config struct {
-				EmitLLMCalls bool `json:"emit_llm_calls"`
-				EventRules   *struct {
+				EmitLLMCalls   bool `json:"emit_llm_calls"`
+				CaptureContent bool `json:"capture_content"`
+				EventRules     *struct {
 					Tools map[string]string `json:"tools"`
 				} `json:"event_rules"`
 			} `json:"config"`
@@ -110,7 +112,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 	}
 	for _, tc := range fixture.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			opts := []ConfigOption{WithLLMCallEvents(tc.Config.EmitLLMCalls)}
+			opts := []ConfigOption{WithLLMCallEvents(tc.Config.EmitLLMCalls), WithCaptureContent(tc.Config.CaptureContent)}
 			if tc.Config.EventRules != nil {
 				rules := map[string]ToolEventRule{}
 				for name, event := range tc.Config.EventRules.Tools {
@@ -125,7 +127,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				for _, step := range steps {
 					switch step.Op {
 					case "record_call":
-						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: step.InputTokens}
+						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: step.InputTokens, OutputText: step.OutputText}
 						if step.Source == "span" {
 							call.Integration = "tracing"
 						}

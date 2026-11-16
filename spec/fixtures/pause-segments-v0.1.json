@@ -248,6 +248,68 @@
       }
     },
     {
+      "name": "span answer recorded during paused call delivery",
+      "description": "The paused response keeps the answer captured before delivery; a span answer recorded by the callback does not replace it.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "output_text": "First answer."
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310,
+              "output_text": "Late answer."
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "response_text": "First answer."
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
       "name": "call recorded during final call delivery is not counted",
       "description": "The final end delivers a held span call event after the interaction ended, so a call the callback records is refused, as any write after end is.",
       "config": {
