@@ -2,6 +2,7 @@ package rudderotel
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,5 +125,42 @@ func TestSpanCoverageManualMiddlewareDoesNotHideTheCall(t *testing.T) {
 				t.Errorf("spans %v, want the wrapper's chat span and the manual spans only", names)
 			}
 		})
+	}
+}
+
+// An SDK span that cannot be sent neither covers an inner OTel span nor replaces an outer one:
+// the processor keeps it, as on main.
+func TestSpanCoverageNeedsASendableSDKSpan(t *testing.T) {
+	big := map[string]any{"traits": map[string]any{"blob": strings.Repeat("a", 40_000)}}
+	for _, tc := range []struct {
+		name    string
+		options []rudderstackai.ConfigOption
+		context map[string]any
+	}{
+		{"no SDK client", []rudderstackai.ConfigOption{rudderstackai.WithAnalytics(nil)}, nil},
+		{"oversized message context", nil, big},
+	} {
+		for _, outer := range []bool{false, true} {
+			t.Run(tc.name+"/outer="+strconvBool(outer), func(t *testing.T) {
+				provider, _, events := testProvider(t, Options{Simple: true})
+				configureSpans(t, tc.options...)
+				ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u", Context: tc.context})
+				started := time.Now()
+				if outer {
+					octx, o := provider.Tracer("app").Start(ctx, "provider", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+					_, s := hook.Tracing.BeginWrapper(octx, i, started)
+					hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "m", StartedAt: started, EndedAt: time.Now()}, s, 200)
+					o.End()
+				} else {
+					wrapped, s := hook.Tracing.BeginWrapper(ctx, i, started)
+					modelSpan(wrapped, provider.Tracer("app"), "provider").End()
+					hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "m", StartedAt: started, EndedAt: time.Now()}, s, 200)
+				}
+				i.End(rudderstackai.EndOptions{})
+				if names := spanNames(events()); len(names) != 1 || names[0] != "provider" {
+					t.Errorf("spans %v, want the OTel span exported once", names)
+				}
+			})
+		}
 	}
 }

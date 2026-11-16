@@ -48,7 +48,25 @@ type Span struct {
 	seq uint64
 	// call: a provider wrapper's model call.
 	call bool
+	// sendable: the span has a client and its identity and message context fit the budget.
+	sendOnce sync.Once
+	sendable bool
 }
+
+// canSend reports whether this span can be sent: it has an analytics client, and its message
+// context plus identity alone fit the span size budget. Otherwise nothing replaces or covers
+// an OTel span for it.
+func (s *Span) canSend() bool {
+	s.sendOnce.Do(func() {
+		s.sendable = s.client != nil && spanmodel.DestinationFits(s.trackOptions(false))
+	})
+	return s.sendable
+}
+
+func (s *Span) trackOptions(masked bool) spanmodel.Options {
+	return spanmodel.Options{Capture: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version}
+}
+
 // ownsCall reports whether an active SDK call span of interaction i encloses ctx's innermost
 // active SDK span, or is it. A manual span inside the call does not hide it; the walk stops at
 // the interaction boundary.
@@ -57,7 +75,7 @@ func ownsCall(ctx context.Context, i any) bool {
 		s.mu.Lock()
 		ended := s.ended
 		s.mu.Unlock()
-		if !ended && s.call {
+		if !ended && s.call && s.canSend() {
 			return true
 		}
 	}
@@ -193,25 +211,32 @@ func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time)
 	if active != nil {
 		activeSeq = active.seq
 	}
-	o, ok := hook.Tracing.AdoptOTelCall(ctx, i, activeSeq)
-	if !ok {
-		return nil
-	}
 	// Keeps the active SDK parent, so work on a retained context still finds it once this ends.
-	s := &Span{TraceID: o.TraceID, SpanID: o.SpanID, parentID: o.ParentID, started: started, interaction: i, attributes: map[string]any{}, parent: active, seq: spanSeq.Add(1), call: true}
-	if !o.Adopted {
-		s.SpanID, s.parentID = randomSpanID(8), o.SpanID
-	}
+	s := &Span{started: started, interaction: i, attributes: map[string]any{}, parent: active, seq: spanSeq.Add(1), call: true}
 	i.mu.Lock()
-	if o.Adopted {
-		// The first SDK span fixes the interaction's trace, persisted across pause and JSON restore.
-		i.sdkTraceID = o.TraceID
-	}
 	s.userID, s.anonymousID, s.interactionID, s.conversationID = i.userID, i.anonymousID, i.id, i.conversationID
 	s.client, s.capture, s.llmCalls = i.analytics(), i.capture.Spans, i.capture.LLMCalls
 	msgContext := i.msgContext
 	i.mu.Unlock()
 	s.msgContext, _ = stripBinary(msgContext).(map[string]any)
+	// An SDK span that cannot be sent never replaces the OTel span: the processor keeps it.
+	if !s.canSend() {
+		return nil
+	}
+	o, ok := hook.Tracing.AdoptOTelCall(ctx, i, activeSeq)
+	if !ok {
+		return nil
+	}
+	s.TraceID, s.SpanID, s.parentID = o.TraceID, o.SpanID, o.ParentID
+	if !o.Adopted {
+		s.SpanID, s.parentID = randomSpanID(8), o.SpanID
+	}
+	if o.Adopted {
+		// The first SDK span fixes the interaction's trace, persisted across pause and JSON restore.
+		i.mu.Lock()
+		i.sdkTraceID = o.TraceID
+		i.mu.Unlock()
+	}
 	return s
 }
 
@@ -388,7 +413,7 @@ func (s *Span) send(n spanmodel.Span, masked bool) {
 	if s.client == nil {
 		return
 	}
-	m, e := spanmodel.ToTrack(n, spanmodel.Options{Capture: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version})
+	m, e := spanmodel.ToTrack(n, s.trackOptions(masked))
 	if e != nil {
 		report(KindInternal, "span.map", e)
 		return

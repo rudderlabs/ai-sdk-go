@@ -43,6 +43,31 @@ func iso(t time.Time) string {
 	return t.UTC().Truncate(time.Millisecond).Format("2006-01-02T15:04:05.000Z")
 }
 
+// messageContext is the track context of a span: the message context plus the wrapper library.
+func messageContext(options Options) object {
+	extraContext := maps.Clone(options.MessageContext)
+	if extraContext == nil {
+		extraContext = object{}
+	}
+	wrapper := object{"name": options.LibraryName, "version": options.LibraryVersion, "integration": "tracing"}
+	if outer, ok := extraContext["wrapperLibrary"]; ok {
+		wrapper["wrapperLibrary"] = outer
+	}
+	extraContext["wrapperLibrary"] = wrapper
+	return extraContext
+}
+
+// DestinationFits reports whether the fields no truncation can shrink, the identity and the
+// message context, fit the event budget: a span that cannot fit is always dropped.
+func DestinationFits(options Options) bool {
+	maxBytes := options.MaxEventBytes
+	if maxBytes == 0 {
+		maxBytes = DefaultMaxEventBytes
+	}
+	b, err := json.Marshal(&analytics.Track{UserId: options.UserID, AnonymousId: options.AnonymousID, Context: &analytics.Context{Extra: messageContext(options)}})
+	return err == nil && len(b) <= maxBytes
+}
+
 // SpanToTrack maps one ended span; nil means it could not fit the event budget.
 // It does not apply the export filter. The original span is never mutated.
 func ToTrack(s Span, options Options) (*analytics.Track, error) {
@@ -112,15 +137,7 @@ func ToTrack(s Span, options Options) (*analytics.Track, error) {
 	if event == "" {
 		event = DefaultEventName
 	}
-	extraContext := maps.Clone(options.MessageContext)
-	if extraContext == nil {
-		extraContext = object{}
-	}
-	wrapper := object{"name": options.LibraryName, "version": options.LibraryVersion, "integration": "tracing"}
-	if outer, ok := extraContext["wrapperLibrary"]; ok {
-		wrapper["wrapperLibrary"] = outer
-	}
-	extraContext["wrapperLibrary"] = wrapper
+	extraContext := messageContext(options)
 	m := &analytics.Track{Event: event, UserId: id.UserID, AnonymousId: id.AnonymousID,
 		MessageId: sc.TraceID + "-" + sc.SpanID, OriginalTimestamp: s.End.UTC().Truncate(time.Millisecond),
 		Properties: analytics.Properties(p), Context: &analytics.Context{Extra: extraContext},
