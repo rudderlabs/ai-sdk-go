@@ -226,7 +226,7 @@ func TestCancelledCall(t *testing.T) {
 		<-ctx.Done()
 		return nil, nil, ctx.Err()
 	})
-	r := wrap(t, server, Options{})
+	r := wrap(t, server, Options{CaptureContent: true})
 	cs := connect(t, server, "2025-06-18", nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
@@ -243,6 +243,9 @@ func TestCancelledCall(t *testing.T) {
 	}
 	if ms, ok := p["time_to_cancel_ms"].(int64); !ok || ms < 10 {
 		t.Errorf("time_to_cancel_ms = %v", p["time_to_cancel_ms"])
+	}
+	if _, ok := p["error_message"]; ok {
+		t.Error("error_message on a cancelled call")
 	}
 	if _, ok := p["duration_ms"]; ok {
 		t.Error("duration_ms on a cancelled call")
@@ -640,7 +643,7 @@ func TestDeclaredToolEventPropertyGuard(t *testing.T) {
 	for _, capture := range []bool{false, true} {
 		t.Run(fmt.Sprintf("capture=%t", capture), func(t *testing.T) {
 			properties := map[string]any{"promptLength": 12, "promptSource": "app", "responseTimeMs": 3, "cardKinds": 2}
-			for _, name := range []string{"prompt_text", "response_text", "feedback_text", "call_reason", "capability_detail", "tool_status", "tool_name", "primary_model", "llm_call_count", "mcp_session_id", "server_version"} {
+			for _, name := range []string{"prompt_text", "response_text", "feedback_text", "call_reason", "capability_detail", "error_message", "tool_status", "tool_name", "primary_model", "llm_call_count", "mcp_session_id", "server_version"} {
 				for _, key := range propertyVariants(name) {
 					properties[key] = "custom"
 				}

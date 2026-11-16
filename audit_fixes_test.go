@@ -24,7 +24,7 @@ func propertyVariants(key string) []string {
 func TestAuditContentPropertyVariants(t *testing.T) {
 	setupAI(t)
 	logs := captureLogs(t)
-	for _, name := range []string{"prompt_text", "response_text", "feedback_text", "intent_summary", "explanation", "call_reason", "capability_detail"} {
+	for _, name := range []string{"prompt_text", "response_text", "feedback_text", "intent_summary", "explanation", "call_reason", "capability_detail", "error_message"} {
 		for _, key := range propertyVariants(name) {
 			if propertyName(key) != name {
 				t.Errorf("propertyName(%q) = %q, want %q", key, propertyName(key), name)

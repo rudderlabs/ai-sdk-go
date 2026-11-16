@@ -1337,3 +1337,38 @@ func protocolVersion(v string) string {
 var protocolVersionRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 func cleanClient(client *mcpbridge.Client) *mcpbridge.Client { return mcpbridge.CleanClient(client) }
+
+// errorMessage is a pure helper reserved for SDK-6893, when a final response is observable.
+// It reads an explicit {result} or {error} source as described by
+// spec/fixtures/mcp-error-message-v0.1.json: mask before capping,
+// and withhold empty text, failed masking and anything still matching a built-in pattern.
+func errorMessage(failure map[string]any, mask func(string) (string, bool)) string {
+	var text string
+	if rpc, ok := failure["error"].(map[string]any); ok {
+		text, _ = rpc["message"].(string)
+	} else if result, ok := failure["result"].(map[string]any); ok && result["isError"] == true {
+		content, _ := result["content"].([]any)
+		var blocks []string
+		for _, item := range content {
+			block, _ := item.(map[string]any)
+			if block["type"] == "text" {
+				if value, ok := block["text"].(string); ok {
+					blocks = append(blocks, value)
+				}
+			}
+		}
+		text = strings.Join(blocks, "\n")
+	}
+	// JS String.prototype.trim includes BOM but excludes NEL (U+0085).
+	text = strings.TrimFunc(text, func(r rune) bool {
+		return r == '\ufeff' || (r != '\u0085' && unicode.IsSpace(r))
+	})
+	if text == "" {
+		return ""
+	}
+	masked, ok := mask(text)
+	if !ok || masked == "" || masked == redactionTimedOut || hasSensitive(masked) {
+		return ""
+	}
+	return capText(masked, maxTextLength)
+}

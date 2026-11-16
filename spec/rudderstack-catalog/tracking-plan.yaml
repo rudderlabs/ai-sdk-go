@@ -330,6 +330,7 @@ spec:
         - property: '#property:tool_status'
           required: true
         - property: '#property:error_type'
+        - property: '#property:error_message'
         - property: '#property:is_error_result'
         - property: '#property:duration_ms'
         - property: '#property:time_to_cancel_ms'
@@ -439,6 +440,7 @@ spec:
         - property: '#property:tool_status'
           required: true
         - property: '#property:error_type'
+        - property: '#property:error_message'
         - property: '#property:duration_ms'
         - property: '#property:result_size_bytes'
         - property: '#property:server_version'
@@ -466,6 +468,7 @@ spec:
         - property: '#property:tool_status'
           required: true
         - property: '#property:error_type'
+        - property: '#property:error_message'
         - property: '#property:duration_ms'
         - property: '#property:result_size_bytes'
         - property: '#property:server_version'

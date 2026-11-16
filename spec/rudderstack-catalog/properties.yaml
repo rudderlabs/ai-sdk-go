@@ -767,6 +767,10 @@ spec:
       name: call_reason
       type: string
       description: Opt-in. The agent's one-sentence reason for the call; masked and capped.
+    - id: error_message
+      name: error_message
+      type: string
+      description: Opt-in. Why an MCP request failed, from the tool's error text or the JSON-RPC error message; masked, capped at 200 characters, withheld if still sensitive.
     - id: elicitation_action
       name: elicitation_action
       type: string

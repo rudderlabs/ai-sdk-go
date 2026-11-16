@@ -75,8 +75,10 @@ type Options struct {
 	// by mcp_client_seen, per server name and process. Also sets remembered client expiry
 	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
-	// CaptureContent sends masked call_reason and capability_detail capped at 200
-	// characters, and feedback_text capped at 2000. Off by default.
+	// CaptureContent sends masked call_reason and capability_detail capped at 200 characters,
+	// and feedback_text capped at 2000. Off by default. The Go SDK does not yet send
+	// error_message because neither adapter observes the final JSON-RPC response.
+	// Tracked in SDK-6893: https://linear.app/rudderstack/issue/SDK-6893/mcp-ai-events-error-message-from-the-final-response-in-python-mcp-2x
 	CaptureContent bool
 	// CapabilityRequests registers the request_capability tool, recorded as
 	// mcp_capability_requested. Nil (the default) leaves it out.
@@ -94,7 +96,7 @@ type Options struct {
 	Transport string
 	// ServerName overrides the server's own name, sent as server_name.
 	ServerName string
-	// Redact runs after the built-in masking of call_reason, capability_detail and feedback_text; if it fails
+	// Redact runs after the built-in masking of call_reason, capability_detail and feedback_text. If it fails
 	// or panics, the field is not sent.
 	Redact func(text string) (string, error)
 	// DisableRedaction turns redaction off: the built-in masking and Redact.
