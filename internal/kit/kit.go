@@ -68,6 +68,10 @@ func PrimaryModel(i *rudderstackai.Interaction, model, provider string) {
 // KeepAnswer keeps answer text for the classifier and evaluator.
 func KeepAnswer(i *rudderstackai.Interaction, text string) { hook.KeepAnswer(i, text) }
 
+// Backdate moves a resumed segment's start back to when its events happened, taking the time from
+// the latest pause.
+func Backdate(i *rudderstackai.Interaction, startedAt time.Time) { hook.Backdate(i, startedAt) }
+
 // ContextConversation is the conversation ID a context carries (rudderstackai.WithValues), or "".
 func ContextConversation(ctx context.Context) string { return hook.ContextConversation(ctx) }
 

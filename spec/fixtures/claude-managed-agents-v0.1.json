@@ -661,7 +661,7 @@
             "primary_model": "claude-haiku-5-5",
             "primary_provider": "anthropic",
             "llm_call_count": 1,
-            "tool_call_count": 1,
+            "tool_call_count": 0,
             "total_input_tokens": 30,
             "total_output_tokens": 8,
             "total_tokens": 38,
@@ -682,12 +682,6 @@
                 "error_count": 0,
                 "cost_usd": 0.000007
               }
-            ],
-            "tool_breakdown": [
-              {
-                "tool_name": "get_weather",
-                "call_count": 1
-              }
             ]
           }
         },
@@ -701,7 +695,7 @@
             "primary_model": "claude-haiku-5-5",
             "primary_provider": "anthropic",
             "llm_call_count": 1,
-            "tool_call_count": 0,
+            "tool_call_count": 1,
             "total_input_tokens": 70,
             "total_output_tokens": 2,
             "total_tokens": 72,
@@ -721,6 +715,16 @@
                 "service_tier": "standard",
                 "error_count": 0,
                 "cost_usd": 0.0000053
+              }
+            ],
+            "tool_breakdown": [
+              {
+                "tool_name": "get_weather",
+                "call_count": 1,
+                "error_count": 0,
+                "duration_ms": 1100,
+                "measured_count": 1,
+                "max_duration_ms": 1100
               }
             ],
             "pause_count": 1
@@ -3043,7 +3047,7 @@
             "primary_model": "claude-haiku-5-5",
             "primary_provider": "anthropic",
             "llm_call_count": 1,
-            "tool_call_count": 1,
+            "tool_call_count": 0,
             "total_input_tokens": 30,
             "total_output_tokens": 8,
             "total_tokens": 38,
@@ -3075,7 +3079,7 @@
             "response_status": "cancelled",
             "trigger": "user",
             "llm_call_count": 0,
-            "tool_call_count": 0,
+            "tool_call_count": 1,
             "error_type": "cancelled",
             "pause_count": 1
           }
@@ -3313,7 +3317,7 @@
             "primary_model": "claude-haiku-5-5",
             "primary_provider": "anthropic",
             "llm_call_count": 1,
-            "tool_call_count": 1,
+            "tool_call_count": 0,
             "total_input_tokens": 30,
             "total_output_tokens": 8,
             "total_tokens": 38,
@@ -3347,7 +3351,7 @@
             "primary_model": "claude-haiku-5-5",
             "primary_provider": "anthropic",
             "llm_call_count": 1,
-            "tool_call_count": 0,
+            "tool_call_count": 1,
             "total_input_tokens": 70,
             "total_output_tokens": 2,
             "total_tokens": 72,
@@ -3575,7 +3579,7 @@
             "primary_model": "claude-haiku-5-5",
             "primary_provider": "anthropic",
             "llm_call_count": 1,
-            "tool_call_count": 1,
+            "tool_call_count": 0,
             "total_input_tokens": 30,
             "total_output_tokens": 8,
             "total_tokens": 38,
@@ -3609,7 +3613,7 @@
             "primary_model": "claude-haiku-5-5",
             "primary_provider": "anthropic",
             "llm_call_count": 1,
-            "tool_call_count": 0,
+            "tool_call_count": 1,
             "total_input_tokens": 70,
             "total_output_tokens": 2,
             "total_tokens": 72,
@@ -3629,6 +3633,680 @@
                 "service_tier": "standard",
                 "error_count": 0,
                 "cost_usd": 0.0000053
+              }
+            ],
+            "pause_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "running_after_requires_action",
+      "description": "The session runs again after a requires_action idle (the app answered a subagent's custom tool): a stream that then ends mid-turn cancels the answer instead of pausing it.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_running_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_running_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            },
+            {
+              "id": "sevt_running_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_running_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_running_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_running_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.thread_created",
+              "agent_name": "researcher",
+              "session_thread_id": "sthr_child",
+              "workflow_run_id": null
+            },
+            {
+              "id": "sevt_running_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "agent.custom_tool_use",
+              "name": "lookup",
+              "input": {},
+              "session_thread_id": "sthr_child"
+            },
+            {
+              "id": "sevt_running_07",
+              "processed_at": "2026-11-16T10:00:00.910000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_running_05"
+                ]
+              }
+            },
+            {
+              "id": "sevt_running_08",
+              "processed_at": "2026-11-16T10:00:00.920000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_running_09",
+              "processed_at": "2026-11-16T10:00:01.020000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_running_10",
+              "processed_at": "2026-11-16T10:00:01.420000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_running_09",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 12,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 2,
+            "tool_call_count": 0,
+            "total_input_tokens": 22,
+            "total_output_tokens": 4,
+            "total_tokens": 26,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0000042,
+            "error_type": "cancelled",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 2,
+                "input_tokens": 22,
+                "output_tokens": 4,
+                "total_tokens": 26,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.0000042
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "paused_then_error",
+      "description": "A later stream of a paused session holds a terminal session.error, then session.status_terminated: the paused answer ends with that error.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_perr_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_perr_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Weather?"
+                }
+              ]
+            },
+            {
+              "id": "sevt_perr_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_perr_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_perr_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_perr_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "agent.custom_tool_use",
+              "name": "get_weather",
+              "input": {
+                "city": "Paris"
+              }
+            },
+            {
+              "id": "sevt_perr_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_perr_05"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "events": [
+            {
+              "id": "sevt_perr_07",
+              "processed_at": "2026-11-16T10:00:01.810000Z",
+              "type": "session.error",
+              "error": {
+                "type": "mcp_connection_failed_error",
+                "message": "unreachable",
+                "mcp_server_name": "github",
+                "retry_status": {
+                  "type": "terminal"
+                }
+              }
+            },
+            {
+              "id": "sevt_perr_08",
+              "processed_at": "2026-11-16T10:00:01.910000Z",
+              "type": "session.status_terminated"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "paused",
+            "pause_reason": "deferred_tool",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ]
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "error",
+            "trigger": "user",
+            "llm_call_count": 0,
+            "tool_call_count": 1,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "total_tokens": 0,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "error_type": "connection_error",
+            "pause_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "grader_then_failed_call",
+      "description": "A successful call, a grader cycle, then a failed revision: primary_model stays the agent's model.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_gradefail_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_gradefail_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            },
+            {
+              "id": "sevt_gradefail_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_gradefail_04",
+              "processed_at": "2026-11-16T10:00:00.560000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Draft"
+                }
+              ]
+            },
+            {
+              "id": "sevt_gradefail_05",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_gradefail_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 20,
+                "output_tokens": 5,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_gradefail_06",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "span.outcome_evaluation_start",
+              "outcome_id": "outc_1",
+              "iteration": 0
+            },
+            {
+              "id": "sevt_gradefail_07",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "span.outcome_evaluation_end",
+              "outcome_evaluation_start_id": "sevt_gradefail_06",
+              "outcome_id": "outc_1",
+              "iteration": 0,
+              "result": "needs_revision",
+              "explanation": "no",
+              "usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 6
+              }
+            },
+            {
+              "id": "sevt_gradefail_08",
+              "processed_at": "2026-11-16T10:00:00.910000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_gradefail_09",
+              "processed_at": "2026-11-16T10:00:01.010000Z",
+              "type": "span.model_request_end",
+              "is_error": true,
+              "model_request_start_id": "sevt_gradefail_08",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_gradefail_10",
+              "processed_at": "2026-11-16T10:00:01.110000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 3,
+            "tool_call_count": 0,
+            "total_input_tokens": 50,
+            "total_output_tokens": 11,
+            "total_tokens": 61,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 2,
+                "input_tokens": 20,
+                "output_tokens": 5,
+                "total_tokens": 25,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 1,
+                "cost_usd": 0.0000045
+              },
+              {
+                "agent_name": "outcome_grader",
+                "provider": "anthropic",
+                "model": null,
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 6,
+                "total_tokens": 36,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "custom_tool_error_after_resume",
+      "description": "A custom tool waiting on the app when the answer paused is counted in the resumed segment, with the error and duration its result reports.",
+      "options": {
+        "tool_breakdown": true
+      },
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_terr_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_terr_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Weather?"
+                }
+              ]
+            },
+            {
+              "id": "sevt_terr_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_terr_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_terr_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_terr_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "agent.custom_tool_use",
+              "name": "get_weather",
+              "input": {
+                "city": "Paris"
+              }
+            },
+            {
+              "id": "sevt_terr_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_terr_05"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "events": [
+            {
+              "id": "sevt_terr_07",
+              "processed_at": "2026-11-16T10:00:02.310000Z",
+              "type": "user.custom_tool_result",
+              "custom_tool_use_id": "sevt_terr_05",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "timeout"
+                }
+              ],
+              "is_error": true
+            },
+            {
+              "id": "sevt_terr_08",
+              "processed_at": "2026-11-16T10:00:02.320000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_terr_09",
+              "processed_at": "2026-11-16T10:00:02.420000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_terr_10",
+              "processed_at": "2026-11-16T10:00:02.770000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Could not get the weather."
+                }
+              ]
+            },
+            {
+              "id": "sevt_terr_11",
+              "processed_at": "2026-11-16T10:00:02.820000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_terr_09",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 30,
+                "input_tokens": 40,
+                "output_tokens": 6,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_terr_12",
+              "processed_at": "2026-11-16T10:00:02.920000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "paused",
+            "pause_reason": "deferred_tool",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ]
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 70,
+            "total_output_tokens": 6,
+            "total_tokens": 76,
+            "total_cached_input_tokens": 30,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0000073,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 70,
+                "output_tokens": 6,
+                "total_tokens": 76,
+                "cached_input_tokens": 30,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.0000073
+              }
+            ],
+            "tool_breakdown": [
+              {
+                "tool_name": "get_weather",
+                "call_count": 1,
+                "error_count": 1,
+                "error_types": {
+                  "api_error": 1
+                },
+                "duration_ms": 1600,
+                "measured_count": 1,
+                "max_duration_ms": 1600
               }
             ],
             "pause_count": 1

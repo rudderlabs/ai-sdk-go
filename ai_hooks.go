@@ -40,6 +40,7 @@ func init() {
 	hook.Adopt = func(i any, integration string, client analytics.Client) { i.(*Interaction).adopt(integration, client) }
 	hook.PrimaryModel = func(i any, model, provider string) { i.(*Interaction).setPrimaryModel(model, provider) }
 	hook.KeepAnswer = func(i any, text string) { i.(*Interaction).keepAnswer(text) }
+	hook.Backdate = func(i any, startedAt time.Time) { i.(*Interaction).backdate(startedAt) }
 	hook.WarnOnce = func(key, message string) { warnOnce(key, message, 0) }
 	hook.ContextConversation = func(ctx context.Context) string {
 		if v := valuesFrom(ctx); v != nil {

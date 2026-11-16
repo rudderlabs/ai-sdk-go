@@ -64,6 +64,8 @@ var (
 	MaxMapEntries func() int
 	// MaxCallsPerInteraction is the configured cap of calls stored per interaction.
 	MaxCallsPerInteraction func() int
+	// Backdate moves a resumed segment's start back to when its events happened.
+	Backdate func(interaction any, startedAt time.Time)
 	// Reset restores the defaults (tests only).
 	Reset func()
 )
