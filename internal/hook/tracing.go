@@ -12,6 +12,10 @@ import (
 // Tracing is the core's integration API for span inputs. It contains no OTel types.
 // Interaction is opaque here to avoid an import cycle; integrations use *Interaction.
 var Tracing struct {
+	// SetClock supplies a per-interaction clock for portable lifecycle conformance tests.
+	SetClock              func(any, func() time.Time)
+	RecordSpan            func(any, any, *SpanSource)
+	RecordAncestry        func(any, string, string, string)
 	EmitSpans             func() bool
 	ParentContext         func(context.Context) (traceID, spanID, traceState string)
 	WrapperCaptureContent func(any) bool

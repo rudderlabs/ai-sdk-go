@@ -3,6 +3,7 @@ package rudderstackai
 import (
 	"context"
 	"strconv"
+	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
@@ -11,6 +12,21 @@ import (
 )
 
 func init() {
+	hook.Tracing.SetClock = func(owner any, now func() time.Time) {
+		i := owner.(*Interaction)
+		i.mu.Lock()
+		i.eventClock = now
+		i.mu.Unlock()
+	}
+	hook.Tracing.RecordSpan = func(owner, call any, source *hook.SpanSource) {
+		c := call.(LLMCall)
+		c.spanSource = source
+		owner.(*Interaction).RecordCall(c)
+	}
+	hook.Tracing.RecordAncestry = func(owner any, traceID, spanID, parentID string) {
+		owner.(*Interaction).recordSpanAncestry(traceID, spanID, parentID)
+	}
+
 	hook.Tracing.Identity = tracingIdentity
 	hook.Tracing.Open = func(id string) any {
 		open.mu.Lock()

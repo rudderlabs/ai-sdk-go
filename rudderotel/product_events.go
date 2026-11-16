@@ -273,7 +273,7 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 		if hook.CapturesCallContent(i) {
 			call.InputMessages, call.OutputToolCalls = spanCallContent(a)
 		}
-		i.RecordCall(call)
+		hook.Tracing.RecordSpan(i, call, spanSource(s, call))
 		if !call.FirstTokenAt.IsZero() {
 			hook.FirstToken(i, call.FirstTokenAt)
 		}
