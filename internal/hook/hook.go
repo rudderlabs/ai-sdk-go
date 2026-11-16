@@ -29,8 +29,22 @@ var (
 	CapturesCallContent func(interaction any) bool
 	// FirstToken marks the first streamed token.
 	FirstToken func(interaction any, at time.Time)
-	// HintOutcome sets the status End reports unless a call is recorded afterwards.
-	HintOutcome func(interaction any, status string, errorType string)
+	// HintOutcome sets the status End reports unless a call is recorded afterwards; pauseReason
+	// says what a paused run waits for.
+	HintOutcome func(interaction any, status string, errorType string, pauseReason string)
+	// StartInteraction starts an interaction an integration opens after the fact (opts is an
+	// InteractionOptions): tagged with integration, offered client, started at startedAt.
+	StartInteraction func(ctx context.Context, opts any, integration string, client analytics.Client, startedAt time.Time) (context.Context, any)
+	// Adopt tags an interaction with an integration and offers its client; the first of each wins.
+	Adopt func(interaction any, integration string, client analytics.Client)
+	// PrimaryModel sets primary_model and primary_provider unless a later call succeeds.
+	PrimaryModel func(interaction any, model, provider string)
+	// KeepAnswer keeps answer text for the classifier and evaluator.
+	KeepAnswer func(interaction any, text string)
+	// ContextConversation is the conversation ID a context carries (WithValues), or "".
+	ContextConversation func(ctx context.Context) string
+	// WarnOnce logs a warning the first time key is seen.
+	WarnOnce func(key, message string)
 	// OnBeforeEnd runs fn just before ai_response_received is built.
 	OnBeforeEnd func(interaction any, fn func())
 	// StatusForErrorType maps an error type to a response status.

@@ -3952,7 +3952,7 @@ func (i *Interaction) providerFailureLocked() (ResponseStatus, string) {
 
 // hintOutcome sets the status End reports unless a call is recorded afterwards.
 // Generic application errors preserve the current provider or finish-reason classification.
-func (i *Interaction) hintOutcome(status ResponseStatus, errorType string) {
+func (i *Interaction) hintOutcome(status ResponseStatus, errorType string, pauseReason ...PauseReason) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if status == StatusError && errorType == "app_error" {
@@ -3960,7 +3960,38 @@ func (i *Interaction) hintOutcome(status ResponseStatus, errorType string) {
 			return
 		}
 	}
-	i.hint = &outcomeHint{status: status, errorType: errorType, calls: i.callCount}
+	hint := &outcomeHint{status: status, errorType: errorType, calls: i.callCount}
+	if len(pauseReason) > 0 {
+		hint.pauseReason = pauseReason[0]
+	}
+	i.hint = hint
+}
+
+// adopt tags the interaction with an integration and offers its client; the first of each wins.
+func (i *Interaction) adopt(integration string, client analytics.Client) {
+	i.adoptAnalytics(client)
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.integration == "" {
+		i.integration = integration
+	}
+}
+
+// setPrimaryModel names primary_model and primary_provider unless a later call succeeds.
+func (i *Interaction) setPrimaryModel(model, provider string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.primary != nil && i.primary.persistent {
+		return
+	}
+	i.primary = &primarySelection{model: canonicalModel(model), provider: provider, calls: i.callCount}
+}
+
+// keepAnswer keeps answer text for the classifier and evaluator.
+func (i *Interaction) keepAnswer(text string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.keepAnswerLocked(text, false)
 }
 
 // onBeforeEnd runs fn just before ai_response_received is built.

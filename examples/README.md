@@ -10,6 +10,7 @@ Each example is a `main` package in this module (Go 1.26.11 or later) that uses 
 | [`mcp-auth`](mcp-auth)                     | Streamable HTTP behind a bearer token check, with `Identify`: `userId`, `account_id`, `oauth_client_id`, `token_scopes` |
 | [`openai`](openai)                         | `rudderopenai`: a streamed Chat Completions answer in `RunInteraction`, a registered price, `TrackAction` feedback |
 | [`anthropic`](anthropic)                   | `rudderanthropic`: a streamed Messages answer with a cache read and write, priced with cache rates |
+| [`managed-agents`](managed-agents)         | `rudderanthropic.TrackSessionEvents`: a Claude Managed Agents session (bash, a custom tool the app answers) as one priced answer |
 | [`google-genai`](google-genai)             | `ruddergenai`: `generateContent` calling a tool, then the streamed answer, with `tool_breakdown` |
 | [`bedrock-converse`](bedrock-converse)     | `rudderbedrock`: `Converse` calling a tool, then `ConverseStream`, priced through an inference profile |
 | [`background-agent`](background-agent)     | `RunTask` on a schedule (`account_id`, `on_behalf_of`), a chained sub-task (`parent_interaction_id`), `TrackScore` |

@@ -27,8 +27,25 @@ func init() {
 	hook.KeepsText = func(i any) bool { return i.(*Interaction).keepsText() }
 	hook.CapturesCallContent = func(i any) bool { return i.(*Interaction).capturesCallContent() }
 	hook.FirstToken = func(i any, at time.Time) { i.(*Interaction).firstTokenAt(at) }
-	hook.HintOutcome = func(i any, status, errorType string) {
-		i.(*Interaction).hintOutcome(ResponseStatus(status), errorType)
+	hook.HintOutcome = func(i any, status, errorType, pauseReason string) {
+		i.(*Interaction).hintOutcome(ResponseStatus(status), errorType, PauseReason(pauseReason))
+	}
+	hook.StartInteraction = func(ctx context.Context, opts any, integration string, client analytics.Client, startedAt time.Time) (context.Context, any) {
+		o := opts.(InteractionOptions)
+		o.adapterAnalytics, o.startedAt = client, startedAt
+		ctx, i := StartInteraction(ctx, o)
+		i.adopt(integration, nil)
+		return ctx, i
+	}
+	hook.Adopt = func(i any, integration string, client analytics.Client) { i.(*Interaction).adopt(integration, client) }
+	hook.PrimaryModel = func(i any, model, provider string) { i.(*Interaction).setPrimaryModel(model, provider) }
+	hook.KeepAnswer = func(i any, text string) { i.(*Interaction).keepAnswer(text) }
+	hook.WarnOnce = func(key, message string) { warnOnce(key, message, 0) }
+	hook.ContextConversation = func(ctx context.Context) string {
+		if v := valuesFrom(ctx); v != nil {
+			return v.conversationID
+		}
+		return ""
 	}
 	hook.OnBeforeEnd = func(i any, fn func()) { i.(*Interaction).onBeforeEnd(fn) }
 	hook.StatusForErrorType = func(t string) string { return string(statusForErrorType(t)) }

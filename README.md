@@ -84,6 +84,7 @@ This sends `ai_user_prompt_created`, `ai_response_received` (models, tokens, lat
 | ---------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | [OpenAI](docs/integrations.md#openai)                | `github.com/rudderlabs/ai-sdk-go/rudderopenai`    | `openai.NewClient(rudderopenai.WithTracking())`                   | Chat Completions and Responses API, streamed or not; OpenAI-compatible gateways        |
 | [Anthropic](docs/integrations.md#anthropic)          | `github.com/rudderlabs/ai-sdk-go/rudderanthropic` | `anthropic.NewClient(rudderanthropic.WithTracking())`             | Messages API, streamed or not, also through its Bedrock and Vertex AI clients          |
+| [Claude Managed Agents](docs/integrations.md#claude-managed-agents) | `github.com/rudderlabs/ai-sdk-go/rudderanthropic` | `rudderanthropic.TrackSessionEvents(ctx, stream, ...)` | Session turns: model requests, built-in, MCP and custom tools |
 | [Google Gen AI](docs/integrations.md#google-gen-ai)  | `github.com/rudderlabs/ai-sdk-go/ruddergenai`     | `genai.ClientConfig{HTTPClient: ruddergenai.HTTPClient(nil)}`     | `GenerateContent`, `GenerateContentStream` and chats, Gemini API and Vertex AI         |
 | [Amazon Bedrock](docs/integrations.md#amazon-bedrock) | `github.com/rudderlabs/ai-sdk-go/rudderbedrock`  | `bedrockruntime.NewFromConfig(cfg, rudderbedrock.WithTracking())` | `Converse` and `ConverseStream`                                                        |
 | [Manual](docs/integrations.md#manual)                | `github.com/rudderlabs/ai-sdk-go`                 | `in.RecordCall(...)`                                              | Calls and tool calls of any other client                                               |
@@ -440,6 +441,7 @@ No API was removed.
 
 - Mastra is a TypeScript framework, so this SDK has no Mastra integration; use `@rudderstack/ai` (Node.js).
 - Provider integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients. There are no OpenAI Agents SDK, Claude Agent SDK, LangChain, LangGraph or Vercel AI SDK integrations (they have no Go version). The optional `rudderotel` module provides an OpenTelemetry span processor and exporter.
+- Claude Managed Agents: only a session's primary thread is recorded; subagent and workflow threads are not ([details](docs/integrations.md#claude-managed-agents)).
 - Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `Interaction.Pause` or `EndOptions`.
 - Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint. A cancelled Chat Completions stream keeps 0 tokens (usage arrives only at the end).
 - Retries: with `WithEmitSpans(true)`, SDK retries share one invocation span within a bounded one-second retry grace; failed attempts settle when that grace expires. See [tracing](docs/tracing.md#go-platform-limits) and [Retries](docs/integrations.md#retries).
@@ -452,6 +454,7 @@ No API was removed.
 | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | [`openai`](examples/openai)                           | `rudderopenai`: a streamed Chat Completions answer, a registered price, `TrackAction` feedback |
 | [`anthropic`](examples/anthropic)                     | `rudderanthropic`: a streamed Messages answer with cache reads and writes                      |
+| [`managed-agents`](examples/managed-agents)           | `rudderanthropic.TrackSessionEvents`: a Claude Managed Agents session with bash and a custom tool |
 | [`google-genai`](examples/google-genai)               | `ruddergenai`: a tool call, then a streamed answer, with `tool_breakdown`                      |
 | [`bedrock-converse`](examples/bedrock-converse)       | `rudderbedrock`: `Converse` with a tool, then `ConverseStream`, priced through an inference profile |
 | [`background-agent`](examples/background-agent)       | `RunTask`: system-triggered work with a chained sub-task and `TrackScore`                      |
