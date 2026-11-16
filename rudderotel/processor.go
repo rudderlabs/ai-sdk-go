@@ -328,13 +328,6 @@ type taggedSpan struct {
 
 func (s taggedSpan) Attributes() []attribute.KeyValue { return s.attrs }
 
-// decidedSpan carries the processor's one export decision for an owner span to its exporter,
-// which uses it instead of running the filter again.
-type decidedSpan struct {
-	sdktrace.ReadOnlySpan
-	export bool
-}
-
 // OnEnd records only spans of an open interaction and skips suppressed classifier spans.
 func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	defer p.finish(key(s.SpanContext()))
@@ -365,12 +358,18 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 		}
 		if owner != nil {
 			safe("tracing.filter", func() { exported = p.exports(s) })
-			s = decidedSpan{ReadOnlySpan: s, export: exported}
 		}
 		if p.options.ProductEvents {
 			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
 		}
-		if !state.covered {
+		switch {
+		case owner != nil:
+			// Exported by its one decision and outside the batch queue, so a full queue cannot
+			// drop a span that already settled as exported.
+			if exported {
+				p.exporter.exportDecided(s)
+			}
+		case !state.covered:
 			p.inner.OnEnd(s)
 		}
 	})
