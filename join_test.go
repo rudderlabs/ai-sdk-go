@@ -1,0 +1,233 @@
+package rudderstackai
+
+import (
+	"context"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+type joinStep struct {
+	Kind        string     `json:"kind"`
+	Label       string     `json:"label"`
+	Interaction string     `json:"interaction"`
+	Parent      string     `json:"parent"`
+	Children    []joinStep `json:"children"`
+}
+
+type joinScenario struct {
+	Name      string     `json:"name"`
+	EmitSpans bool       `json:"emit_spans"`
+	Steps     []joinStep `json:"steps"`
+	Expected  struct {
+		Answers      map[string]int `json:"answers"`
+		OtherAnswers int            `json:"other_answers"`
+		Warnings     int            `json:"warnings"`
+		Spans        []struct {
+			Label  string  `json:"label"`
+			Parent *string `json:"parent"`
+		} `json:"spans"`
+	} `json:"expected"`
+}
+
+// wrapperCall reports one call the way a provider wrapper does: the interaction comes from ctx,
+// or an ephemeral one is opened and ended for it.
+func wrapperCall(ctx context.Context, model string) {
+	i, ephemeral := forCall(ctx, IntegrationOpenAI, nil)
+	if i == nil {
+		return
+	}
+	_, s := beginWrapperSpan(ctx, i, time.Now())
+	i.recordWrapperCall(LLMCall{Provider: "openai", Model: model, ResponseID: "r-" + model, InputTokens: 1, OutputTokens: 1}, s, 200)
+	if ephemeral {
+		i.End(EndOptions{})
+	}
+}
+
+func rearmJoinWarnings() {
+	global.mu.Lock()
+	delete(global.warned, "join:unknown")
+	delete(global.warned, "join:parent")
+	global.mu.Unlock()
+}
+
+func TestSharedExplicitContextFixture(t *testing.T) {
+	var fixture struct {
+		Scenarios []joinScenario `json:"scenarios"`
+	}
+	loadFixture(t, "spec/fixtures/explicit-context-v0.1.json", &fixture)
+	for _, sc := range fixture.Scenarios {
+		t.Run(sc.Name, func(t *testing.T) {
+			r := setupAI(t, WithEmitSpans(sc.EmitSpans))
+			rearmJoinWarnings()
+			logs := captureLogs(t)
+			interactions := map[string]string{}
+			spans := map[string]string{}
+			var run func(ctx context.Context, steps []joinStep)
+			run = func(ctx context.Context, steps []joinStep) {
+				for _, st := range steps {
+					switch st.Kind {
+					case "interaction":
+						ctx, i := StartInteraction(ctx, InteractionOptions{UserID: st.Label, Classify: Ptr(false)})
+						interactions[st.Label] = i.ID()
+						run(ctx, st.Children)
+						i.End(EndOptions{})
+					case "lost":
+						run(context.Background(), st.Children)
+					case "join":
+						id, ok := interactions[st.Interaction]
+						if !ok {
+							id = "unknown-id"
+						}
+						parent := spans[st.Parent]
+						if st.Parent == "invalid" {
+							parent = "xyz"
+						}
+						run(JoinInteraction(ctx, id, JoinOptions{ParentSpanID: parent}), st.Children)
+					case "manual":
+						ctx, s := StartSpan(ctx, SpanOptions{Name: st.Label, Operation: "execute_tool"})
+						spans[st.Label] = s.SpanID
+						run(ctx, st.Children)
+						s.End(nil)
+					case "wrapper":
+						wrapperCall(ctx, st.Label)
+					}
+				}
+			}
+			run(context.Background(), sc.Steps)
+			waitBackgroundWork(10 * time.Second)
+
+			labels := map[string]string{}
+			for label, id := range interactions {
+				labels[id] = label
+			}
+			counts := map[string]int{}
+			for label := range sc.Expected.Answers {
+				counts[label] = 0
+			}
+			other := 0
+			for _, e := range r.named("ai_response_received") {
+				label, known := labels[e.Properties["interaction_id"].(string)]
+				if !known {
+					other++
+					continue
+				}
+				if _, want := counts[label]; want {
+					counts[label] += e.Properties["llm_call_count"].(int)
+				}
+			}
+			for label, n := range sc.Expected.Answers {
+				if counts[label] != n {
+					t.Errorf("answers of %s: %d calls, want %d", label, counts[label], n)
+				}
+			}
+			if other != sc.Expected.OtherAnswers {
+				t.Errorf("other answers %d, want %d", other, sc.Expected.OtherAnswers)
+			}
+			if n := logs.count("JoinInteraction"); n != sc.Expected.Warnings {
+				t.Errorf("warnings %d, want %d: %s", n, sc.Expected.Warnings, logs.String())
+			}
+			exported := r.named("ai_otel_span")
+			if len(exported) != len(sc.Expected.Spans) {
+				t.Fatalf("exported %d spans, want %d", len(exported), len(sc.Expected.Spans))
+			}
+			byID := map[string]string{}
+			label := func(name any) string { return strings.TrimPrefix(name.(string), "chat ") }
+			for _, e := range exported {
+				byID[e.Properties["span_id"].(string)] = label(e.Properties["span_name"])
+			}
+			first := ""
+			for _, st := range sc.Steps {
+				if st.Kind == "interaction" {
+					first = st.Label
+					break
+				}
+			}
+			for _, want := range sc.Expected.Spans {
+				found := false
+				for _, e := range exported {
+					if label(e.Properties["span_name"]) != want.Label {
+						continue
+					}
+					found = true
+					parent, _ := e.Properties["parent_span_id"].(string)
+					got := byID[parent]
+					if parent != "" && got == "" {
+						got = "?"
+					}
+					if (want.Parent == nil && parent != "") || (want.Parent != nil && got != *want.Parent) {
+						t.Errorf("%s: parent %q, want %v", want.Label, got, want.Parent)
+					}
+					if labels[e.Properties["interaction_id"].(string)] != first {
+						t.Errorf("%s belongs to %v, want %s", want.Label, e.Properties["interaction_id"], first)
+					}
+				}
+				if !found {
+					t.Errorf("span %s not exported", want.Label)
+				}
+			}
+		})
+	}
+}
+
+func TestJoinInteractionFromAGoroutine(t *testing.T) {
+	r := setupAI(t, WithEmitSpans(true))
+	ctx, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
+	_, parent := StartSpan(ctx, SpanOptions{Name: "fan-out", Operation: "invoke_agent"})
+	var wg sync.WaitGroup
+	for n := range 3 {
+		wg.Go(func() {
+			// A worker that only got the IDs, on a fresh context.
+			joined := JoinInteraction(context.Background(), i.ID(), JoinOptions{ParentSpanID: parent.SpanID})
+			wrapperCall(joined, "worker-"+strconv.Itoa(n))
+		})
+	}
+	wg.Wait()
+	parent.End(nil)
+	i.End(EndOptions{})
+	answers := r.named("ai_response_received")
+	if len(answers) != 1 || answers[0].Properties["llm_call_count"] != 3 {
+		t.Fatalf("want one answer with 3 calls, got %d answers", len(answers))
+	}
+	workers := 0
+	for _, e := range r.named("ai_otel_span") {
+		if !strings.HasPrefix(e.Properties["span_name"].(string), "chat worker-") {
+			continue
+		}
+		workers++
+		if e.Properties["parent_span_id"] != parent.SpanID {
+			t.Errorf("worker span parent %v, want %s", e.Properties["parent_span_id"], parent.SpanID)
+		}
+	}
+	if workers != 3 {
+		t.Errorf("want 3 worker spans, got %d", workers)
+	}
+}
+
+func TestJoinInteractionEdgeCases(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	rearmJoinWarnings()
+	logs := captureLogs(t)
+	//nolint:staticcheck // a nil context is tolerated
+	if got := JoinInteraction(nil, "unknown-id", JoinOptions{}); got == nil {
+		t.Fatal("nil context must become context.Background()")
+	}
+	ctx, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
+	defer i.End(EndOptions{})
+	for _, bad := range []string{"0000000000000000", "ABCDEF0123456789", "abc"} {
+		rearmJoinWarnings()
+		joined := JoinInteraction(context.Background(), i.ID(), JoinOptions{ParentSpanID: bad})
+		if FromContext(joined) != i || activeSDKSpan(joined) != nil {
+			t.Errorf("%q: want the interaction without a parent", bad)
+		}
+	}
+	if FromContext(JoinInteraction(ctx, "unknown-id", JoinOptions{})) != i {
+		t.Error("an unknown ID must leave the context unchanged")
+	}
+	// The unknown ID warns twice: the loop re-armed it.
+	if n := logs.count("JoinInteraction"); n != 5 {
+		t.Errorf("want 5 warnings, got %d: %s", n, logs.String())
+	}
+}
