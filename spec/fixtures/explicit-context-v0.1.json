@@ -11,10 +11,27 @@
         {
           "kind": "interaction",
           "label": "A",
-          "children": [{ "kind": "lost", "children": [{ "kind": "wrapper", "label": "w" }] }]
+          "children": [
+            {
+              "kind": "lost",
+              "children": [
+                {
+                  "kind": "wrapper",
+                  "label": "w"
+                }
+              ]
+            }
+          ]
         }
       ],
-      "expected": { "answers": { "A": 0 }, "other_answers": 1, "warnings": 0, "spans": [] }
+      "expected": {
+        "answers": {
+          "A": 0
+        },
+        "other_answers": 1,
+        "warnings": 0,
+        "spans": []
+      }
     },
     {
       "name": "lost-context-joins-by-id",
@@ -27,13 +44,29 @@
             {
               "kind": "lost",
               "children": [
-                { "kind": "join", "interaction": "A", "children": [{ "kind": "wrapper", "label": "w" }] }
+                {
+                  "kind": "join",
+                  "interaction": "A",
+                  "children": [
+                    {
+                      "kind": "wrapper",
+                      "label": "w"
+                    }
+                  ]
+                }
               ]
             }
           ]
         }
       ],
-      "expected": { "answers": { "A": 1 }, "other_answers": 0, "warnings": 0, "spans": [] }
+      "expected": {
+        "answers": {
+          "A": 1
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": []
+      }
     },
     {
       "name": "joined-interaction-wins-over-the-current-one",
@@ -47,13 +80,30 @@
               "kind": "interaction",
               "label": "B",
               "children": [
-                { "kind": "join", "interaction": "A", "children": [{ "kind": "wrapper", "label": "w" }] }
+                {
+                  "kind": "join",
+                  "interaction": "A",
+                  "children": [
+                    {
+                      "kind": "wrapper",
+                      "label": "w"
+                    }
+                  ]
+                }
               ]
             }
           ]
         }
       ],
-      "expected": { "answers": { "A": 1, "B": 0 }, "other_answers": 0, "warnings": 0, "spans": [] }
+      "expected": {
+        "answers": {
+          "A": 1,
+          "B": 0
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": []
+      }
     },
     {
       "name": "unknown-id-warns-and-keeps-the-current-context",
@@ -66,26 +116,58 @@
             {
               "kind": "join",
               "interaction": "unknown",
-              "children": [{ "kind": "wrapper", "label": "w" }]
+              "children": [
+                {
+                  "kind": "wrapper",
+                  "label": "w"
+                }
+              ]
             }
           ]
         }
       ],
-      "expected": { "answers": { "B": 1 }, "other_answers": 0, "warnings": 1, "spans": [] }
+      "expected": {
+        "answers": {
+          "B": 1
+        },
+        "other_answers": 0,
+        "warnings": 1,
+        "spans": []
+      }
     },
     {
       "name": "ended-interaction-warns",
       "emit_spans": false,
       "steps": [
-        { "kind": "interaction", "label": "A", "children": [] },
+        {
+          "kind": "interaction",
+          "label": "A",
+          "children": []
+        },
         {
           "kind": "lost",
           "children": [
-            { "kind": "join", "interaction": "A", "children": [{ "kind": "wrapper", "label": "w" }] }
+            {
+              "kind": "join",
+              "interaction": "A",
+              "children": [
+                {
+                  "kind": "wrapper",
+                  "label": "w"
+                }
+              ]
+            }
           ]
         }
       ],
-      "expected": { "answers": { "A": 0 }, "other_answers": 1, "warnings": 1, "spans": [] }
+      "expected": {
+        "answers": {
+          "A": 0
+        },
+        "other_answers": 1,
+        "warnings": 1,
+        "spans": []
+      }
     },
     {
       "name": "parent-span-from-lost-context",
@@ -107,7 +189,16 @@
                       "interaction": "A",
                       "parent": "p",
                       "children": [
-                        { "kind": "manual", "label": "t", "children": [{ "kind": "wrapper", "label": "w" }] }
+                        {
+                          "kind": "manual",
+                          "label": "t",
+                          "children": [
+                            {
+                              "kind": "wrapper",
+                              "label": "w"
+                            }
+                          ]
+                        }
                       ]
                     }
                   ]
@@ -118,13 +209,24 @@
         }
       ],
       "expected": {
-        "answers": { "A": 1 },
+        "answers": {
+          "A": 1
+        },
         "other_answers": 0,
         "warnings": 0,
         "spans": [
-          { "label": "p", "parent": null },
-          { "label": "t", "parent": "p" },
-          { "label": "w", "parent": "t" }
+          {
+            "label": "p",
+            "parent": null
+          },
+          {
+            "label": "t",
+            "parent": "p"
+          },
+          {
+            "label": "w",
+            "parent": "t"
+          }
         ]
       }
     },
@@ -136,7 +238,11 @@
           "kind": "interaction",
           "label": "A",
           "children": [
-            { "kind": "manual", "label": "p", "children": [] },
+            {
+              "kind": "manual",
+              "label": "p",
+              "children": []
+            },
             {
               "kind": "manual",
               "label": "q",
@@ -145,7 +251,12 @@
                   "kind": "join",
                   "interaction": "A",
                   "parent": "p",
-                  "children": [{ "kind": "wrapper", "label": "w" }]
+                  "children": [
+                    {
+                      "kind": "wrapper",
+                      "label": "w"
+                    }
+                  ]
                 }
               ]
             }
@@ -153,13 +264,24 @@
         }
       ],
       "expected": {
-        "answers": { "A": 1 },
+        "answers": {
+          "A": 1
+        },
         "other_answers": 0,
         "warnings": 0,
         "spans": [
-          { "label": "p", "parent": null },
-          { "label": "q", "parent": null },
-          { "label": "w", "parent": "p" }
+          {
+            "label": "p",
+            "parent": null
+          },
+          {
+            "label": "q",
+            "parent": null
+          },
+          {
+            "label": "w",
+            "parent": "p"
+          }
         ]
       }
     },
@@ -178,7 +300,12 @@
                   "kind": "join",
                   "interaction": "A",
                   "parent": "invalid",
-                  "children": [{ "kind": "wrapper", "label": "w" }]
+                  "children": [
+                    {
+                      "kind": "wrapper",
+                      "label": "w"
+                    }
+                  ]
                 }
               ]
             }
@@ -186,10 +313,17 @@
         }
       ],
       "expected": {
-        "answers": { "A": 1 },
+        "answers": {
+          "A": 1
+        },
         "other_answers": 0,
         "warnings": 1,
-        "spans": [{ "label": "w", "parent": null }]
+        "spans": [
+          {
+            "label": "w",
+            "parent": null
+          }
+        ]
       }
     },
     {
@@ -211,7 +345,12 @@
                       "kind": "join",
                       "interaction": "A",
                       "parent": "p",
-                      "children": [{ "kind": "wrapper", "label": "w" }]
+                      "children": [
+                        {
+                          "kind": "wrapper",
+                          "label": "w"
+                        }
+                      ]
                     }
                   ]
                 }
@@ -220,7 +359,71 @@
           ]
         }
       ],
-      "expected": { "answers": { "A": 1 }, "other_answers": 0, "warnings": 0, "spans": [] }
+      "expected": {
+        "answers": {
+          "A": 1
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": []
+      }
+    },
+    {
+      "name": "framework-child-run-inside-a-join-counts-for-the-joined-interaction",
+      "emit_spans": true,
+      "requires": "integration",
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "B",
+          "children": [
+            {
+              "kind": "interaction",
+              "label": "A",
+              "children": [
+                {
+                  "kind": "framework_run",
+                  "label": "r",
+                  "children": [
+                    {
+                      "kind": "join",
+                      "interaction": "B",
+                      "children": [
+                        {
+                          "kind": "framework_run",
+                          "label": "c",
+                          "parent": "r",
+                          "model": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 0,
+          "B": 1
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": [
+          {
+            "label": "r",
+            "parent": null,
+            "interaction": "A"
+          },
+          {
+            "label": "c",
+            "parent": "r",
+            "interaction": "B"
+          }
+        ]
+      }
     }
   ]
 }
