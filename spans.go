@@ -46,10 +46,8 @@ type Span struct {
 	msgContext map[string]any
 	// seq: start order, compared with OTel model-call spans to tell which one is nested.
 	seq uint64
-	// call: a provider wrapper's model call. otelOwned: it joined an enclosing OTel
-	// model-call span, taking its IDs; owner sends it only if that span is not exported.
-	call, otelOwned bool
-	owner           *hook.OTelOwner
+	// call: a provider wrapper's model call.
+	call bool
 }
 type sdkSpanKey struct{}
 
@@ -164,30 +162,34 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
 	return s
 }
 
-// otelOwnedSpan joins the active OTel model-call span a span processor saw start in this
-// interaction, when it is nested inside the active SDK span (or there is none): it already
-// owns the call. The app's span is never modified.
-func otelOwnedSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
-	if hook.Tracing.OTelCallOwner == nil || i == nil || i.Ended() {
-		return nil
-	}
-	o, ok := hook.Tracing.OTelCallOwner(ctx)
-	if !ok || o.Interaction != any(i) {
+// otelReplacementSpan is the SDK span of a model call starting inside an active OTel model-call
+// span a span processor saw start in this interaction, nested inside every active SDK span. The
+// first such call adopts the OTel span's trace, span and parent IDs, so RudderStack gets this
+// span in its place; later calls inside are its children. The app's span is never modified.
+func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
+	if hook.Tracing.AdoptOTelCall == nil || i == nil || i.Ended() {
 		return nil
 	}
 	active := activeSDKSpan(ctx)
 	if active != nil && active.interaction != i {
 		active = nil
 	}
-	if active != nil && active.seq > o.Seq {
+	var activeSeq uint64
+	if active != nil {
+		activeSeq = active.seq
+	}
+	o, ok := hook.Tracing.AdoptOTelCall(ctx, i, activeSeq)
+	if !ok {
 		return nil
 	}
 	// Keeps the active SDK parent, so work on a retained context still finds it once this ends.
-	// Sent in the owner's place, with its IDs and parent, if the processor does not export it.
-	s := &Span{TraceID: o.TraceID, SpanID: o.SpanID, parentID: o.ParentID, started: started, interaction: i, attributes: map[string]any{}, parent: active, seq: spanSeq.Add(1), call: true, otelOwned: true, owner: o.Owner}
+	s := &Span{TraceID: o.TraceID, SpanID: o.SpanID, parentID: o.ParentID, started: started, interaction: i, attributes: map[string]any{}, parent: active, seq: spanSeq.Add(1), call: true}
+	if !o.Adopted {
+		s.SpanID, s.parentID = randomSpanID(8), o.SpanID
+	}
 	i.mu.Lock()
-	// The first SDK span fixes the interaction's trace, persisted across pause and JSON restore.
-	if i.sdkTraceID == "" {
+	if o.Adopted {
+		// The first SDK span fixes the interaction's trace, persisted across pause and JSON restore.
 		i.sdkTraceID = o.TraceID
 	}
 	s.userID, s.anonymousID, s.interactionID, s.conversationID = i.userID, i.anonymousID, i.id, i.conversationID
@@ -264,16 +266,11 @@ func beginWrapperSpan(ctx context.Context, i *Interaction, started time.Time) (c
 	if !cfg().emitSpans || isUntracked(ctx) || (i != nil && !i.Ended() && i.untracked) {
 		return ctx, nil
 	}
-	if s := otelOwnedSpan(ctx, i, started); s != nil {
-		// Flush finishes an unread joined call too; its span then follows the owner's decision.
-		pendingWrapperSpans.mu.Lock()
-		pendingWrapperSpans.spans[s] = wrapperMetadata{}
-		pendingWrapperSpans.mu.Unlock()
-		ctx = context.WithValue(ctx, keyInteraction, s.interaction)
-		return context.WithValue(ctx, sdkSpanKey{}, s), s
+	s := otelReplacementSpan(ctx, i, started)
+	if s == nil {
+		s = newSDKSpan(ctx, i, started)
+		s.call = true
 	}
-	s := newSDKSpan(ctx, i, started)
-	s.call = true
 	ctx = context.WithValue(ctx, keyInteraction, s.interaction)
 	pendingWrapperSpans.mu.Lock()
 	pendingWrapperSpans.spans[s] = wrapperMetadata{}
@@ -368,14 +365,7 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 			return fmt.Sprintf("%T", err)
 		}(), "exception.message": n.StatusMessage}}}
 	}
-	send := func() { safely(func() { s.send(n, masked) }) }
-	if s.otelOwned {
-		if s.owner != nil {
-			s.owner.Defer(send)
-		}
-		return
-	}
-	send()
+	safely(func() { s.send(n, masked) })
 }
 
 // send maps and enqueues a finished SDK span.

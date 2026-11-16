@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
-	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
@@ -101,18 +100,6 @@ func (e *Exporter) send(s sdktrace.ReadOnlySpan) error {
 		return nil
 	}
 	return enqueue(e.client, *m)
-}
-
-// exportDecided sends a span its processor already decided to export, outside any batch queue.
-func (e *Exporter) exportDecided(s sdktrace.ReadOnlySpan) {
-	if e.closed.Load() {
-		return
-	}
-	safe("tracing.export", func() {
-		if err := e.send(s); err != nil {
-			otel.Handle(err)
-		}
-	})
 }
 
 func enqueue(c analytics.Client, m analytics.Track) (err error) {

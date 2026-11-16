@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	analytics "github.com/rudderlabs/analytics-go/v4"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -19,6 +21,7 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/ruddertest"
 )
 
 type dedupNode struct {
@@ -36,10 +39,11 @@ type dedupScenario struct {
 	Requires      string    `json:"requires"`
 	Tree          dedupNode `json:"tree"`
 	ExpectedSpans []struct {
-		Label  string  `json:"label"`
-		Parent *string `json:"parent"`
+		Label    string  `json:"label"`
+		Parent   *string `json:"parent"`
+		Replaces string  `json:"replaces"`
 	} `json:"expected_spans"`
-	CallSpan           *string  `json:"call_span"`
+	CallSpan           any      `json:"call_span"`
 	OtherProcessorsSee []string `json:"other_processors_see"`
 }
 
@@ -82,9 +86,13 @@ func dedupRun(ctx context.Context, tracer trace.Tracer, n dedupNode) {
 
 func TestSharedSpanDedupFixture(t *testing.T) {
 	var fixture struct {
-		Scenarios []dedupScenario `json:"scenarios"`
+		FixtureVersion int             `json:"fixture_version"`
+		Scenarios      []dedupScenario `json:"scenarios"`
 	}
 	loadCases(t, "../spec/fixtures/span-dedup-v0.1.json", &fixture)
+	if fixture.FixtureVersion != 2 {
+		t.Fatalf("fixture_version %d, want 2", fixture.FixtureVersion)
+	}
 	for _, sc := range fixture.Scenarios {
 		t.Run(sc.Name, func(t *testing.T) {
 			if sc.Requires == "integration" {
@@ -98,9 +106,11 @@ func TestSharedSpanDedupFixture(t *testing.T) {
 			dedupRun(context.Background(), provider.Tracer("app"), sc.Tree)
 
 			labels := map[string]string{}
+			otel := map[string]sdktrace.ReadOnlySpan{}
 			seen := []string{}
 			for _, s := range apm.Ended() {
 				labels[s.SpanContext().SpanID().String()] = s.Name()
+				otel[s.Name()] = s
 				seen = append(seen, s.Name())
 			}
 			exported := spanEvents(events())
@@ -121,6 +131,24 @@ func TestSharedSpanDedupFixture(t *testing.T) {
 					}
 					found = true
 					parent, _ := p["parent_span_id"].(string)
+					if want.Replaces != "" {
+						// The SDK span carries the OTel span's IDs; its content is the SDK call's.
+						o := otel[want.Replaces]
+						if o == nil {
+							t.Fatalf("%s replaces %s, which never ended", want.Label, want.Replaces)
+						}
+						wantParent := ""
+						if o.Parent().IsValid() {
+							wantParent = o.Parent().SpanID().String()
+						}
+						if p["trace_id"] != o.SpanContext().TraceID().String() || p["span_id"] != o.SpanContext().SpanID().String() || parent != wantParent {
+							t.Errorf("%s IDs %v/%v/%v, want %s's", want.Label, p["trace_id"], p["span_id"], parent, want.Replaces)
+						}
+						if !strings.Contains(render(e), "rudderstack.span_source") {
+							t.Errorf("%s is not the SDK's span", want.Label)
+						}
+						continue
+					}
 					switch {
 					case want.Parent == nil && parent != "":
 						t.Errorf("%s: parent %q, want none", want.Label, labels[parent])
@@ -138,6 +166,17 @@ func TestSharedSpanDedupFixture(t *testing.T) {
 			if !slices.Equal(seen, others) {
 				t.Errorf("other processors saw %v, want %v", seen, others)
 			}
+			// call_span: one label for every call event, or an ordered list for successive ones.
+			var wantCalls []string
+			switch v := sc.CallSpan.(type) {
+			case string:
+				wantCalls = []string{v}
+			case []any:
+				for _, l := range v {
+					wantCalls = append(wantCalls, l.(string))
+				}
+			}
+			n := 0
 			for _, e := range events() {
 				if e["event"] != "ai_llm_response_received" {
 					continue
@@ -148,37 +187,146 @@ func TestSharedSpanDedupFixture(t *testing.T) {
 					got = ""
 				}
 				want := ""
-				if sc.CallSpan != nil {
-					want = *sc.CallSpan
+				switch {
+				case len(wantCalls) == 1:
+					want = wantCalls[0]
+				case n < len(wantCalls):
+					want = wantCalls[n]
 				}
 				if got != want {
-					t.Errorf("call span_id is %q, want %q", got, want)
+					t.Errorf("call %d span_id is %q, want %q", n, got, want)
 				}
+				n++
+			}
+			if len(wantCalls) > 1 && n != len(wantCalls) {
+				t.Errorf("%d call events, want %d", n, len(wantCalls))
 			}
 		})
 	}
 }
 
-func TestSpanDedupNeverModifiesTheAppSpan(t *testing.T) {
-	apm := tracetest.NewSpanRecorder()
-	provider, _, events := testProvider(t, Options{Simple: true}, apm)
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true), rudderstackai.WithLLMCallEvents(true), rudderstackai.WithCaptureContent(true)); err != nil {
+// ownerSpan starts an active OTel model-call span in a new interaction of user u.
+func ownerSpan(tracer trace.Tracer) (context.Context, *rudderstackai.Interaction, trace.Span) {
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	ctx, o := tracer.Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	return ctx, i, o
+}
+
+func rejectErrors(s sdktrace.ReadOnlySpan) bool { return IsAISpan(s) && s.Status().Code != codes.Error }
+
+// render renders an event for substring checks.
+func render(e object) string {
+	b, _ := json.Marshal(e)
+	return string(b)
+}
+
+func isSDKSpan(e object) bool { return strings.Contains(render(e), "rudderstack.span_source") }
+
+func configureSpans(t *testing.T, options ...rudderstackai.ConfigOption) {
+	t.Helper()
+	if err := rudderstackai.Configure(append([]rudderstackai.ConfigOption{rudderstackai.WithEmitSpans(true)}, options...)...); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// wrapperIn runs one wrapper call in ctx and returns the span ID it sent.
+func wrapperIn(ctx context.Context, t *testing.T, i *rudderstackai.Interaction) string {
+	t.Helper()
+	_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
+	hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "w", InputTokens: 1, OutputTokens: 1}, s, 200)
+	return s.(*rudderstackai.Span).SpanID
+}
+
+// requireOneSDKSpanUnder asserts a single exported span: the SDK's, under o's IDs and parent.
+func requireOneSDKSpanUnder(t *testing.T, events func() []object, o trace.Span, parent string) object {
+	t.Helper()
+	spans := spanEvents(events())
+	if len(spans) != 1 {
+		t.Fatalf("want one span, got %d", len(spans))
+	}
+	p := spans[0]["properties"].(object)
+	ids := o.SpanContext()
+	if p["trace_id"] != ids.TraceID().String() || p["span_id"] != ids.SpanID().String() || (parent != "" && p["parent_span_id"] != parent) {
+		t.Errorf("span IDs %v/%v/%v, want the OTel span's %s/%s/%s", p["trace_id"], p["span_id"], p["parent_span_id"], ids.TraceID(), ids.SpanID(), parent)
+	}
+	if !isSDKSpan(spans[0]) {
+		t.Error("the exported span is not the SDK's")
+	}
+	return p
+}
+
+func TestSpanDedupSDKSpanReplacesTheAppSpan(t *testing.T) {
+	apm := tracetest.NewSpanRecorder()
+	provider, _, events := testProvider(t, Options{Simple: true}, apm)
+	configureSpans(t, rudderstackai.WithLLMCallEvents(true), rudderstackai.WithCaptureContent(true))
 	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
-	ctx, app := provider.Tracer("app").Start(ctx, "chat gpt-4o-mini", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	ctx, root := provider.Tracer("app").Start(ctx, "request")
+	ctx, app := provider.Tracer("app").Start(ctx, "chat gpt-4o-mini", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat"), attribute.String("app.attr", "kept")))
 	_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
 	hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "gpt-4o-mini", InputTokens: 10, OutputTokens: 5, OutputText: "hi", InputMessages: []rudderstackai.GenAIMessage{{Role: "user", Parts: []rudderstackai.GenAIPart{{"type": "text", "content": "hello"}}}}}, s, 200)
 	app.End()
+	root.End()
 	i.End(rudderstackai.EndOptions{})
-	spans := spanEvents(events())
-	if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != app.SpanContext().SpanID().String() {
-		t.Fatalf("want only the app span: %v", spans)
+	p := requireOneSDKSpanUnder(t, events, app, root.SpanContext().SpanID().String())
+	// RudderStack gets the SDK span's content, not the app span's attributes.
+	if strings.Contains(render(spanEvents(events())[0]), "app.attr") {
+		t.Error("the app span's attributes reached RudderStack")
 	}
-	for _, kv := range apm.Ended()[0].Attributes() {
-		if strings.HasPrefix(string(kv.Key), "gen_ai.usage.") || strings.HasPrefix(string(kv.Key), "gen_ai.input.") || kv.Key == "rudderstack.span_source" {
-			t.Errorf("the SDK wrote %s onto the app span", kv.Key)
+	if p["span_name"] != "chat gpt-4o-mini" {
+		t.Errorf("span name %v", p["span_name"])
+	}
+	for _, e := range apm.Ended() {
+		if e.Name() != "chat gpt-4o-mini" {
+			continue
 		}
+		for _, kv := range e.Attributes() {
+			if strings.HasPrefix(string(kv.Key), "gen_ai.usage.") || strings.HasPrefix(string(kv.Key), "gen_ai.input.") || kv.Key == "rudderstack.span_source" {
+				t.Errorf("the SDK wrote %s onto the app span", kv.Key)
+			}
+		}
+	}
+}
+
+// A non-RudderStack processor receives the OTel span unchanged: same IDs, name, parent and
+// attributes, ended once.
+func TestSpanDedupOtherProcessorReceivesTheOTelSpanUnchanged(t *testing.T) {
+	apm := tracetest.NewSpanRecorder()
+	provider, _, events := testProvider(t, Options{Simple: true}, apm)
+	configureSpans(t)
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	ctx, root := provider.Tracer("app").Start(ctx, "request")
+	ctx, app := provider.Tracer("app").Start(ctx, "chat gpt-4o-mini", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat"), attribute.String("app.attr", "kept")))
+	wrapperIn(ctx, t, i)
+	app.End()
+	root.End()
+	i.End(rudderstackai.EndOptions{})
+	var got []sdktrace.ReadOnlySpan
+	for _, s := range apm.Ended() {
+		if s.Name() == "chat gpt-4o-mini" {
+			got = append(got, s)
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("the other processor received the OTel span %d times", len(got))
+	}
+	s := got[0]
+	if s.SpanContext().TraceID() != app.SpanContext().TraceID() || s.SpanContext().SpanID() != app.SpanContext().SpanID() || s.Parent().SpanID() != root.SpanContext().SpanID() {
+		t.Errorf("IDs changed: %v parent %v", s.SpanContext(), s.Parent())
+	}
+	attrs := map[string]string{}
+	for _, kv := range s.Attributes() {
+		attrs[string(kv.Key)] = kv.Value.String()
+	}
+	if attrs["app.attr"] != "kept" || attrs["gen_ai.operation.name"] != "chat" {
+		t.Errorf("attributes changed: %v", attrs)
+	}
+	for k := range attrs {
+		if strings.HasPrefix(k, "gen_ai.usage.") || k == "rudderstack.span_source" {
+			t.Errorf("the SDK wrote %s onto the app span", k)
+		}
+	}
+	if n := len(spanEvents(events())); n != 1 {
+		t.Errorf("RudderStack got %d spans, want the SDK span alone", n)
 	}
 }
 
@@ -190,16 +338,9 @@ func (recordOnly) ShouldSample(p sdktrace.SamplingParameters) sdktrace.SamplingR
 }
 func (recordOnly) Description() string { return "record-only" }
 
-// wrapperIn runs one wrapper call in ctx and reports whether it sent a span of its own.
-func wrapperIn(ctx context.Context, t *testing.T, i *rudderstackai.Interaction, events func() []object) bool {
-	t.Helper()
-	before := len(spanEvents(events()))
-	_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
-	hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "w", InputTokens: 1, OutputTokens: 1}, s, 200)
-	return len(spanEvents(events())) > before
-}
-
-func TestSpanDedupOwnerMustBeExported(t *testing.T) {
+// Adoption does not depend on what the processor would export: a filtered-out or unsampled span
+// is replaced too, and the call still has exactly one span.
+func TestSpanDedupAdoptsFilteredAndUnsampledSpans(t *testing.T) {
 	for _, c := range []struct {
 		name    string
 		options Options
@@ -211,25 +352,19 @@ func TestSpanDedupOwnerMustBeExported(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			_, p, events := testProvider(t, c.options)
 			provider := sdktrace.NewTracerProvider(append(c.more, sdktrace.WithSpanProcessor(p))...)
-			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-				t.Fatal(err)
-			}
-			ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
-			ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
-			if !wrapperIn(ctx, t, i, events) {
-				t.Error("a span the processor never exports owned the call")
-			}
+			configureSpans(t, rudderstackai.WithLLMCallEvents(true))
+			ctx, i, o := ownerSpan(provider.Tracer("app"))
+			wrapperIn(ctx, t, i)
 			o.End()
 			i.End(rudderstackai.EndOptions{})
+			requireOneSDKSpanUnder(t, events, o, "")
 		})
 	}
 }
 
 func TestSpanDedupEndedInteractionNeverJoins(t *testing.T) {
 	provider, _, events := testProvider(t, Options{Simple: true})
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-		t.Fatal(err)
-	}
+	configureSpans(t)
 	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
 	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
 	defer o.End()
@@ -246,11 +381,12 @@ func TestSpanDedupEndedInteractionNeverJoins(t *testing.T) {
 
 func TestSpanDedupJoinedWrapperKeepsItsSDKParent(t *testing.T) {
 	provider, _, events := testProvider(t, Options{Simple: true})
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-		t.Fatal(err)
-	}
+	configureSpans(t)
 	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
 	defer i.End(rudderstackai.EndOptions{})
+	// One trace throughout: the manual span is under an OTel request span, and so is the model span.
+	ctx, root := provider.Tracer("app").Start(ctx, "request")
+	defer root.End()
 	ctx, manual := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{Name: "manual", Operation: "execute_tool"})
 	defer manual.End(nil)
 	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
@@ -276,11 +412,10 @@ func TestSpanDedupJoinedWrapperKeepsItsSDKParent(t *testing.T) {
 	}
 }
 
+// A shut-down processor never replaces a span: it exports nothing, so the span is its own.
 func TestSpanDedupShutdownForgetsItsSpans(t *testing.T) {
 	provider, p, events := testProvider(t, Options{Simple: true})
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-		t.Fatal(err)
-	}
+	configureSpans(t)
 	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
 	defer i.End(rudderstackai.EndOptions{})
 	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
@@ -288,19 +423,20 @@ func TestSpanDedupShutdownForgetsItsSpans(t *testing.T) {
 	if err := p.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if !wrapperIn(ctx, t, i, events) {
-		t.Error("a span of a shut-down processor owned the call")
+	if id := wrapperIn(ctx, t, i); id == o.SpanContext().SpanID().String() {
+		t.Error("a span of a shut-down processor was adopted")
+	}
+	if n := len(spanEvents(events())); n != 1 {
+		t.Errorf("want the SDK span alone, got %d", n)
 	}
 }
 
-func TestSpanDedupRejectedOwnerSendsTheJoinedSpan(t *testing.T) {
+// The SDK span is sent when its call finishes, whatever the OTel span's filter, status or timing.
+func TestSpanDedupSDKSpanIsSentWhateverTheOTelSpanDoes(t *testing.T) {
 	for _, order := range []string{"after", "before"} {
-		t.Run("owner ends "+order+" the call", func(t *testing.T) {
-			// Accepts the span at start, rejects it once it ends with ERROR.
-			provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool { return IsAISpan(s) && s.Status().Code != codes.Error }})
-			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true), rudderstackai.WithLLMCallEvents(true)); err != nil {
-				t.Fatal(err)
-			}
+		t.Run("OTel ends "+order+" the call", func(t *testing.T) {
+			provider, _, events := testProvider(t, Options{Simple: true, Filter: rejectErrors})
+			configureSpans(t, rudderstackai.WithLLMCallEvents(true))
 			tracer := provider.Tracer("app")
 			ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
 			ctx, root := tracer.Start(ctx, "request")
@@ -311,276 +447,276 @@ func TestSpanDedupRejectedOwnerSendsTheJoinedSpan(t *testing.T) {
 				o.End()
 			}
 			hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "gpt-4o-mini", InputTokens: 1, OutputTokens: 1}, s, 200)
+			if n := len(spanEvents(events())); n != 1 {
+				t.Fatalf("sent %d spans when the call finished, want the SDK span", n)
+			}
 			if order == "after" {
-				if n := len(spanEvents(events())); n != 0 {
-					t.Fatalf("sent %d spans before the owner settled", n)
-				}
 				o.SetStatus(codes.Error, "")
 				o.End()
 			}
 			root.End()
 			i.End(rudderstackai.EndOptions{})
-			spans := spanEvents(events())
-			if len(spans) != 1 {
-				t.Fatalf("want the joined span alone, got %d", len(spans))
-			}
-			p := spans[0]["properties"].(object)
-			ids := o.SpanContext()
-			if p["trace_id"] != ids.TraceID().String() || p["span_id"] != ids.SpanID().String() || p["parent_span_id"] != root.SpanContext().SpanID().String() {
-				t.Errorf("fallback span IDs %v/%v/%v, want the owner's", p["trace_id"], p["span_id"], p["parent_span_id"])
-			}
-			if b, _ := json.Marshal(p["otlp"]); !strings.Contains(string(b), "rudderstack.span_source") {
-				t.Error("the fallback is not the SDK's wrapper span")
-			}
+			requireOneSDKSpanUnder(t, events, o, root.SpanContext().SpanID().String())
 			for _, e := range events() {
-				if e["event"] == "ai_llm_response_received" && e["properties"].(object)["span_id"] != ids.SpanID().String() {
-					t.Errorf("call span_id %v, want the owner's", e["properties"].(object)["span_id"])
+				if e["event"] == "ai_llm_response_received" && e["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
+					t.Errorf("call span_id %v, want the adopted ID", e["properties"].(object)["span_id"])
 				}
 			}
 		})
 	}
 }
 
-func TestSpanDedupStartFilterSeesIdentityTags(t *testing.T) {
-	// Exports only spans tagged with the interaction's user.
+// The export filter is never asked about a replaced span: not at start, not at end.
+func TestSpanDedupNeverCallsTheFilterForAReplacedSpan(t *testing.T) {
+	var calls atomic.Int32
 	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
-		return IsAISpan(s) && asString(attributes(s.Attributes())["user.id"]) == "u"
-	}})
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-		t.Fatal(err)
-	}
-	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
-	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
-	if wrapperIn(ctx, t, i, events) {
-		t.Error("the tagged OTel span did not own the call")
-	}
-	o.End()
-	i.End(rudderstackai.EndOptions{})
-	spans := spanEvents(events())
-	if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
-		t.Fatalf("want only the owner's span, got %d", len(spans))
-	}
-}
-
-func TestSpanDedupPanickingEndFilterSendsTheJoinedSpan(t *testing.T) {
-	// Accepts the span at start, panics once it has ended.
-	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
-		if !s.EndTime().IsZero() {
+		if s.Name() == "chat" {
+			calls.Add(1)
 			panic("filter exploded")
 		}
-		return IsAISpan(s)
+		return true
 	}})
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-		t.Fatal(err)
-	}
-	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
-	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
-	if wrapperIn(ctx, t, i, events) {
-		t.Fatal("the joined span was sent before its owner settled")
-	}
+	var mu sync.Mutex
+	var reported []string
+	configureSpans(t, rudderstackai.WithOnError(func(_ error, info rudderstackai.ErrorInfo) {
+		mu.Lock()
+		defer mu.Unlock()
+		reported = append(reported, info.Kind+":"+info.Where)
+	}))
+	ctx, i, o := ownerSpan(provider.Tracer("app"))
+	wrapperIn(ctx, t, i)
 	o.End()
 	i.End(rudderstackai.EndOptions{})
-	spans := spanEvents(events())
-	if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
-		t.Fatalf("want the held span under the owner's ID, got %d", len(spans))
+	if n := calls.Load(); n != 0 {
+		t.Errorf("the filter ran %d times for a replaced span", n)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(reported) != 0 {
+		t.Errorf("reported %v", reported)
+	}
+	requireOneSDKSpanUnder(t, events, o, "")
+}
+
+// An OTel model-call span with no SDK call inside is exported as before, and a panicking
+// filter on it is a user_callback error.
+func TestSpanDedupPanickingFilterIsAUserCallbackError(t *testing.T) {
+	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(sdktrace.ReadOnlySpan) bool { panic("filter exploded") }})
+	var mu sync.Mutex
+	kinds := map[string]string{}
+	configureSpans(t, rudderstackai.WithOnError(func(_ error, info rudderstackai.ErrorInfo) {
+		mu.Lock()
+		defer mu.Unlock()
+		kinds[info.Where] = info.Kind
+	}))
+	_, _, o := ownerSpan(provider.Tracer("app"))
+	o.End()
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Contains(slices.Collect(maps.Values(kinds)), rudderstackai.KindUserCallback) {
+		t.Errorf("the filter panic was not reported as user_callback: %v", kinds)
+	}
+	for where, kind := range kinds {
+		if strings.Contains(where, "filter") && kind != rudderstackai.KindUserCallback {
+			t.Errorf("%s reported as %s, want user_callback", where, kind)
+		}
+	}
+	if n := len(spanEvents(events())); n != 0 {
+		t.Errorf("a span whose filter panicked was exported: %d", n)
 	}
 }
 
-// ownerSpan starts an active OTel model-call span in a new interaction of user u.
-func ownerSpan(tracer trace.Tracer) (context.Context, *rudderstackai.Interaction, trace.Span) {
-	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
-	ctx, o := tracer.Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
-	return ctx, i, o
-}
-
-func rejectErrors(s sdktrace.ReadOnlySpan) bool { return IsAISpan(s) && s.Status().Code != codes.Error }
-
-func TestSpanDedupFlushFinishesAJoinedCall(t *testing.T) {
-	for _, c := range []struct {
-		method   string
-		rejected bool
-	}{{"Flush", true}, {"Flush", false}, {"Shutdown", true}} {
-		rejected := c.rejected
-		t.Run(c.method+"/owner rejected="+strconvBool(rejected), func(t *testing.T) {
-			provider, _, events := testProvider(t, Options{Simple: true, Filter: rejectErrors})
-			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-				t.Fatal(err)
-			}
+func TestSpanDedupFlushAndShutdownFinishAnUnreadCall(t *testing.T) {
+	for _, method := range []string{"Flush", "Shutdown"} {
+		t.Run(method, func(t *testing.T) {
+			provider, _, events := testProvider(t, Options{Simple: true})
+			configureSpans(t)
 			ctx, i, o := ownerSpan(provider.Tracer("app"))
-			hook.Tracing.BeginWrapper(ctx, i, time.Now()) // an unread joined call
+			hook.Tracing.BeginWrapper(ctx, i, time.Now()) // an unread call
 			finish := rudderstackai.Flush
-			if c.method == "Shutdown" {
+			if method == "Shutdown" {
 				finish = rudderstackai.Shutdown
 			}
 			if !finish(context.Background()) {
-				t.Fatalf("%s did not finish", c.method)
-			}
-			if rejected {
-				o.SetStatus(codes.Error, "")
+				t.Fatalf("%s did not finish", method)
 			}
 			o.End()
 			i.End(rudderstackai.EndOptions{})
-			spans := spanEvents(events())
-			if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
-				t.Fatalf("want one span with the owner's ID, got %d", len(spans))
-			}
-			if src := strings.Contains(render(spans[0]), "rudderstack.span_source"); src != rejected {
-				t.Errorf("SDK fallback sent=%v, want %v", src, rejected)
-			}
+			requireOneSDKSpanUnder(t, events, o, "")
 		})
 	}
 }
 
-func TestSpanDedupExporterUsesTheProcessorDecision(t *testing.T) {
-	// Accepts the span at start and at the processor's end decision, rejects any later call.
-	var calls atomic.Int32
-	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
-		return calls.Add(1) <= 2 && IsAISpan(s)
-	}})
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-		t.Fatal(err)
-	}
-	ctx, i, o := ownerSpan(provider.Tracer("app"))
-	wrapperIn(ctx, t, i, events)
-	o.End()
-	i.End(rudderstackai.EndOptions{})
-	if spans := spanEvents(events()); len(spans) != 1 {
-		t.Fatalf("the call lost its span: %d spans", len(spans))
-	}
-}
-
-func TestSpanDedupProcessorsSettleTogether(t *testing.T) {
+// Every processor that saw the span drops it, whatever each one's filter says, and the call has
+// one span.
+func TestSpanDedupEveryProcessorDropsTheReplacedSpan(t *testing.T) {
 	accept := func(sdktrace.ReadOnlySpan) bool { return true }
-	reject := func(s sdktrace.ReadOnlySpan) bool { return s.Status().Code != codes.Error }
-	explode := func(sdktrace.ReadOnlySpan) bool { panic("filter exploded") }
+	reject := func(sdktrace.ReadOnlySpan) bool { return false }
+	errorsOnly := func(s sdktrace.ReadOnlySpan) bool { return s.Status().Code == codes.Error }
 	for _, c := range []struct {
-		name     string
-		ends     [2]func(sdktrace.ReadOnlySpan) bool
-		count    int
-		fallback bool
+		name    string
+		filters [2]func(sdktrace.ReadOnlySpan) bool
 	}{
-		{"one exports, one rejects", [2]func(sdktrace.ReadOnlySpan) bool{accept, reject}, 1, false},
-		{"both reject", [2]func(sdktrace.ReadOnlySpan) bool{reject, reject}, 1, true},
-		{"both export", [2]func(sdktrace.ReadOnlySpan) bool{accept, accept}, 2, false},
-		{"one panics, one rejects", [2]func(sdktrace.ReadOnlySpan) bool{explode, reject}, 1, true},
-		{"one exports, one panics", [2]func(sdktrace.ReadOnlySpan) bool{accept, explode}, 1, false},
+		{"both accept", [2]func(sdktrace.ReadOnlySpan) bool{accept, accept}},
+		{"one accepts, one rejects", [2]func(sdktrace.ReadOnlySpan) bool{accept, reject}},
+		{"both reject", [2]func(sdktrace.ReadOnlySpan) bool{reject, reject}},
+		{"successes and errors", [2]func(sdktrace.ReadOnlySpan) bool{rejectErrors, errorsOnly}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			// Accepted at start, so both processors register the owner; each decides at the end.
-			filter := func(end func(sdktrace.ReadOnlySpan) bool) func(sdktrace.ReadOnlySpan) bool {
-				return func(s sdktrace.ReadOnlySpan) bool { return s.EndTime().IsZero() || end(s) }
-			}
-			_, p1, events := testProvider(t, Options{Simple: true, Filter: filter(c.ends[0])})
-			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-				t.Fatal(err)
-			}
-			p2, err := NewSpanProcessor(Options{Simple: true, Filter: filter(c.ends[1])})
+			_, p1, events := testProvider(t, Options{Simple: true, Filter: c.filters[0]})
+			configureSpans(t)
+			p2, err := NewSpanProcessor(Options{Simple: true, Filter: c.filters[1], Analytics: p1.exporter.client})
 			if err != nil {
 				t.Fatal(err)
 			}
 			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(p1), sdktrace.WithSpanProcessor(p2))
 			t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
 			ctx, i, o := ownerSpan(provider.Tracer("app"))
-			wrapperIn(ctx, t, i, events)
+			wrapperIn(ctx, t, i)
 			o.SetStatus(codes.Error, "")
 			o.End()
 			i.End(rudderstackai.EndOptions{})
-			spans := spanEvents(events())
-			fallbacks := 0
-			for _, s := range spans {
-				if s["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
-					t.Errorf("span %v is not the owner's", s["properties"].(object)["span_id"])
-				}
-				if strings.Contains(render(s), "rudderstack.span_source") {
-					fallbacks++
-				}
-			}
-			if len(spans) != c.count || (fallbacks > 0) != c.fallback {
-				t.Fatalf("spans=%d fallbacks=%d, want %d spans and fallback=%v", len(spans), fallbacks, c.count, c.fallback)
-			}
+			requireOneSDKSpanUnder(t, events, o, "")
 		})
 	}
 }
 
-func TestSpanDedupExporterReusesARejection(t *testing.T) {
-	// Accepts at start, rejects at the processor's end decision, accepts any later call.
-	var calls atomic.Int32
-	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
-		return calls.Add(1) != 2 && IsAISpan(s)
-	}})
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+// probeProcessor runs fn when a span ends, in registration order among the processors.
+type probeProcessor struct{ onEnd func(sdktrace.ReadOnlySpan) }
+
+func (probeProcessor) OnStart(context.Context, sdktrace.ReadWriteSpan) {}
+func (p probeProcessor) OnEnd(s sdktrace.ReadOnlySpan)                 { p.onEnd(s) }
+func (probeProcessor) Shutdown(context.Context) error                  { return nil }
+func (probeProcessor) ForceFlush(context.Context) error                { return nil }
+
+// stillRecording reports a span as recording whatever its state.
+type stillRecording struct{ trace.Span }
+
+func (stillRecording) IsRecording() bool { return true }
+
+// Once a processor reached a span's end without a replacement, the decision is final: a call
+// starting while a later processor still ends it keeps its own span, so the span is never both
+// exported by the first and replaced for the second.
+func TestSpanDedupTheFirstEndMakesTheDecisionFinal(t *testing.T) {
+	_, p1, events := testProvider(t, Options{Simple: true})
+	configureSpans(t)
+	var ctx context.Context
+	var i *rudderstackai.Interaction
+	var late string
+	// The call's context still shows the span as recording, as it would to a call that checked
+	// just before the span ended.
+	probe := probeProcessor{onEnd: func(sdktrace.ReadOnlySpan) {
+		late = wrapperIn(trace.ContextWithSpan(ctx, stillRecording{trace.SpanFromContext(ctx)}), t, i)
+	}}
+	// p1 (exports) ends the span first; the probe starts a call; p2 (rejects everything) ends it last.
+	p2, err := NewSpanProcessor(Options{Simple: true, Filter: func(sdktrace.ReadOnlySpan) bool { return false }, Analytics: p1.exporter.client})
+	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, i, o := ownerSpan(provider.Tracer("app"))
-	wrapperIn(ctx, t, i, events)
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(p1), sdktrace.WithSpanProcessor(probe), sdktrace.WithSpanProcessor(p2))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+	var o trace.Span
+	ctx, i, o = ownerSpan(provider.Tracer("app"))
 	o.End()
 	i.End(rudderstackai.EndOptions{})
 	spans := spanEvents(events())
-	if len(spans) != 1 || !strings.Contains(render(spans[0]), "rudderstack.span_source") {
-		t.Fatalf("want only the SDK span in the rejected owner's place, got %d", len(spans))
+	ids := map[string]bool{}
+	for _, s := range spans {
+		ids[s["properties"].(object)["span_id"].(string)] = true
+	}
+	if len(spans) != 2 || len(ids) != 2 || !ids[o.SpanContext().SpanID().String()] || late == "" || late == o.SpanContext().SpanID().String() {
+		t.Fatalf("want the OTel span and the call's own span, got %d spans %v (late call %s)", len(spans), ids, late)
 	}
 }
 
-func TestSpanDedupShutdownSendsTheJoinedSpanOfAnOpenOwner(t *testing.T) {
-	provider, p, events := testProvider(t, Options{Simple: true})
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+// An adoption racing the span's end ends with exactly one span under the OTel span's ID, never
+// none and never two, even with several processors.
+func TestSpanDedupAdoptionRacingEndNeverLosesOrDuplicates(t *testing.T) {
+	_, p1, events := testProvider(t, Options{Simple: true})
+	configureSpans(t)
+	p2, err := NewSpanProcessor(Options{Simple: true, Filter: func(sdktrace.ReadOnlySpan) bool { return false }, Analytics: p1.exporter.client})
+	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, i, o := ownerSpan(provider.Tracer("app"))
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(p1), sdktrace.WithSpanProcessor(p2))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+	const rounds = 200
+	ids := make([]string, rounds)
+	for r := range rounds {
+		ctx, i, o := ownerSpan(provider.Tracer("app"))
+		ids[r] = o.SpanContext().SpanID().String()
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); wrapperIn(ctx, t, i) }()
+		go func() { defer wg.Done(); o.End() }()
+		wg.Wait()
+		i.End(rudderstackai.EndOptions{})
+	}
+	byID := map[string]int{}
+	total := 0
+	for _, e := range spanEvents(events()) {
+		byID[e["properties"].(object)["span_id"].(string)]++
+		total++
+	}
+	for _, id := range ids {
+		if byID[id] != 1 {
+			t.Fatalf("%d spans under OTel span %s, want exactly 1", byID[id], id)
+		}
+	}
+	if total < rounds || total > 2*rounds {
+		t.Fatalf("%d spans for %d calls", total, rounds)
+	}
+}
+
+// The shared mark is bounded by the open spans: gone once every processor ended the span or shut down.
+func TestSpanDedupMarkIsRemovedAtTheSpansEnd(t *testing.T) {
+	size := func() int {
+		otelCalls.mu.Lock()
+		defer otelCalls.mu.Unlock()
+		return len(otelCalls.m)
+	}
+	_, p1, events := testProvider(t, Options{Simple: true})
+	configureSpans(t)
+	p2, err := NewSpanProcessor(Options{Simple: true, Analytics: p1.exporter.client})
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(p1), sdktrace.WithSpanProcessor(p2))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+	before := size()
+	for _, replaced := range []bool{true, false} {
+		ctx, i, o := ownerSpan(provider.Tracer("app"))
+		if size() != before+1 {
+			t.Fatalf("an open span left %d marks, want %d", size(), before+1)
+		}
+		if replaced {
+			wrapperIn(ctx, t, i)
+		}
+		o.End()
+		i.End(rudderstackai.EndOptions{})
+		if size() != before {
+			t.Fatalf("an ended span (replaced=%v) left %d marks, want %d", replaced, size(), before)
+		}
+	}
+	// Shutdown forgets the marks of spans still open.
+	_, i, o := ownerSpan(provider.Tracer("app"))
+	defer o.End()
 	defer i.End(rudderstackai.EndOptions{})
-	wrapperIn(ctx, t, i, events)
-	if err := p.Shutdown(context.Background()); err != nil {
+	if err := p1.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	spans := spanEvents(events())
-	if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() || !strings.Contains(render(spans[0]), "rudderstack.span_source") {
-		t.Fatalf("want the held SDK span under the open owner's ID, got %d", len(spans))
+	if err := p2.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestSpanDedupCapsReportLimitReached(t *testing.T) {
-	for _, where := range []string{"span owners", "held spans"} {
-		t.Run(where, func(t *testing.T) {
-			provider, _, events := testProvider(t, Options{Simple: true, Filter: rejectErrors})
-			var mu sync.Mutex
-			var reported []string
-			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 1}),
-				rudderstackai.WithOnError(func(_ error, info rudderstackai.ErrorInfo) {
-					mu.Lock()
-					defer mu.Unlock()
-					if info.Kind == rudderstackai.KindLimitReached {
-						reported = append(reported, info.Where)
-					}
-				})); err != nil {
-				t.Fatal(err)
-			}
-			ctx, i, o := ownerSpan(provider.Tracer("app"))
-			if where == "span owners" {
-				_, o2 := provider.Tracer("app").Start(ctx, "chat 2", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
-				o2.End()
-			} else {
-				for range 2 {
-					_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
-					hook.Tracing.FinishRaw(s, "openai", "m", 200, time.Now(), nil)
-				}
-			}
-			o.End()
-			i.End(rudderstackai.EndOptions{})
-			_ = events
-			mu.Lock()
-			defer mu.Unlock()
-			if !slices.ContainsFunc(reported, func(w string) bool { return strings.Contains(w, where) }) {
-				t.Errorf("no limit_reached for %s: %v", where, reported)
-			}
-		})
+	if size() != before {
+		t.Errorf("shut-down processors left %d marks, want %d", size(), before)
 	}
+	_ = events
 }
 
 func TestSpanDedupNoRegistrationAfterShutdown(t *testing.T) {
 	_, p, _ := testProvider(t, Options{Simple: true})
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-		t.Fatal(err)
-	}
+	configureSpans(t)
 	if err := p.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -594,48 +730,84 @@ func TestSpanDedupNoRegistrationAfterShutdown(t *testing.T) {
 	_, registered := otelCalls.m[key(s.SpanContext())]
 	otelCalls.mu.Unlock()
 	if registered {
-		t.Error("a shut-down processor registered an owner")
+		t.Error("a shut-down processor registered a span")
 	}
 }
 
-// render renders an event for substring checks.
-func render(e object) string {
-	b, _ := json.Marshal(e)
-	return string(b)
+// blockedClient blocks every Enqueue until release closes.
+type blockedClient struct {
+	*ruddertest.Recorder
+	release chan struct{}
 }
 
-func TestSpanDedupProcessorRejectingAtStartStillSettles(t *testing.T) {
-	ok := func(s sdktrace.ReadOnlySpan) bool { return s.Status().Code != codes.Error }
-	failed := func(s sdktrace.ReadOnlySpan) bool { return s.Status().Code == codes.Error }
-	for _, reverse := range []bool{false, true} {
-		t.Run("reverse="+strconvBool(reverse), func(t *testing.T) {
-			// One accepts at start and rejects at the end; the other rejects at start and exports.
-			filters := [2]func(sdktrace.ReadOnlySpan) bool{ok, failed}
-			if reverse {
-				filters[0], filters[1] = filters[1], filters[0]
-			}
-			provider, p, events := testProvider(t, Options{Simple: true, Filter: filters[0]})
-			other, err := NewSpanProcessor(Options{Simple: true, Filter: filters[1], Analytics: p.exporter.client})
+func (c *blockedClient) Enqueue(m analytics.Message) error {
+	<-c.release
+	return c.Recorder.Enqueue(m)
+}
+
+// Ending a replaced span never touches the processor's client, so a blocked client cannot block End.
+func TestSpanDedupEndingAReplacedSpanNeverBlocksOnTheClient(t *testing.T) {
+	for _, simple := range []bool{true, false} {
+		t.Run("simple="+strconvBool(simple), func(t *testing.T) {
+			r, err := ruddertest.NewRecorder(filepath.Join(t.TempDir(), "events.jsonl"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			provider.RegisterSpanProcessor(other)
-			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-				t.Fatal(err)
-			}
+			blocked := &blockedClient{Recorder: r, release: make(chan struct{})}
+			defer func() { close(blocked.release); _ = r.Close() }()
+			provider, _, events := testProvider(t, Options{Simple: simple, Analytics: blocked})
+			configureSpans(t)
 			ctx, i, o := ownerSpan(provider.Tracer("app"))
-			wrapperIn(ctx, t, i, events)
-			o.SetStatus(codes.Error, "")
-			o.End()
+			wrapperIn(ctx, t, i) // the SDK's own client is the unblocked recorder
+			done := make(chan struct{})
+			go func() { o.End(); close(done) }()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("End blocked on the client")
+			}
 			i.End(rudderstackai.EndOptions{})
-			spans := spanEvents(events())
-			if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
-				t.Fatalf("want only the exported owner, got %d spans", len(spans))
-			}
-			if strings.Contains(render(spans[0]), "rudderstack.span_source") {
-				t.Error("the SDK fallback went out although a processor exported the owner")
-			}
+			requireOneSDKSpanUnder(t, events, o, "")
 		})
+	}
+}
+
+// The SDK call never waits for the batch queue: a full queue cannot cost the call its span.
+func TestSpanDedupFullBatchQueueDoesNotAffectTheSDKSpan(t *testing.T) {
+	provider, p, events := testProvider(t, Options{Simple: true, ExportAllSpans: true})
+	// A batch queue of one, its exporter stuck on busy and its queue holding queued.
+	blocked := &blockedExporter{SpanExporter: p.exporter, entered: make(chan struct{}), release: make(chan struct{})}
+	p.inner = sdktrace.NewBatchSpanProcessor(blocked, sdktrace.WithMaxQueueSize(1), sdktrace.WithMaxExportBatchSize(1), sdktrace.WithBatchTimeout(time.Minute))
+	configureSpans(t)
+	tracer := provider.Tracer("app")
+	_, busy := tracer.Start(context.Background(), "busy")
+	busy.End()
+	select {
+	case <-blocked.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the busy export did not start")
+	}
+	_, queued := tracer.Start(context.Background(), "queued")
+	queued.End()
+	ctx, i, o := ownerSpan(tracer)
+	wrapperIn(ctx, t, i)
+	o.End()
+	i.End(rudderstackai.EndOptions{})
+	close(blocked.release)
+	if err := provider.ForceFlush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	for _, e := range spanEvents(events()) {
+		if n := e["properties"].(object)["span_name"]; n != "busy" && n != "queued" {
+			calls++
+			if e["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
+				t.Error("the call's span is not under the adopted ID")
+			}
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("the call has %d spans, want 1", calls)
 	}
 }
 
@@ -653,53 +825,94 @@ func (e *blockedExporter) ExportSpans(ctx context.Context, spans []sdktrace.Read
 	return e.SpanExporter.ExportSpans(ctx, spans)
 }
 
-func TestSpanDedupFullBatchQueueKeepsTheOwnedCallsSpan(t *testing.T) {
-	provider, p, events := testProvider(t, Options{Simple: true, ExportAllSpans: true})
-	// A batch queue of one, its exporter stuck on busy and its queue holding queued.
-	blocked := &blockedExporter{SpanExporter: p.exporter, entered: make(chan struct{}), release: make(chan struct{})}
-	p.inner = sdktrace.NewBatchSpanProcessor(blocked, sdktrace.WithMaxQueueSize(1), sdktrace.WithMaxExportBatchSize(1), sdktrace.WithBatchTimeout(time.Minute))
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+// A processor shut down by the client's callback while the SDK span is sent cannot duplicate it.
+func TestSpanDedupShutdownWhileSendingNeverDuplicates(t *testing.T) {
+	provider, p, events := testProvider(t, Options{Simple: true})
+	configureSpans(t)
+	ctx, i, o := ownerSpan(provider.Tracer("app"))
+	wrapperIn(ctx, t, i)
+	if err := p.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	tracer := provider.Tracer("app")
-	_, busy := tracer.Start(context.Background(), "busy")
-	busy.End()
-	select {
-	case <-blocked.entered:
-	case <-time.After(5 * time.Second):
-		t.Fatal("the busy export did not start")
-	}
-	_, queued := tracer.Start(context.Background(), "queued")
-	queued.End()
-	ctx, i, o := ownerSpan(tracer)
-	wrapperIn(ctx, t, i, events)
 	o.End()
 	i.End(rudderstackai.EndOptions{})
-	close(blocked.release)
-	if err := provider.ForceFlush(context.Background()); err != nil {
+	requireOneSDKSpanUnder(t, events, o, "")
+}
+
+// The SDK span is sent when its call finishes even if the OTel span never ends.
+func TestSpanDedupSDKSpanSendsBeforeAnOpenOTelSpanEnds(t *testing.T) {
+	provider, p, events := testProvider(t, Options{Simple: true})
+	configureSpans(t)
+	ctx, i, o := ownerSpan(provider.Tracer("app"))
+	defer i.End(rudderstackai.EndOptions{})
+	wrapperIn(ctx, t, i)
+	if err := p.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	calls := 0
+	requireOneSDKSpanUnder(t, events, o, "")
+}
+
+// The call finishing after the OTel span ended (a stream read later) still sends the adopted span.
+func TestSpanDedupCallFinishingAfterTheOTelSpanEnded(t *testing.T) {
+	provider, _, events := testProvider(t, Options{Simple: true})
+	configureSpans(t, rudderstackai.WithLLMCallEvents(true))
+	ctx, i, o := ownerSpan(provider.Tracer("app"))
+	_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
+	o.End()
+	if n := len(spanEvents(events())); n != 0 {
+		t.Fatalf("%d spans before the call finished", n)
+	}
+	hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "w", InputTokens: 1, OutputTokens: 1}, s, 200)
+	i.End(rudderstackai.EndOptions{})
+	requireOneSDKSpanUnder(t, events, o, "")
+}
+
+// The first call adopts the OTel span, replacing any SDK trace the interaction already had; later
+// calls inside are its children, and a later manual span stays on that trace.
+func TestSpanDedupLaterCallsAreChildrenOfTheAdoptedSpan(t *testing.T) {
+	provider, _, events := testProvider(t, Options{Simple: true})
+	configureSpans(t, rudderstackai.WithLLMCallEvents(true))
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	_, before := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{Name: "before", Operation: "execute_tool"})
+	before.End(nil) // allocates the interaction's SDK trace
+	octx, o := provider.Tracer("app").Start(ctx, "chat outer", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	if o.SpanContext().TraceID().String() == before.TraceID {
+		t.Fatal("the OTel span is on the interaction's trace already")
+	}
+	first := wrapperIn(octx, t, i)
+	second := wrapperIn(octx, t, i)
+	o.End()
+	_, after := rudderstackai.StartSpan(ctx, rudderstackai.SpanOptions{Name: "after", Operation: "execute_tool"})
+	after.End(nil)
+	i.End(rudderstackai.EndOptions{})
+	oid := o.SpanContext().SpanID().String()
+	if first != oid || second == oid {
+		t.Fatalf("first call %s, second %s, want the first under %s and the second not", first, second, oid)
+	}
+	traces := map[string]string{}
 	for _, e := range spanEvents(events()) {
-		if n := e["properties"].(object)["span_name"]; n != "busy" && n != "queued" {
-			calls++
+		p := e["properties"].(object)
+		traces[p["span_name"].(string)] = p["trace_id"].(string)
+		if p["span_id"] == second && p["parent_span_id"] != oid {
+			t.Errorf("second call parent %v, want %s", p["parent_span_id"], oid)
 		}
 	}
-	if calls != 1 {
-		t.Fatalf("the owned call has %d spans, want 1", calls)
+	otrace := o.SpanContext().TraceID().String()
+	for _, name := range []string{"chat w", "after"} {
+		if traces[name] != otrace {
+			t.Errorf("%s on trace %s, want the adopted %s", name, traces[name], otrace)
+		}
 	}
 }
 
-func TestSpanDedupJoinedCallFixesTheSDKTraceAcrossPause(t *testing.T) {
+func TestSpanDedupAdoptedCallFixesTheSDKTraceAcrossPause(t *testing.T) {
 	for _, restore := range []string{"in-process", "json"} {
 		t.Run(restore, func(t *testing.T) {
 			provider, _, events := testProvider(t, Options{Simple: true})
-			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
-				t.Fatal(err)
-			}
+			configureSpans(t)
 			ctx, i, o := ownerSpan(provider.Tracer("app"))
 			ownerTrace := o.SpanContext().TraceID().String()
-			wrapperIn(ctx, t, i, events)
+			wrapperIn(ctx, t, i)
 			snapshot, ok := i.Pause(rudderstackai.PauseOptions{})
 			if !ok {
 				t.Fatal("pause failed")
@@ -721,7 +934,7 @@ func TestSpanDedupJoinedCallFixesTheSDKTraceAcrossPause(t *testing.T) {
 			} else {
 				i.Resume()
 			}
-			wrapperIn(ctx, t, i, events)
+			wrapperIn(ctx, t, i)
 			i.End(rudderstackai.EndOptions{})
 			for _, e := range spanEvents(events()) {
 				if got := e["properties"].(object)["trace_id"]; got != ownerTrace {
@@ -729,40 +942,5 @@ func TestSpanDedupJoinedCallFixesTheSDKTraceAcrossPause(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestSpanDedupPanickingFilterIsAUserCallbackError(t *testing.T) {
-	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
-		if !s.EndTime().IsZero() {
-			panic("filter exploded")
-		}
-		return IsAISpan(s)
-	}})
-	var mu sync.Mutex
-	kinds := map[string]string{}
-	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true), rudderstackai.WithOnError(func(_ error, info rudderstackai.ErrorInfo) {
-		mu.Lock()
-		defer mu.Unlock()
-		kinds[info.Where] = info.Kind
-	})); err != nil {
-		t.Fatal(err)
-	}
-	ctx, i, o := ownerSpan(provider.Tracer("app"))
-	wrapperIn(ctx, t, i, events)
-	o.End()
-	i.End(rudderstackai.EndOptions{})
-	mu.Lock()
-	defer mu.Unlock()
-	for where, kind := range kinds {
-		if strings.Contains(where, "filter") && kind != rudderstackai.KindUserCallback {
-			t.Errorf("%s reported as %s, want user_callback", where, kind)
-		}
-	}
-	if !slices.Contains(slices.Collect(maps.Values(kinds)), rudderstackai.KindUserCallback) {
-		t.Errorf("the filter panic was not reported as user_callback: %v", kinds)
-	}
-	if spans := spanEvents(events()); len(spans) != 1 {
-		t.Errorf("want the SDK span in the rejected owner's place, got %d", len(spans))
 	}
 }

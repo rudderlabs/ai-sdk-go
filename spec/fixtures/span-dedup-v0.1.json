@@ -1,8 +1,8 @@
 {
-  "fixture_version": 1,
+  "fixture_version": 2,
   "span_schema_version": "0.1",
   "event_spec_version": "0.4.0",
-  "description": "One ai_otel_span per model call when SDK spans and the RudderStack span processor both see it. Each scenario is a tree of nested scopes; the outer of an SDK call span and an OTel model-call span owns the call. See FIXTURE-FORMAT.md.",
+  "description": "The SDK span is always sent: inner OTel model spans are dropped and the first direct SDK call replaces an outer OTel span under its IDs. Other processors receive OTel spans unchanged. See FIXTURE-FORMAT.md.",
   "scenarios": [
     {
       "name": "otel-model-span-inside-wrapper",
@@ -57,11 +57,12 @@
       },
       "expected_spans": [
         {
-          "label": "o",
-          "parent": null
+          "label": "w",
+          "parent": null,
+          "replaces": "o"
         }
       ],
-      "call_span": "o",
+      "call_span": "w",
       "other_processors_see": [
         "o"
       ]
@@ -95,11 +96,12 @@
       },
       "expected_spans": [
         {
-          "label": "o",
-          "parent": null
+          "label": "w",
+          "parent": null,
+          "replaces": "o"
         }
       ],
-      "call_span": "o",
+      "call_span": "w",
       "other_processors_see": [
         "i",
         "o"
@@ -293,11 +295,12 @@
       },
       "expected_spans": [
         {
-          "label": "o",
-          "parent": null
+          "label": "m",
+          "parent": null,
+          "replaces": "o"
         }
       ],
-      "call_span": "o",
+      "call_span": "m",
       "other_processors_see": [
         "o"
       ]
@@ -510,7 +513,8 @@
       "expected_spans": [
         {
           "label": "w",
-          "parent": "o"
+          "parent": null,
+          "replaces": "o"
         }
       ],
       "call_span": "w",
@@ -547,6 +551,323 @@
       "call_span": null,
       "other_processors_see": [
         "i"
+      ]
+    },
+    {
+      "name": "first-wrapper-replaces-outer-later-wrapper-is-child",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              },
+              {
+                "kind": "wrapper",
+                "label": "later"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "w",
+          "parent": null,
+          "replaces": "o"
+        },
+        {
+          "label": "later",
+          "parent": "w"
+        }
+      ],
+      "call_span": [
+        "w",
+        "later"
+      ],
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "outer-model-span-without-sdk-call",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": []
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-generation-sent-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "generation",
+                "child_state": "sent"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "generation",
+          "parent": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "generation"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-generation-unsent-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "generation",
+                "child_state": "unsent"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "generation",
+          "parent": null,
+          "replaces": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "generation"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-generation-mixed-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "generation",
+                "child_state": "mixed"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "generation",
+          "parent": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "generation"
+        },
+        {
+          "label": "second",
+          "parent": "generation"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-response-sent-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "response",
+                "child_state": "sent"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "response",
+          "parent": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "response"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-response-unsent-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "response",
+                "child_state": "unsent"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "response",
+          "parent": null,
+          "replaces": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "response"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-response-mixed-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "response",
+                "child_state": "mixed"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "response",
+          "parent": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "response"
+        },
+        {
+          "label": "second",
+          "parent": "response"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
       ]
     }
   ]

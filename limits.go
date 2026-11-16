@@ -24,8 +24,6 @@ type Limits struct {
 	MaxCallsPerInteraction int
 	// MaxMapEntries caps each of the SDK's own lookup maps (default 10,000): remembered clients,
 	// failed attempts held for a retry, and each MCP map per server. The oldest entries go first.
-	// It also caps the open OTel spans that can own a call and the SDK spans held under one;
-	// past it, new ones are skipped and limit_reached is reported.
 	MaxMapEntries int
 }
 

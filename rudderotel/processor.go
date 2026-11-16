@@ -32,7 +32,9 @@ type spanState struct {
 }
 
 // otelCalls are the OTel model-call spans a processor saw start outside any SDK call span,
-// while they are open: an SDK call starting inside one joins it instead of sending its own span.
+// while they are open: the first SDK call starting inside one adopts its IDs, and every
+// processor drops it at its end. An entry goes when its last processor ends the span (or shuts
+// down), the only point after which the span can no longer be adopted.
 var otelCalls = struct {
 	mu sync.Mutex
 	m  map[spanKey]*otelCall
@@ -44,33 +46,37 @@ type otelCall struct {
 	seq         uint64
 	interaction *rudderstackai.Interaction
 	parentID    string
-	// owner holds the joined SDK spans' sends until every registered processor decided.
-	owner *hook.OTelOwner
-	// processors registered the span and have not decided yet; Shutdown decides for its own.
+	// replaced: an SDK call adopted the span's IDs; every processor drops it at its end.
+	replaced bool
+	// ended: a processor reached the span's end, so the decision is final and nothing adopts it.
+	ended bool
+	// processors registered the span and have not reached its end yet.
 	processors map[*SpanProcessor]struct{}
-	// accepted: a processor's filter accepted the span at start, so it can own calls.
-	accepted bool
 }
 
 func init() {
-	hook.Tracing.OTelCallOwner = func(ctx context.Context) (hook.OTelCall, bool) {
+	hook.Tracing.AdoptOTelCall = func(ctx context.Context, interaction any, activeSeq uint64) (hook.OTelCall, bool) {
 		s := trace.SpanFromContext(ctx)
-		if !s.IsRecording() {
-			return hook.OTelCall{}, false
-		}
 		sc := s.SpanContext()
 		otelCalls.mu.Lock()
 		defer otelCalls.mu.Unlock()
-		c := otelCalls.m[key(sc)]
-		if c == nil || !c.accepted {
+		// Checked under the lock: a span's end is observed by its processors after it stops
+		// recording, so a call that sees it recording is adopted before any processor's end.
+		if !s.IsRecording() {
 			return hook.OTelCall{}, false
 		}
-		return hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: c.parentID, Seq: c.seq, Interaction: c.interaction, Owner: c.owner}, true
+		c := otelCalls.m[key(sc)]
+		if c == nil || c.ended || any(c.interaction) != interaction || activeSeq > c.seq {
+			return hook.OTelCall{}, false
+		}
+		call := hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: c.parentID, Adopted: !c.replaced}
+		c.replaced = true
+		return call, true
 	}
 }
 
-// dedup keeps one span per model call: the outer of an SDK call span and an OTel model-call
-// span owns it. Spans off, it is never called.
+// dedup registers an OTel model-call span an SDK call may replace. A span starting inside an
+// SDK call span is covered: it is recorded, never exported. Spans off, it is never called.
 func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, interaction *rudderstackai.Interaction) (covered bool) {
 	if interaction == nil || interaction.Ended() || spanRole(s) != "llm" {
 		return false
@@ -78,13 +84,6 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	if hook.Tracing.SDKOwnsCall(ctx, interaction) {
 		return true
 	}
-	// An unsampled span is never exported, so it never owns a call.
-	if !s.SpanContext().IsSampled() {
-		return false
-	}
-	// Every processor that sees the span decides on it at its end, but it can own calls only if
-	// one of them accepts it now; otherwise the SDK sends its own span.
-	accepted := p.exports(s)
 	k := key(s.SpanContext())
 	otelCalls.mu.Lock()
 	defer otelCalls.mu.Unlock()
@@ -94,52 +93,37 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	}
 	c := otelCalls.m[k]
 	if c == nil {
-		// Bounded like the SDK's other maps: past the cap a span cannot own a call.
-		if len(otelCalls.m) >= max(hook.MaxMapEntries(), 1) {
-			hook.Report(rudderstackai.KindLimitReached, "MaxMapEntries (span owners)", errors.New("rudderstackai: MaxMapEntries (span owners) reached"))
-			return false
-		}
 		parentID := ""
 		if s.Parent().IsValid() {
 			parentID = s.Parent().SpanID().String()
 		}
-		c = &otelCall{seq: hook.Tracing.NextSpanSeq(), interaction: interaction, parentID: parentID, owner: &hook.OTelOwner{}, processors: map[*SpanProcessor]struct{}{}}
+		c = &otelCall{seq: hook.Tracing.NextSpanSeq(), interaction: interaction, parentID: parentID, processors: map[*SpanProcessor]struct{}{}}
 		otelCalls.m[k] = c
 		otelCalls.n.Store(int64(len(otelCalls.m)))
 	}
-	c.accepted = c.accepted || accepted
-	if _, in := c.processors[p]; !in {
-		c.processors[p] = struct{}{}
-		c.owner.Register()
-	}
+	c.processors[p] = struct{}{}
 	return false
 }
 
-// exports applies the exporter's filter to a span; a panicking filter rejects it.
-func (p *SpanProcessor) exports(s sdktrace.ReadOnlySpan) bool {
-	if p.options.Filter != nil {
-		return filterSpan(p.options.Filter, s)
-	}
-	return p.options.ExportAllSpans || IsAISpan(s)
-}
-
-// takeOTelCall removes p's registration of a span that ended and returns its owner, which p
-// must settle exactly once.
-func (p *SpanProcessor) takeOTelCall(k spanKey) *hook.OTelOwner {
+// takeOTelCall is p reaching the end of a registered span: it reports whether an SDK call
+// replaced it, and p's entry goes. The first end makes the decision final, so a span one
+// processor exported can never be adopted by a call whose span another processor then drops.
+func (p *SpanProcessor) takeOTelCall(k spanKey) (replaced bool) {
 	if otelCalls.n.Load() == 0 {
-		return nil
+		return false
 	}
 	otelCalls.mu.Lock()
 	defer otelCalls.mu.Unlock()
 	c := otelCalls.m[k]
 	if c == nil {
-		return nil
+		return false
 	}
 	if _, in := c.processors[p]; !in {
-		return nil
+		return false
 	}
+	c.ended = true
 	p.unregister(k, c)
-	return c.owner
+	return c.replaced
 }
 
 // unregister removes p from an entry, and the entry once no processor is left. Holds the lock.
@@ -151,20 +135,14 @@ func (p *SpanProcessor) unregister(k spanKey, c *otelCall) {
 	}
 }
 
-// forgetOTelCalls settles every span a shut-down processor registered and has not decided on:
-// it will not export them.
+// forgetOTelCalls drops every span a shut-down processor registered and has not ended.
 func forgetOTelCalls(p *SpanProcessor) {
-	var owners []*hook.OTelOwner
 	otelCalls.mu.Lock()
+	defer otelCalls.mu.Unlock()
 	for k, c := range otelCalls.m {
 		if _, in := c.processors[p]; in {
 			p.unregister(k, c)
-			owners = append(owners, c.owner)
 		}
-	}
-	otelCalls.mu.Unlock()
-	for _, o := range owners {
-		safe("tracing.owner", func() { o.Settle(false) })
 	}
 }
 
@@ -329,13 +307,9 @@ func (s taggedSpan) Attributes() []attribute.KeyValue { return s.attrs }
 // OnEnd records only spans of an open interaction and skips suppressed classifier spans.
 func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	defer p.finish(key(s.SpanContext()))
-	// An owner always settles once for this processor: unless the filter accepts the finished
-	// span (a panic, a closed processor or any failure counts as a rejection), it is not exported.
-	exported := false
-	owner := p.takeOTelCall(key(s.SpanContext()))
-	if owner != nil {
-		defer safe("tracing.owner", func() { owner.Settle(exported) })
-	}
+	// An SDK call that adopted this span's IDs sends the span instead: every processor drops it
+	// here, synchronously, whatever its filter says.
+	replaced := p.takeOTelCall(key(s.SpanContext()))
 	if p.closed.Load() {
 		return
 	}
@@ -354,20 +328,10 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 			}
 			s = taggedSpan{ReadOnlySpan: s, attrs: attrs}
 		}
-		if owner != nil {
-			exported = p.exports(s)
-		}
 		if p.options.ProductEvents {
 			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
 		}
-		switch {
-		case owner != nil:
-			// Exported by its one decision and outside the batch queue, so a full queue cannot
-			// drop a span that already settled as exported.
-			if exported {
-				p.exporter.exportDecided(s)
-			}
-		case !state.covered:
+		if !replaced && !state.covered {
 			p.inner.OnEnd(s)
 		}
 	})

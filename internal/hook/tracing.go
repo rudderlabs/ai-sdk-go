@@ -40,7 +40,18 @@ var Tracing struct {
 	NextSpanSeq func() uint64
 	// SDKOwnsCall reports whether the active SDK span in ctx is a model call of interaction.
 	SDKOwnsCall func(ctx context.Context, interaction any) bool
-	// OTelCallOwner returns the active, still-recording OTel model-call span in ctx that a span
-	// processor registered. Set by rudderotel.
-	OTelCallOwner func(ctx context.Context) (OTelCall, bool)
+	// AdoptOTelCall matches the active, still-recording OTel model-call span in ctx that a span
+	// processor registered, when it belongs to interaction and is nested inside the active SDK
+	// span with start order activeSeq (0 if none). The first call adopts its IDs and marks it
+	// replaced, so every processor drops it at its end; later calls inside are children.
+	// Set by rudderotel.
+	AdoptOTelCall func(ctx context.Context, interaction any, activeSeq uint64) (OTelCall, bool)
+}
+
+// OTelCall is an OTel model-call span an SDK call starts inside.
+type OTelCall struct {
+	TraceID, SpanID, ParentID string
+	// Adopted: this call is the first, and takes the span's trace, span and parent IDs; otherwise
+	// the call is a child of the span with SpanID.
+	Adopted bool
 }
