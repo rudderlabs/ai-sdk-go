@@ -796,8 +796,9 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 			i.seen[pair[0]+"\x00"+pair[1]] = nil
 		}
 		i.restorePending(snapshot)
-		i.pausedTotal = time.Duration(max(snapshot.TotalPausedMS, 0))*time.Millisecond +
-			max(now.Sub(time.UnixMilli(snapshot.PausedAt)), 0)
+		// The wait since the snapshot is this restore's pause: backdate may move time out of it.
+		i.lastPause = max(now.Sub(time.UnixMilli(snapshot.PausedAt)), 0)
+		i.pausedTotal = time.Duration(max(snapshot.TotalPausedMS, 0))*time.Millisecond + i.lastPause
 	}
 	i.fillTraceID(ctx)
 	return i

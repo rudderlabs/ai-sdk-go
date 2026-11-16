@@ -150,18 +150,25 @@ func (s *SessionEvents[T]) Next() bool {
 		return false
 	}
 	more := s.src.Next()
+	// Read before taking mu: a panic in the source's Current or Err reaches the caller with mu free.
+	var err error
+	var event T
+	if !more {
+		err = s.src.Err()
+	} else if s.tracker != nil {
+		event = s.src.Current()
+	}
 	s.mu.Lock()
 	if s.finished {
 		s.mu.Unlock()
 		return false
 	}
 	if !more {
-		s.finishLocked(s.src.Err())
+		s.finishLocked(err)
 		s.mu.Unlock()
 		return false
 	}
 	if s.tracker != nil {
-		event := s.src.Current()
 		contain(func() { s.tracker.observe(event.RawJSON()) })
 	}
 	s.mu.Unlock()
@@ -235,10 +242,12 @@ var settleEvents = map[string]bool{
 	"user.custom_tool_result": true, "user.tool_confirmation": true, "user.tool_result": true, "user.interrupt": true,
 }
 
-// sessionState is what a session's streams share: event IDs already read and the subagent threads
-// it started.
+// sessionState is what a session's streams share: event IDs already read, the subagent threads
+// it started, and a turn in the caller's interaction that ended with tools still open.
 type sessionState struct {
 	seen, children *boundedSet
+	mu             sync.Mutex // guards borrowed
+	borrowed       *borrowedTurn
 }
 
 func newSessionState() *sessionState {
@@ -283,6 +292,14 @@ type pausedTurn struct {
 	i        *rudderstackai.Interaction
 	tools    []*turnTool
 	blocking map[string]rudderstackai.PauseReason
+}
+
+// borrowedTurn is a turn in the caller's interaction whose stream ended before its recorded tools
+// settled: a later stream of the session in the same interaction settles them.
+type borrowedTurn struct {
+	i        *rudderstackai.Interaction
+	recorded *boundedMap[msTime]
+	blocking *boundedMap[rudderstackai.PauseReason]
 }
 
 // pausedTurns are turns paused at requires_action, by session ID: a later stream resumes them.
@@ -529,12 +546,9 @@ func (s *sessionTracker) close(err error) {
 	}
 	switch {
 	case err != nil:
-		errorType := kit.AppErrorType(err) // the app's own exception is app_error
-		status := rudderstackai.StatusError
-		if errorType == "cancelled" {
-			status = rudderstackai.StatusCancelled
-		}
-		s.finish(turnEnd{status: status, errorType: errorType}, msTime{})
+		// Ends as an error ends an answer: the app's own is app_error, a deadline is timeout.
+		errorType := kit.AppErrorType(err)
+		s.finish(turnEnd{status: kit.StatusForErrorType(errorType), errorType: errorType}, msTime{})
 	case t.waiting != "":
 		s.finish(turnEnd{status: rudderstackai.StatusPaused, pauseReason: t.waiting}, msTime{})
 	default:
@@ -579,7 +593,9 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 			t.borrowed = active
 		}
 		s.turn, s.runningAt = t, msTime{}
-		if t.continuation && t.borrowed == nil {
+		if t.borrowed != nil {
+			s.adoptBorrowed(t)
+		} else if t.continuation {
 			s.resume(t)
 		}
 	}
@@ -599,6 +615,22 @@ func (s *sessionTracker) hasPausedTurn() bool {
 	pausedTurns.Lock()
 	defer pausedTurns.Unlock()
 	return pausedTurns.m[s.cfg.sessionID] != nil
+}
+
+// adoptBorrowed takes over the tools an earlier stream of this session left open in the same
+// interaction.
+func (s *sessionTracker) adoptBorrowed(t *turn) {
+	s.shared.mu.Lock()
+	open := s.shared.borrowed
+	if open != nil && open.i == t.borrowed {
+		s.shared.borrowed = nil
+	} else {
+		open = nil
+	}
+	s.shared.mu.Unlock()
+	if open != nil {
+		t.recorded, t.blocking = open.recorded, open.blocking
+	}
 }
 
 // resume resumes this session's paused answer now, with the tools it was waiting on.
@@ -720,9 +752,13 @@ func (s *sessionTracker) settle(t *turn, id string, e map[string]any, at msTime,
 		tool.err = rudderstackai.Ptr(e["is_error"] == true)
 		return
 	}
-	// A tool already recorded into the answer (past the call cap).
+	// A tool already recorded into the answer (past the call cap, or in the caller's interaction).
+	i := t.interaction
+	if i == nil {
+		i = t.borrowed
+	}
 	startedAt, ok := t.recorded.get(id)
-	if !ok || t.interaction == nil {
+	if !ok || i == nil {
 		return
 	}
 	t.recorded.delete(id)
@@ -732,11 +768,11 @@ func (s *sessionTracker) settle(t *turn, id string, e map[string]any, at msTime,
 		duration = &d
 	}
 	if errorType != "" {
-		kit.RecordToolResult(t.interaction, id, rudderstackai.ToolResult{Error: rudderstackai.Ptr(true), ErrorType: errorType, Duration: duration}, false)
+		kit.RecordToolResult(i, id, rudderstackai.ToolResult{Error: rudderstackai.Ptr(true), ErrorType: errorType, Duration: duration}, false)
 		return
 	}
 	result := rudderstackai.ToolResult{Error: rudderstackai.Ptr(e["is_error"] == true), Result: e["content"], Duration: duration}
-	kit.RecordToolResult(t.interaction, id, result, true)
+	kit.RecordToolResult(i, id, result, true)
 }
 
 func (s *sessionTracker) sessionError(t *turn, e map[string]any) {
@@ -954,6 +990,12 @@ func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime) {
 	if t.borrowed != nil && i == t.borrowed {
 		kit.KeepAnswer(i, t.answer)
 		kit.HintStatus(i, end.status, end.errorType, end.pauseReason)
+		// A reconnect in the same interaction settles the tools still open.
+		if t.recorded.len() > 0 {
+			s.shared.mu.Lock()
+			s.shared.borrowed = &borrowedTurn{i: i, recorded: t.recorded, blocking: t.blocking}
+			s.shared.mu.Unlock()
+		}
 		return
 	}
 	if end.status != rudderstackai.StatusPaused {
