@@ -283,6 +283,9 @@ func TestLoad(t *testing.T) {
 					} else {
 						runtime.Gosched()
 					}
+					if failed.Load() { // another worker failed while this one waited
+						return
+					}
 					n := seq.Add(1)
 					id := turn(ctx, n)
 					interactions.Add(1)
