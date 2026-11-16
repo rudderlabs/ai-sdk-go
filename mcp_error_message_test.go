@@ -108,13 +108,17 @@ func TestMCPErrorMessageCancelledOutcomes(t *testing.T) {
 
 func TestMCPErrorMessageCapture(t *testing.T) {
 	for _, tc := range []struct {
-		name                      string
-		capture, success, rewrite bool
+		name                               string
+		capture, success, rewrite, observe bool
 	}{
 		{name: "capture", capture: true},
 		{name: "default off"},
 		{name: "success", capture: true, success: true},
 		{name: "later middleware", capture: true, rewrite: true},
+		{name: "observed", capture: true, observe: true},
+		{name: "observed default off", observe: true},
+		{name: "observed success", capture: true, success: true, observe: true},
+		{name: "observed later middleware", capture: true, rewrite: true, observe: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setupAI(t, WithCaptureContent(false))
@@ -134,7 +138,7 @@ func TestMCPErrorMessageCapture(t *testing.T) {
 					}
 				})
 			}
-			cs := connect(t, s, "2025-06-18", nil)
+			cs := connectMaybeObserved(t, s, tc.observe)
 			result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "lookup"})
 			if err != nil {
 				t.Fatal(err)
@@ -145,7 +149,7 @@ func TestMCPErrorMessageCapture(t *testing.T) {
 			if tc.rewrite && result.Content[0].(*mcp.TextContent).Text != "client-visible failure" {
 				t.Fatalf("middleware did not rewrite result: %v", result)
 			}
-			p := r.props(t, "mcp_tool_called")
+			p := r.wait(t, "mcp_tool_called", 1)[0].Properties
 			wantStatus := "error"
 			if tc.success {
 				wantStatus = "success"
@@ -153,8 +157,13 @@ func TestMCPErrorMessageCapture(t *testing.T) {
 			if p["tool_status"] != wantStatus {
 				t.Errorf("status=%v", p)
 			}
-			if _, ok := p["error_message"]; ok {
-				t.Errorf("unexpected error_message: %v", p)
+			want := ""
+			if tc.capture && tc.observe && !tc.success {
+				// The text the client received, not what the handler returned.
+				want = result.Content[0].(*mcp.TextContent).Text
+			}
+			if got, _ := p["error_message"].(string); got != want {
+				t.Errorf("error_message=%q, want %q: %v", got, want, p)
 			}
 		})
 	}
@@ -162,10 +171,12 @@ func TestMCPErrorMessageCapture(t *testing.T) {
 
 func TestMCPErrorMessageProtocolErrors(t *testing.T) {
 	for _, tc := range []struct {
-		name             string
-		capture, rewrite bool
+		name                      string
+		capture, rewrite, observe bool
 	}{
 		{name: "off"}, {name: "on", capture: true}, {name: "later middleware", capture: true, rewrite: true},
+		{name: "observed off", observe: true}, {name: "observed", capture: true, observe: true},
+		{name: "observed later middleware", capture: true, rewrite: true, observe: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			setupAI(t)
@@ -191,7 +202,7 @@ func TestMCPErrorMessageProtocolErrors(t *testing.T) {
 					}
 				})
 			}
-			cs := connect(t, s, "2025-06-18", nil)
+			cs := connectMaybeObserved(t, s, tc.observe)
 			ctx := context.Background()
 			_, te := cs.CallTool(ctx, &mcp.CallToolParams{Name: "lookup"})
 			_, re := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "db://x"})
@@ -218,12 +229,18 @@ func TestMCPErrorMessageProtocolErrors(t *testing.T) {
 				if got := maskBuiltIn(wire.Message); got != want {
 					t.Errorf("wire message=%q, want %q", got, want)
 				}
-				p := r.props(t, failure.event)
+				p := r.wait(t, failure.event, 1)[0].Properties
 				if p["tool_status"] != "error" {
 					t.Errorf("status=%v", p)
 				}
-				if _, ok := p["error_message"]; ok {
-					t.Errorf("unexpected error_message: %v", p)
+				if !tc.capture || !tc.observe {
+					want = ""
+				}
+				if got, _ := p["error_message"].(string); got != want {
+					t.Errorf("error_message=%q, want %q: %v", got, want, p)
+				}
+				if strings.Contains(mustJSON(p), "secret stack") {
+					t.Errorf("error.data sent: %v", p)
 				}
 			}
 		})

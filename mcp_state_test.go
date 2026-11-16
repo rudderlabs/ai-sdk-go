@@ -131,6 +131,8 @@ func TestRewrapKeepsState(t *testing.T) {
 // grow memory.
 func TestWrappedServersAreReleased(t *testing.T) {
 	freshState(t)
+	// Servers of earlier tests may still be live; count only this test's.
+	before := instances.size()
 	r := newRecorder(t)
 	const n = 200
 	for i := range n {
@@ -139,11 +141,11 @@ func TestWrappedServersAreReleased(t *testing.T) {
 		}
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for instances.size() >= n/2 && time.Now().Before(deadline) {
+	for instances.size()-before >= n/2 && time.Now().Before(deadline) {
 		runtime.GC()
 		time.Sleep(10 * time.Millisecond)
 	}
-	if got := instances.size(); got >= n/2 {
+	if got := instances.size() - before; got >= n/2 {
 		t.Errorf("%d of %d wrapped servers still held", got, n)
 	}
 }

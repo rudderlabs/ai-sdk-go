@@ -23,7 +23,7 @@ func maskedErrorMessage(t *testing.T, s string) string {
 	return out
 }
 
-func testMCPGoErrorMessageCapture(t *testing.T, connect func(*testing.T, *server.MCPServer) *sdk.ClientSession) {
+func testMCPGoErrorMessageCapture(t *testing.T, connect func(*testing.T, *server.MCPServer) *sdk.ClientSession, observed bool) {
 	for _, tc := range []struct {
 		name             string
 		capture, success bool
@@ -47,7 +47,7 @@ func testMCPGoErrorMessageCapture(t *testing.T, connect func(*testing.T, *server
 			if result.IsError == tc.success {
 				t.Fatalf("unexpected result: %v", result)
 			}
-			p := r.props(t, "mcp_tool_called")
+			p := waitProps(t, r, "mcp_tool_called")
 			wantStatus := "error"
 			if tc.success {
 				wantStatus = "success"
@@ -55,14 +55,18 @@ func testMCPGoErrorMessageCapture(t *testing.T, connect func(*testing.T, *server
 			if p["tool_status"] != wantStatus {
 				t.Errorf("status=%v", p)
 			}
-			if _, ok := p["error_message"]; ok {
-				t.Errorf("unexpected error_message: %v", p)
+			want := ""
+			if tc.capture && observed && !tc.success {
+				want = "Warehouse timed out for [email]"
+			}
+			if got, _ := p["error_message"].(string); got != want {
+				t.Errorf("error_message=%q, want %q: %v", got, want, p)
 			}
 		})
 	}
 }
 
-func testMCPGoErrorMessageProtocolErrors(t *testing.T, connect func(*testing.T, *server.MCPServer) *sdk.ClientSession) {
+func testMCPGoErrorMessageProtocolErrors(t *testing.T, connect func(*testing.T, *server.MCPServer) *sdk.ClientSession, observed bool) {
 	for _, capture := range []bool{false, true} {
 		t.Run(map[bool]string{false: "off", true: "on"}[capture], func(t *testing.T) {
 			if err := rudderstackai.Configure(rudderstackai.WithCaptureContent(false)); err != nil {
@@ -102,12 +106,16 @@ func testMCPGoErrorMessageProtocolErrors(t *testing.T, connect func(*testing.T, 
 				if got := maskedErrorMessage(t, wire.Message); got != tc.want {
 					t.Errorf("wire message=%q, want %q", got, tc.want)
 				}
-				p := r.props(t, tc.event)
+				p := waitProps(t, r, tc.event)
 				if p["tool_status"] != "error" {
 					t.Errorf("status=%v", p)
 				}
-				if _, ok := p["error_message"]; ok {
-					t.Errorf("unexpected error_message: %v", p)
+				want := ""
+				if capture && observed {
+					want = tc.want
+				}
+				if got, _ := p["error_message"].(string); got != want {
+					t.Errorf("error_message=%q, want %q: %v", got, want, p)
 				}
 			}
 		})
@@ -116,19 +124,26 @@ func testMCPGoErrorMessageProtocolErrors(t *testing.T, connect func(*testing.T, 
 
 func TestMCPGoErrorMessage(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		connect func(*testing.T, *server.MCPServer) *sdk.ClientSession
+		name     string
+		connect  func(*testing.T, *server.MCPServer) *sdk.ClientSession
+		observed bool
 	}{
 		{"stdio", func(t *testing.T, s *server.MCPServer) *sdk.ClientSession {
 			return connectStdio(t, s, "2025-06-18", nil)
-		}},
+		}, false},
 		{"http", func(t *testing.T, s *server.MCPServer) *sdk.ClientSession {
 			return connectHTTP(t, s, "2025-06-18", nil)
-		}},
+		}, false},
+		{"stdio observed", func(t *testing.T, s *server.MCPServer) *sdk.ClientSession {
+			return connectStdioObserved(t, s)
+		}, true},
+		{"http observed", func(t *testing.T, s *server.MCPServer) *sdk.ClientSession {
+			return connectHTTPObserved(t, s)
+		}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Run("capture", func(t *testing.T) { testMCPGoErrorMessageCapture(t, tc.connect) })
-			t.Run("protocol", func(t *testing.T) { testMCPGoErrorMessageProtocolErrors(t, tc.connect) })
+			t.Run("capture", func(t *testing.T) { testMCPGoErrorMessageCapture(t, tc.connect, tc.observed) })
+			t.Run("protocol", func(t *testing.T) { testMCPGoErrorMessageProtocolErrors(t, tc.connect, tc.observed) })
 			t.Run("success", func(t *testing.T) { testMCPGoErrorMessageSuccessfulReadsAndPrompts(t, tc.connect) })
 			t.Run("cancel", func(t *testing.T) {
 				s := server.NewMCPServer("cancel-errors-mcpgo", "1", server.WithToolCapabilities(true))

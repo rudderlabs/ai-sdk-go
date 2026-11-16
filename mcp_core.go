@@ -266,6 +266,11 @@ type reqCtx struct {
 	meta              map[string]any
 	start             time.Time
 	tool              *toolState
+	// responses, rawID and held send a failed request's events once its final response is
+	// written, with error_message from that response.
+	responses *mcpbridge.Responses
+	rawID     any
+	held      *heldEvents
 }
 
 // toolState is one tools/call between its start and its end.
@@ -390,7 +395,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	put(base, "trace_id", traceID)
 	rc := &reqCtx{
 		w: w, st: st, opts: opts, base: base, who: who{id.UserID, id.AnonymousID}, identity: id,
-		client: seenClient, requestID: safeRequestID(r.RequestID), http: r.HTTP, meta: map[string]any{}, start: time.Now(),
+		client: seenClient, requestID: safeRequestID(r.RequestID), rawID: r.RequestID, responses: r.Responses, http: r.HTTP, meta: map[string]any{}, start: time.Now(),
 		initializeClient: r.InitializeClient, received: received, sequence: sequence, registeredTools: r.RegisteredTools, registeredPrompts: r.RegisteredPrompts,
 	}
 	// A copy: the SDK may remove the protocol keys from _meta while it handles the request.
@@ -865,7 +870,79 @@ func (rc *reqCtx) finish(event, nameKey, name, status string, extra map[string]a
 	for k, v := range extra {
 		p[k] = v
 	}
-	emit(rc.opts.Analytics, event, rc.who, p)
+	rc.send(event, p, func() { emit(rc.opts.Analytics, event, rc.who, p) })
+}
+
+// heldEvents are a failed request's event and the request's later events, sent in order once
+// the final response for its id is written (or none can follow).
+type heldEvents struct {
+	mu    sync.Mutex
+	props map[string]any
+	tool  bool
+	mask  func(string) (string, bool)
+	sends []func()
+	done  bool
+	sent  chan struct{} // closed once flush has sent the held events
+}
+
+// add queues send behind the held events. Once flushing has begun it waits until they are sent
+// and returns false, so the caller sends afterwards and the order holds.
+func (h *heldEvents) add(send func()) bool {
+	h.mu.Lock()
+	if !h.done {
+		h.sends = append(h.sends, send)
+		h.mu.Unlock()
+		return true
+	}
+	h.mu.Unlock()
+	<-h.sent
+	return false
+}
+
+// flush sets error_message from the response the client received: its JSON-RPC error, or a
+// tools/call isError result. Without a response the events go out without it.
+func (h *heldEvents) flush(response map[string]any) {
+	h.mu.Lock()
+	h.done = true
+	sends := h.sends
+	h.sends = nil
+	h.mu.Unlock()
+	if response != nil {
+		safely(func() {
+			source := map[string]any{}
+			if e, ok := response["error"].(map[string]any); ok {
+				source["error"] = e
+			} else if r, ok := response["result"].(map[string]any); ok && h.tool {
+				source["result"] = r
+			}
+			if message := errorMessage(source, h.mask); message != "" {
+				h.props["error_message"] = message
+			}
+		})
+	}
+	defer close(h.sent)
+	for _, send := range sends {
+		safely(send)
+	}
+}
+
+var failureEvents = set("mcp_tool_called", "mcp_resource_read", "mcp_prompt_used")
+
+// send emits now, or holds a failed request's event (and those after it) for its response when
+// content capture is on and the application observes responses.
+func (rc *reqCtx) send(event string, p map[string]any, send func()) {
+	if h := rc.held; h != nil && h.add(send) {
+		return
+	}
+	if rc.responses != nil && rc.opts.CaptureContent && failureEvents[event] &&
+		p["tool_status"] == "error" && p["error_type"] != "cancelled" {
+		h := &heldEvents{props: p, tool: event == "mcp_tool_called", mask: rc.opts.mask, sends: []func(){send}, sent: make(chan struct{})}
+		if rc.responses.Await(rc.rawID, h.flush) {
+			rc.held = h
+			return
+		}
+	}
+	send()
 }
 
 // toolResultValue is what rules see of a result: structuredContent, else a single text block
@@ -963,7 +1040,8 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 	p["tool_name"] = rc.toolName
 	p["tool_status"] = status
 	rates := cfg().sampleRates
-	emitRates(rc.opts.Analytics, rule.Event, rc.who, fitToolEventProperties(rule.Event, p, custom, rates), rates)
+	fitted := fitToolEventProperties(rule.Event, p, custom, rates)
+	rc.send(rule.Event, fitted, func() { emitRates(rc.opts.Analytics, rule.Event, rc.who, fitted, rates) })
 }
 
 // inputKey scopes a pending elicitation to its caller and session or interaction, so another
@@ -1338,8 +1416,7 @@ var protocolVersionRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 func cleanClient(client *mcpbridge.Client) *mcpbridge.Client { return mcpbridge.CleanClient(client) }
 
-// errorMessage is a pure helper reserved for SDK-6893, when a final response is observable.
-// It reads an explicit {result} or {error} source as described by
+// errorMessage reads an explicit {result} or {error} source as described by
 // spec/fixtures/mcp-error-message-v0.1.json: mask before capping,
 // and withhold empty text, failed masking and anything still matching a built-in pattern.
 func errorMessage(failure map[string]any, mask func(string) (string, bool)) string {

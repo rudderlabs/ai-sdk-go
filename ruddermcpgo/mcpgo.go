@@ -76,9 +76,9 @@ type Options struct {
 	// at initialize receipt time; later changes do not affect existing entries. Zero means 24 hours.
 	ClientSeenWindow time.Duration
 	// CaptureContent sends masked call_reason and capability_detail capped at 200 characters,
-	// and feedback_text capped at 2000. Off by default. The Go SDK does not yet send
-	// error_message because neither adapter observes the final JSON-RPC response.
-	// Tracked in SDK-6893: https://linear.app/rudderstack/issue/SDK-6893/mcp-ai-events-error-message-from-the-final-response-in-python-mcp-2x
+	// and feedback_text capped at 2000. Off by default. Failed requests also carry error_message
+	// (masked, 200 characters) when the final response is observed with ObserveHTTP or
+	// ObserveStdio.
 	CaptureContent bool
 	// CapabilityRequests registers the request_capability tool, recorded as
 	// mcp_capability_requested. Nil (the default) leaves it out.
@@ -452,7 +452,7 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if method == "tools/call" {
 		identityCtx = mcpbridge.WithToolCall(ctx, env.Params.Name, env.Params.Arguments)
 	}
-	r := mcpbridge.Request{Ctx: identityCtx, Meta: env.Params.Meta, RequestID: id, HTTP: len(header) > 0, UserAgent: header.Get("User-Agent")}
+	r := mcpbridge.Request{Ctx: identityCtx, Meta: env.Params.Meta, RequestID: id, HTTP: len(header) > 0, UserAgent: header.Get("User-Agent"), Responses: mcpbridge.ResponsesFrom(ctx)}
 	session := server.ClientSessionFromContext(ctx)
 	// Read per request: names come from the registry as it is now, never from earlier lists.
 	if (method == "tools/call" || method == "tools/list") && t.tools != nil {

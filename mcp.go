@@ -229,6 +229,7 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 		r.UserAgent = extra.Header.Get("User-Agent")
 	}
 	r.SessionID = sessionIDOf(ss, extra)
+	r.Responses = mcpbridge.ResponsesFrom(ctx)
 	var info sessionInfo
 	if ss != nil {
 		info, _ = sessions.get(ss)

@@ -11,6 +11,7 @@ Both send the same events with the same options, defaults and properties. `rudde
 
 - [Setup](#setup)
 - [Options](#options)
+- [Error messages: observing the final response](#error-messages-observing-the-final-response)
 - [Events](#events)
 - [Protocol revisions](#protocol-revisions)
 - [Identity](#identity)
@@ -67,6 +68,35 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 
 `ruddermcpgo.Options` has the same fields as `rudderstackai.Options`, except that `Identify`, `ClientInfo` and `ClientInfoFallback` receive only the context and `ClassifyToolError` receives mcp-go's `*mcp.CallToolResult`: mcp-go verifies no bearer tokens, so read your own authentication from it. `WrapServer` uses mcp-go's own extension points: server hooks (`GetHooks`, or `WithHooks` when the server has none) and a tool handler middleware (`Use`). When `RequestContext.Enabled` is true, it removes `request_context` from the arguments in a hook, before input validation and your handler, and adds it to the tool schemas of the `tools/list` result. With `CapabilityRequests`, it registers `request_capability` as a tool (with a schema that accepts any arguments, so input validation never rejects a capability outside the list; `tools/list` shows the full one). Call it after `NewMCPServer` and before serving.
 
+## Error messages: observing the final response
+
+With `CaptureContent`, a failed `mcp_tool_called`, `mcp_resource_read` or `mcp_prompt_used` can carry `error_message`: the JSON-RPC error message, or the text content of a tool result with `isError: true`, masked, capped at 200 characters and withheld if it still matches a sensitive pattern ([fixture](../spec/fixtures/mcp-error-message-v0.1.json)). It is taken only from the final response written to the client, matched by request id, because middleware added after the wrapper (go-sdk `AddReceivingMiddleware`) or mcp-go `OnAfterCallTool` hooks can still replace the error or result. Neither library has a response hook, so you opt in by wrapping the transport output; **without it, `error_message` is left out** and everything else is unchanged.
+
+| Library | Wrap | API |
+| --- | --- | --- |
+| go-sdk, `Server.Run` / `Server.Connect` with `*mcp.StdioTransport` or `*mcp.IOTransport` | the context and transport | `rudderstackai.ObserveMCPTransport(ctx context.Context, t mcp.Transport) (context.Context, mcp.Transport)` |
+| mcp-go, `server.NewStreamableHTTPServer` | the HTTP handler | `ruddermcpgo.ObserveHTTP(h http.Handler) http.Handler` |
+| mcp-go, `StdioServer.Listen` | the context, input and output | `ruddermcpgo.ObserveStdio(ctx context.Context, r io.Reader, w io.Writer) (context.Context, io.Reader, io.Writer)` |
+
+```go
+// go-sdk over stdio: pass the returned context to Run or Connect
+ctx, t := rudderstackai.ObserveMCPTransport(ctx, &mcp.StdioTransport{})
+err := server.Run(ctx, t)
+
+// mcp-go over streamable HTTP
+s := server.NewMCPServer("rudderstack-mcp", version, opts...)
+if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{Analytics: client, CaptureContent: true}); err != nil {
+	log.Fatal(err)
+}
+http.Handle("/mcp", ruddermcpgo.ObserveHTTP(server.NewStreamableHTTPServer(s)))
+
+// mcp-go over stdio
+ctx, in, out := ruddermcpgo.ObserveStdio(ctx, os.Stdin, os.Stdout)
+err := server.NewStdioServer(s).Listen(ctx, in, out)
+```
+
+Messages pass through unchanged, and the libraries' own connections and protocol handling stay in place: the go-sdk wrapper observes the transport's reader and writer, not its connection. A failed request's event, and any declared tool event after it, is held until its response is written. **The hold lasts at most 10 seconds: if no response is written by then, the event goes out without `error_message`**, as it does when the connection, the context or the HTTP request ends first. If a client reuses a request id (MCP forbids it) before the earlier response is written, the earlier event also goes out without it; later matches are not guaranteed for such a client. Cancelled requests never carry it. `ObserveHTTP` reads JSON responses and SSE `data:` frames of the request it wraps (mcp-go's legacy SSE transport answers on another stream, so it gets no `error_message`); a response over 1 MiB is not read. The go-sdk's `StreamableHTTPHandler` builds its transports internally, so go-sdk HTTP servers cannot opt in yet ([SDK-6904](https://linear.app/rudderstack/issue/SDK-6904/mcp-ai-events-error-message-for-go-sdk-streamablehttphandler-apps)). On the go-sdk, other transports (in-memory, SSE, streamable HTTP, custom) are returned unchanged.
+
 ## Options
 
 | Field                | Default    | What it does                                                                                                                                                                      |
@@ -79,7 +109,7 @@ if err := ruddermcpgo.WrapServer(s, ruddermcpgo.Options{
 | `EventRules`         | none       | Declared tool events. Names starting with `ai_` or `mcp_` are rejected.                                                                                                          |
 | `RequestContext`     | off        | `Enabled: true` injects `request_context`; `Intents` and `DisableUserSentiment` apply only when enabled.                                                                          |
 | `ClientSeenWindow`   | 24 hours   | Window in which a (client, OAuth client, user) is reported once by `mcp_client_seen`, per server name and process.                                                                                               |
-| `CaptureContent`     | off        | Sends masked `call_reason` and `capability_detail` capped at 200 characters, and `feedback_text` capped at 2,000.                                                                                                |
+| `CaptureContent`     | off        | Sends masked `call_reason` and `capability_detail` capped at 200 characters, `feedback_text` capped at 2,000, and `error_message` capped at 200 when the [final response is observed](#error-messages-observing-the-final-response).                                                                                                |
 | `CapabilityRequests` | off (nil)  | Deprecated: use `FeedbackRequests`. Existing `request_capability` behavior remains available.                                                                         |
 | `FeedbackRequests` | off (nil) | `&FeedbackRequestOptions{Capabilities: []string{"bulk_export"}}` adds `submit_feedback`. Cannot be combined with `CapabilityRequests`. |
 | `MCPEvents`          | off        | Enables the experimental [MCP Events](#mcp-events-experimental) helpers.                                                                                                          |
@@ -107,7 +137,7 @@ Every event is a track call, within the 30,000-byte [properties budget](events.m
 
 How the `mcp_tool_called` signals are derived:
 
-- **`error_message`**: the Go SDK does not yet send this property because neither adapter observes the final JSON-RPC response. Later middleware can replace the error after the SDK records completion. Tracked in [SDK-6893](https://linear.app/rudderstack/issue/SDK-6893/mcp-ai-events-error-message-from-the-final-response-in-python-mcp-2x). The shared schema, catalog and [masking fixture](../spec/fixtures/mcp-error-message-v0.1.json) remain for parity and custom properties.
+- **`error_message`**: sent with `CaptureContent` only when the application observes the final response; see [Error messages](#error-messages-observing-the-final-response).
 - **`tool_status` and `error_type`**: a result with `IsError` is `error` with `is_error_result: true` (`mcp.AddTool` turns a handler error and an argument validation failure into one); its `error_type` is `invalid_request` when arguments failed the schema, else `api_error`. A returned error maps by JSON-RPC code: parse error, invalid request, method not found, invalid params, header mismatch (-32020), missing client capability (-32021) and unsupported protocol version (-32022) are `invalid_request`, request timeout (-32001) `timeout`, connection closed (-32000) `connection_error`, URL elicitation required (-32042) `auth_error`. Other errors map as in the Node.js and Python SDKs: a context deadline or network timeout is `timeout`, a refused or reset connection `connection_error`, then by HTTP status (`StatusCode()` or `HTTPStatusCode()`: 429 `rate_limit`, 408 and 504 `timeout`, 401 and 403 `auth_error`, 400 and 422 `invalid_request`) or type name (`ratelimit`, `throttling`, `timeout`, `cancel`, `authentication`, `accessdenied`, `badrequest`, `connection`, ...), following wrapped errors; anything else is `api_error`. A call the client cancels (`notifications/cancelled`) is `cancelled` with `time_to_cancel_ms` instead of `duration_ms`; a call that completed before the cancellation reached it stays a success.
 - **`invalid_arguments`**: on a failed call, the names of the arguments that fail the tool's input schema one level deep (missing required, wrong `type`, not in `enum`, not `const`, unexpected when `additionalProperties: false`). Needs the schema from a `tools/list` this process answered.
 - **`call_index`, `ms_since_previous_call` and `retry_count`**: counted per server name and process, additionally scoped by the identified account and user (missing values are empty strings), per `mcp_session_id`, else per caller-sent `interaction_id`, else per stdio or in-memory connection. `call_index` starts at 0; `ms_since_previous_call` is the gap since the previous call in the scope ended; `retry_count` counts earlier calls of the same tool with the same arguments (a SHA-256 hash of their canonical JSON, kept in memory). Without any scope (a stateless HTTP request with a minted `interaction_id`) the three are left out.
@@ -142,7 +172,7 @@ On stateless HTTP or servers built per request, client name and version are reme
 
 Remembered details fill absent client details on non-initialize requests, after initialize params, per-request `_meta` clientInfo, connection/session state and `ClientInfo`. Expiry is fixed at initialize receipt time plus the `ClientSeenWindow` in force then (default 24 hours); reads do not refresh it, and later window changes or rewrapping neither extend nor shorten existing entries. Go's zero `ClientSeenWindow` retains the 24-hour default. Remembering has no opt-out. Entries are bounded to 10,000 per server name, with the least recently stored evicted. Only name and version are remembered, never protocol version or capabilities. One user running two clients under the same OAuth client can be attributed to whichever initialized last. `mcp_session_id` is still absent on stateless endpoints.
 
-For a tool result with `isError: true`, `ClassifyToolError` may return `rate_limit`, `timeout`, `cancelled`, `denied`, `auth_error`, `invalid_request`, `connection_error` or `api_error`. Other values, an empty return or a panic are ignored. The default reads the first numeric HTTP status from `result._meta["com.rudderstack/http_status"]`, `structuredContent.status`, then `structuredContent.statusCode`: 401 → `auth_error`, 403 → `denied`, 408/504 → `timeout`, 429 → `rate_limit`, other 4xx → `invalid_request`, 5xx → `api_error`. Without a mapped status, schema-invalid arguments use `invalid_request`, otherwise `api_error`. Schema-invalid argument names remain in `invalid_arguments` regardless of the classifier or HTTP status's chosen `error_type`. Error text is not yet sent by the Go SDK; see `error_message` above. Retry counting is unchanged: repeats count regardless of success or failure.
+For a tool result with `isError: true`, `ClassifyToolError` may return `rate_limit`, `timeout`, `cancelled`, `denied`, `auth_error`, `invalid_request`, `connection_error` or `api_error`. Other values, an empty return or a panic are ignored. The default reads the first numeric HTTP status from `result._meta["com.rudderstack/http_status"]`, `structuredContent.status`, then `structuredContent.statusCode`: 401 → `auth_error`, 403 → `denied`, 408/504 → `timeout`, 429 → `rate_limit`, other 4xx → `invalid_request`, 5xx → `api_error`. Without a mapped status, schema-invalid arguments use `invalid_request`, otherwise `api_error`. Schema-invalid argument names remain in `invalid_arguments` regardless of the classifier or HTTP status's chosen `error_type`. Error text is sent as `error_message` only when the [final response is observed](#error-messages-observing-the-final-response). Retry counting is unchanged: repeats count regardless of success or failure.
 
 ## Auth providers
 
