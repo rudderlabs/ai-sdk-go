@@ -3,7 +3,10 @@
 // adds over the same call without the SDK. With -budget, it fails when a scenario's extra
 // allocations per op exceed the ceiling in that file.
 //
-//	go test -run '^$' -bench Overhead -benchmem . ./rudderopenai | go run ./internal/benchreport -budget internal/benchreport/alloc_budget.json
+//	go test -run '^$' -bench Overhead -benchmem -count 5 . ./rudderopenai > go.txt
+//	go run ./internal/benchreport -budget internal/benchreport/alloc_budget.json < go.txt
+//
+// With -count, each metric is the median of the runs, which alternate baseline and sdk.
 package main
 
 import (
@@ -52,7 +55,7 @@ var line = regexp.MustCompile(`^BenchmarkOverhead/(.+)/(baseline|sdk)(?:-\d+)?\s
 
 // parse reads benchmark output: the scenarios in first-seen order, and the cpu line.
 func parse(r io.Reader) (order []string, sides map[string]map[string]side, cpu string, err error) {
-	sides = map[string]map[string]side{}
+	runs := map[string]map[string][]side{}
 	sc := bufio.NewScanner(r)
 	for sc.Scan() {
 		text := sc.Text()
@@ -87,13 +90,42 @@ func parse(r io.Reader) (order []string, sides map[string]map[string]side, cpu s
 				s.allocs = v
 			}
 		}
-		if sides[m[1]] == nil {
-			sides[m[1]] = map[string]side{}
+		if runs[m[1]] == nil {
+			runs[m[1]] = map[string][]side{}
 			order = append(order, m[1])
 		}
-		sides[m[1]][m[2]] = s
+		runs[m[1]][m[2]] = append(runs[m[1]][m[2]], s)
+	}
+	sides = map[string]map[string]side{}
+	for id, bySide := range runs {
+		sides[id] = map[string]side{}
+		for name, list := range bySide {
+			sides[id][name] = medianSide(list)
+		}
 	}
 	return order, sides, cpu, sc.Err()
+}
+
+// medianSide is the median of each metric over the runs of one side (go test -count n runs the
+// sub-benchmarks n times, alternating baseline and sdk).
+func medianSide(list []side) side {
+	med := func(get func(side) float64) float64 {
+		vs := make([]float64, len(list))
+		for i, s := range list {
+			vs[i] = get(s)
+		}
+		sort.Float64s(vs)
+		return vs[len(vs)/2]
+	}
+	return side{
+		ns:     med(func(s side) float64 { return s.ns }),
+		cpu:    med(func(s side) float64 { return s.cpu }),
+		gc:     med(func(s side) float64 { return s.gc }),
+		p50:    med(func(s side) float64 { return s.p50 }),
+		p99:    med(func(s side) float64 { return s.p99 }),
+		bytes:  med(func(s side) float64 { return s.bytes }),
+		allocs: med(func(s side) float64 { return s.allocs }),
+	}
 }
 
 func round(v float64, digits int) float64 {

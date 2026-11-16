@@ -50,7 +50,8 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p bench-results
-          go test -run '^$' -bench Overhead -benchmem . ./rudderopenai | tee bench-results/go.txt
+          # Five runs alternate baseline and sdk; the report takes the median of each metric.
+          go test -run '^$' -bench Overhead -benchmem -count 5 . ./rudderopenai | tee bench-results/go.txt
           go run ./internal/benchreport -out bench-results/go.json -budget internal/benchreport/alloc_budget.json < bench-results/go.txt
 
       - name: Upload results

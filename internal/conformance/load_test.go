@@ -45,10 +45,12 @@ func envOr(name string, def float64) float64 {
 	return def
 }
 
-// countingPlane counts events by name; failing makes it answer every batch with HTTP 500.
+// countingPlane counts events by name, and answers ended by Shutdown; failing makes it answer
+// every batch with HTTP 500.
 type countingPlane struct {
 	mu       sync.Mutex
 	counts   map[string]int
+	shutdown int
 	rejected int
 	failing  atomic.Bool
 }
@@ -69,13 +71,19 @@ func (p *countingPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var batch struct {
 		Batch []struct {
-			Event string `json:"event"`
+			Event      string `json:"event"`
+			Properties struct {
+				EndReason string `json:"end_reason"`
+			} `json:"properties"`
 		} `json:"batch"`
 	}
 	_ = json.Unmarshal(body, &batch)
 	p.mu.Lock()
 	for _, m := range batch.Batch {
 		p.counts[m.Event]++
+		if m.Properties.EndReason == "shutdown" {
+			p.shutdown++
+		}
 	}
 	p.mu.Unlock()
 	_, _ = w.Write([]byte("{}"))
@@ -242,17 +250,36 @@ func TestLoad(t *testing.T) {
 	phase := func(seconds float64, warmup func()) float64 {
 		start := time.Now()
 		until := start.Add(time.Duration(seconds * float64(time.Second)))
-		var next atomic.Int64 // slot number on a shared schedule of rate starts per second
+		// Each worker takes the next slot of a shared schedule of rate starts per second. A late
+		// worker starts from now instead of catching up, so a busy machine lowers the rate rather
+		// than sending a burst bigger than the client can take.
+		var slotMu sync.Mutex
+		next := start
+		take := func() time.Time {
+			slotMu.Lock()
+			defer slotMu.Unlock()
+			if now := time.Now(); next.Before(now) {
+				next = now
+			}
+			slot := next
+			next = next.Add(time.Duration(float64(time.Second) / rate))
+			return slot
+		}
 		var warmed sync.Once
+		var failed atomic.Bool // the first failure stops every worker at its next slot
 		var wg sync.WaitGroup
 		for _, cs := range sessions {
 			wg.Go(func() {
-				for {
-					slot := start.Add(time.Duration(float64(next.Add(1)-1) / rate * float64(time.Second)))
+				for !failed.Load() {
+					slot := take()
 					if !slot.Before(until) {
 						return
 					}
-					time.Sleep(time.Until(slot))
+					if wait := time.Until(slot); wait > 0 {
+						time.Sleep(wait)
+					} else {
+						runtime.Gosched()
+					}
 					n := seq.Add(1)
 					id := turn(ctx, n)
 					interactions.Add(1)
@@ -262,6 +289,7 @@ func TestLoad(t *testing.T) {
 					}
 					if _, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "lookup_order", Arguments: map[string]any{"order": fmt.Sprintf("A-%d", n%100)}, Meta: meta}); err != nil {
 						t.Error(err)
+						failed.Store(true)
 						return
 					}
 					mcpCalls.Add(1)
@@ -289,6 +317,8 @@ func TestLoad(t *testing.T) {
 	phase2 := phase(seconds/2, nil)
 	plane.failing.Store(false)
 	recovered := rudderstackai.Flush(ctx)
+	// Shutdown ends every interaction still open as incomplete with end_reason shutdown: none may be.
+	rudderstackai.Shutdown(ctx)
 	for _, cs := range sessions {
 		_ = cs.Close()
 	}
@@ -315,6 +345,9 @@ func TestLoad(t *testing.T) {
 	}
 	if plane.rejected == 0 {
 		t.Error("phase 2 never reached a failing data plane")
+	}
+	if plane.shutdown > 0 {
+		t.Errorf("%d interactions were still open at the end", plane.shutdown)
 	}
 	if !recovered {
 		t.Error("the flush after the data plane recovered timed out")

@@ -39,6 +39,20 @@ func TestResults(t *testing.T) {
 	}
 }
 
+func TestMedianOfRuns(t *testing.T) {
+	in := `BenchmarkOverhead/interaction/manual/sdk-4  10  1 ns/op  1 cpu-ns/op  1 gc/10k-op  10000 p50-ns  1 p99-ns  1 B/op  100 allocs/op
+BenchmarkOverhead/interaction/manual/sdk-4  10  1 ns/op  1 cpu-ns/op  1 gc/10k-op  30000 p50-ns  1 p99-ns  1 B/op  300 allocs/op
+BenchmarkOverhead/interaction/manual/sdk-4  10  1 ns/op  1 cpu-ns/op  1 gc/10k-op  20000 p50-ns  1 p99-ns  1 B/op  200 allocs/op
+`
+	order, sides, _, err := parse(strings.NewReader(in))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rs := results(order, sides); len(rs) != 1 || rs[0].SdkP50Us != 20 || rs[0].ExtraAllocs != 200 {
+		t.Fatalf("median of runs: %+v", rs)
+	}
+}
+
 func TestBudget(t *testing.T) {
 	dir := t.TempDir()
 	budget := filepath.Join(dir, "budget.json")
