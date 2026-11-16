@@ -124,13 +124,13 @@ func genAISummary(a map[string]any) map[string]any {
 	}
 	return g
 }
-func cleanAttributes(a map[string]any, capture, all, masked bool) map[string]any {
+func cleanAttributes(a map[string]any, scope string, capture, all, masked bool) map[string]any {
 	out := map[string]any{}
 	for k, v := range a {
 		if stripped(k) {
 			continue
 		}
-		content := all || contentAttribute(k)
+		content := all || contentAttribute(k, scope)
 		if content && !capture {
 			continue
 		}

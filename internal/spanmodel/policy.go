@@ -16,6 +16,19 @@ var contentKeys = []string{
 	"ai.response.providerMetadata", "ai.toolCall.args", "ai.toolCall.result", "ai.request.text", "ai.value", "ai.values",
 	"ai.embedding", "ai.embeddings", "ai.documents", "ai.ranking", "ai.decision.state", "ai.decision.questions", "ai.decision.answers",
 	"traceloop.entity.input", "traceloop.entity.output",
+	// Pydantic AI (instrumentation v1-v5; tool keys before v3, gen_ai.tool.call.* after)
+	"pydantic_ai.all_messages", "all_messages_events", "final_result", "tool_arguments", "tool_response",
+	"pydantic_ai.tool.deferral.metadata", "pydantic_ai.decision.state", "pydantic_ai.decision.questions",
+	"pydantic_ai.decision.route_questions", "pydantic_ai.decision.answers",
+	"model_request_parameters", "model_settings", "embedding_settings",
+	// Tool descriptions and schemas (GenAI semconv: opt-in, may be sensitive)
+	"gen_ai.tool.definitions",
+}
+
+// scopedContentKeys are generic keys that are content only on spans from the named instrumentation scope.
+var scopedContentKeys = map[string][]string{
+	// Pydantic AI image generation prompts and embedding inputs
+	"pydantic-ai": {"prompt", "inputs"},
 }
 var contentPrefixes = []string{
 	"gen_ai.prompt", "gen_ai.completion", "llm.input_messages", "llm.output_messages", "llm.prompts",
@@ -36,8 +49,9 @@ func hasPrefix(key string, prefixes []string) bool {
 	return false
 }
 
-func contentAttribute(key string) bool {
-	return slices.Contains(contentKeys, key) || hasPrefix(key, contentPrefixes)
+func contentAttribute(key, scope string) bool {
+	return slices.Contains(contentKeys, key) || hasPrefix(key, contentPrefixes) ||
+		slices.Contains(scopedContentKeys[scope], key)
 }
 
 func contentEvent(name string) bool {

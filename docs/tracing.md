@@ -318,7 +318,12 @@ successful model span when End supplies no `ResponseText`; prompts never come fr
 Content capture is off by default. Export strips GenAI input/output messages, instructions, tool
 arguments/results, retrieval content and legacy prompt/completion prefixes; OpenInference inputs,
 outputs, messages, prompt templates, retrieval/embedding/reranker documents; Vercel content fields;
-and OpenLLMetry entity input/output. It drops `gen_ai.choice`,
+OpenLLMetry entity input/output; Pydantic AI messages, final results, tool arguments/responses,
+deferral metadata, decision state, questions and answers, request parameters and model and
+embedding settings (its default `include_content=True`), plus `prompt` and `inputs` on spans from
+the `pydantic-ai` instrumentation scope only; and `gen_ai.tool.definitions`. Pydantic AI's
+`metadata` and `gen_ai.agent.description` are written by your app and exported as they are.
+It drops `gen_ai.choice`,
 `gen_ai.client.inference.operation.details`, and `gen_ai.<role>.message` events. Other events keep
 their non-content attributes. These lists match Node's tracing constants. Go also strips error
 text: span status descriptions (including the summary `status_message`) and `exception.message`

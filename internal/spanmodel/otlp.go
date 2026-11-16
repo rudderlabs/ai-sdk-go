@@ -16,7 +16,7 @@ func dropped(o object, key string, n int) {
 
 // ToOTLP maps a normalized span through the shared privacy policy.
 func ToOTLP(s Span, capture, masked bool) (map[string]any, []map[string]any) {
-	return toOTLP(s, capture, masked, cleanAttributes(s.Attributes, capture, false, masked))
+	return toOTLP(s, capture, masked, cleanAttributes(s.Attributes, s.Scope.Name, capture, false, masked))
 }
 
 func toOTLP(s Span, capture, masked bool, attributes map[string]any) (map[string]any, []map[string]any) {
@@ -46,14 +46,14 @@ func toOTLP(s Span, capture, masked bool, attributes map[string]any) (map[string
 		if !capture && contentEvent(e.Name) {
 			continue
 		}
-		event := object{"timeUnixNano": strconv.FormatInt(e.Time.UnixNano(), 10), "name": e.Name, "attributes": keyValues(cleanAttributes(e.Attributes, capture, contentEvent(e.Name), masked), e.AttributeKeys)}
+		event := object{"timeUnixNano": strconv.FormatInt(e.Time.UnixNano(), 10), "name": e.Name, "attributes": keyValues(cleanAttributes(e.Attributes, s.Scope.Name, capture, contentEvent(e.Name), masked), e.AttributeKeys)}
 		dropped(event, "droppedAttributesCount", e.DroppedAttributeCount)
 		events = append(events, event)
 	}
 	encoded["events"] = events
 	links := []object{}
 	for _, l := range s.Links {
-		link := object{"traceId": l.SpanContext.TraceID, "spanId": l.SpanContext.SpanID, "attributes": keyValues(cleanAttributes(l.Attributes, capture, false, masked), l.AttributeKeys)}
+		link := object{"traceId": l.SpanContext.TraceID, "spanId": l.SpanContext.SpanID, "attributes": keyValues(cleanAttributes(l.Attributes, s.Scope.Name, capture, false, masked), l.AttributeKeys)}
 		if v := l.SpanContext.TraceState; v != "" {
 			link["traceState"] = v
 		}
@@ -67,13 +67,13 @@ func toOTLP(s Span, capture, masked bool, attributes map[string]any) (map[string
 		scopeJSON["version"] = scope.Version
 	}
 	if len(scope.Attributes) > 0 {
-		scopeJSON["attributes"] = keyValues(cleanAttributes(scope.Attributes, capture, false, masked), scope.AttributeKeys)
+		scopeJSON["attributes"] = keyValues(cleanAttributes(scope.Attributes, s.Scope.Name, capture, false, masked), scope.AttributeKeys)
 	}
 	ss := object{"scope": scopeJSON, "spans": []object{encoded}}
 	if scope.SchemaURL != "" {
 		ss["schemaUrl"] = scope.SchemaURL
 	}
-	resourceAttrs := keyValues(cleanAttributes(s.ResourceAttributes, capture, false, masked), s.ResourceAttributeKeys)
+	resourceAttrs := keyValues(cleanAttributes(s.ResourceAttributes, s.Scope.Name, capture, false, masked), s.ResourceAttributeKeys)
 	rs := object{"resource": object{"attributes": resourceAttrs}, "scopeSpans": []object{ss}}
 	if s.ResourceSchemaURL != "" {
 		rs["schemaUrl"] = s.ResourceSchemaURL
