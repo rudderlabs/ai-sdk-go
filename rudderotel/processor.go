@@ -125,7 +125,7 @@ type otelCall struct {
 }
 
 func init() {
-	hook.Tracing.AdoptOTelCall = func(ctx context.Context, interaction any, activeSeq uint64) (hook.OTelCall, bool) {
+	hook.Tracing.AdoptOTelCall = func(ctx context.Context, interaction any, activeSeq uint64, fits func(hook.OTelCall) bool) (hook.OTelCall, bool) {
 		s := trace.SpanFromContext(ctx)
 		sc := s.SpanContext()
 		otelCalls.mu.Lock()
@@ -140,6 +140,9 @@ func init() {
 			return hook.OTelCall{}, false
 		}
 		call := hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: c.parentID, Adopted: !c.replaced}
+		if fits != nil && !fits(call) {
+			return hook.OTelCall{}, false
+		}
 		c.replaced = true
 		return call, true
 	}

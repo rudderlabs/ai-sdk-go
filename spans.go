@@ -48,19 +48,38 @@ type Span struct {
 	seq uint64
 	// call: a provider wrapper's model call.
 	call bool
-	// sendable: the span has a client and its identity and message context fit the budget.
+	// sendable: the span has a client and its whole message fits the budget.
 	sendOnce sync.Once
 	sendable bool
 }
 
-// canSend reports whether this span can be sent: it has an analytics client, and its message
-// context plus identity alone fit the span size budget. Otherwise nothing replaces or covers
-// an OTel span for it.
+// canSend reports whether this span can be sent: it has an analytics client, and its whole
+// message as known now (envelope, IDs, times, status, summary, identity and context, with every
+// attribute value at delivery's truncation minimum) fits the span size budget. Otherwise nothing
+// replaces or covers an OTel span for it.
 func (s *Span) canSend() bool {
-	s.sendOnce.Do(func() {
-		s.sendable = s.client != nil && spanmodel.DestinationFits(s.trackOptions(false))
-	})
+	s.sendOnce.Do(func() { s.sendable = s.fits(s.TraceID, s.SpanID, s.parentID) })
 	return s.sendable
+}
+
+// fits reports whether the span could be sent under the given trace, span and parent IDs.
+func (s *Span) fits(traceID, spanID, parentID string) bool {
+	return s.fitsAt(time.Now(), traceID, spanID, parentID)
+}
+
+// fitsAt is fits for a span ending at ended. The message is built as delivery builds it, from
+// what is known now, then measured at delivery's truncation minimum.
+func (s *Span) fitsAt(ended time.Time, traceID, spanID, parentID string) bool {
+	if s.client == nil {
+		return false
+	}
+	n := s.model("chat", "chat", "wrapper", nil, nil, nil, ended)
+	n.Context.TraceID, n.Context.SpanID = traceID, spanID
+	n.Parent = spanmodel.Context{}
+	if parentID != "" {
+		n.Parent = spanmodel.Context{TraceID: traceID, SpanID: parentID}
+	}
+	return spanmodel.DestinationFits(n, s.trackOptions(false))
 }
 
 func (s *Span) trackOptions(masked bool) spanmodel.Options {
@@ -219,17 +238,22 @@ func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time)
 	msgContext := i.msgContext
 	i.mu.Unlock()
 	s.msgContext, _ = stripBinary(msgContext).(map[string]any)
-	// An SDK span that cannot be sent never replaces the OTel span: the processor keeps it.
-	if !s.canSend() {
-		return nil
-	}
-	o, ok := hook.Tracing.AdoptOTelCall(ctx, i, activeSeq)
+	// An SDK span that cannot be sent under the IDs it would take never replaces the OTel span:
+	// the processor keeps it. Measured before the OTel span is marked replaced.
+	childID := randomSpanID(8)
+	o, ok := hook.Tracing.AdoptOTelCall(ctx, i, activeSeq, func(o hook.OTelCall) bool {
+		if o.Adopted {
+			return s.fits(o.TraceID, o.SpanID, o.ParentID)
+		}
+		return s.fits(o.TraceID, childID, o.SpanID)
+	})
 	if !ok {
 		return nil
 	}
+	s.sendOnce.Do(func() { s.sendable = true })
 	s.TraceID, s.SpanID, s.parentID = o.TraceID, o.SpanID, o.ParentID
 	if !o.Adopted {
-		s.SpanID, s.parentID = randomSpanID(8), o.SpanID
+		s.SpanID, s.parentID = childID, o.SpanID
 	}
 	if o.Adopted {
 		// The first SDK span fixes the interaction's trace, persisted across pause and JSON restore.
@@ -373,6 +397,14 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 	pendingWrapperSpans.mu.Unlock()
 	attrs := maps.Clone(s.attributes)
 	s.mu.Unlock()
+	n := s.model(name, operation, source, attrs, a, err, ended)
+	safely(func() { s.send(n, masked) })
+}
+
+// model is the span as a model span: the attributes and the identity it carries, its IDs, times,
+// status and exception event. Delivery and the size check build it the same way.
+func (s *Span) model(name, operation, source string, attrs, a map[string]any, err error, ended time.Time) spanmodel.Span {
+	attrs = maps.Clone(attrs)
 	if attrs == nil {
 		attrs = map[string]any{}
 	}
@@ -405,7 +437,7 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 			return fmt.Sprintf("%T", err)
 		}(), "exception.message": n.StatusMessage}}}
 	}
-	safely(func() { s.send(n, masked) })
+	return n
 }
 
 // send maps and enqueues a finished SDK span.

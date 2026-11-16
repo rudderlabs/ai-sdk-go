@@ -57,20 +57,45 @@ func messageContext(options Options) object {
 	return extraContext
 }
 
-// DestinationFits reports whether the fields no truncation can shrink, the identity and the
-// message context, fit the event budget: a span that cannot fit is always dropped.
-func DestinationFits(options Options) bool {
-	maxBytes := options.MaxEventBytes
-	if maxBytes == 0 {
-		maxBytes = DefaultMaxEventBytes
+// minTruncatedValueBytes is the shortest an attribute value is cut to before it is removed
+// from further truncation.
+const minTruncatedValueBytes = 256
+
+// cutValue is value shortened to at most target bytes on a rune boundary, plus the suffix.
+func cutValue(value string, target int) string {
+	end := min(target, len(value))
+	for end > 0 && end < len(value) && !utf8.RuneStart(value[end]) {
+		end--
 	}
-	b, err := json.Marshal(&analytics.Track{UserId: options.UserID, AnonymousId: options.AnonymousID, Context: &analytics.Context{Extra: messageContext(options)}})
+	return value[:end] + truncationSuffix
+}
+
+// DestinationFits reports whether delivery can send the span: its whole message (envelope, IDs,
+// times, status, summary, identity and context) fits the event budget once every attribute value
+// is at the shortest delivery's truncation makes it. A span that cannot fit is always dropped.
+func DestinationFits(s Span, options Options) bool {
+	m, p, candidates, maxBytes := build(s, options)
+	for _, c := range candidates {
+		value := c["stringValue"].(string)
+		if shortened := cutValue(value, minTruncatedValueBytes); len(shortened) < len(value) {
+			c["stringValue"] = shortened
+			p["truncated"] = true
+		}
+	}
+	b, err := json.Marshal(m)
 	return err == nil && len(b) <= maxBytes
 }
 
 // SpanToTrack maps one ended span; nil means it could not fit the event budget.
 // It does not apply the export filter. The original span is never mutated.
 func ToTrack(s Span, options Options) (*analytics.Track, error) {
+	m, p, candidates, maxBytes := build(s, options)
+	return truncateToFit(m, p, candidates, maxBytes, s.Context.SpanID)
+}
+
+// build is the untruncated track message, shared by delivery and DestinationFits so both measure
+// the same fields. It returns the message, its properties, the shortenable values and the budget.
+func build(s Span, options Options) (*analytics.Track, object, []map[string]any, int) {
 	var kinds capture.Spans
 	if options.Capture != nil {
 		kinds = *options.Capture
@@ -147,6 +172,10 @@ func ToTrack(s Span, options Options) (*analytics.Track, error) {
 	if maxBytes == 0 {
 		maxBytes = DefaultMaxEventBytes
 	}
+	return m, p, candidates, maxBytes
+}
+
+func truncateToFit(m *analytics.Track, p object, candidates []map[string]any, maxBytes int, spanID string) (*analytics.Track, error) {
 	measure := func() (int, error) { b, err := json.Marshal(m); return len(b), err }
 	size, err := measure()
 	if err != nil {
@@ -162,16 +191,12 @@ func ToTrack(s Span, options Options) (*analytics.Track, error) {
 				longest, n = i, size
 			}
 		}
-		if longest < 0 || n <= 256 {
+		if longest < 0 || n <= minTruncatedValueBytes {
 			break
 		}
-		target := max(256, n-(size-maxBytes)-len(truncationSuffix))
+		target := max(minTruncatedValueBytes, n-(size-maxBytes)-len(truncationSuffix))
 		value := candidates[longest]["stringValue"].(string)
-		end := min(target, len(value))
-		for end > 0 && end < len(value) && !utf8.RuneStart(value[end]) {
-			end--
-		}
-		shortened := value[:end] + truncationSuffix
+		shortened := cutValue(value, target)
 		if len(shortened) >= n {
 			candidates = append(candidates[:longest], candidates[longest+1:]...)
 			continue
@@ -186,6 +211,6 @@ func ToTrack(s Span, options Options) (*analytics.Track, error) {
 	if size <= maxBytes {
 		return m, nil
 	}
-	slog.Warn("[rudderstack-ai] span exceeds maxEventBytes after truncation; dropped", "span_id", sc.SpanID, "maxEventBytes", maxBytes)
+	slog.Warn("[rudderstack-ai] span exceeds maxEventBytes after truncation; dropped", "span_id", spanID, "maxEventBytes", maxBytes)
 	return nil, nil
 }

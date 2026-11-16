@@ -43,9 +43,11 @@ var Tracing struct {
 	// AdoptOTelCall matches the active, still-recording OTel model-call span in ctx that a span
 	// processor registered, when it belongs to interaction and is nested inside the active SDK
 	// span with start order activeSeq (0 if none). The first call adopts its IDs and marks it
-	// replaced, so every processor drops it at its end; later calls inside are children.
+	// replaced, so every processor drops it at its end; later calls inside are children. fits is
+	// asked, before anything is marked, whether the SDK span can be sent under the IDs it would
+	// take; when it cannot, nothing is adopted and the OTel span exports normally.
 	// Set by rudderotel.
-	AdoptOTelCall func(ctx context.Context, interaction any, activeSeq uint64) (OTelCall, bool)
+	AdoptOTelCall func(ctx context.Context, interaction any, activeSeq uint64, fits func(OTelCall) bool) (OTelCall, bool)
 }
 
 // OTelCall is an OTel model-call span an SDK call starts inside.
