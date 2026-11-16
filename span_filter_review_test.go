@@ -101,6 +101,15 @@ func TestSpanRulesFilterAfterCaptureCallbacks(t *testing.T) {
 		for _, source := range []string{"redactor", "tool callback", "second redaction"} {
 			t.Run(map[bool]string{false: "pause", true: "end"}[ending]+"/"+source, func(t *testing.T) {
 				var i *Interaction
+				// Recording order must not shift the observed span windows: prep
+				// suppression allows usage to start at most 1 ms before the prep span.
+				start := time.Unix(1_700_000_000, 0)
+				callAt := func(id, parent string, usage bool, response, answer string) LLMCall {
+					call := taggedRuleCall(id, parent, usage, response, answer)
+					call.StartedAt, call.EndedAt = start, start.Add(time.Millisecond)
+					call.spanSource.Start, call.spanSource.End = float64(call.StartedAt.UnixMilli()), float64(call.EndedAt.UnixMilli())
+					return call
+				}
 				capturing, added := false, false
 				add := func() {
 					if added {
@@ -113,7 +122,7 @@ func TestSpanRulesFilterAfterCaptureCallbacks(t *testing.T) {
 							t.Fatal("capture callback exposed an unfinished pause")
 						}
 					}
-					call := taggedRuleCall("child", "parent", true, "child-response", "child answer")
+					call := callAt("child", "parent", true, "child-response", "child answer")
 					i.RecordCall(call)
 				}
 				r := setupAI(t, WithCaptureContent(true), WithLLMCallEvents(true), WithRedactHook(func(text string) (string, error) {
@@ -128,7 +137,7 @@ func TestSpanRulesFilterAfterCaptureCallbacks(t *testing.T) {
 							add()
 						}
 						if source == "second redaction" && text == "child answer" {
-							prep := taggedRuleCall("late-prep", "", false, "", "")
+							prep := callAt("late-prep", "", false, "", "")
 							prep.InputTokens = 0
 							prep.spanSource.LLM = true
 							i.RecordCall(prep)
@@ -139,7 +148,8 @@ func TestSpanRulesFilterAfterCaptureCallbacks(t *testing.T) {
 					"lookup": {Event: "lookup_done", Properties: func(map[string]any, any) map[string]any { add(); return nil }},
 				}}))
 				_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
-				i.RecordCall(taggedRuleCall("parent", "", true, "", "parent answer"))
+				i.eventClock = func() time.Time { return start.Add(time.Second) }
+				i.RecordCall(callAt("parent", "", true, "", "parent answer"))
 				capturing = true
 				if ending {
 					i.End(EndOptions{})
