@@ -13,6 +13,8 @@ import (
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 type pauseSegmentsStep struct {
@@ -20,10 +22,12 @@ type pauseSegmentsStep struct {
 	Source      string              `json:"source"`
 	Provider    string              `json:"provider"`
 	Model       string              `json:"model"`
-	InputTokens int                 `json:"input_tokens"`
+	InputTokens *int                `json:"input_tokens"`
 	StartedMS   *int64              `json:"started_ms"`
 	EndedMS     *int64              `json:"ended_ms"`
 	OutputText  string              `json:"output_text"`
+	SpanID      string              `json:"span_id"`
+	ParentSpan  string              `json:"parent_span_id"`
 	Event       string              `json:"event"`
 	Steps       []pauseSegmentsStep `json:"steps"`
 	JSON        bool                `json:"json"`
@@ -127,7 +131,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				for _, step := range steps {
 					switch step.Op {
 					case "record_call":
-						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: step.InputTokens, OutputText: step.OutputText}
+						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: derefInt(step.InputTokens), OutputText: step.OutputText}
 						if step.Source == "span" {
 							call.Integration = "tracing"
 						}
@@ -136,6 +140,13 @@ func TestPauseSegmentsFixture(t *testing.T) {
 						}
 						if step.EndedMS != nil {
 							call.EndedAt = time.UnixMilli(*step.EndedMS)
+						}
+						if step.SpanID != "" {
+							call.spanSource = &hook.SpanSource{
+								TraceID: "trace", SpanID: step.SpanID, ParentSpanID: step.ParentSpan, RequestModel: step.Model,
+								Start: float64(call.StartedAt.UnixMilli()), End: float64(call.EndedAt.UnixMilli()),
+								Usage: step.InputTokens != nil, Output: step.OutputText != "", LLM: true, Ancestors: []string{},
+							}
 						}
 						i.RecordCall(call)
 					case "record_tool_call":

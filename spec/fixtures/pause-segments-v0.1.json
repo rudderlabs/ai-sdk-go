@@ -396,6 +396,180 @@
       }
     },
     {
+      "name": "nested spans recorded during paused call delivery, then another span",
+      "description": "Delivery of the held call records a parent span and its child; the parent is filtered as the child's nested twin, and delivery of the child's event records one more span. Every counted call sends its event before the totals are captured.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "span_id": "first",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 5,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "span_id": "parent",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "started_ms": 300,
+              "ended_ms": 320
+            },
+            {
+              "op": "record_call",
+              "source": "span",
+              "span_id": "child",
+              "parent_span_id": "parent",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 305,
+              "ended_ms": 315
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "span_id": "last",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 500,
+              "ended_ms": 510
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 3,
+            "total_input_tokens": 35
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          5,
+          10,
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "nested spans recorded during paused call delivery, then another span, then JSON restore",
+      "description": "The same run continued from the JSON snapshot: nothing recorded during delivery is left for, or sent again by, the restored run.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "span_id": "first",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 5,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "span_id": "parent",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "started_ms": 300,
+              "ended_ms": 320
+            },
+            {
+              "op": "record_call",
+              "source": "span",
+              "span_id": "child",
+              "parent_span_id": "parent",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 305,
+              "ended_ms": 315
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "span_id": "last",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 500,
+              "ended_ms": 510
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 3,
+            "total_input_tokens": 35
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          5,
+          10,
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
       "name": "call recorded during final call delivery is not counted",
       "description": "The final end delivers a held span call event after the interaction ended, so a call the callback records is refused, as any write after end is.",
       "config": {
