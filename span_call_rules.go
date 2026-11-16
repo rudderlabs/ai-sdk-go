@@ -204,7 +204,7 @@ func (i *Interaction) filterSpanCallsLocked() {
 	if i.eventClock != nil {
 		now = i.eventClock()
 	}
-	skipped := skippedSpanCalls(i.calls, float64(now.Unix())*1000+float64(now.Nanosecond())/1e6)
+	skipped := skippedSpanCalls(i.calls, float64(now.UnixMilli()))
 	i.spanParents, i.spanParentOrder = nil, nil
 	before := slices.Clone(i.calls)
 	if len(skipped) == 0 {

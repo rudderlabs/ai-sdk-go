@@ -2523,11 +2523,19 @@ func (i *Interaction) end(o EndOptions) {
 	for _, fn := range hooks {
 		safely(fn)
 	}
-	i.mu.Lock()
-	tools := slices.Clone(i.tools)
-	i.mu.Unlock()
-	// Calls whose outcome never arrived are sent now, as unknown.
-	i.fireToolEvents(tools, true)
+	// Calls whose outcome never arrived are sent now, as unknown. Drain tools
+	// appended by callbacks before applying the span rules, as Node does.
+	for nextTool := 0; ; {
+		i.mu.Lock()
+		if nextTool >= len(i.tools) {
+			i.mu.Unlock()
+			break
+		}
+		tools := slices.Clone(i.tools[nextTool:])
+		nextTool = len(i.tools)
+		i.mu.Unlock()
+		i.fireToolEvents(tools, true)
+	}
 
 	if o.Status != "" && !responseStatuses[o.Status] {
 		warnOnce("invalid-status", fmt.Sprintf("End: invalid status %q; using the status derived from the calls", o.Status), 0)

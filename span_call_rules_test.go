@@ -19,6 +19,62 @@ func taggedRuleCall(id, parent string, usage bool, response, answer string) LLMC
 			Start: float64(start.UnixMilli()), End: float64(start.Add(time.Millisecond).UnixMilli()), Ancestors: []string{}}}
 }
 
+func TestSpanRulesEndDrainsToolHooks(t *testing.T) {
+	var i *Interaction
+	var hooks []string
+	r := setupAI(t, WithLLMCallEvents(true), WithEventRules(EventRules{Tools: map[string]ToolEventRule{
+		"a": {Event: "Tool A", Properties: func(map[string]any, any) map[string]any {
+			hooks = append(hooks, "a")
+			i.RecordToolCalls(ToolCall{ID: "b", Name: "b"})
+			return nil
+		}},
+		"b": {Event: "Tool B", Properties: func(map[string]any, any) map[string]any {
+			hooks = append(hooks, "b")
+			i.RecordCall(taggedRuleCall("child", "parent", true, "child-response", ""))
+			return nil
+		}},
+	}}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	i.RecordCall(taggedRuleCall("parent", "", true, "", ""))
+	i.RecordToolCalls(ToolCall{ID: "a", Name: "a"})
+	i.End(EndOptions{})
+	if !slices.Equal(hooks, []string{"a", "b"}) {
+		t.Fatalf("tool hooks = %v, want [a b]", hooks)
+	}
+	if len(r.named("Tool A")) != 1 || len(r.named("Tool B")) != 1 || lastResponse(t, r)["llm_call_count"] != 1 {
+		t.Fatal(r.names(), lastResponse(t, r))
+	}
+	calls := r.named("ai_llm_response_received")
+	if len(calls) != 1 || calls[0].Properties["response_id"] != "child-response" || calls[0].Properties["call_index"] != 1 {
+		t.Fatal(calls)
+	}
+}
+
+func TestSpanRulesEndFloorsPrepWindowToMilliseconds(t *testing.T) {
+	r := setupAI(t, WithLLMCallEvents(true))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	start := time.Now().Add(-time.Second).Truncate(time.Millisecond)
+	i.eventClock = func() time.Time { return start.Add(10300 * time.Microsecond) }
+	prep := taggedRuleCall("prep", "", false, "", "")
+	prep.StartedAt, prep.EndedAt = start, start.Add(time.Millisecond)
+	prep.InputTokens = 0
+	prep.spanSource.Start, prep.spanSource.End = float64(start.UnixMilli()), float64(start.UnixMilli()+1)
+	prep.spanSource.LLM = true
+	usage := taggedRuleCall("usage", "", true, "usage-response", "")
+	usage.StartedAt, usage.EndedAt = start.Add(10100*time.Microsecond), start.Add(10200*time.Microsecond)
+	usage.spanSource.Start, usage.spanSource.End = float64(start.UnixMilli())+10.1, float64(start.UnixMilli())+10.2
+	i.RecordCall(prep)
+	i.RecordCall(usage)
+	i.End(EndOptions{})
+	if lastResponse(t, r)["llm_call_count"] != 2 {
+		t.Fatal(lastResponse(t, r))
+	}
+	calls := r.named("ai_llm_response_received")
+	if len(calls) != 2 || calls[0].Properties["call_index"] != 1 || calls[1].Properties["call_index"] != 2 {
+		t.Fatal(calls)
+	}
+}
+
 func TestSpanRulesPendingEvidenceAcrossPause(t *testing.T) {
 	for _, restore := range []bool{false, true} {
 		t.Run(fmt.Sprint(restore), func(t *testing.T) {
