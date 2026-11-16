@@ -46,6 +46,7 @@ type pauseSegmentsStep struct {
 	Event                string              `json:"event"`
 	Steps                []pauseSegmentsStep `json:"steps"`
 	JSON                 bool                `json:"json"`
+	Status               string              `json:"status"`
 	Calls                []struct {
 		ID        string   `json:"id"`
 		Name      string   `json:"name"`
@@ -273,7 +274,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 					case "resume":
 						i.Resume()
 					case "end":
-						i.End(EndOptions{})
+						i.End(EndOptions{Status: ResponseStatus(step.Status)})
 					default:
 						t.Fatalf("unknown op %q", step.Op)
 					}

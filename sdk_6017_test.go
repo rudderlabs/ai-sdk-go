@@ -359,3 +359,34 @@ func TestSDK6017DurationOnlyResultEndsTheWait(t *testing.T) {
 		})
 	}
 }
+
+// A final end while paused is not a resume: a tool the pause still waits on never ran.
+func TestSDK6017NeverCountsAnAwaitedToolWhenTheRunEndsWhilePaused(t *testing.T) {
+	for _, status := range []ResponseStatus{"", StatusCancelled, StatusError} {
+		t.Run("status "+string(status), func(t *testing.T) {
+			r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}), WithToolBreakdown(true))
+			i := sdk6017Start()
+			i.RecordCall(sdk6017Call("", 10))
+			i.RecordToolCalls(ToolCall{ID: "call_1", Name: "approve_me"})
+			i.Pause(PauseOptions{})
+			i.End(EndOptions{Status: status})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 0})
+			if breakdown, ok := r.named("ai_response_received")[1].Properties["tool_breakdown"]; ok {
+				t.Fatalf("final tool_breakdown = %v, want absent", breakdown)
+			}
+			sdk6017Expect(t, "Approved", len(r.named("Approved")), 0)
+		})
+	}
+
+	t.Run("counts a tool settled while paused, and not one still waited on", func(t *testing.T) {
+		r := setupAI(t, sdk6017Rules(map[string]string{"approve_me": "Approved"}))
+		i := sdk6017Start()
+		i.RecordCall(sdk6017Call("", 10))
+		i.RecordToolCalls(ToolCall{ID: "denied", Name: "approve_me"}, ToolCall{ID: "waiting", Name: "approve_me"})
+		i.Pause(PauseOptions{})
+		i.RecordToolResult("denied", ToolResult{Error: Ptr(true), ErrorType: "denied"})
+		i.End(EndOptions{Status: StatusCancelled})
+		sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+		sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"denied", "denied"}})
+	})
+}

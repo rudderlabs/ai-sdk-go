@@ -1918,10 +1918,11 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 	var jobs []job
 	i.mu.Lock()
 	for _, t := range tools {
-		// A tool the pause waits on fires in the segment that runs it, or as unknown at final End.
+		// A tool the pause waits on fires in the segment that runs it, or as unknown at a resumed
+		// run's final End; an End while still paused never ran it, so it never fires.
 		// While paused, a settled tool's event waits for the run to go on, as in Node.
 		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || (!final && !i.pausedAt.IsZero()) || t.fired || t.name == "" || (final && t.structuredPending()) ||
-			(final && i.pausing && i.awaitedLocked(t)) || (!t.settled && !final) {
+			(final && (i.pausing || !i.pausedAt.IsZero()) && i.awaitedLocked(t)) || (!t.settled && !final) {
 			continue
 		}
 		rule, ok := rules[first(t.rawName, t.name)]
@@ -3141,11 +3142,16 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	i.filterSpanCallsLocked()
 	var excluded []*recordedTool
+	// Never resumed: a tool the pause still waits on never ran, so nothing counts it (SDK-6017).
+	neverResumed := !i.pausedAt.IsZero()
 	i.tools = slices.DeleteFunc(i.tools, func(tool *recordedTool) bool {
-		if !tool.structuredPending() {
+		unrun := neverResumed && i.awaitedLocked(tool)
+		if !tool.structuredPending() && !unrun {
 			return false
 		}
-		excluded = append(excluded, tool)
+		if !unrun {
+			excluded = append(excluded, tool)
+		}
 		if tool.id != "" {
 			delete(i.toolsByID, tool.id)
 		}
