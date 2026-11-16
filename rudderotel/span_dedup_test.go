@@ -637,3 +637,54 @@ func TestSpanDedupProcessorRejectingAtStartStillSettles(t *testing.T) {
 		})
 	}
 }
+
+// blockedExporter holds the export of the span named busy until release closes.
+type blockedExporter struct {
+	sdktrace.SpanExporter
+	entered, release chan struct{}
+}
+
+func (e *blockedExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	if len(spans) > 0 && spans[0].Name() == "busy" {
+		close(e.entered)
+		<-e.release
+	}
+	return e.SpanExporter.ExportSpans(ctx, spans)
+}
+
+func TestSpanDedupFullBatchQueueKeepsTheOwnedCallsSpan(t *testing.T) {
+	provider, p, events := testProvider(t, Options{Simple: true, ExportAllSpans: true})
+	// A batch queue of one, its exporter stuck on busy and its queue holding queued.
+	blocked := &blockedExporter{SpanExporter: p.exporter, entered: make(chan struct{}), release: make(chan struct{})}
+	p.inner = sdktrace.NewBatchSpanProcessor(blocked, sdktrace.WithMaxQueueSize(1), sdktrace.WithMaxExportBatchSize(1), sdktrace.WithBatchTimeout(time.Minute))
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	tracer := provider.Tracer("app")
+	_, busy := tracer.Start(context.Background(), "busy")
+	busy.End()
+	select {
+	case <-blocked.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the busy export did not start")
+	}
+	_, queued := tracer.Start(context.Background(), "queued")
+	queued.End()
+	ctx, i, o := ownerSpan(tracer)
+	wrapperIn(ctx, t, i, events)
+	o.End()
+	i.End(rudderstackai.EndOptions{})
+	close(blocked.release)
+	if err := provider.ForceFlush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	for _, e := range spanEvents(events()) {
+		if n := e["properties"].(object)["span_name"]; n != "busy" && n != "queued" {
+			calls++
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("the owned call has %d spans, want 1", calls)
+	}
+}

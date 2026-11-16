@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
+	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
@@ -62,9 +63,7 @@ func (e *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 		}
 		safe("tracing.export", func() {
 			keep := IsAISpan(s)
-			if d, decided := s.(decidedSpan); decided {
-				keep = d.export
-			} else if e.options.Filter != nil {
+			if e.options.Filter != nil {
 				keep = e.options.Filter(s)
 			} else if e.options.ExportAllSpans {
 				keep = true
@@ -72,22 +71,37 @@ func (e *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 			if !keep {
 				return
 			}
-			m, err := SpanToTrack(s, e.options)
-			if err != nil {
-				hook.Report(rudderstackai.KindInternal, "tracing.map", err)
-				return
-			}
-			if m == nil {
-				return
-			}
-			// A transport panic is an export failure, like an Enqueue error.
-			err = enqueue(e.client, *m)
-			if err != nil {
+			if err := e.send(s); err != nil {
 				failures = append(failures, err)
 			}
 		})
 	}
 	return errors.Join(failures...)
+}
+
+// send maps one span and enqueues it; a transport panic is an export failure, like an Enqueue error.
+func (e *Exporter) send(s sdktrace.ReadOnlySpan) error {
+	m, err := SpanToTrack(s, e.options)
+	if err != nil {
+		hook.Report(rudderstackai.KindInternal, "tracing.map", err)
+		return nil
+	}
+	if m == nil {
+		return nil
+	}
+	return enqueue(e.client, *m)
+}
+
+// exportDecided sends a span its processor already decided to export, outside any batch queue.
+func (e *Exporter) exportDecided(s sdktrace.ReadOnlySpan) {
+	if e.closed.Load() {
+		return
+	}
+	safe("tracing.export", func() {
+		if err := e.send(s); err != nil {
+			otel.Handle(err)
+		}
+	})
 }
 
 func enqueue(c analytics.Client, m analytics.Track) (err error) {
