@@ -324,7 +324,8 @@ embedding settings (its default `include_content=True`), plus `prompt` and `inpu
 the `pydantic-ai` instrumentation scope only; `gen_ai.tool.definitions`; and Mirascope
 response messages and content, traced arguments and outputs and annotation reasoning, plus its
 `error.message` on spans from the `mirascope.llm` and `mirascope.ops` scopes, masked like
-`exception.message` (a custom Mirascope tracer name doesn't match). Pydantic AI's
+`exception.message` (a custom Mirascope tracer name doesn't match); and Eve's `ai.response.tool_calls`,
+plus `agent.session.title` and `agent.channel.delivery.input` on spans from its `eve.agent` scope. Pydantic AI's
 `metadata` and `gen_ai.agent.description` are written by your app and exported as they are.
 It drops `gen_ai.choice`,
 `gen_ai.client.inference.operation.details`, and `gen_ai.<role>.message` events. Other events keep

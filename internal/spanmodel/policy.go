@@ -26,6 +26,8 @@ var contentKeys = []string{
 	// Mirascope ops: request and response messages, traced call arguments and outputs, annotations
 	"mirascope.response.messages", "mirascope.response.content", "mirascope.trace.arg_values",
 	"mirascope.trace.output", "mirascope.annotation.reasoning",
+	// Vercel AI SDK snake_case tool calls (Eve)
+	"ai.response.tool_calls",
 }
 
 // scopedContentKeys are generic keys that are content only on spans from the named instrumentation scope.
@@ -35,6 +37,8 @@ var scopedContentKeys = map[string][]string{
 	// Mirascope's native error text (its default tracer names); handled like exception.message
 	"mirascope.llm": {"error.message"},
 	"mirascope.ops": {"error.message"},
+	// Eve agent spans: the session title and a channel's delivered input come from the user's message
+	"eve.agent": {"agent.session.title", "agent.channel.delivery.input"},
 }
 var contentPrefixes = []string{
 	"gen_ai.prompt", "gen_ai.completion", "llm.input_messages", "llm.output_messages", "llm.prompts",

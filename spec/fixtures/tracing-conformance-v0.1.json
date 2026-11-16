@@ -1812,6 +1812,237 @@
       }
     },
     {
+      "name": "Eve content keys stripped by default",
+      "options": {},
+      "compare": "exact",
+      "span": {
+        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "spanId": "00f067aa0ba902b7",
+        "name": "chat gpt-5",
+        "kind": "client",
+        "startTimeUnixNano": "1760000000000000000",
+        "endTimeUnixNano": "1760000002500250001",
+        "resource": {
+          "service.name": "chat-api",
+          "telemetry.sdk.language": "fixture"
+        },
+        "scope": {
+          "name": "eve.agent",
+          "version": "1.0.0"
+        },
+        "attributes": {
+          "gen_ai.operation.name": "chat",
+          "gen_ai.request.model": "claude-haiku-4-5",
+          "agent.session.title": "Refund order 123 for jane@example.com",
+          "agent.channel.delivery.input": "{\"text\":\"Refund order 123\"}",
+          "ai.response.tool_calls": "[{\"toolName\":\"refund\",\"input\":{\"order\":\"123\"}}]",
+          "agent.channel.name": "slack"
+        }
+      },
+      "expected": {
+        "event": "ai_otel_span",
+        "anonymousId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "messageId": "4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
+        "timestamp": "2025-10-09T08:53:22.500Z",
+        "properties": {
+          "schema_version": "0.1",
+          "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+          "span_id": "00f067aa0ba902b7",
+          "parent_span_id": null,
+          "span_name": "chat gpt-5",
+          "span_kind": "client",
+          "start_time": "2025-10-09T08:53:20.000Z",
+          "end_time": "2025-10-09T08:53:22.500Z",
+          "duration_ms": 2500.25,
+          "status_code": "unset",
+          "gen_ai": {
+            "operation_name": "chat",
+            "request_model": "claude-haiku-4-5"
+          },
+          "truncated": false,
+          "otlp": {
+            "resourceSpans": [
+              {
+                "resource": {
+                  "attributes": [
+                    {
+                      "key": "service.name",
+                      "value": {
+                        "stringValue": "chat-api"
+                      }
+                    },
+                    {
+                      "key": "telemetry.sdk.language",
+                      "value": {
+                        "stringValue": "fixture"
+                      }
+                    }
+                  ]
+                },
+                "scopeSpans": [
+                  {
+                    "scope": {
+                      "name": "eve.agent",
+                      "version": "1.0.0"
+                    },
+                    "spans": [
+                      {
+                        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                        "spanId": "00f067aa0ba902b7",
+                        "name": "chat gpt-5",
+                        "kind": 3,
+                        "startTimeUnixNano": "1760000000000000000",
+                        "endTimeUnixNano": "1760000002500250001",
+                        "attributes": [
+                          {
+                            "key": "gen_ai.operation.name",
+                            "value": {
+                              "stringValue": "chat"
+                            }
+                          },
+                          {
+                            "key": "gen_ai.request.model",
+                            "value": {
+                              "stringValue": "claude-haiku-4-5"
+                            }
+                          },
+                          {
+                            "key": "agent.channel.name",
+                            "value": {
+                              "stringValue": "slack"
+                            }
+                          }
+                        ],
+                        "events": [],
+                        "links": [],
+                        "status": {
+                          "code": 0
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "agent.session.title kept on spans from other instrumentation scopes",
+      "options": {},
+      "compare": "exact",
+      "span": {
+        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "spanId": "00f067aa0ba902b7",
+        "name": "chat gpt-5",
+        "kind": "client",
+        "startTimeUnixNano": "1760000000000000000",
+        "endTimeUnixNano": "1760000002500250001",
+        "resource": {
+          "service.name": "chat-api",
+          "telemetry.sdk.language": "fixture"
+        },
+        "scope": {
+          "name": "fixture-instrumentation",
+          "version": "1.0.0"
+        },
+        "attributes": {
+          "gen_ai.operation.name": "chat",
+          "gen_ai.request.model": "gpt-5",
+          "agent.session.title": "nightly-batch"
+        }
+      },
+      "expected": {
+        "event": "ai_otel_span",
+        "anonymousId": "4bf92f3577b34da6a3ce929d0e0e4736",
+        "messageId": "4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7",
+        "timestamp": "2025-10-09T08:53:22.500Z",
+        "properties": {
+          "schema_version": "0.1",
+          "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+          "span_id": "00f067aa0ba902b7",
+          "parent_span_id": null,
+          "span_name": "chat gpt-5",
+          "span_kind": "client",
+          "start_time": "2025-10-09T08:53:20.000Z",
+          "end_time": "2025-10-09T08:53:22.500Z",
+          "duration_ms": 2500.25,
+          "status_code": "unset",
+          "gen_ai": {
+            "operation_name": "chat",
+            "request_model": "gpt-5"
+          },
+          "truncated": false,
+          "otlp": {
+            "resourceSpans": [
+              {
+                "resource": {
+                  "attributes": [
+                    {
+                      "key": "service.name",
+                      "value": {
+                        "stringValue": "chat-api"
+                      }
+                    },
+                    {
+                      "key": "telemetry.sdk.language",
+                      "value": {
+                        "stringValue": "fixture"
+                      }
+                    }
+                  ]
+                },
+                "scopeSpans": [
+                  {
+                    "scope": {
+                      "name": "fixture-instrumentation",
+                      "version": "1.0.0"
+                    },
+                    "spans": [
+                      {
+                        "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+                        "spanId": "00f067aa0ba902b7",
+                        "name": "chat gpt-5",
+                        "kind": 3,
+                        "startTimeUnixNano": "1760000000000000000",
+                        "endTimeUnixNano": "1760000002500250001",
+                        "attributes": [
+                          {
+                            "key": "gen_ai.operation.name",
+                            "value": {
+                              "stringValue": "chat"
+                            }
+                          },
+                          {
+                            "key": "gen_ai.request.model",
+                            "value": {
+                              "stringValue": "gpt-5"
+                            }
+                          },
+                          {
+                            "key": "agent.session.title",
+                            "value": {
+                              "stringValue": "nightly-batch"
+                            }
+                          }
+                        ],
+                        "events": [],
+                        "links": [],
+                        "status": {
+                          "code": 0
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
       "name": "extra properties and a custom event name",
       "options": {
         "eventName": "llm_span",

@@ -53,7 +53,8 @@
     "mirascope.response.content",
     "mirascope.trace.arg_values",
     "mirascope.trace.output",
-    "mirascope.annotation.reasoning"
+    "mirascope.annotation.reasoning",
+    "ai.response.tool_calls"
   ],
   "attributePrefixes": [
     "gen_ai.prompt",
@@ -77,6 +78,10 @@
     ],
     "mirascope.ops": [
       "error.message"
+    ],
+    "eve.agent": [
+      "agent.session.title",
+      "agent.channel.delivery.input"
     ]
   },
   "eventNames": [
