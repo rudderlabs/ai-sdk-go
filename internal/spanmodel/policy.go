@@ -66,7 +66,8 @@ var httpKeys = []string{"url.path", "url.full", "http.url", "http.target"}
 
 // toolSpan reports a tool-execution span, whose message content is the tool's arguments and result.
 func toolSpan(a map[string]any) bool {
-	return a["gen_ai.operation.name"] == "execute_tool" || a["openinference.span.kind"] == "TOOL"
+	return a["gen_ai.operation.name"] == "execute_tool" || a["openinference.span.kind"] == "TOOL" ||
+		a["traceloop.span.kind"] == "tool" || a["ai.operationId"] == "ai.toolCall" || a["langsmith.span.kind"] == "tool"
 }
 
 // errorKeys keep the Messages kind even on a tool span.

@@ -243,7 +243,7 @@ ctx, i := rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{
 
 `Spans` covers the [tracing exporter](tracing.md) and SDK spans:
 - `Messages` is prompt, completion, instruction, retrieval and error text, `gen_ai.*.message` and `gen_ai.choice` events and the status message.
-- `ToolCalls` is tool arguments and results, and all other content of a tool-execution span (`gen_ai.operation.name` `execute_tool`, or OpenInference `TOOL`) except error text.
+- `ToolCalls` is tool arguments and results, and all other content of a tool-execution span (`gen_ai.operation.name` `execute_tool`, OpenInference `TOOL`, Traceloop or LangSmith `tool`, or Vercel `ai.toolCall`) except error text.
 - Nil kinds take `Spans.Default`, then `Default`.
 - `HTTP: Ptr(true)` (off unless set) keeps `url.path` and `url.full` / `http.url` / `http.target` without the query string, masked. `url.query`, the user agent, client addresses and headers are never sent.
 

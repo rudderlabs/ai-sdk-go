@@ -1,7 +1,7 @@
 {
   "fixture_version": 1,
   "spec_version": "0.4.0",
-  "description": "captureContent policy resolution (SDK-6888). Each case lists levels most general first (global, then interaction, mcp or exporter); every SDK resolves them with the same rules and must produce `expected`. Keys are snake_case; Node.js and Go map them to their own names. `capture_content: null` means the level sets nothing. `intent_summary: null` means not set at any level (sent as before the policy). `invalid` values must be rejected where captureContent is accepted (Go: not applicable, the type checks it). `custom_properties`: whether a custom event property with a content name is kept under the resolved policy: intent_summary follows an explicit intent_summary key at any level, else the default chain (boolean false drops it, as today); other names follow their own key; input_messages, output_text and output_tool_calls follow llm_calls (input_truncated is a boolean marker, not content, and is never dropped). `spans`: one span's content and, per resolved span kinds, the content exported with built-in masking on. Kept kinds are masked, other content removed; content events, the status message and ai.response.toolCalls are the messages kind; `tool_call_keys` (equal to span-content-keys toolCallAttributeKeys) are the tool_calls kind; with http, url.path and full URLs are kept without query or fragment and masked; url.query, user agents, client addresses and headers never. A span-kind case with its own `input` uses it instead of `spans.input`. On a tool-execution span (attribute gen_ai.operation.name execute_tool, or openinference.span.kind TOOL), content attributes other than exception.message, exception.stacktrace and scoped error.message are the tool_calls kind, in span attributes and in the attributes of events other than content events. URL attributes with array values are sanitised per element (non-strings dropped, an empty result removed).",
+  "description": "captureContent policy resolution (SDK-6888). Each case lists levels most general first (global, then interaction, mcp or exporter); every SDK resolves them with the same rules and must produce `expected`. Keys are snake_case; Node.js and Go map them to their own names. `capture_content: null` means the level sets nothing. `intent_summary: null` means not set at any level (sent as before the policy). `invalid` values must be rejected where captureContent is accepted (Go: not applicable, the type checks it). `custom_properties`: whether a custom event property with a content name is kept under the resolved policy: intent_summary follows an explicit intent_summary key at any level, else the default chain (boolean false drops it, as today); other names follow their own key; input_messages, output_text and output_tool_calls follow llm_calls (input_truncated is a boolean marker, not content, and is never dropped). `spans`: one span's content and, per resolved span kinds, the content exported with built-in masking on. Kept kinds are masked, other content removed; content events, the status message and ai.response.toolCalls are the messages kind; `tool_call_keys` (equal to span-content-keys toolCallAttributeKeys) are the tool_calls kind; with http, url.path and full URLs are kept without query or fragment and masked; url.query, user agents, client addresses and headers never. A span-kind case with its own `input` uses it instead of `spans.input`. On a tool-execution span (attribute gen_ai.operation.name execute_tool, openinference.span.kind TOOL, traceloop.span.kind tool, ai.operationId ai.toolCall or langsmith.span.kind tool), content attributes other than exception.message, exception.stacktrace and scoped error.message are the tool_calls kind, in span attributes and in the attributes of events other than content events. URL attributes with array values are sanitised per element (non-strings dropped, an empty result removed).",
   "resolution": [
     {
       "name": "nothing_set",
@@ -1656,6 +1656,205 @@
               }
             }
           ],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "traceloop_tool_span_messages_only",
+        "description": "A Traceloop tool span (traceloop.span.kind tool) is a tool-execution span. With messages only, its tool content is removed.",
+        "input": {
+          "attributes": {
+            "traceloop.span.kind": "tool",
+            "traceloop.entity.name": "refund",
+            "traceloop.entity.input": "{\"order\":\"A-1\",\"email\":\"jane@example.com\"}",
+            "traceloop.entity.output": "{\"status\":\"refunded\"}"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": true,
+          "tool_calls": false,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "traceloop.span.kind": "tool",
+            "traceloop.entity.name": "refund"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "traceloop_tool_span_tool_calls_only",
+        "description": "A Traceloop tool span (traceloop.span.kind tool) is a tool-execution span. With tool_calls only, its tool content is kept and masked.",
+        "input": {
+          "attributes": {
+            "traceloop.span.kind": "tool",
+            "traceloop.entity.name": "refund",
+            "traceloop.entity.input": "{\"order\":\"A-1\",\"email\":\"jane@example.com\"}",
+            "traceloop.entity.output": "{\"status\":\"refunded\"}"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": false,
+          "tool_calls": true,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "traceloop.span.kind": "tool",
+            "traceloop.entity.name": "refund",
+            "traceloop.entity.input": "{\"order\":\"A-1\",\"email\":\"[email]\"}",
+            "traceloop.entity.output": "{\"status\":\"refunded\"}"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "vercel_tool_call_span_messages_only",
+        "description": "A Vercel AI SDK tool-call span (ai.operationId ai.toolCall) is a tool-execution span. With messages only, its tool content is removed.",
+        "input": {
+          "attributes": {
+            "ai.operationId": "ai.toolCall",
+            "operation.name": "ai.toolCall",
+            "ai.toolCall.name": "refund",
+            "ai.toolCall.args": "{\"email\":\"jane@example.com\"}",
+            "ai.toolCall.result": "refunded",
+            "ai.response.text": "Refund sent to jane@example.com"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": true,
+          "tool_calls": false,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "ai.operationId": "ai.toolCall",
+            "operation.name": "ai.toolCall",
+            "ai.toolCall.name": "refund"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "vercel_tool_call_span_tool_calls_only",
+        "description": "A Vercel AI SDK tool-call span (ai.operationId ai.toolCall) is a tool-execution span. With tool_calls only, its tool content is kept and masked.",
+        "input": {
+          "attributes": {
+            "ai.operationId": "ai.toolCall",
+            "operation.name": "ai.toolCall",
+            "ai.toolCall.name": "refund",
+            "ai.toolCall.args": "{\"email\":\"jane@example.com\"}",
+            "ai.toolCall.result": "refunded",
+            "ai.response.text": "Refund sent to jane@example.com"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": false,
+          "tool_calls": true,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "ai.operationId": "ai.toolCall",
+            "operation.name": "ai.toolCall",
+            "ai.toolCall.name": "refund",
+            "ai.toolCall.args": "{\"email\":\"[email]\"}",
+            "ai.toolCall.result": "refunded",
+            "ai.response.text": "Refund sent to [email]"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "langsmith_tool_span_messages_only",
+        "description": "A LangSmith tool span (langsmith.span.kind tool) is a tool-execution span. With messages only, its tool content is removed.",
+        "input": {
+          "attributes": {
+            "langsmith.span.kind": "tool",
+            "gen_ai.tool.name": "refund",
+            "gen_ai.prompt": "{\"email\":\"jane@example.com\"}",
+            "gen_ai.completion": "refunded"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": true,
+          "tool_calls": false,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "langsmith.span.kind": "tool",
+            "gen_ai.tool.name": "refund"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        }
+      },
+      {
+        "name": "langsmith_tool_span_tool_calls_only",
+        "description": "A LangSmith tool span (langsmith.span.kind tool) is a tool-execution span. With tool_calls only, its tool content is kept and masked.",
+        "input": {
+          "attributes": {
+            "langsmith.span.kind": "tool",
+            "gen_ai.tool.name": "refund",
+            "gen_ai.prompt": "{\"email\":\"jane@example.com\"}",
+            "gen_ai.completion": "refunded"
+          },
+          "events": [],
+          "status": {
+            "code": 0
+          }
+        },
+        "spans": {
+          "messages": false,
+          "tool_calls": true,
+          "http": false
+        },
+        "expected": {
+          "attributes": {
+            "langsmith.span.kind": "tool",
+            "gen_ai.tool.name": "refund",
+            "gen_ai.prompt": "{\"email\":\"[email]\"}",
+            "gen_ai.completion": "refunded"
+          },
+          "events": [],
           "status": {
             "code": 0
           }
