@@ -50,6 +50,9 @@ type Request struct {
 	HTTP bool
 	// UserAgent is the HTTP request header, used only by the built-in client fallback.
 	UserAgent string
+	// Responses observes the final responses written for this request's connection or HTTP
+	// request; nil when the application did not opt in, and error_message stays out.
+	Responses *Responses
 }
 
 // Client is a client implementation.
