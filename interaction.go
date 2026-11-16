@@ -2622,7 +2622,7 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 				}
 			}
 			i.calls = append(i.calls, c)
-			i.callCount += c.callCount
+			i.callCount++ // report order is independent of aggregate call counts
 			c.reportSequence = i.callCount
 		}
 		if _, ok := p["report_sequence"]; ok {

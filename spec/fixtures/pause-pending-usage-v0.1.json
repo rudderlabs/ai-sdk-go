@@ -140,6 +140,122 @@
     }
   },
   "cross_sdk": {
+    "aggregate_report_order": {
+      "description": "SDK-6942: a Python-written pending snapshot has an aggregate, an older span, and an intervening report. Optional report_sequence is omitted to exercise legacy readers. Restore it, merge second with a 10-token wrapper at 200..210 ms, report third gpt-4o-mini with 20 tokens at 300..310 ms, end. Report order, never aggregate call counts, ranks primary model and outcome.",
+      "snapshots": [
+        {
+          "writer": "python-legacy",
+          "snapshot": {
+            "interaction_id": "80fb3c44-9e33-4f8b-9ca0-9b2c98138bc1",
+            "conversation_id": "0fabef27-ce68-4c16-afad-857b3ad9e412",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794872037919,
+            "user_id": "u",
+            "report_count": 3,
+            "call_sequence": 12,
+            "successful_call_sequence": 3,
+            "seen_response_ids": [
+              [
+                "openai",
+                "between"
+              ],
+              [
+                "openai",
+                "first"
+              ],
+              [
+                "openai",
+                "second"
+              ]
+            ],
+            "pending_calls": [
+              {
+                "provider": "openai",
+                "model": "gpt-4o",
+                "raw_model": "gpt-4o",
+                "call_count": 10,
+                "error_count": 0,
+                "input_tokens": 30,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "response_id": "first",
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "matched": false,
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "usage_known": true,
+                "credits_explicit": false,
+                "latency_ms": 10,
+                "call_index": 1,
+                "started_at": 100,
+                "ended_at": 110
+              },
+              {
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "raw_model": "gpt-4.1",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 10,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "response_id": "second",
+                "server_tool_call_count": 0,
+                "from_span": true,
+                "matched": false,
+                "call_event_pending": true,
+                "call_event_emitted": false,
+                "usage_known": true,
+                "credits_explicit": false,
+                "latency_ms": 10,
+                "call_index": 11,
+                "started_at": 200,
+                "ended_at": 210
+              },
+              {
+                "provider": "openai",
+                "model": "gpt-3.5-turbo",
+                "raw_model": "gpt-3.5-turbo",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 5,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "response_id": "between",
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "matched": false,
+                "call_event_pending": true,
+                "call_event_emitted": false,
+                "usage_known": true,
+                "credits_explicit": false,
+                "latency_ms": 10,
+                "call_index": 12,
+                "started_at": 250,
+                "ended_at": 260,
+                "last": true,
+                "last_ok": true
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "primary_model": "gpt-4o-mini",
+        "llm_call_count": 13,
+        "total_input_tokens": 65,
+        "response_status": "success"
+      }
+    },
     "description": "A pending_calls record uses the same keys and value types in the three SDKs: matched, usage_known, and started_at / ended_at in epoch milliseconds. Each snapshot holds the same two calls recorded during paused-response delivery with emitLlmCalls on, as its written_by SDK writes them: a span with known usage and a wrapper call with unknown usage, both unmatched and timed. The two entries marked before SDK-6111 use the keys Python (started_ns, ended_ns) and Go (twin_matched, usage_unknown, RFC 3339 times) wrote until then, which every reader still accepts. For each snapshot: restore it with emitLlmCalls on, record reports in order (source wrapper or span, started_ms / ended_ms in epoch milliseconds), then end. Each report merges into its pending twin in the restored run, so expected.response is a subset of the final ai_response_received and expected.call_events lists a subset of each ai_llm_response_received, in order. Each SDK also writes the scenario itself and compares its pending_calls with its own entry. Top-level primary and outcome_hint use Node objects in current snapshots, legacy positional lists in the old entries; a persistent primary override and a cancelled outcome survive twin merges in either arrival order.",
     "snapshots": [
       {

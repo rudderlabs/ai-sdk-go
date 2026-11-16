@@ -2,6 +2,8 @@ package rudderstackai
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 )
@@ -73,5 +75,51 @@ func TestSDK6942AuthoritativeTwinsReprice(t *testing.T) {
 				})
 			}
 		}
+	}
+}
+func TestSDK6942AggregatePendingSnapshotsRankReports(t *testing.T) {
+	raw, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Cross struct {
+			Order struct {
+				Snapshots []struct {
+					Writer   string
+					Snapshot PausedInteraction
+				}
+				Expected map[string]any
+			} `json:"aggregate_report_order"`
+		} `json:"cross_sdk"`
+	}
+	if err = json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range fixture.Cross.Order.Snapshots {
+		t.Run(entry.Writer, func(t *testing.T) {
+			r := setupAI(t, WithLLMCallEvents(true))
+			_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &entry.Snapshot})
+			c := sdk6942Call()
+			c.Integration = "openai"
+			c.Model = "gpt-4.1"
+			c.ResponseID = "second"
+			i.RecordCall(sdk6111Window(c, 200))
+			c.Model = "gpt-4o-mini"
+			c.ResponseID = "third"
+			c.InputTokens = 20
+			i.RecordCall(sdk6111Window(c, 300))
+			i.End(EndOptions{})
+			p := lastResponse(t, r)
+			for k, want := range fixture.Cross.Order.Expected {
+				if n, ok := want.(float64); ok {
+					if sdk6111Num(p[k]) != n {
+						t.Fatal(p)
+					}
+				} else if p[k] != want {
+					t.Fatal(p)
+				}
+			}
+		})
 	}
 }
