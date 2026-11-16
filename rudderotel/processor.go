@@ -31,11 +31,12 @@ type spanState struct {
 
 // SpanProcessor adds interaction identity and optionally records product calls before export.
 type SpanProcessor struct {
-	inner    sdktrace.SpanProcessor
-	exporter *Exporter
-	options  Options
-	mu       sync.Mutex
-	closed   atomic.Bool
+	inner      sdktrace.SpanProcessor
+	exporter   *Exporter
+	options    Options
+	productNow func() time.Time
+	mu         sync.Mutex
+	closed     atomic.Bool
 	// Go has no weak-key map for interface spans. Bounded identities allow descendants of
 	// already-ended non-AI spans to inherit without retaining span objects themselves.
 	states map[spanKey]spanState
@@ -57,7 +58,8 @@ func NewSpanProcessor(options Options) (*SpanProcessor, error) {
 	} else {
 		inner = sdktrace.NewBatchSpanProcessor(exporter, options.BatchOptions...)
 	}
-	return &SpanProcessor{inner: inner, exporter: exporter, options: options, states: map[spanKey]spanState{}, held: map[spanKey]spanState{}}, nil
+	p := &SpanProcessor{inner: inner, exporter: exporter, options: options, states: map[spanKey]spanState{}, held: map[spanKey]spanState{}}
+	return p, nil
 }
 
 func (p *SpanProcessor) state(k spanKey) spanState {
@@ -168,6 +170,9 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 				s.SetAttributes(attribute.String(k, v))
 			}
 		}
+		if p.options.ProductEvents {
+			p.recordAncestry(s, interaction)
+		}
 		p.inner.OnStart(ctx, s)
 	})
 }
@@ -202,7 +207,7 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 			s = taggedSpan{ReadOnlySpan: s, attrs: attrs}
 		}
 		if p.options.ProductEvents {
-			safe("tracing.productEvents", func() { recordSpan(s, p.exporter.client, state.owner) })
+			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
 		}
 		p.inner.OnEnd(s)
 	})
@@ -245,4 +250,22 @@ func (p *SpanProcessor) Shutdown(ctx context.Context) error {
 	p.order = nil
 	p.mu.Unlock()
 	return err
+}
+
+func (p *SpanProcessor) recordAncestry(s sdktrace.ReadOnlySpan, owner *rudderstackai.Interaction) {
+	id := firstString(attributes(s.Attributes()), InteractionIDAttribute)
+	if id != "" && (owner == nil || owner.ID() != id) {
+		owner = nil
+		if found := hook.Tracing.Open(id); found != nil {
+			owner = found.(*rudderstackai.Interaction)
+		}
+	}
+	if owner == nil {
+		return
+	}
+	parent := ""
+	if s.Parent().IsValid() {
+		parent = s.Parent().SpanID().String()
+	}
+	hook.Tracing.RecordAncestry(owner, s.SpanContext().TraceID().String(), s.SpanContext().SpanID().String(), parent)
 }

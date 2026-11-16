@@ -2,6 +2,7 @@ package rudderotel
 
 import (
 	"context"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -35,6 +36,7 @@ func runProductEventsConformance(t *testing.T, path string) {
 					CachedInputPerMtok, CacheWritePerMtok *float64
 				}
 				CaptureContent, EmitLLMCalls, ToolBreakdown, PerCallContent bool
+				AdvanceClock, ExactCallTiming                               bool
 				Analytics                                                   string
 				Classifier                                                  *struct {
 					Intents  []string
@@ -50,6 +52,8 @@ func runProductEventsConformance(t *testing.T, path string) {
 			}
 			Steps []struct {
 				Op, ResponseText string
+				Count            int
+				Time             string `json:"timeUnixNano"`
 				Span             fixtureSpan
 				Call             struct {
 					Integration, Provider, Model, RequestedModel, FinishReason string
@@ -104,14 +108,43 @@ func runProductEventsConformance(t *testing.T, path string) {
 			})
 			ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: c.Interaction.InteractionID, ConversationID: c.Interaction.ConversationID, UserID: c.Interaction.UserID, Feature: c.Interaction.Feature, PromptText: c.Interaction.PromptText})
 			t.Cleanup(func() { i.End(rudderstackai.EndOptions{}) })
-			offset := time.Now().UnixNano() - int64(1760000000000000000)
+			// Match Node's Date.now() offset so exact 1 ms boundaries survive float timestamps.
+			offset := time.Now().UnixMilli()*int64(time.Millisecond) - int64(1760000000000000000)
 			shift := func(s string) string { n, _ := strconv.ParseInt(s, 10, 64); return strconv.FormatInt(n+offset, 10) }
+			now := time.Now()
+			p.productNow = func() time.Time { return now }
+			if c.Config.AdvanceClock {
+				hook.Tracing.SetClock(i, p.productNow)
+			}
 			for _, step := range c.Steps {
+				if c.Config.AdvanceClock && (step.Op == "span" || step.Op == "span_start") {
+					at := nanos(shift(step.Span.End))
+					if step.Op == "span_start" {
+						at = nanos(shift(step.Span.Start))
+					}
+					if at.After(now) {
+						now = at
+					}
+				}
 				switch step.Op {
-				case "span":
+				case "span", "span_start", "span_on_end":
 					step.Span.Start, step.Span.End = shift(step.Span.Start), shift(step.Span.End)
-					s, _ := startFixture(ctx, t, step.Span, p)
-					s.End(trace.WithTimestamp(nanos(step.Span.End)))
+					capture := tracetest.NewSpanRecorder()
+					span, provider := startFixture(ctx, t, step.Span, capture)
+					if step.Op == "span_start" {
+						p.OnStart(ctx, span.(sdktrace.ReadWriteSpan))
+					}
+					span.End(trace.WithTimestamp(nanos(step.Span.End)))
+					snapshot := capture.Ended()[0]
+					switch step.Op {
+					case "span_on_end":
+						hook.OnBeforeEnd(i, func() { p.OnEnd(snapshot) })
+					case "span":
+						p.OnEnd(snapshot)
+					}
+					if err := provider.Shutdown(ctx); err != nil {
+						t.Fatal(err)
+					}
 				case "wrapper_call":
 					c := step.Call
 					accepted := i.RecordCall(rudderstackai.LLMCall{Integration: c.Integration, Provider: c.Provider, Model: c.Model, RequestedModel: c.RequestedModel, InputTokens: c.InputTokens, OutputTokens: c.OutputTokens, ResponseID: c.ResponseID, FinishReason: c.FinishReason, StartedAt: nanos(shift(c.Start)), EndedAt: nanos(shift(c.End))})
@@ -119,6 +152,20 @@ func runProductEventsConformance(t *testing.T, path string) {
 						for _, id := range c.ToolCallIDs {
 							i.RecordToolCalls(rudderstackai.ToolCall{ID: id})
 						}
+					}
+				case "advance_clock":
+					now = nanos(shift(step.Time))
+				case "expect_recorded_calls":
+					if got := int(reflect.ValueOf(i).Elem().FieldByName("callCount").Int()); got != step.Count {
+						t.Fatalf("recorded calls=%d want %d", got, step.Count)
+					}
+				case "sdk_flush":
+					if !rudderstackai.Flush(ctx) {
+						t.Fatal("SDK flush failed")
+					}
+				case "shutdown":
+					if err := p.Shutdown(ctx); err != nil {
+						t.Fatal(err)
 					}
 				case "end":
 					i.End(rudderstackai.EndOptions{ResponseText: step.ResponseText})
@@ -138,6 +185,13 @@ func runProductEventsConformance(t *testing.T, path string) {
 				if event["event"] != DefaultEventName {
 					if props, ok := event["properties"].(map[string]any); ok && !c.Config.PerCallContent && event["event"] == "ai_llm_response_received" {
 						delete(props, "call_index")
+					}
+					if c.Config.ExactCallTiming && event["event"] == "ai_llm_response_received" {
+						stamp, err := time.Parse(time.RFC3339Nano, event["originalTimestamp"].(string))
+						if err != nil {
+							t.Fatal(err)
+						}
+						event["timestampOffsetMs"] = float64(stamp.UnixNano()-offset-1760000000000000000) / 1e6
 					}
 					actual = append(actual, event)
 				}
