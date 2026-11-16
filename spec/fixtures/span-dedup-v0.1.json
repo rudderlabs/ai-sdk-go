@@ -14,13 +14,26 @@
           {
             "kind": "wrapper",
             "label": "w",
-            "children": [{ "kind": "otel", "label": "i", "operation": "chat" }]
+            "children": [
+              {
+                "kind": "otel",
+                "label": "i",
+                "operation": "chat"
+              }
+            ]
           }
         ]
       },
-      "expected_spans": [{ "label": "w", "parent": null }],
+      "expected_spans": [
+        {
+          "label": "w",
+          "parent": null
+        }
+      ],
       "call_span": "w",
-      "other_processors_see": ["i"]
+      "other_processors_see": [
+        "i"
+      ]
     },
     {
       "name": "wrapper-inside-otel-model-span",
@@ -33,13 +46,25 @@
             "kind": "otel",
             "label": "o",
             "operation": "chat",
-            "children": [{ "kind": "wrapper", "label": "w" }]
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              }
+            ]
           }
         ]
       },
-      "expected_spans": [{ "label": "o", "parent": null }],
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        }
+      ],
       "call_span": "o",
-      "other_processors_see": ["o"]
+      "other_processors_see": [
+        "o"
+      ]
     },
     {
       "name": "instrumentation-inside-joined-wrapper",
@@ -56,15 +81,29 @@
               {
                 "kind": "wrapper",
                 "label": "w",
-                "children": [{ "kind": "otel", "label": "i", "operation": "chat" }]
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "i",
+                    "operation": "chat"
+                  }
+                ]
               }
             ]
           }
         ]
       },
-      "expected_spans": [{ "label": "o", "parent": null }],
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        }
+      ],
       "call_span": "o",
-      "other_processors_see": ["i", "o"]
+      "other_processors_see": [
+        "i",
+        "o"
+      ]
     },
     {
       "name": "manual-span-between-otel-model-span-and-wrapper",
@@ -82,19 +121,35 @@
                 "kind": "manual",
                 "label": "t",
                 "operation": "execute_tool",
-                "children": [{ "kind": "wrapper", "label": "w" }]
+                "children": [
+                  {
+                    "kind": "wrapper",
+                    "label": "w"
+                  }
+                ]
               }
             ]
           }
         ]
       },
       "expected_spans": [
-        { "label": "o", "parent": null },
-        { "label": "t", "parent": "o" },
-        { "label": "w", "parent": "t" }
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "t",
+          "parent": "o"
+        },
+        {
+          "label": "w",
+          "parent": "t"
+        }
       ],
       "call_span": "w",
-      "other_processors_see": ["o"]
+      "other_processors_see": [
+        "o"
+      ]
     },
     {
       "name": "wrapper-inside-otel-agent-span",
@@ -107,16 +162,29 @@
             "kind": "otel",
             "label": "a",
             "operation": "invoke_agent",
-            "children": [{ "kind": "wrapper", "label": "w" }]
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              }
+            ]
           }
         ]
       },
       "expected_spans": [
-        { "label": "a", "parent": null },
-        { "label": "w", "parent": "a" }
+        {
+          "label": "a",
+          "parent": null
+        },
+        {
+          "label": "w",
+          "parent": "a"
+        }
       ],
       "call_span": "w",
-      "other_processors_see": ["a"]
+      "other_processors_see": [
+        "a"
+      ]
     },
     {
       "name": "wrapper-in-another-interaction-inside-otel-model-span",
@@ -133,18 +201,31 @@
               {
                 "kind": "interaction",
                 "label": "B",
-                "children": [{ "kind": "wrapper", "label": "w" }]
+                "children": [
+                  {
+                    "kind": "wrapper",
+                    "label": "w"
+                  }
+                ]
               }
             ]
           }
         ]
       },
       "expected_spans": [
-        { "label": "o", "parent": null },
-        { "label": "w", "parent": "o" }
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "w",
+          "parent": "o"
+        }
       ],
       "call_span": "w",
-      "other_processors_see": ["o"]
+      "other_processors_see": [
+        "o"
+      ]
     },
     {
       "name": "wrapper-under-ended-otel-model-span",
@@ -158,16 +239,29 @@
             "label": "e",
             "operation": "chat",
             "end_before_children": true,
-            "children": [{ "kind": "wrapper", "label": "w" }]
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              }
+            ]
           }
         ]
       },
       "expected_spans": [
-        { "label": "e", "parent": null },
-        { "label": "w", "parent": "e" }
+        {
+          "label": "e",
+          "parent": null
+        },
+        {
+          "label": "w",
+          "parent": "e"
+        }
       ],
       "call_span": "w",
-      "other_processors_see": ["e"]
+      "other_processors_see": [
+        "e"
+      ]
     },
     {
       "name": "integration-model-run-inside-otel-model-span",
@@ -186,15 +280,27 @@
                 "kind": "integration",
                 "label": "m",
                 "operation": "chat",
-                "children": [{ "kind": "wrapper", "label": "w" }]
+                "children": [
+                  {
+                    "kind": "wrapper",
+                    "label": "w"
+                  }
+                ]
               }
             ]
           }
         ]
       },
-      "expected_spans": [{ "label": "o", "parent": null }],
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        }
+      ],
       "call_span": "o",
-      "other_processors_see": ["o"]
+      "other_processors_see": [
+        "o"
+      ]
     },
     {
       "name": "otel-model-span-inside-integration-model-run",
@@ -208,13 +314,209 @@
             "kind": "integration",
             "label": "m",
             "operation": "chat",
-            "children": [{ "kind": "otel", "label": "i", "operation": "chat" }]
+            "children": [
+              {
+                "kind": "otel",
+                "label": "i",
+                "operation": "chat"
+              }
+            ]
           }
         ]
       },
-      "expected_spans": [{ "label": "m", "parent": null }],
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        }
+      ],
       "call_span": null,
-      "other_processors_see": ["i"]
+      "other_processors_see": [
+        "i"
+      ]
+    },
+    {
+      "name": "otel-model-span-inside-wrapper-inside-integration-tool",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "execute_tool",
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w",
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "i",
+                    "operation": "chat"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "w",
+          "parent": "m"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "i"
+      ]
+    },
+    {
+      "name": "manual-span-between-integration-model-run-and-otel-model-span",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "manual",
+                "label": "t",
+                "operation": "execute_tool",
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "i",
+                    "operation": "chat"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "t",
+          "parent": "m"
+        },
+        {
+          "label": "i",
+          "parent": null
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "i"
+      ]
+    },
+    {
+      "name": "framework-parented-model-run-under-a-newer-manual-span",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "r",
+            "operation": "invoke_agent",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "children": [
+                  {
+                    "kind": "manual",
+                    "label": "t",
+                    "operation": "execute_tool",
+                    "children": [
+                      {
+                        "kind": "integration",
+                        "label": "m",
+                        "operation": "chat",
+                        "framework_parent": "r"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "r",
+          "parent": null
+        },
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "t",
+          "parent": "r"
+        },
+        {
+          "label": "m",
+          "parent": "r"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "wrapper-inside-an-otel-model-span-the-processor-does-not-export",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "legacy": true,
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "w",
+          "parent": "o"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "o"
+      ]
     },
     {
       "name": "spans-off-exports-the-otel-model-span",
@@ -226,13 +528,26 @@
           {
             "kind": "wrapper",
             "label": "w",
-            "children": [{ "kind": "otel", "label": "i", "operation": "chat" }]
+            "children": [
+              {
+                "kind": "otel",
+                "label": "i",
+                "operation": "chat"
+              }
+            ]
           }
         ]
       },
-      "expected_spans": [{ "label": "i", "parent": null }],
+      "expected_spans": [
+        {
+          "label": "i",
+          "parent": null
+        }
+      ],
       "call_span": null,
-      "other_processors_see": ["i"]
+      "other_processors_see": [
+        "i"
+      ]
     }
   ]
 }

@@ -119,16 +119,21 @@ call:
   inside a wrapper call is not exported by the `rudderotel` processor. Your other processors and
   exporters still receive it, and `ProductEvents` still counts the call once.
 - A wrapper call that starts inside such an OpenTelemetry span of the same interaction sends no
-  span of its own. Its `ai_llm_response_received.span_id` is the OpenTelemetry span's ID. The SDK
-  never writes attributes onto your span.
+  span of its own, provided the processor will export that span (sampled, and passing the export
+  filter when it starts). Its `ai_llm_response_received.span_id` is the OpenTelemetry span's ID.
+  No wrapper usage or content is copied onto your span; the processor's usual identity attributes
+  still apply.
 - Any other span in between keeps both: a wrapper call inside a `StartSpan` span that is itself
   inside an OpenTelemetry model-call span gets its own span, a child of the manual one.
 
-Matching uses context nesting only, never times or model names. Limits:
+Matching uses context nesting only, never times or model names, and the most recently started
+active SDK span decides. Limits:
 
 - Instrumentations that never put their span on the context passed downstream, and spans your
   sampler drops, cannot be matched, so the call can still produce two spans.
 - The bare `Exporter` has no start hook and cannot deduplicate; use the processor.
+- A span is classified when it starts: one that gets its model-call attributes later is not
+  matched.
 - A span that already ended, or that started in another interaction, is never joined.
 - An exported child of a dropped OpenTelemetry span keeps that span as its `parent_span_id`,
   although RudderStack never received it.
