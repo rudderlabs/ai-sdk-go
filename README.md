@@ -366,6 +366,8 @@ Moving AI events your app already sends through RudderStack to this SDK? `aichec
 client, err := ruddertest.NewRecorder("events.jsonl") // github.com/rudderlabs/ai-sdk-go/ruddertest, instead of analytics.NewWithConfig(...)
 ```
 
+The recorder creates the file in the current folder, where it's easy to commit by accident: record outside the repo (for example in a temp folder) or add the capture file to `.gitignore`.
+
 ```bash
 go install github.com/rudderlabs/ai-sdk-go/cmd/aicheck@latest
 aicheck events.jsonl --expect-legacy chatTurnCompleted \
