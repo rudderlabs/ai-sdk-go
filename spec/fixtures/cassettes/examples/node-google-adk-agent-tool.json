@@ -1,0 +1,292 @@
+{
+  "synthetic": false,
+  "recorded_at": "2026-11-16T17:29:23.702Z",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "events": [
+          {
+            "payload": {
+              "candidates": [
+                {
+                  "content": {
+                    "parts": [
+                      {
+                        "functionCall": {
+                          "name": "orders",
+                          "args": {
+                            "request": "1234"
+                          },
+                          "id": "call_15643289575498613816"
+                        },
+                        "thoughtSignature": "EmAKXgFpFH0Th3maNf06b4z9WZEWshF3/UEmy4qU/yuZmwfLxNYwD/bty76noXZ1uinYiQCaiuRGEOfYu3uj9MkjEIcGV+Gm5eaMiw5NwBc2cOXbORFdpnl/E/vv0IiyWRw="
+                      }
+                    ],
+                    "role": "model"
+                  },
+                  "index": 0
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 89,
+                "candidatesTokenCount": 17,
+                "totalTokenCount": 106,
+                "promptTokensDetails": [
+                  {
+                    "modality": "TEXT",
+                    "tokenCount": 89
+                  }
+                ],
+                "serviceTier": "standard"
+              },
+              "modelVersion": "gemini-3.5-flash-lite",
+              "responseId": "bz37atq3MJ2Z4-EP8f-VQA"
+            }
+          },
+          {
+            "payload": {
+              "candidates": [
+                {
+                  "content": {
+                    "parts": [
+                      {
+                        "text": ""
+                      }
+                    ],
+                    "role": "model"
+                  },
+                  "finishReason": "STOP",
+                  "index": 0
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 89,
+                "candidatesTokenCount": 17,
+                "totalTokenCount": 106,
+                "promptTokensDetails": [
+                  {
+                    "modality": "TEXT",
+                    "tokenCount": 89
+                  }
+                ],
+                "serviceTier": "standard"
+              },
+              "modelVersion": "gemini-3.5-flash-lite",
+              "responseId": "bz37atq3MJ2Z4-EP8f-VQA"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.5-flash-lite:generateContent"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "functionCall": {
+                      "name": "lookup_order",
+                      "args": {
+                        "orderId": "1234"
+                      },
+                      "id": "call_6140213079696532538"
+                    },
+                    "thoughtSignature": "EmAKXgFpFH0T9or1Pk3Zdw74Eq19zqA66/u/KKLKfgGspJVOcGrn7/A8IIFdJktQIRRanhEGpOtidPUNMOAWaAjQqgZMZP/Bm5qtr3LrDpwceyfZEQam0xo4SFlCpklMh64="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0,
+              "finishMessage": "Model generated function call(s)."
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 98,
+            "candidatesTokenCount": 20,
+            "totalTokenCount": 118,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 98
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.5-flash-lite",
+          "responseId": "cD37aob8JqHf4t4P7eGJuQk"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.5-flash-lite:generateContent"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "Your order 1234 has been shipped and is expected to arrive in 2 days.",
+                    "thoughtSignature": "EmAKXgFpFH0TOklEz1sSCWApbByRDMbO9liMdCQ8WsKsMEEB0kwvWZYnf4YMeAnax7yUMD/yhu761Uoer7o+/jW2lYa3TqL8rKLAnNGKwQUxTRGdzp9HXvpcT+ABZnpVWhI="
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "index": 0
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 152,
+            "candidatesTokenCount": 20,
+            "totalTokenCount": 172,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 152
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-3.5-flash-lite",
+          "responseId": "cT37ata8GPm64-EP1pLdiAI"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1beta/models/gemini-3.5-flash-lite:streamGenerateContent"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "events": [
+          {
+            "payload": {
+              "candidates": [
+                {
+                  "content": {
+                    "parts": [
+                      {
+                        "text": "Your order"
+                      }
+                    ],
+                    "role": "model"
+                  },
+                  "index": 0
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 137,
+                "candidatesTokenCount": 2,
+                "totalTokenCount": 139,
+                "promptTokensDetails": [
+                  {
+                    "modality": "TEXT",
+                    "tokenCount": 137
+                  }
+                ],
+                "serviceTier": "standard"
+              },
+              "modelVersion": "gemini-3.5-flash-lite",
+              "responseId": "cz37au7EBIOOmNMP4vm44QM"
+            }
+          },
+          {
+            "payload": {
+              "candidates": [
+                {
+                  "content": {
+                    "parts": [
+                      {
+                        "text": " 1234 has been shipped and is expected to arrive in 2 days."
+                      }
+                    ],
+                    "role": "model"
+                  },
+                  "index": 0
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 137,
+                "candidatesTokenCount": 20,
+                "totalTokenCount": 157,
+                "promptTokensDetails": [
+                  {
+                    "modality": "TEXT",
+                    "tokenCount": 137
+                  }
+                ],
+                "serviceTier": "standard"
+              },
+              "modelVersion": "gemini-3.5-flash-lite",
+              "responseId": "cz37au7EBIOOmNMP4vm44QM"
+            }
+          },
+          {
+            "payload": {
+              "candidates": [
+                {
+                  "content": {
+                    "parts": [
+                      {
+                        "text": "",
+                        "thoughtSignature": "EmAKXgFpFH0T8XKXC95kTSwoVRlmu0OUfG69Kju8yernuAV1jKyHlsMcvH68ZVwj1QU4ZhN8/HPu+kTZDhYWS0de/T5nf8VfE6syp4L1tQYZD1GctGPRwPlqHzsMtU1RFYc="
+                      }
+                    ],
+                    "role": "model"
+                  },
+                  "finishReason": "STOP",
+                  "index": 0
+                }
+              ],
+              "usageMetadata": {
+                "promptTokenCount": 137,
+                "candidatesTokenCount": 20,
+                "totalTokenCount": 157,
+                "promptTokensDetails": [
+                  {
+                    "modality": "TEXT",
+                    "tokenCount": 137
+                  }
+                ],
+                "serviceTier": "standard"
+              },
+              "modelVersion": "gemini-3.5-flash-lite",
+              "responseId": "cz37au7EBIOOmNMP4vm44QM"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
