@@ -2,12 +2,14 @@ package rudderotel
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -285,5 +287,53 @@ func TestSpanDedupShutdownForgetsItsSpans(t *testing.T) {
 	}
 	if !wrapperIn(ctx, t, i, events) {
 		t.Error("a span of a shut-down processor owned the call")
+	}
+}
+
+func TestSpanDedupRejectedOwnerSendsTheJoinedSpan(t *testing.T) {
+	for _, order := range []string{"after", "before"} {
+		t.Run("owner ends "+order+" the call", func(t *testing.T) {
+			// Accepts the span at start, rejects it once it ends with ERROR.
+			provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool { return IsAISpan(s) && s.Status().Code != codes.Error }})
+			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true), rudderstackai.WithLLMCallEvents(true)); err != nil {
+				t.Fatal(err)
+			}
+			tracer := provider.Tracer("app")
+			ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+			ctx, root := tracer.Start(ctx, "request")
+			ctx, o := tracer.Start(ctx, "chat outer", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+			_, s := hook.Tracing.BeginWrapper(ctx, i, time.Now())
+			if order == "before" {
+				o.SetStatus(codes.Error, "")
+				o.End()
+			}
+			hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: "gpt-4o-mini", InputTokens: 1, OutputTokens: 1}, s, 200)
+			if order == "after" {
+				if n := len(spanEvents(events())); n != 0 {
+					t.Fatalf("sent %d spans before the owner settled", n)
+				}
+				o.SetStatus(codes.Error, "")
+				o.End()
+			}
+			root.End()
+			i.End(rudderstackai.EndOptions{})
+			spans := spanEvents(events())
+			if len(spans) != 1 {
+				t.Fatalf("want the joined span alone, got %d", len(spans))
+			}
+			p := spans[0]["properties"].(object)
+			ids := o.SpanContext()
+			if p["trace_id"] != ids.TraceID().String() || p["span_id"] != ids.SpanID().String() || p["parent_span_id"] != root.SpanContext().SpanID().String() {
+				t.Errorf("fallback span IDs %v/%v/%v, want the owner's", p["trace_id"], p["span_id"], p["parent_span_id"])
+			}
+			if b, _ := json.Marshal(p["otlp"]); !strings.Contains(string(b), "rudderstack.span_source") {
+				t.Error("the fallback is not the SDK's wrapper span")
+			}
+			for _, e := range events() {
+				if e["event"] == "ai_llm_response_received" && e["properties"].(object)["span_id"] != ids.SpanID().String() {
+					t.Errorf("call span_id %v, want the owner's", e["properties"].(object)["span_id"])
+				}
+			}
+		})
 	}
 }
