@@ -5,6 +5,7 @@ How each integration attaches, what it records, and its edge cases. Event fields
 - [How integrations work](#how-integrations-work)
 - [OpenAI](#openai)
 - [Anthropic](#anthropic)
+- [Claude Managed Agents](#claude-managed-agents)
 - [Google Gen AI](#google-gen-ai)
 - [Amazon Bedrock](#amazon-bedrock)
 - [Gateways and OpenAI-compatible endpoints](#gateways-and-openai-compatible-endpoints)
@@ -96,6 +97,31 @@ client := anthropic.NewClient(
 - `finish_reason` is the `stop_reason` as sent (`end_turn`, `tool_use`, `max_tokens`, ...); a last call stopped at `max_tokens` makes the answer `incomplete`.
 - Tool calls: `tool_use`, `server_tool_use` and `mcp_tool_use` blocks (`mcp_tool_use` with its `server_name`). Outcomes come from the `tool_result` blocks of a later request in the same interaction (`is_error`): run the whole tool loop inside one interaction.
 - An `error` event inside a stream is a failed call (`api_error`) that keeps the tokens seen so far.
+
+## Claude Managed Agents
+
+Anthropic runs a Managed Agents session's agent loop on its servers, so there is no client call to wrap. `rudderanthropic.TrackSessionEvents` reads the session's event stream and passes every event through unchanged. `github.com/anthropics/anthropic-sdk-go` v1.78.0 or later.
+
+```go
+session, err := client.Beta.Sessions.New(ctx, anthropic.BetaSessionNewParams{ /* agent, environment */ })
+stream := client.Beta.Sessions.Events.StreamEvents(ctx, session.ID, anthropic.BetaSessionEventStreamParams{}) // open before sending
+events := rudderanthropic.TrackSessionEvents(ctx, stream, rudderanthropic.WithSession(session),
+	rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{UserID: userID}))
+defer events.Close()
+// send the user.message, then read the same events: answer custom tools and approvals as usual
+for events.Next() {
+	event := events.Current()
+}
+```
+
+It also takes `Beta.Sessions.Events.ListAutoPaging`. Options: `WithSession(session)` (its ID and agent model), `WithSessionID`, `WithSessionModel`, `WithAgentName`, `WithInteractionOptions` (identity and fields of the interactions the turns open) and `WithSessionAnalytics(client)`. An interaction in `ctx` receives the turns instead. [Example](../examples/managed-agents).
+
+- Turns: one answer per turn, from the turn's first event (usually the echoed `user.message` or `user.define_outcome`) until the session goes idle for any reason but `requires_action`, or terminates. A `user.message` sent with `initial_events` before the stream opened is not on the stream: the turn still sends `ai_user_prompt_created`, without `prompt_text`. All turns of one stream share a `conversation_id`: `InteractionOptions.ConversationID`, else the context's, else the session ID, else one minted for the stream.
+- Model calls: each `span.model_request_end` is one call. Input tokens include cache reads and writes, `speed` is `service_tier`, and a failed request (`is_error`) stays unpriced. The model is `WithSessionModel`, else the session agent's; without either, calls have no model and stay unpriced (one warning). Each outcome grader cycle (`span.outcome_evaluation_end`) is one more call with `agent_name: outcome_grader` and no model: its tokens count, its cost does not, and it is never `primary_model`.
+- Tools: built-in (`agent.tool_use`), MCP (`agent.mcp_tool_use`, with `mcp_server`) and custom (`agent.custom_tool_use`) calls. A result with `is_error` is an error; a call the permission policy refused, or the app denied in `user.tool_confirmation`, is `denied`. Durations run from the tool use to its result, by the events' `processed_at` in whole milliseconds.
+- Status: `end_turn` is `success`, or `cancelled` after a `user.interrupt`; `refusal` is `error` with `content_filter`; `retries_exhausted` is `error` typed by the last `session.error` (`model_rate_limited_error` and `billing_error` `rate_limit`, MCP and repository authentication `auth_error`, MCP connection and credential host `connection_error`, repository not found, checkout and clone `invalid_request`, else `api_error`); `budget_reached` is `incomplete` with `max_budget_usd`. A stream that fails ends the turn with the error's type; one closed mid-turn ends it `cancelled`.
+- Pauses: a stream that ends while the session waits on the app (`requires_action`) pauses the answer (`pause_reason` `approval` or `deferred_tool`); the next stream of the same session in this process resumes it under the same `interaction_id`.
+- Limits: only the session's primary thread is recorded; subagent and dynamic workflow threads report on their own thread streams ([SDK-6918](https://linear.app/rudderstack/issue/SDK-6918)). The stream does not report thinking tokens, time to first token, finish reasons, or the session's runtime and web search fees (only in the session's cent-rounded `usage.list_cost`).
 
 ## Google Gen AI
 

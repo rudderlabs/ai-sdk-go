@@ -74,6 +74,17 @@ func (l *LLM) Replay(c *Cassette) {
 	}
 }
 
+// ReplayManagedAgents queues every Claude Managed Agents interaction of c, in recorded order: the
+// app must make the same requests in the same order.
+func (l *LLM) ReplayManagedAgents(c *Cassette) {
+	for _, it := range c.Interactions {
+		path, _, _ := strings.Cut(it.Request.Path, "?")
+		if managedAgentsPath.MatchString(path) {
+			l.enqueue("anthropic.managed_agents", it.Response)
+		}
+	}
+}
+
 func (resp CassetteResponse) serve(_ *LLM, w http.ResponseWriter, _ *http.Request) {
 	contentType := strings.ToLower(resp.Headers["content-type"])
 	switch {

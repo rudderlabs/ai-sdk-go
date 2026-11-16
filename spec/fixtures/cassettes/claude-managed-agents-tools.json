@@ -1,0 +1,694 @@
+{
+  "synthetic": false,
+  "recorded_at": "2026-11-16T17:26:38.170Z",
+  "description": "One Claude Managed Agents turn on claude-haiku-5-5 (beta managed-agents-2026-04-01): environment, agent and session creation, the session event stream (bash, a custom tool the app answers, then the answer), the two sent events and the final session. Recorded with @anthropic-ai/sdk 1.3.0.",
+  "interactions": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/environments"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "id": "env_01VRTQeEgembCzHb3fDybykt",
+          "type": "environment",
+          "name": "rudderstack-ai-sdk-cassette",
+          "description": null,
+          "created_at": "2026-11-16T17:24:26.873045Z",
+          "updated_at": "2026-11-16T17:24:26.873045Z",
+          "archived_at": null,
+          "state": "active",
+          "config": {
+            "type": "cloud",
+            "packages": {
+              "type": "packages",
+              "pip": [],
+              "npm": [],
+              "apt": [],
+              "cargo": [],
+              "gem": [],
+              "go": []
+            },
+            "networking": {
+              "type": "limited",
+              "allow_mcp_servers": false,
+              "allow_package_managers": false,
+              "allowed_hosts": []
+            }
+          },
+          "metadata": {},
+          "scope": "organization"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/agents"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "archived_at": null,
+          "created_at": "2026-11-16T17:24:27.283461Z",
+          "description": null,
+          "execution_identity": {
+            "type": "service_account"
+          },
+          "id": "agent_01EqtJRNfJhNe94yhDqHwXyc",
+          "mcp_servers": [],
+          "metadata": {},
+          "model": {
+            "effort": {
+              "type": "medium"
+            },
+            "id": "claude-haiku-5-5",
+            "speed": "standard"
+          },
+          "multiagent": null,
+          "name": "rudderstack-ai-sdk-cassette",
+          "skills": [],
+          "system": "Be brief. Follow the steps exactly.",
+          "tools": [
+            {
+              "configs": [
+                {
+                  "enabled": true,
+                  "name": "bash",
+                  "permission_policy": {
+                    "type": "always_allow"
+                  },
+                  "type": "bash"
+                }
+              ],
+              "default_config": {
+                "enabled": false,
+                "permission_policy": {
+                  "type": "always_allow"
+                }
+              },
+              "type": "agent_toolset_20260401"
+            },
+            {
+              "description": "Current weather for a city.",
+              "input_schema": {
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "type": "object"
+              },
+              "name": "get_weather",
+              "type": "custom"
+            }
+          ],
+          "type": "agent",
+          "updated_at": "2026-11-16T17:24:27.283461Z",
+          "version": 1
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/sessions"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "agent": {
+            "description": null,
+            "execution_identity": {
+              "type": "service_account"
+            },
+            "id": "agent_01EqtJRNfJhNe94yhDqHwXyc",
+            "mcp_servers": [],
+            "model": {
+              "effort": {
+                "type": "medium"
+              },
+              "id": "claude-haiku-5-5",
+              "speed": "standard"
+            },
+            "multiagent": null,
+            "name": "rudderstack-ai-sdk-cassette",
+            "skills": [],
+            "system": "Be brief. Follow the steps exactly.",
+            "tools": [
+              {
+                "configs": [
+                  {
+                    "enabled": true,
+                    "name": "bash",
+                    "permission_policy": {
+                      "type": "always_allow"
+                    },
+                    "type": "bash"
+                  }
+                ],
+                "default_config": {
+                  "enabled": false,
+                  "permission_policy": {
+                    "type": "always_allow"
+                  }
+                },
+                "type": "agent_toolset_20260401"
+              },
+              {
+                "description": "Current weather for a city.",
+                "input_schema": {
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "city"
+                  ],
+                  "type": "object"
+                },
+                "name": "get_weather",
+                "type": "custom"
+              }
+            ],
+            "type": "agent",
+            "version": 1
+          },
+          "archived_at": null,
+          "budget": null,
+          "created_at": "2026-11-16T17:24:28.205151Z",
+          "environment_id": "env_01VRTQeEgembCzHb3fDybykt",
+          "id": "sesn_016wWdgSK9ouXnMMGFJvH58e",
+          "metadata": {},
+          "outcome_evaluations": [],
+          "resources": [],
+          "stats": {
+            "active_seconds": 0,
+            "duration_seconds": 0
+          },
+          "status": "idle",
+          "title": "rudderstack-ai cassette",
+          "type": "session",
+          "updated_at": "2026-11-16T17:24:28.205151Z",
+          "usage": {
+            "active_seconds": 0,
+            "cache_creation": null,
+            "cache_read_input_tokens": 0,
+            "input_tokens": 0,
+            "list_cost": {
+              "amount": "0",
+              "currency": "USD"
+            },
+            "output_tokens": 0,
+            "server_tool_use": {
+              "web_fetch_requests": 0,
+              "web_search_requests": 0
+            }
+          },
+          "vault_ids": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/sessions/sesn_016wWdgSK9ouXnMMGFJvH58e/events/stream"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "events": [
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_014sfvNqZagL4LiXbzz7cUCw",
+              "processed_at": "2026-11-16T17:24:29.562624Z",
+              "type": "session.status_running"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "agent_name": "rudderstack-ai-sdk-cassette",
+              "id": "sevt_01X8ofrChsyakfAaHhj4LB5Q",
+              "processed_at": "2026-11-16T17:24:29.562625Z",
+              "session_thread_id": "sthr_01JfujXfvsEYBujFuoSzhdFN",
+              "type": "session.thread_status_running"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "content": [
+                {
+                  "text": "Step 1: run `echo hi` with bash. Step 2: call get_weather for Paris. Step 3: reply with one word describing the weather.",
+                  "type": "text"
+                }
+              ],
+              "id": "sevt_01X27qgm7GpdciomvAgfq39J",
+              "processed_at": "2026-11-16T17:24:29.632512Z",
+              "type": "user.message"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_01TP3MsKauy6EzpieGTTy8MC",
+              "processed_at": "2026-11-16T17:24:29.632513Z",
+              "type": "span.model_request_start"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_01SjdkchLwkCv2WiCkLThij5",
+              "processed_at": "2026-11-16T17:24:30.561451Z",
+              "type": "agent.thinking"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_01WfdFX7UK91LqqAyyHh7q4p",
+              "is_error": false,
+              "model_request_start_id": "sevt_01TP3MsKauy6EzpieGTTy8MC",
+              "model_usage": {
+                "cache_creation_input_tokens": 4283,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 4,
+                "output_tokens": 218,
+                "speed": "standard"
+              },
+              "processed_at": "2026-11-16T17:24:30.819538Z",
+              "type": "span.model_request_end"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "evaluated_permission": "allow",
+              "evaluation": {
+                "type": "always_allow"
+              },
+              "id": "sevt_012NwReJeZ6kQJaiHGwETF4n",
+              "input": {
+                "command": "echo hi"
+              },
+              "name": "bash",
+              "processed_at": "2026-11-16T17:24:30.921681Z",
+              "type": "agent.tool_use"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "content": [
+                {
+                  "text": "hi\n",
+                  "type": "text"
+                }
+              ],
+              "id": "sevt_01TqkrcrvbVmD7pJc7FJgePP",
+              "is_error": false,
+              "processed_at": "2026-11-16T17:24:31.486222Z",
+              "tool_use_id": "sevt_012NwReJeZ6kQJaiHGwETF4n",
+              "type": "agent.tool_result"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_01Wk9DyRSXviea3pqw8ZzqCw",
+              "input": {
+                "city": "Paris"
+              },
+              "name": "get_weather",
+              "processed_at": "2026-11-16T17:24:31.667289Z",
+              "type": "agent.custom_tool_use"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "agent_name": "rudderstack-ai-sdk-cassette",
+              "id": "sevt_01FR7kkjYDT1huDMTe8xPPG7",
+              "processed_at": "2026-11-16T17:24:31.667290Z",
+              "session_thread_id": "sthr_01JfujXfvsEYBujFuoSzhdFN",
+              "stop_details": null,
+              "stop_reason": {
+                "event_ids": [
+                  "sevt_01Wk9DyRSXviea3pqw8ZzqCw"
+                ],
+                "type": "requires_action"
+              },
+              "type": "session.thread_status_idle"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_01EKt3cuU7prDGWFezmKYAKc",
+              "processed_at": "2026-11-16T17:24:31.667291Z",
+              "type": "session.usage",
+              "usage": {
+                "active_seconds": 2.158,
+                "cache_creation": {
+                  "ephemeral_1h_input_tokens": 0,
+                  "ephemeral_5m_input_tokens": 4283
+                },
+                "cache_read_input_tokens": 0,
+                "input_tokens": 4,
+                "list_cost": {
+                  "amount": "0",
+                  "currency": "USD"
+                },
+                "output_tokens": 218,
+                "server_tool_use": {
+                  "web_fetch_requests": 0,
+                  "web_search_requests": 0
+                }
+              }
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_01HtSMT97TDvuaWpykTf7aHK",
+              "processed_at": "2026-11-16T17:24:31.667292Z",
+              "stop_details": null,
+              "stop_reason": {
+                "event_ids": [
+                  "sevt_01Wk9DyRSXviea3pqw8ZzqCw"
+                ],
+                "type": "requires_action"
+              },
+              "type": "session.status_idle"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "content": [
+                {
+                  "text": "Sunny, 21 C",
+                  "type": "text"
+                }
+              ],
+              "custom_tool_use_id": "sevt_01Wk9DyRSXviea3pqw8ZzqCw",
+              "id": "sevt_01Ck8UyUBbydZCdqjr7yKEwZ",
+              "is_error": false,
+              "processed_at": "2026-11-16T17:24:32.203409Z",
+              "type": "user.custom_tool_result"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_019FrvpUD5MTetu2aQke6zmY",
+              "processed_at": "2026-11-16T17:24:32.256569Z",
+              "type": "session.status_running"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "agent_name": "rudderstack-ai-sdk-cassette",
+              "id": "sevt_01PPGw3zDBxPNNQSygDAqSAf",
+              "processed_at": "2026-11-16T17:24:32.256570Z",
+              "session_thread_id": "sthr_01JfujXfvsEYBujFuoSzhdFN",
+              "type": "session.thread_status_running"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_012DFW91kLq8pds4dYeTvNWP",
+              "processed_at": "2026-11-16T17:24:32.295478Z",
+              "type": "span.model_request_start"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "content": [
+                {
+                  "text": "Sunny",
+                  "type": "text"
+                }
+              ],
+              "id": "sevt_015xCatV2frsu6aSb3zKmHfk",
+              "processed_at": "2026-11-16T17:24:32.542757Z",
+              "type": "agent.message"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_01Lz5PCMuyGWDB1NBCUtmyB9",
+              "is_error": false,
+              "model_request_start_id": "sevt_012DFW91kLq8pds4dYeTvNWP",
+              "model_usage": {
+                "cache_creation_input_tokens": 307,
+                "cache_read_input_tokens": 4283,
+                "input_tokens": 2,
+                "output_tokens": 6,
+                "speed": "standard"
+              },
+              "processed_at": "2026-11-16T17:24:32.542758Z",
+              "type": "span.model_request_end"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "agent_name": "rudderstack-ai-sdk-cassette",
+              "id": "sevt_01Sy1XDvxeXhdcRD2ccQjuGn",
+              "processed_at": "2026-11-16T17:24:32.639284Z",
+              "session_thread_id": "sthr_01JfujXfvsEYBujFuoSzhdFN",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              },
+              "type": "session.thread_status_idle"
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_011wx6tH98bbRXTkcs1XrFo1",
+              "processed_at": "2026-11-16T17:24:32.639285Z",
+              "type": "session.usage",
+              "usage": {
+                "active_seconds": 2.678,
+                "cache_creation": {
+                  "ephemeral_1h_input_tokens": 0,
+                  "ephemeral_5m_input_tokens": 4590
+                },
+                "cache_read_input_tokens": 4283,
+                "input_tokens": 6,
+                "list_cost": {
+                  "amount": "0",
+                  "currency": "USD"
+                },
+                "output_tokens": 224,
+                "server_tool_use": {
+                  "web_fetch_requests": 0,
+                  "web_search_requests": 0
+                }
+              }
+            }
+          },
+          {
+            "event": "message",
+            "payload": {
+              "id": "sevt_014NaAGQ7rLBup2un872YJh3",
+              "processed_at": "2026-11-16T17:24:32.639286Z",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              },
+              "type": "session.status_idle"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/sessions/sesn_016wWdgSK9ouXnMMGFJvH58e/events"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "data": [
+            {
+              "content": [
+                {
+                  "text": "Step 1: run `echo hi` with bash. Step 2: call get_weather for Paris. Step 3: reply with one word describing the weather.",
+                  "type": "text"
+                }
+              ],
+              "id": "sevt_01X27qgm7GpdciomvAgfq39J",
+              "type": "user.message"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/v1/sessions/sesn_016wWdgSK9ouXnMMGFJvH58e/events"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "data": [
+            {
+              "content": [
+                {
+                  "text": "Sunny, 21 C",
+                  "type": "text"
+                }
+              ],
+              "custom_tool_use_id": "sevt_01Wk9DyRSXviea3pqw8ZzqCw",
+              "id": "sevt_01Ck8UyUBbydZCdqjr7yKEwZ",
+              "processed_at": "2026-11-16T17:24:32.078798909Z",
+              "type": "user.custom_tool_result"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/sessions/sesn_016wWdgSK9ouXnMMGFJvH58e"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "agent": {
+            "description": null,
+            "execution_identity": {
+              "type": "service_account"
+            },
+            "id": "agent_01EqtJRNfJhNe94yhDqHwXyc",
+            "mcp_servers": [],
+            "model": {
+              "effort": {
+                "type": "medium"
+              },
+              "id": "claude-haiku-5-5",
+              "speed": "standard"
+            },
+            "multiagent": null,
+            "name": "rudderstack-ai-sdk-cassette",
+            "skills": [],
+            "system": "Be brief. Follow the steps exactly.",
+            "tools": [
+              {
+                "configs": [
+                  {
+                    "enabled": true,
+                    "name": "bash",
+                    "permission_policy": {
+                      "type": "always_allow"
+                    },
+                    "type": "bash"
+                  }
+                ],
+                "default_config": {
+                  "enabled": false,
+                  "permission_policy": {
+                    "type": "always_allow"
+                  }
+                },
+                "type": "agent_toolset_20260401"
+              },
+              {
+                "description": "Current weather for a city.",
+                "input_schema": {
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "city"
+                  ],
+                  "type": "object"
+                },
+                "name": "get_weather",
+                "type": "custom"
+              }
+            ],
+            "type": "agent",
+            "version": 1
+          },
+          "archived_at": null,
+          "budget": null,
+          "created_at": "2026-11-16T17:24:28.205151Z",
+          "environment_id": "env_01VRTQeEgembCzHb3fDybykt",
+          "id": "sesn_016wWdgSK9ouXnMMGFJvH58e",
+          "metadata": {},
+          "outcome_evaluations": [],
+          "resources": [],
+          "stats": {
+            "active_seconds": 2.275,
+            "duration_seconds": 129.792379738
+          },
+          "status": "idle",
+          "title": "rudderstack-ai cassette",
+          "type": "session",
+          "updated_at": "2026-11-16T17:24:32.700806Z",
+          "usage": {
+            "active_seconds": 2.789,
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 0,
+              "ephemeral_5m_input_tokens": 4590
+            },
+            "cache_read_input_tokens": 4283,
+            "input_tokens": 6,
+            "list_cost": {
+              "amount": "0",
+              "currency": "USD"
+            },
+            "output_tokens": 224,
+            "server_tool_use": {
+              "web_fetch_requests": 0,
+              "web_search_requests": 0
+            }
+          },
+          "vault_ids": []
+        }
+      }
+    }
+  ]
+}

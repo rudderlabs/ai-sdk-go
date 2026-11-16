@@ -467,9 +467,16 @@ type pendingEvent struct {
 }
 
 type outcomeHint struct {
-	status    ResponseStatus
-	errorType string
-	calls     int
+	status      ResponseStatus
+	errorType   string
+	pauseReason PauseReason
+	calls       int
+}
+
+// primaryOverride is the primary model an integration named; a later successful call replaces it.
+type primaryOverride struct {
+	model, provider string
+	calls           int
 }
 
 // Interaction is one user prompt and the one answer it gets, however many model calls, tools or
@@ -517,6 +524,7 @@ type Interaction struct {
 	sdkTraceID             string
 	restored               bool // from a snapshot: the request context never supplies the trace ID
 	integration            string
+	primary                *primaryOverride
 	ended                  bool
 	ending                 bool // capture callbacks may record calls while finalization is in progress
 	firstToken             time.Duration
@@ -1998,7 +2006,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 			i.toolsByID[tool.id] = tool
 		}
 	}
-	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
+	i.hint, i.primary, i.clientDisconnected, i.firstToken = nil, nil, false, -1
 	i.answerSource, i.spanAnswerSource = nil, nil
 	i.prompt, i.answer, i.spanAnswer, i.messages = "", "", "", nil // not in the snapshot, so not in an in-process resume
 	i.compactions = 0
@@ -2543,8 +2551,12 @@ func (i *Interaction) end(o EndOptions) {
 		if o.ClientDisconnected {
 			i.clientDisconnected = true
 		}
+		reason := o.PauseReason
+		if pausingHint {
+			reason = cmp.Or(reason, i.hint.pauseReason)
+		}
 		i.mu.Unlock()
-		i.pause(PauseOptions{Reason: o.PauseReason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
+		i.pause(PauseOptions{Reason: reason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
 		return
 	}
 	hooks := i.beforeEnd
@@ -2581,8 +2593,12 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	hintedPause := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
 	if o.endReason == "" && (o.Status == StatusPaused || hintedPause) {
+		reason := o.PauseReason
+		if hintedPause {
+			reason = cmp.Or(reason, i.hint.pauseReason)
+		}
 		i.mu.Unlock()
-		i.pause(PauseOptions{Reason: o.PauseReason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
+		i.pause(PauseOptions{Reason: reason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
 		return
 	}
 	i.filterSpanCallsLocked()
@@ -2772,7 +2788,10 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	if named == nil {
 		named = last
 	}
-	if named != nil {
+	if po := i.primary; po != nil && (lastOK == nil || lastOK.reportSequence <= po.calls) {
+		put(p, "primary_model", po.model)
+		put(p, "primary_provider", po.provider)
+	} else if named != nil {
 		put(p, "primary_model", named.model)
 		put(p, "primary_provider", named.provider)
 	}
@@ -3215,7 +3234,7 @@ func (i *Interaction) providerFailureLocked() (ResponseStatus, string) {
 
 // hintOutcome sets the status End reports unless a call is recorded afterwards.
 // Generic application errors preserve the current provider or finish-reason classification.
-func (i *Interaction) hintOutcome(status ResponseStatus, errorType string) {
+func (i *Interaction) hintOutcome(status ResponseStatus, errorType string, pauseReason ...PauseReason) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if status == StatusError && errorType == "app_error" {
@@ -3223,7 +3242,35 @@ func (i *Interaction) hintOutcome(status ResponseStatus, errorType string) {
 			return
 		}
 	}
-	i.hint = &outcomeHint{status: status, errorType: errorType, calls: i.callCount}
+	hint := &outcomeHint{status: status, errorType: errorType, calls: i.callCount}
+	if len(pauseReason) > 0 {
+		hint.pauseReason = pauseReason[0]
+	}
+	i.hint = hint
+}
+
+// adopt tags the interaction with an integration and offers its client; the first of each wins.
+func (i *Interaction) adopt(integration string, client analytics.Client) {
+	i.adoptAnalytics(client)
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.integration == "" {
+		i.integration = integration
+	}
+}
+
+// setPrimaryModel names primary_model and primary_provider unless a later call succeeds.
+func (i *Interaction) setPrimaryModel(model, provider string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.primary = &primaryOverride{model: canonicalModel(model), provider: provider, calls: i.callCount}
+}
+
+// keepAnswer keeps answer text for the classifier and evaluator.
+func (i *Interaction) keepAnswer(text string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.keepAnswerLocked(text, false)
 }
 
 // onBeforeEnd runs fn just before ai_response_received is built.
