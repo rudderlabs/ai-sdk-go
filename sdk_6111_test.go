@@ -395,3 +395,55 @@ func TestSDK6111SameSourceRepeatWhoseCreditsHookPausesIsDropped(t *testing.T) {
 		}
 	}
 }
+
+// A span twin for the same single call never prices over a wrapper's own credits, as in Node.
+func TestSDK6111SpanTwinOfAWrapperWithExplicitCreditsDoesNotRunTheCreditsHook(t *testing.T) {
+	for _, mode := range []string{"same segment", "pending in-process", "pending json"} {
+		for _, responseID := range []string{"", "resp_1"} {
+			t.Run(mode+"/responseID="+responseID, func(t *testing.T) {
+				var hookCalls []int
+				r := setupAI(t, WithCredits(func(c CreditCall) (*float64, error) {
+					hookCalls = append(hookCalls, c.InputTokens)
+					return Ptr(1.0), nil
+				}))
+				client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received", done: mode == "same segment"}
+				_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+				wrapper := func() {
+					if !i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "openai", InputTokens: 10, ResponseID: responseID, Credits: Ptr(7.0)}, 100)) {
+						t.Error("wrapper was not recorded")
+					}
+				}
+				if mode == "same segment" {
+					wrapper()
+				} else {
+					// Accepted during paused delivery: pending for the next segment.
+					client.reenter = wrapper
+					snapshot, ok := i.Pause(PauseOptions{})
+					if !ok || !client.done {
+						t.Fatalf("pause ok=%v, delivered=%v", ok, client.done)
+					}
+					if mode == "pending json" {
+						var stored PausedInteraction
+						if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+							t.Fatal(err)
+						}
+						_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored, Analytics: client})
+					} else {
+						i.Resume()
+					}
+				}
+				// The span stands for the same single call: the wrapper's own credits already cover it.
+				i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "tracing", InputTokens: 3, ResponseID: responseID}, 100))
+				i.End(EndOptions{})
+				segments := r.named("ai_response_received")
+				last := segments[len(segments)-1].Properties
+				if calls, tokens, credits := sdk6111Num(last["llm_call_count"]), sdk6111Num(last["total_input_tokens"]), sdk6111Num(last["total_credits"]); calls != 1 || tokens != 10 || credits != 7 {
+					t.Errorf("llm_call_count=%g total_input_tokens=%g total_credits=%g, want 1, 10 and 7", calls, tokens, credits)
+				}
+				if len(hookCalls) != 0 {
+					t.Errorf("credits hook ran for input tokens %v, want no call", hookCalls)
+				}
+			})
+		}
+	}
+}

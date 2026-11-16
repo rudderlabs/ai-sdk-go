@@ -1061,7 +1061,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	if call.ErrorType == "cancelled" {
 		credits = nil
 	}
-	if credits == nil && c.credits != nil && call.ErrorType == "" && (!call.UsageUnknown || useTwinUsage) {
+	// A twin's explicit credits stand, unless this report's usage replaces the twin's.
+	explicitTwin := pricingTwin != nil && pricingTwin.creditsExplicit &&
+		(call.UsageUnknown || call.ErrorType != "" || (call.Integration == "tracing" && !pricingTwin.usageUnknown))
+	if credits == nil && c.credits != nil && call.ErrorType == "" && (!call.UsageUnknown || useTwinUsage) && !explicitTwin {
 		// App callbacks may inspect, update or end this interaction.
 		own := CreditCall{
 			Provider: call.Provider, Model: call.Model, InputTokens: input, OutputTokens: output,
