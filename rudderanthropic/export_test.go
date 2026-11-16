@@ -9,3 +9,6 @@ func ResetManagedAgents() {
 	pausedTurns.m, pausedTurns.order = map[string]*pausedTurn{}, nil
 	pausedTurns.Unlock()
 }
+
+// PanickingOption is a session option that panics, like a getter that throws (tests only).
+func PanickingOption() SessionOption { return func(*sessionConfig) { panic("option failed") } }

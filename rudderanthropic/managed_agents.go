@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
@@ -95,10 +96,11 @@ func WithSessionAnalytics(client analytics.Client) SessionOption {
 // SessionEvents passes a session's events through unchanged while it tracks them. Use it as
 // the stream it wraps; Close also closes that stream when it can be closed.
 type SessionEvents[T SessionEvent] struct {
-	src     SessionEventStream[T]
-	tracker *sessionTracker // nil: untracked
-	mu      sync.Mutex      // guards tracker and closed; Close may run while Next is blocked
-	closed  bool
+	src      SessionEventStream[T]
+	tracker  *sessionTracker // nil: untracked
+	mu       sync.Mutex      // guards tracker and finished; never held while reading src or by Close
+	closed   atomic.Bool     // Close was called: whoever releases mu last finishes the tracker
+	finished bool
 }
 
 // TrackSessionEvents reads a Claude Managed Agents session's events and sends one
@@ -119,52 +121,62 @@ type SessionEvents[T SessionEvent] struct {
 //		event := events.Current() // the same events as stream
 //	}
 func TrackSessionEvents[T SessionEvent](ctx context.Context, stream SessionEventStream[T], opts ...SessionOption) *SessionEvents[T] {
-	c := sessionConfig{}
-	for _, o := range opts {
-		if o != nil {
-			o(&c)
-		}
-	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if c.model == "" {
-		c.model = c.sessionModel
-	}
 	events := &SessionEvents[T]{src: stream}
-	// The SDK's own calls (a classifier or evaluator) are never tracked.
+	// The SDK's own calls (a classifier or evaluator) are never tracked; options that panic leave
+	// the events untracked.
 	if !kit.Untracked(ctx) {
-		events.tracker = &sessionTracker{ctx: ctx, cfg: c, shared: sessionStateOf(c.sessionID)}
+		contain(func() {
+			c := sessionConfig{}
+			for _, o := range opts {
+				if o != nil {
+					o(&c)
+				}
+			}
+			if c.model == "" {
+				c.model = c.sessionModel
+			}
+			events.tracker = &sessionTracker{ctx: ctx, cfg: c, shared: sessionStateOf(c.sessionID)}
+		})
 	}
 	return events
 }
 
 // Next advances to the next event; false when the stream ended, failed (see Err) or was closed.
 func (s *SessionEvents[T]) Next() bool {
-	if s.isClosed() {
+	if s.closed.Load() {
 		return false
 	}
 	more := s.src.Next()
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed {
+	if s.finished {
+		s.mu.Unlock()
 		return false
 	}
 	if !more {
 		s.finishLocked(s.src.Err())
+		s.mu.Unlock()
 		return false
 	}
 	if s.tracker != nil {
 		event := s.src.Current()
 		contain(func() { s.tracker.observe(event.RawJSON()) })
 	}
+	s.mu.Unlock()
+	// A Close during the event (from a hook) could not finish: the last to release mu does.
+	s.finishIfClosed()
 	return true
 }
 
-func (s *SessionEvents[T]) isClosed() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.closed
+// finishIfClosed finishes after a Close that found mu held; a failed TryLock means the holder
+// finishes when it releases.
+func (s *SessionEvents[T]) finishIfClosed() {
+	if s.closed.Load() && s.mu.TryLock() {
+		s.finishLocked(nil)
+		s.mu.Unlock()
+	}
 }
 
 // Current is the current event, unchanged.
@@ -174,11 +186,11 @@ func (s *SessionEvents[T]) Current() T { return s.src.Current() }
 func (s *SessionEvents[T]) Err() error { return s.src.Err() }
 
 // Close ends tracking (a turn still open is paused or cancelled) and closes the stream when it
-// has a Close method. Next returns false after it.
+// has a Close method. Next returns false after it. It never waits for a Next in progress: a
+// close during an event is applied when that event has been read.
 func (s *SessionEvents[T]) Close() error {
-	s.mu.Lock()
-	s.finishLocked(nil)
-	s.mu.Unlock()
+	s.closed.Store(true)
+	s.finishIfClosed()
 	if closer, ok := s.src.(io.Closer); ok {
 		return closer.Close()
 	}
@@ -186,10 +198,10 @@ func (s *SessionEvents[T]) Close() error {
 }
 
 func (s *SessionEvents[T]) finishLocked(err error) {
-	if s.closed {
+	if s.finished {
 		return
 	}
-	s.closed = true
+	s.finished = true
 	if s.tracker != nil {
 		contain(func() { s.tracker.close(err) })
 	}
@@ -516,7 +528,7 @@ func (s *sessionTracker) close(err error) {
 	}
 	switch {
 	case err != nil:
-		errorType := rudderstackai.ErrorTypeOf(err)
+		errorType := kit.AppErrorType(err) // the app's own exception is app_error
 		status := rudderstackai.StatusError
 		if errorType == "cancelled" {
 			status = rudderstackai.StatusCancelled
@@ -786,8 +798,15 @@ func (s *sessionTracker) finish(end turnEnd, at msTime) {
 
 // spillIfFull records what the turn holds once it reaches the call cap, so it never grows past it.
 func (s *sessionTracker) spillIfFull(t *turn) {
-	if len(t.calls)+len(t.tools) >= kit.MaxCallsPerInteraction() {
-		contain(func() { s.flush(t, t.lastAt, false, nil) })
+	// Tools waiting on the app stay with the turn, for a pause to carry them to the next segment.
+	waiting := map[string]bool{}
+	for _, key := range t.toolOrder {
+		if _, ok := t.blocking.get(key); ok && !t.tools[key].settled {
+			waiting[key] = true
+		}
+	}
+	if len(t.calls)+len(t.tools)-len(waiting) >= kit.MaxCallsPerInteraction() {
+		contain(func() { s.flush(t, clockAt(t.lastAt), false, waiting) })
 	}
 }
 
@@ -821,17 +840,20 @@ func (s *sessionTracker) interactionFor(t *turn, local func(msTime) time.Time) *
 	return i
 }
 
-// flush records the turn's buffered calls and tools into its answer. Server times map onto the
-// local clock so that endAt is now. Tools in keep (waiting on the app when the answer pauses) stay,
-// for the pause to carry them to the next segment.
-func (s *sessionTracker) flush(t *turn, endAt msTime, final bool, keep map[string]bool) *rudderstackai.Interaction {
+// clockAt maps server times onto the local clock so that endAt is now.
+func clockAt(endAt msTime) func(msTime) time.Time {
 	now := time.Now()
-	local := func(m msTime) time.Time {
+	return func(m msTime) time.Time {
 		if !m.ok || !endAt.ok {
 			return time.Time{}
 		}
 		return now.Add(-time.Duration(max(0, endAt.v-m.v)) * time.Millisecond)
 	}
+}
+
+// flush records the turn's buffered calls and tools into its answer. Tools in keep (waiting on
+// the app) stay, for a pause to carry them to the next segment.
+func (s *sessionTracker) flush(t *turn, local func(msTime) time.Time, final bool, keep map[string]bool) *rudderstackai.Interaction {
 	i := s.interactionFor(t, local)
 	calls := t.calls
 	t.calls = nil
@@ -894,7 +916,12 @@ func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime) {
 			}
 		}
 	}
-	i := s.flush(t, endAt, true, keep)
+	local := clockAt(endAt)
+	i := s.flush(t, local, true, keep)
+	// Read after the fact (history), the answer started at the turn's first event, also when a spill opened it earlier.
+	if i != t.borrowed {
+		kit.Backdate(i, local(t.startAt))
+	}
 	// The grader's model is unknown: it never becomes primary_model.
 	if t.hasGrader && t.lastModel != "" {
 		kit.PrimaryModel(i, t.lastModel, "anthropic")
