@@ -9,9 +9,10 @@ import (
 
 type fixture struct {
 	Resolution []struct {
-		Name     string  `json:"name"`
-		Levels   []level `json:"levels"`
-		Expected struct {
+		Name          string            `json:"name"`
+		NotApplicable map[string]string `json:"not_applicable"`
+		Levels        []level           `json:"levels"`
+		Expected      struct {
 			AnswerText       bool  `json:"answer_text"`
 			LLMCalls         bool  `json:"llm_calls"`
 			FeedbackText     bool  `json:"feedback_text"`
@@ -27,11 +28,28 @@ type fixture struct {
 		} `json:"expected"`
 	} `json:"resolution"`
 	CustomProperties []struct {
-		Name     string  `json:"name"`
-		Levels   []level `json:"levels"`
-		Property string  `json:"property"`
-		Sent     bool    `json:"sent"`
+		Name          string            `json:"name"`
+		NotApplicable map[string]string `json:"not_applicable"`
+		Levels        []level           `json:"levels"`
+		Property      string            `json:"property"`
+		Sent          bool              `json:"sent"`
 	} `json:"custom_properties"`
+	// Invalid policies: Node.js and Python reject them; Go's types cannot express them.
+	Invalid           []invalidCase `json:"invalid"`
+	InvalidAtCallSite []invalidCase `json:"invalid_at_call_site"`
+}
+
+type invalidCase struct {
+	Name          string            `json:"name"`
+	NotApplicable map[string]string `json:"not_applicable"`
+}
+
+// notApplicable skips a case the fixture marks not applicable to Go, with its reason.
+func notApplicable(t *testing.T, na map[string]string) {
+	t.Helper()
+	if reason, ok := na["go"]; ok {
+		t.Skip("N/A for Go: " + reason)
+	}
 }
 
 type level struct {
@@ -118,9 +136,11 @@ func levels(t *testing.T, in []level) ([]*Policy, bool) {
 func TestResolutionFixture(t *testing.T) {
 	for _, c := range load(t).Resolution {
 		t.Run(c.Name, func(t *testing.T) {
+			notApplicable(t, c.NotApplicable)
 			ls, ok := levels(t, c.Levels)
 			if !ok {
-				t.Skip("a non-boolean, non-object level: Go's types cannot hold it")
+				// Coercion cases (strings, numbers): Node.js and Python read them with Boolean()/bool().
+				t.Skip("N/A for Go: a non-boolean, non-object level; Go's types cannot hold it")
 			}
 			r := Resolve(ls...)
 			e := c.Expected
@@ -136,9 +156,10 @@ func TestResolutionFixture(t *testing.T) {
 func TestCustomPropertiesFixture(t *testing.T) {
 	for _, c := range load(t).CustomProperties {
 		t.Run(c.Name, func(t *testing.T) {
+			notApplicable(t, c.NotApplicable)
 			ls, ok := levels(t, c.Levels)
 			if !ok {
-				t.Skip("a non-boolean, non-object level")
+				t.Fatal("a non-boolean, non-object level without not_applicable for go")
 			}
 			if got := Resolve(ls...).Field(c.Property); got != c.Sent {
 				t.Fatalf("%s kept = %v, want %v", c.Property, got, c.Sent)
@@ -192,5 +213,16 @@ func TestResolveAndCloneCopyValues(t *testing.T) {
 	}
 	if Clone(nil) != nil {
 		t.Fatal("clone of nil")
+	}
+}
+
+// Every invalid case must be marked not applicable to Go: none is ignored.
+func TestInvalidFixtureCasesNotApplicable(t *testing.T) {
+	f := load(t)
+	for _, c := range append(f.Invalid, f.InvalidAtCallSite...) {
+		t.Run(c.Name, func(t *testing.T) {
+			notApplicable(t, c.NotApplicable)
+			t.Fatal("invalid case without not_applicable for go: Go has no way to run it")
+		})
 	}
 }
