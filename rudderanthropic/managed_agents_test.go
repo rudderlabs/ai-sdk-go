@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -302,7 +303,7 @@ func TestManagedAgentsIntegrationTag(t *testing.T) {
 	f := loadMAFixture(t)
 	_, rec := setup(t)
 	sc := f.Scenarios[1] // text_turn_capture
-	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)}, rudderanthropic.WithSession(rawJSON(f.Session)))
+	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)}, rudderanthropic.WithSession(withID(f.Session, "sesn_tag")))
 	for events.Next() {
 	}
 	rudderstackai.Flush(context.Background())
@@ -329,7 +330,7 @@ func TestManagedAgentsReportsIntoTheContextInteraction(t *testing.T) {
 		}
 	}
 	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
-	events := rudderanthropic.TrackSessionEvents(ctx, &sliceStream{events: decodeEvents(t, two.Streams[0].Events)}, rudderanthropic.WithSession(rawJSON(f.Session)))
+	events := rudderanthropic.TrackSessionEvents(ctx, &sliceStream{events: decodeEvents(t, two.Streams[0].Events)}, rudderanthropic.WithSession(withID(f.Session, "sesn_borrowed")))
 	for events.Next() {
 	}
 	if got := rec.events(t); len(got["ai_response_received"]) != 0 {
@@ -348,7 +349,7 @@ func TestManagedAgentsFailingStreamEndsTheTurnAsAnError(t *testing.T) {
 	sc := f.Scenarios[1] // text_turn_capture
 	failure := errors.New("connection reset")
 	src := &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)[:3], err: failure}
-	events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSession(rawJSON(f.Session)))
+	events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSession(withID(f.Session, "sesn_failing")))
 	n := 0
 	for events.Next() {
 		n++
@@ -400,5 +401,47 @@ func TestManagedAgentsOptionsAndMapCap(t *testing.T) {
 		if p["conversation_id"] != "sesn_other" || usage["agent_name"] != "support" || usage["model"] != "claude-haiku-5-5" {
 			t.Errorf("%v", p)
 		}
+	}
+}
+
+// withID is the fixture session under another ID: event IDs dedupe per session.
+func withID(session json.RawMessage, id string) rawJSON {
+	return rawJSON(strings.Replace(string(session), `"sesn_fixture"`, strconv.Quote(id), 1))
+}
+
+func TestManagedAgentsCloseEndsIterationAndTypedNilSession(t *testing.T) {
+	f := loadMAFixture(t)
+	_, rec := setup(t)
+	var nilSession *anthropic.BetaManagedAgentsSession
+	src := &sliceStream{events: decodeEvents(t, f.Scenarios[1].Streams[0].Events)}
+	events := rudderanthropic.TrackSessionEvents(context.Background(), src,
+		rudderanthropic.WithSession(nilSession), rudderanthropic.WithSessionID("sesn_close"))
+	for range 2 {
+		if !events.Next() {
+			t.Fatal("no events")
+		}
+	}
+	if err := events.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if events.Next() {
+		t.Fatal("Next after Close")
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["response_status"] != "cancelled" {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestManagedAgentsModelOptionWinsOverTheSession(t *testing.T) {
+	f := loadMAFixture(t)
+	_, rec := setup(t)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, f.Scenarios[1].Streams[0].Events)},
+		rudderanthropic.WithSessionModel("claude-opus-5-5"), rudderanthropic.WithSession(withID(f.Session, "sesn_model")))
+	for events.Next() {
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["primary_model"] != "claude-opus-5-5" {
+		t.Fatalf("%v", got)
 	}
 }

@@ -74,6 +74,9 @@ func ContextConversation(ctx context.Context) string { return hook.ContextConver
 // WarnOnce logs a warning the first time key is seen.
 func WarnOnce(key, message string) { hook.WarnOnce(key, message) }
 
+// MaxCallsPerInteraction is the configured cap of model and tool calls stored per interaction.
+func MaxCallsPerInteraction() int { return hook.MaxCallsPerInteraction() }
+
 // MaxMapEntries is the configured cap of each SDK lookup map.
 func MaxMapEntries() int { return hook.MaxMapEntries() }
 

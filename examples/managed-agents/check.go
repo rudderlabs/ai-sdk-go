@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
+	"sync/atomic"
 
 	"github.com/anthropics/anthropic-sdk-go/option"
 
@@ -20,6 +23,7 @@ func runCheck(sink *harness.Sink) error {
 	if err != nil {
 		return err
 	}
+	freshSession(cassette)
 	llm := testkit.StartLLM()
 	defer llm.Close()
 	llm.ReplayManagedAgents(cassette)
@@ -34,6 +38,23 @@ func runCheck(sink *harness.Sink) error {
 		return fmt.Errorf("answer %q, want Sunny", res.Answer)
 	}
 	return expectEvents(sink.Messages(), res)
+}
+
+// recordedSession is the session ID in the cassette.
+const recordedSession = "sesn_016wWdgSK9ouXnMMGFJvH58e"
+
+// checks numbers the check runs of this process.
+var checks atomic.Int64
+
+// freshSession gives the replayed session a new ID: event IDs are read once per session in a
+// process, and --check and --live replay the same recording.
+func freshSession(c *testkit.Cassette) {
+	id := fmt.Sprintf("%s_%d", recordedSession, checks.Add(1))
+	for n := range c.Interactions {
+		it := &c.Interactions[n]
+		it.Request.Path = strings.ReplaceAll(it.Request.Path, recordedSession, id)
+		it.Response.Body = json.RawMessage(strings.ReplaceAll(string(it.Response.Body), recordedSession, id))
+	}
 }
 
 // expectEvents checks the prompt and the answer, field by field. Input tokens are the total of both

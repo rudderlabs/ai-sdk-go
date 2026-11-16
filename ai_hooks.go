@@ -60,5 +60,6 @@ func init() {
 	}
 	hook.Report = report
 	hook.MaxMapEntries = func() int { return cfg().limits.MaxMapEntries }
+	hook.MaxCallsPerInteraction = func() int { return cfg().limits.MaxCallsPerInteraction }
 	hook.Reset = resetForTest
 }
