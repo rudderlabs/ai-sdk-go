@@ -4,6 +4,7 @@ package rudderstackai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -204,5 +205,76 @@ func TestSDK6111ToolRecordedDuringPausedCallDeliveryIsCountedOnceWithItsEvent(t 
 	}
 	if n := len(r.named("Looked Up")); n != 1 {
 		t.Fatalf("declared tool events = %d, want 1", n)
+	}
+}
+
+// Another goroutine records in each window where pause runs unlocked: the call or tool is counted
+// once and its events are delivered, or carried by the snapshot.
+func TestSDK6111WriteFromAnotherGoroutineDuringPauseIsDeliveredOrCarried(t *testing.T) {
+	for _, emit := range []bool{true, false} {
+		for _, window := range []string{"ai_llm_response_received", "Looked Up", "ai_response_received"} {
+			for _, kind := range []string{"span", "wrapper and tool"} {
+				for _, restore := range []bool{false, true} {
+					if !emit && window == "ai_llm_response_received" {
+						continue
+					}
+					t.Run(fmt.Sprintf("emit=%v/during %s/%s/json=%v", emit, window, kind, restore), func(t *testing.T) {
+						r := setupAI(t, WithLLMCallEvents(emit), WithEventRules(EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "Looked Up"}}}))
+						client := &sdk6111ReenterClient{recorder: r, event: window}
+						_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+						i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "tracing", InputTokens: 10}, 100))
+						i.RecordToolCalls(ToolCall{ID: "first", Name: "lookup"})
+						wantTools := 1.0
+						client.reenter = func() {
+							done := make(chan struct{})
+							go func() {
+								defer close(done)
+								call := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "openai", InputTokens: 20}, 300)
+								if kind == "span" {
+									call.Integration = "tracing"
+								}
+								i.RecordCall(call)
+								if kind != "span" {
+									i.RecordToolCalls(ToolCall{ID: "late", Name: "lookup", Result: "ok"})
+								}
+							}()
+							<-done
+						}
+						if kind != "span" {
+							wantTools = 2
+						}
+						snapshot, ok := i.Pause(PauseOptions{})
+						if !ok || !client.done {
+							t.Fatalf("pause ok=%v, raced=%v", ok, client.done)
+						}
+						if restore {
+							var stored PausedInteraction
+							if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+								t.Fatal(err)
+							}
+							_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored, Analytics: client})
+						} else {
+							i.Resume()
+						}
+						i.End(EndOptions{})
+						var calls, tokens, tools float64
+						for _, e := range r.named("ai_response_received") {
+							calls += sdk6111Num(e.Properties["llm_call_count"])
+							tokens += sdk6111Num(e.Properties["total_input_tokens"])
+							tools += sdk6111Num(e.Properties["tool_call_count"])
+						}
+						if calls != 2 || tokens != 30 || tools != wantTools {
+							t.Errorf("calls=%g tokens=%g tools=%g, want 2, 30 and %g", calls, tokens, tools, wantTools)
+						}
+						if n := len(r.named("ai_llm_response_received")); emit && n != 2 {
+							t.Errorf("call events = %d, want 2", n)
+						}
+						if n := len(r.named("Looked Up")); float64(n) != wantTools {
+							t.Errorf("declared tool events = %d, want %g", n, wantTools)
+						}
+					})
+				}
+			}
+		}
 	}
 }
