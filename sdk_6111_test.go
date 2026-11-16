@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -505,5 +506,129 @@ func TestSDK6111FoldedCallEventRestoredFromJSONEqualsTheOneSentInProcess(t *test
 	}
 	if last["llm_call_count"] != 4.0 || last["total_input_tokens"] != 100.0 {
 		t.Errorf("restored: llm_call_count=%v total_input_tokens=%v, want 4 and 100", last["llm_call_count"], last["total_input_tokens"])
+	}
+}
+
+type sdk6111CrossSDK struct {
+	Snapshots []struct {
+		WrittenBy string          `json:"written_by"`
+		Snapshot  json.RawMessage `json:"snapshot"`
+	} `json:"snapshots"`
+	Reports []struct {
+		Source       string `json:"source"`
+		Provider     string `json:"provider"`
+		Model        string `json:"model"`
+		InputTokens  int    `json:"input_tokens"`
+		OutputTokens int    `json:"output_tokens"`
+		StartedMS    int64  `json:"started_ms"`
+		EndedMS      int64  `json:"ended_ms"`
+	} `json:"reports"`
+	Expected struct {
+		Response   map[string]any   `json:"response"`
+		CallEvents []map[string]any `json:"call_events"`
+	} `json:"expected"`
+}
+
+func sdk6111CrossSDKFixture(t *testing.T) sdk6111CrossSDK {
+	t.Helper()
+	raw, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		CrossSDK sdk6111CrossSDK `json:"cross_sdk"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	return fixture.CrossSDK
+}
+
+// Shared fixture: pending calls as each SDK writes them restore here and merge their twins.
+func TestSDK6111RestoresThePendingCallsEachSDKWroteAndMergesTheirTwins(t *testing.T) {
+	fixture := sdk6111CrossSDKFixture(t)
+	for _, entry := range fixture.Snapshots {
+		t.Run(entry.WrittenBy, func(t *testing.T) {
+			r := setupAI(t, WithLLMCallEvents(true))
+			var stored PausedInteraction
+			if err := json.Unmarshal(entry.Snapshot, &stored); err != nil {
+				t.Fatal(err)
+			}
+			_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+			for _, report := range fixture.Reports {
+				call := LLMCall{
+					Provider: report.Provider, Model: report.Model, Integration: "openai", InputTokens: report.InputTokens, OutputTokens: report.OutputTokens,
+					StartedAt: time.UnixMilli(report.StartedMS), EndedAt: time.UnixMilli(report.EndedMS),
+				}
+				if report.Source == "span" {
+					call.Integration = "tracing"
+				}
+				i.RecordCall(call)
+			}
+			i.End(EndOptions{})
+			segments := r.named("ai_response_received")
+			last := pauseSegmentsJSON(t, segments[len(segments)-1].Properties).(map[string]any)
+			for key, want := range fixture.Expected.Response {
+				if !reflect.DeepEqual(last[key], want) {
+					t.Errorf("response %s = %v, want %v", key, last[key], want)
+				}
+			}
+			calls := r.named("ai_llm_response_received")
+			if len(calls) != len(fixture.Expected.CallEvents) {
+				t.Fatalf("call events = %d, want %d", len(calls), len(fixture.Expected.CallEvents))
+			}
+			for n, want := range fixture.Expected.CallEvents {
+				got := pauseSegmentsJSON(t, calls[n].Properties).(map[string]any)
+				for key, value := range want {
+					if !reflect.DeepEqual(got[key], value) {
+						t.Errorf("call event %d %s = %v, want %v", n, key, got[key], value)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestSDK6111WritesTheSharedPendingCallKeys(t *testing.T) {
+	fixture := sdk6111CrossSDKFixture(t)
+	r := setupAI(t, WithLLMCallEvents(true))
+	client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+	client.reenter = func() {
+		// Accepted during paused delivery: a timed span, and a timed wrapper call with unknown usage.
+		i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "example-model", Integration: "tracing", InputTokens: 3}, 100))
+		i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "example-model", Integration: "openai", UsageUnknown: true}, 200))
+	}
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("pause")
+	}
+	written := pauseSegmentsJSON(t, snapshot.PendingCalls)
+	records := map[string][]any{}
+	for _, entry := range fixture.Snapshots {
+		var s struct {
+			PendingCalls []any `json:"pending_calls"`
+		}
+		if err := json.Unmarshal(entry.Snapshot, &s); err != nil {
+			t.Fatal(err)
+		}
+		records[entry.WrittenBy] = s.PendingCalls
+	}
+	if !reflect.DeepEqual(written, any(records["go"])) {
+		t.Fatalf("pending_calls = %v, want the fixture's go entry %v", written, records["go"])
+	}
+	// Every key Node.js writes has the same value here; raw_model and report_sequence are this SDK's own.
+	for n, node := range records["node"] {
+		record := records["go"][n].(map[string]any)
+		for key, want := range node.(map[string]any) {
+			if !reflect.DeepEqual(record[key], want) {
+				t.Errorf("record %d %s = %v, want %v as Node.js writes it", n, key, record[key], want)
+			}
+		}
+		for key := range record {
+			if _, shared := node.(map[string]any)[key]; !shared && key != "raw_model" && key != "report_sequence" {
+				t.Errorf("record %d has %s, which Node.js does not write", n, key)
+			}
+		}
 	}
 }

@@ -2241,23 +2241,22 @@ func pendingCall(c *recordedCall) map[string]any {
 	if c.spanSource != nil {
 		p["span_source"] = spanSourceSnapshot(c.spanSource)
 	}
-	p["from_span"], p["twin_matched"], p["usage_unknown"] = c.fromSpan, c.twinMatched, c.usageUnknown
+	// The keys and value types Node.js writes, shared by the three SDKs.
+	p["from_span"], p["matched"], p["usage_known"] = c.fromSpan, c.twinMatched, !c.usageUnknown
 	p["credits_explicit"] = c.creditsExplicit
 	p["report_sequence"] = c.reportSequence
 	if c.callIndex > 0 {
 		p["call_index"] = c.callIndex
 	}
 	if !c.startedAt.IsZero() {
-		p["started_at"] = c.startedAt.Format(time.RFC3339Nano)
+		p["started_at"] = float64(c.startedAt.UnixNano()) / 1e6
 	}
 	if !c.endedAt.IsZero() {
-		p["ended_at"] = c.endedAt.Format(time.RFC3339Nano)
+		p["ended_at"] = float64(c.endedAt.UnixNano()) / 1e6
 	}
-	if c.credits != nil {
+	// A folded group's partial sums are unknown to the other SDKs: written only when complete.
+	if c.credits != nil && !c.uncredited {
 		p["credits"] = *c.credits
-	}
-	if c.uncredited {
-		p["uncredited"] = true
 	}
 	put(p, "call_purpose", c.callPurpose)
 	if c.fallbackUsed != nil {
@@ -2301,7 +2300,7 @@ func pendingCall(c *recordedCall) map[string]any {
 	p["cached_input_tokens"] = c.cachedInputTokens
 	p["cache_write_tokens"] = c.cacheWriteTokens
 	p["cache_write_1h_tokens"] = c.cacheWrite1
-	if c.costUSD != nil {
+	if c.costUSD != nil && !c.unpriced {
 		p["cost_usd"] = *c.costUSD
 	}
 	if c.finishReason != "" {
@@ -2317,10 +2316,33 @@ func pendingCall(c *recordedCall) map[string]any {
 		p["service_tier"] = c.serviceTier
 	}
 	p["server_tool_call_count"] = c.serverToolCallCount
-	if c.serverToolCostUSD != nil {
+	if c.serverToolCostUSD != nil && !c.feesUnknown {
 		p["server_tool_cost_usd"] = *c.serverToolCostUSD
 	}
 	return p
+}
+
+// pendingTime reads a pending call's start or end: epoch milliseconds, or what Go (RFC 3339)
+// and Python (nanoseconds) wrote before SDK-6111.
+func pendingTime(p map[string]any, edge string) time.Time {
+	switch at := p[edge+"_at"].(type) {
+	case string:
+		t, _ := time.Parse(time.RFC3339Nano, at)
+		return t
+	case nil:
+		// Nanoseconds exceed pendingNumber's safe-integer range.
+		switch ns := p[edge+"_ns"].(type) {
+		case float64:
+			return time.Unix(0, int64(ns))
+		case int64:
+			return time.Unix(0, ns)
+		case json.Number:
+			n, _ := ns.Int64()
+			return time.Unix(0, n)
+		}
+		return time.Time{}
+	}
+	return time.Unix(0, int64(math.Round(pendingNumber(p, edge+"_at")*1e6)))
 }
 
 func pendingTool(c *recordedTool) map[string]any {
@@ -2386,10 +2408,13 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		c.spanSource = restoredSpanSource(p["span_source"])
 		c.callIndex = int(pendingNumber(p, "call_index"))
 		c.spanID = pendingText(p, "span_id")
-		c.fromSpan, c.twinMatched, c.usageUnknown = pendingBool(p, "from_span"), pendingBool(p, "twin_matched"), pendingBool(p, "usage_unknown")
+		// Go wrote twin_matched and usage_unknown before SDK-6111.
+		c.fromSpan, c.twinMatched, c.usageUnknown = pendingBool(p, "from_span"), pendingBool(p, "matched") || pendingBool(p, "twin_matched"), pendingBool(p, "usage_unknown")
+		if known, ok := p["usage_known"].(bool); ok {
+			c.usageUnknown = !known
+		}
 		c.creditsExplicit = pendingBool(p, "credits_explicit")
-		c.startedAt, _ = time.Parse(time.RFC3339Nano, pendingText(p, "started_at"))
-		c.endedAt, _ = time.Parse(time.RFC3339Nano, pendingText(p, "ended_at"))
+		c.startedAt, c.endedAt = pendingTime(p, "started"), pendingTime(p, "ended")
 		if p["credits"] != nil {
 			c.credits = Ptr(pendingNumber(p, "credits"))
 		}
@@ -2403,6 +2428,9 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		}
 		if p["latency_ms"] != nil {
 			c.latency = Ptr(time.Duration(pendingNumber(p, "latency_ms") * float64(time.Millisecond)))
+		} else {
+			// Node.js and Python stamp an untimed call with its report time; here untimed is a zero start.
+			c.startedAt = time.Time{}
 		}
 		if p["time_to_first_token_ms"] != nil {
 			c.ttft = Ptr(time.Duration(pendingNumber(p, "time_to_first_token_ms") * float64(time.Millisecond)))

@@ -44,23 +44,23 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 					return false
 				}
 			}
-			for _, key := range []string{"last", "last_ok", "history_only", "fallback_used", "byok", "uncredited", "unpriced", "fees_unknown", "error", "settled", "fired", "call_event_pending", "call_event_emitted", "from_span", "twin_matched", "usage_unknown", "credits_explicit", "structured_candidate", "result_seen", "tool_event_emitted"} {
+			for _, key := range []string{"last", "last_ok", "history_only", "fallback_used", "byok", "uncredited", "unpriced", "fees_unknown", "error", "settled", "fired", "call_event_pending", "call_event_emitted", "from_span", "matched", "usage_known", "twin_matched", "usage_unknown", "credits_explicit", "structured_candidate", "result_seen", "tool_event_emitted"} {
 				if v, ok := p[key]; ok {
 					if _, ok := v.(bool); !ok {
 						return false
 					}
 				}
 			}
+			numbers := []string{"credits", "cost_usd", "server_tool_cost_usd", "latency_ms", "time_to_first_token_ms", "duration_ms"}
+			// Epoch milliseconds; RFC 3339 is what Go wrote before SDK-6111.
 			for _, key := range []string{"started_at", "ended_at"} {
-				if v, ok := p[key]; ok {
-					s, ok := v.(string)
-					if !ok {
-						return false
-					}
+				if s, ok := p[key].(string); ok {
 					if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
 						return false
 					}
+					continue
 				}
+				numbers = append(numbers, key)
 			}
 			for _, key := range []string{"provider", "model", "raw_model", "requested_model", "response_id", "agent_name", "call_purpose", "service_tier", "finish_reason", "error_type", "tool_name", "raw_name", "tool_call_id", "mcp_server", "parent_tool"} {
 				if v, ok := p[key]; ok {
@@ -69,7 +69,7 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 					}
 				}
 			}
-			for _, key := range []string{"credits", "cost_usd", "server_tool_cost_usd", "latency_ms", "time_to_first_token_ms", "duration_ms"} {
+			for _, key := range numbers {
 				if v, ok := p[key]; ok {
 					switch v.(type) {
 					case int, int64, float64, json.Number:

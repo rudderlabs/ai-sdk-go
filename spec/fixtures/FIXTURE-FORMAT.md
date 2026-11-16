@@ -225,6 +225,8 @@ The `v04_review_*` scenarios cover custom server fields, nested version scopes, 
 
 - Pause review operations (Since v0.4): `buffer_call.reenter_end` makes its adapter finalizer reenter `end(error)`; `bind_paused` consumes a bound stream that pauses and yields an approval (Node.js/Python only); `pause_on_shutdown_selection` arranges a pause after shutdown selection but before finalization, exercising the stale selection guard.
 
+`pause-pending-usage-v0.1.json` also has `cross_sdk`, run by all three SDKs: `snapshots` (`written_by`, `snapshot`: the same two pending calls as each SDK writes them, plus the Python and Go encodings from before SDK-6111), `reports` (`source`: `"wrapper"` or `"span"`, `provider`, `model`, `input_tokens`, `output_tokens`, `started_ms`, `ended_ms`) and `expected` (`response`: a subset of the final `ai_response_received`; `call_events`: a subset of each `ai_llm_response_received`, in order). Restore each snapshot with `emitLlmCalls` on, record the reports and end; each SDK also checks that it still writes its own entry's `pending_calls`.
+
 ## Audit normalization fixture
 
 `audit-normalisation-v0.1.json` supplements conformance scenarios with direct helper inputs and wrapper/span reports that the scenario operations cannot express. It has `fixture_version: 1`, `spec_version: "0.4.0"` and four arrays of cases, each with `input` and `expected`:
