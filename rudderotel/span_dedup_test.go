@@ -382,3 +382,46 @@ func TestSpanDedupPanickingEndFilterSendsTheJoinedSpan(t *testing.T) {
 		t.Fatalf("want the held span under the owner's ID, got %d", len(spans))
 	}
 }
+
+// ownerSpan starts an active OTel model-call span in a new interaction of user u.
+func ownerSpan(tracer trace.Tracer) (context.Context, *rudderstackai.Interaction, trace.Span) {
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	ctx, o := tracer.Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	return ctx, i, o
+}
+
+func rejectErrors(s sdktrace.ReadOnlySpan) bool { return IsAISpan(s) && s.Status().Code != codes.Error }
+
+func TestSpanDedupFlushFinishesAJoinedCall(t *testing.T) {
+	for _, rejected := range []bool{true, false} {
+		t.Run("owner rejected="+strconvBool(rejected), func(t *testing.T) {
+			provider, _, events := testProvider(t, Options{Simple: true, Filter: rejectErrors})
+			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+				t.Fatal(err)
+			}
+			ctx, i, o := ownerSpan(provider.Tracer("app"))
+			hook.Tracing.BeginWrapper(ctx, i, time.Now()) // an unread joined call
+			if !rudderstackai.Flush(context.Background()) {
+				t.Fatal("flush did not finish")
+			}
+			if rejected {
+				o.SetStatus(codes.Error, "")
+			}
+			o.End()
+			i.End(rudderstackai.EndOptions{})
+			spans := spanEvents(events())
+			if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
+				t.Fatalf("want one span with the owner's ID, got %d", len(spans))
+			}
+			if src := strings.Contains(render(spans[0]), "rudderstack.span_source"); src != rejected {
+				t.Errorf("SDK fallback sent=%v, want %v", src, rejected)
+			}
+		})
+	}
+}
+
+// render renders an event for substring checks.
+func render(e object) string {
+	b, _ := json.Marshal(e)
+	return string(b)
+}

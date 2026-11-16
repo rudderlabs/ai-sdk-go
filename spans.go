@@ -261,6 +261,10 @@ func beginWrapperSpan(ctx context.Context, i *Interaction, started time.Time) (c
 		return ctx, nil
 	}
 	if s := otelOwnedSpan(ctx, i, started); s != nil {
+		// Flush finishes an unread joined call too; its span then follows the owner's decision.
+		pendingWrapperSpans.mu.Lock()
+		pendingWrapperSpans.spans[s] = wrapperMetadata{}
+		pendingWrapperSpans.mu.Unlock()
 		ctx = context.WithValue(ctx, keyInteraction, s.interaction)
 		return context.WithValue(ctx, sdkSpanKey{}, s), s
 	}
