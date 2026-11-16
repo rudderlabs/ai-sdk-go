@@ -278,3 +278,70 @@ func TestSDK6111WriteFromAnotherGoroutineDuringPauseIsDeliveredOrCarried(t *test
 		}
 	}
 }
+
+// A credits hook priced with its twin's call count or usage, when a pause during the hook closes
+// the twin's segment: the report is then a new call and is priced alone.
+func TestSDK6111CreditsHookThatPausesPricesTheReportAlone(t *testing.T) {
+	for _, order := range []string{"span first", "wrapper first"} {
+		for _, pauser := range []string{"hook", "another goroutine"} {
+			t.Run(order+"/"+pauser, func(t *testing.T) {
+				var i *Interaction
+				var hookCalls []int
+				pauseOn := 1
+				if order == "wrapper first" {
+					pauseOn = 2
+				}
+				r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+					hookCalls = append(hookCalls, c.CallCount)
+					// Only the report that follows its twin pauses.
+					if len(hookCalls) == pauseOn {
+						if pauser == "hook" {
+							i.Pause(PauseOptions{})
+						} else {
+							done := make(chan struct{})
+							go func() { defer close(done); i.Pause(PauseOptions{}) }()
+							<-done
+						}
+					}
+					return Ptr(float64(c.CallCount)), nil
+				}))
+				_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+				// One aggregate of three calls with unknown usage, and its twin for one call with usage.
+				aggregate := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o-2024-08-06", Integration: "tracing", UsageUnknown: true, CallCount: 3}, 100)
+				wrapper := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "openai", InputTokens: 10}, 100)
+				reports, want := []LLMCall{aggregate, wrapper}, [][3]any{{3.0, nil, 0.0}, {1.0, 1.0, 10.0}}
+				if order == "wrapper first" {
+					reports, want = []LLMCall{wrapper, aggregate}, [][3]any{{1.0, 1.0, 10.0}, {3.0, nil, 0.0}}
+				}
+				for _, call := range reports {
+					if !i.RecordCall(call) {
+						t.Fatal("report was not recorded")
+					}
+				}
+				i.End(EndOptions{})
+				segments, calls := r.named("ai_response_received"), r.named("ai_llm_response_received")
+				if len(segments) != 2 || len(calls) != 2 {
+					t.Fatalf("segments = %d, call events = %d, want 2 and 2", len(segments), len(calls))
+				}
+				for n, w := range want {
+					// The pause closed the twin's segment, so the later report is a call of its own count.
+					segment := pauseSegmentsJSON(t, segments[n].Properties).(map[string]any)
+					if segment["llm_call_count"] != w[0] || segment["total_credits"] != w[1] {
+						t.Errorf("segment %d: llm_call_count=%v total_credits=%v, want %v and %v", n, segment["llm_call_count"], segment["total_credits"], w[0], w[1])
+					}
+					event := pauseSegmentsJSON(t, calls[n].Properties).(map[string]any)
+					if event["input_tokens"] != w[2] || event["credits"] != w[1] {
+						t.Errorf("call event %d: input_tokens=%v credits=%v, want %v and %v", n, event["input_tokens"], event["credits"], w[2], w[1])
+					}
+				}
+				wantHook := []int{3, 1}
+				if order == "wrapper first" {
+					wantHook = []int{1, 3}
+				}
+				if fmt.Sprint(hookCalls) != fmt.Sprint(wantHook) {
+					t.Errorf("hook call counts = %v, want %v", hookCalls, wantHook)
+				}
+			})
+		}
+	}
+}

@@ -1062,12 +1062,14 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	if credits == nil && c.credits != nil && call.ErrorType == "" && (!call.UsageUnknown || useTwinUsage) {
 		// App callbacks may inspect, update or end this interaction.
-		creditCall := CreditCall{
+		own := CreditCall{
 			Provider: call.Provider, Model: call.Model, InputTokens: input, OutputTokens: output,
 			ReasoningTokens: reasoning, CachedInputTokens: nonNegative(call.CachedInputTokens), CacheWriteTokens: cacheWrite,
-			ServiceTier: tier, CostUSD: cost, CallCount: pricingCallCount, AgentName: call.AgentName,
+			ServiceTier: tier, CostUSD: cost, CallCount: callCount, AgentName: call.AgentName,
 			CallPurpose: call.CallPurpose, FallbackUsed: call.FallbackUsed, BYOK: call.BYOK,
 		}
+		creditCall := own
+		creditCall.CallCount = pricingCallCount
 		if useTwinUsage {
 			creditCall.Model = first(pricingTwin.rawModel, pricingTwin.model)
 			creditCall.InputTokens, creditCall.OutputTokens = pricingTwin.inputTokens, pricingTwin.outputTokens
@@ -1079,6 +1081,18 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		i.mu.Lock()
 		if i.ended {
 			return false
+		}
+		// A pause during the hook closed the twin's segment: this report is priced as the new call it now is.
+		if pricingTwin != nil && !slices.Contains(i.calls, pricingTwin) && (useTwinUsage || pricingCallCount != callCount) {
+			credits = nil
+			if !call.UsageUnknown {
+				i.mu.Unlock()
+				credits = priceCredits(c.credits, own)
+				i.mu.Lock()
+				if i.ended {
+					return false
+				}
+			}
 		}
 	}
 	if call.ResponseID != "" {
