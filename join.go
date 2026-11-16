@@ -35,11 +35,13 @@ func JoinInteraction(ctx context.Context, interactionID string, o JoinOptions) (
 		}
 	}()
 	i := openByID(interactionID)
-	if !i.joinable() {
+	scope, ok := i.joinScope()
+	if !ok {
 		warnOnce("join:unknown", "JoinInteraction: no open interaction has this ID in this process; the context is unchanged", joinWarnEvery)
 		return ctx
 	}
-	joined := context.WithValue(ctx, keyInteraction, i)
+	// The interaction's own scope and identity win over the caller's values.
+	joined := context.WithValue(context.WithValue(ctx, keyValues, scope), keyInteraction, i)
 	if !emitSpans.Load() || o.ParentSpanID == "" {
 		return joined
 	}
@@ -61,14 +63,32 @@ func joinedParent(i *Interaction, spanID string) *Span {
 	return &Span{TraceID: traceID, SpanID: spanID, interaction: i, seq: spanSeq.Add(1)}
 }
 
-// joinable reports, under its lock, that it is neither pausing, paused nor ended.
-func (i *Interaction) joinable() bool {
+// joinScope is the context values a join restores: the scope the interaction started in, with
+// its own identity, conversation and run labels. Not ok once it is pausing, paused or ended,
+// checked under its lock.
+func (i *Interaction) joinScope() (*contextValues, bool) {
 	if i == nil {
-		return false
+		return nil, false
 	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return !i.ended && !i.pausing && i.pausedAt.IsZero()
+	if i.ended || i.pausing || !i.pausedAt.IsZero() {
+		return nil, false
+	}
+	cv := contextValues{}
+	if i.scope != nil {
+		cv = *i.scope
+	}
+	cv.userID, cv.anonymousID, cv.conversationID = i.userID, i.anonymousID, i.conversationID
+	cv.feature, cv.surface = i.feature, i.surface
+	cv.accountID, cv.onBehalfOf = i.accountID, i.onBehalfOf
+	cv.agentVersion, cv.variant = i.agentVersion, i.variant
+	if i.resumed {
+		// As RunInteraction scopes a resumed run: the snapshot's identity, not this request's.
+		cv.cookies, cv.disconnected = nil, nil
+		cv.identityFromCookies = Ptr(false)
+	}
+	return &cv, true
 }
 
 // openByID is the open (not paused) interaction with this ID in this process.

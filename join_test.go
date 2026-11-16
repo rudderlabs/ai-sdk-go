@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -249,5 +250,42 @@ func TestJoinInteractionNeverJoinsAPausingInteraction(t *testing.T) {
 	}
 	if FromContext(JoinInteraction(context.Background(), i.ID(), JoinOptions{})) == i {
 		t.Error("a paused interaction was joinable")
+	}
+}
+
+func TestJoinInteractionRestoresTheInteractionScope(t *testing.T) {
+	for _, after := range []string{"open", "ended"} {
+		t.Run("interaction "+after, func(t *testing.T) {
+			r := setupAI(t)
+			started := WithValues(context.Background(), ContextValues{Feature: "support", Context: map[string]any{"app": "joined"}})
+			_, i := StartInteraction(started, InteractionOptions{UserID: "u", ConversationID: "conv", AccountID: "acct", Variant: "v", AgentVersion: "2", Classify: Ptr(false)})
+			// The worker's own context carries another request's values.
+			caller := WithValues(context.Background(), ContextValues{UserID: "caller", ConversationID: "caller-conv", AccountID: "other", Variant: "w", Feature: "other"})
+			joined := JoinInteraction(caller, i.ID(), JoinOptions{})
+			if after == "ended" {
+				i.End(EndOptions{})
+			}
+			TrackAction(joined, TrackActionOptions{InteractionID: i.ID(), ActionType: ActionFeedbackGiven})
+			action := r.named("ai_user_action")
+			if len(action) != 1 {
+				t.Fatalf("want one action, got %d", len(action))
+			}
+			p := action[0].Properties
+			if action[0].UserId != "u" || p["conversation_id"] != "conv" || p["account_id"] != "acct" {
+				t.Errorf("action identity %q/%v/%v, want the interaction's", action[0].UserId, p["conversation_id"], p["account_id"])
+			}
+			// A child interaction started in the joined scope inherits it too.
+			_, child := StartInteraction(joined, InteractionOptions{Classify: Ptr(false)})
+			child.mu.Lock()
+			got := []string{child.userID, child.conversationID, child.accountID, child.variant, child.agentVersion, child.feature}
+			child.mu.Unlock()
+			child.End(EndOptions{})
+			if want := []string{"u", "conv", "acct", "v", "2", "support"}; !slices.Equal(got, want) {
+				t.Errorf("child scope %v, want %v", got, want)
+			}
+			if after == "open" {
+				i.End(EndOptions{})
+			}
+		})
 	}
 }

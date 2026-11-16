@@ -490,6 +490,8 @@ type Interaction struct {
 	explicitAnalytics analytics.Client
 	msgContext        map[string]any
 	sessionID         int64
+	// scope is the context values in effect when it started, restored by JoinInteraction.
+	scope *contextValues
 	// resumed: continued from a Resume snapshot.
 	resumed bool
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
@@ -686,6 +688,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		}
 	}
 	i := &Interaction{
+		scope:             valuesFrom(ctx),
 		id:                interactionID,
 		conversationID:    conversationID,
 		userID:            id.userID,
