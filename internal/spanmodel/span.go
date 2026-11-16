@@ -124,13 +124,13 @@ func genAISummary(a map[string]any) map[string]any {
 	}
 	return g
 }
-func cleanAttributes(a map[string]any, capture, all, masked bool) map[string]any {
+func cleanAttributes(a map[string]any, scope string, capture, all, masked bool) map[string]any {
 	out := map[string]any{}
 	for k, v := range a {
 		if stripped(k) {
 			continue
 		}
-		content := all || contentAttribute(k)
+		content := all || contentAttribute(k, scope)
 		if content && !capture {
 			continue
 		}
@@ -141,7 +141,8 @@ func cleanAttributes(a map[string]any, capture, all, masked bool) map[string]any
 				continue
 			}
 		}
-		if content && (!masked || k == "exception.message") {
+		// Error text (exception.message, Mirascope's scoped error.message) is masked even in masked content.
+		if content && (!masked || k == "exception.message" || (k == "error.message" && contentAttribute(k, scope))) {
 			var ok bool
 			v, ok = mask(v)
 			if !ok {

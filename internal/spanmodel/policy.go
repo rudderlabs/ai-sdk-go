@@ -16,6 +16,29 @@ var contentKeys = []string{
 	"ai.response.providerMetadata", "ai.toolCall.args", "ai.toolCall.result", "ai.request.text", "ai.value", "ai.values",
 	"ai.embedding", "ai.embeddings", "ai.documents", "ai.ranking", "ai.decision.state", "ai.decision.questions", "ai.decision.answers",
 	"traceloop.entity.input", "traceloop.entity.output",
+	// Pydantic AI (instrumentation v1-v5; tool keys before v3, gen_ai.tool.call.* after)
+	"pydantic_ai.all_messages", "all_messages_events", "final_result", "tool_arguments", "tool_response",
+	"pydantic_ai.tool.deferral.metadata", "pydantic_ai.decision.state", "pydantic_ai.decision.questions",
+	"pydantic_ai.decision.route_questions", "pydantic_ai.decision.answers",
+	"model_request_parameters", "model_settings", "embedding_settings",
+	// Tool descriptions and schemas (GenAI semconv: opt-in, may be sensitive)
+	"gen_ai.tool.definitions",
+	// Mirascope ops: request and response messages, traced call arguments and outputs, annotations
+	"mirascope.response.messages", "mirascope.response.content", "mirascope.trace.arg_values",
+	"mirascope.trace.output", "mirascope.annotation.reasoning",
+	// Vercel AI SDK snake_case tool calls (Eve)
+	"ai.response.tool_calls",
+}
+
+// scopedContentKeys are generic keys that are content only on spans from the named instrumentation scope.
+var scopedContentKeys = map[string][]string{
+	// Pydantic AI image generation prompts and embedding inputs
+	"pydantic-ai": {"prompt", "inputs"},
+	// Mirascope's native error text (its default tracer names); handled like exception.message
+	"mirascope.llm": {"error.message"},
+	"mirascope.ops": {"error.message"},
+	// Eve agent spans: the session title and a channel's delivered input come from the user's message
+	"eve.agent": {"agent.session.title", "agent.channel.delivery.input"},
 }
 var contentPrefixes = []string{
 	"gen_ai.prompt", "gen_ai.completion", "llm.input_messages", "llm.output_messages", "llm.prompts",
@@ -36,8 +59,9 @@ func hasPrefix(key string, prefixes []string) bool {
 	return false
 }
 
-func contentAttribute(key string) bool {
-	return slices.Contains(contentKeys, key) || hasPrefix(key, contentPrefixes)
+func contentAttribute(key, scope string) bool {
+	return slices.Contains(contentKeys, key) || hasPrefix(key, contentPrefixes) ||
+		slices.Contains(scopedContentKeys[scope], key)
 }
 
 func contentEvent(name string) bool {

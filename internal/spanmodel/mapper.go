@@ -46,7 +46,7 @@ func ToTrack(s Span, options Options) (*analytics.Track, error) {
 	if options.CaptureContent != nil {
 		capture = *options.CaptureContent
 	}
-	s.Attributes = cleanAttributes(s.Attributes, capture, false, options.ContentMasked)
+	s.Attributes = cleanAttributes(s.Attributes, s.Scope.Name, capture, false, options.ContentMasked)
 	otlp, candidates := toOTLP(s, capture, options.ContentMasked, s.Attributes)
 	sc := s.Context
 	var parent any
