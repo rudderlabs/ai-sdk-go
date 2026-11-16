@@ -253,39 +253,30 @@ func TestLoad(t *testing.T) {
 	phase := func(seconds float64, warmup func()) float64 {
 		start := time.Now()
 		until := start.Add(time.Duration(seconds * float64(time.Second)))
-		// Each worker takes the next slot of a shared schedule of rate starts per second. A late
-		// worker starts from now instead of catching up, so a busy machine lowers the rate rather
-		// than sending a burst bigger than the client can take.
+		// Workers claim a slot only when starting, spacing starts by one interval without catching
+		// up after a stall. After sleeping, they recheck the schedule and phase deadline.
 		var slotMu sync.Mutex
 		next := start
-		take := func() time.Time {
-			slotMu.Lock()
-			defer slotMu.Unlock()
-			if now := time.Now(); next.Before(now) {
-				next = now
-			}
-			slot := next
-			next = next.Add(time.Duration(float64(time.Second) / rate))
-			return slot
-		}
+		interval := time.Duration(float64(time.Second) / rate)
 		var warmed sync.Once
 		var failed atomic.Bool // the first failure stops every worker at its next slot
 		var wg sync.WaitGroup
 		for _, cs := range sessions {
 			wg.Go(func() {
 				for !failed.Load() {
-					slot := take()
-					if !slot.Before(until) {
+					now := time.Now()
+					if !now.Before(until) {
 						return
 					}
-					if wait := time.Until(slot); wait > 0 {
+					slotMu.Lock()
+					if now.Before(next) {
+						wait := next.Sub(now)
+						slotMu.Unlock()
 						time.Sleep(wait)
-					} else {
-						runtime.Gosched()
+						continue
 					}
-					if failed.Load() { // another worker failed while this one waited
-						return
-					}
+					next = now.Add(interval)
+					slotMu.Unlock()
 					n := seq.Add(1)
 					id := turn(ctx, n)
 					interactions.Add(1)

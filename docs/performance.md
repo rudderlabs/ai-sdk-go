@@ -52,13 +52,13 @@ On the laptop, 5,000 interactions per second (about 15,000 events per second) we
 
 ## Limits
 
-| Limit                                            | Default                 | Set with                                                         |
-| ------------------------------------------------ | ----------------------- | ---------------------------------------------------------------- |
-| Open interactions                                | 10,000                  | `WithLimits(Limits{MaxOpenInteractions: ...})` ([details](configuration.md#limits)) |
-| Interaction lifetime                             | 1 hour                  | `InteractionTTL`                                                 |
-| Calls kept one by one per interaction            | 1,000                   | `MaxCallsPerInteraction`                                         |
-| Entries per in-memory map (MCP and integrations) | 10,000                  | `MaxMapEntries`                                                  |
-| Event properties                                 | 30,000 serialized bytes | fixed ([details](events.md))                                     |
+| Limit                                                | Default                                                                                                                                          | Set with                                                                            |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| Open interactions                                    | 10,000                                                                                                                                           | `WithLimits(Limits{MaxOpenInteractions: ...})` ([details](configuration.md#limits)) |
+| Interaction lifetime                                 | 1 hour                                                                                                                                           | `InteractionTTL`                                                                    |
+| Model and tool calls kept one by one per interaction | 1,000 each; tool calls still awaiting an outcome may keep up to that many more records, identity only (name, ID, agent, MCP server, parent tool) | `MaxCallsPerInteraction`                                                            |
+| Entries per in-memory map (MCP and integrations)     | 10,000                                                                                                                                           | `MaxMapEntries`                                                                     |
+| Event properties                                     | 30,000 serialized bytes                                                                                                                          | fixed ([details](events.md))                                                        |
 
 What happens at each cap is in [Limits](configuration.md#limits); an event over the size budget loses its captured text first ([events](events.md)). Nothing panics into your code. An interaction leaves nothing behind once it ends; MCP keeps a few entries per session or interaction (call positions and argument hashes for `retry_count`), up to `MaxMapEntries` per map.
 
