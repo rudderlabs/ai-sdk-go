@@ -5,6 +5,8 @@ func ResetManagedAgents() {
 	sessionStates.Lock()
 	sessionStates.m, sessionStates.order = map[string]*sessionState{}, nil
 	sessionStates.Unlock()
+	seenEvents.clear()
+	childThreads.clear()
 	pausedTurns.Lock()
 	pausedTurns.m, pausedTurns.order = map[string]*pausedTurn{}, nil
 	pausedTurns.Unlock()

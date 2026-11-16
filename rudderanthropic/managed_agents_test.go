@@ -1080,3 +1080,25 @@ func TestManagedAgentsEndsATurnAStreamTimeoutStoppedWithTheTimeoutStatus(t *test
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestManagedAgentsKeepsAtMostMaxMapEntriesEventIDsForTheWholeProcess(t *testing.T) {
+	f := loadMAFixture(t)
+	var sc maScenario
+	for _, s := range f.Scenarios {
+		if s.Name == "text_turn_capture" {
+			sc = s
+		}
+	}
+	events := sc.Streams[0].Events
+	// One session's events fit; a second session's push the first one's oldest out.
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: len(events) + 2}))
+	resetMA(t)
+	for _, id := range []string{"sesn_ids_a", "sesn_ids_b", "sesn_ids_a"} {
+		tracked := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, events)}, rudderanthropic.WithSessionID(id))
+		for tracked.Next() {
+		}
+	}
+	if got := rec.events(t)["ai_response_received"]; len(got) != 3 {
+		t.Fatalf("%d answers, want 3", len(got))
+	}
+}
