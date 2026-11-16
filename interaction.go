@@ -1330,7 +1330,8 @@ func sameModel(a, b string) bool {
 	if strings.Contains(x, "claude") || strings.Contains(y, "claude") {
 		return x == y
 	}
-	return strings.HasPrefix(x, y) || strings.HasPrefix(y, x)
+	// A version suffix only: gpt-4o-mini is another model, not a dated gpt-4o.
+	return isVersionOf(x, y) || isVersionOf(y, x)
 }
 
 func mergeCallTwin(kept, later *recordedCall) {

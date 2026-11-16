@@ -1931,6 +1931,113 @@
       }
     },
     {
+      "name": "openai wrapper,span gpt-4o,gpt-4o-2024-08-06",
+      "description": "A span naming the wrapper's model with a version suffix is the same call.",
+      "input": {
+        "provider": "openai",
+        "reports": [
+          {
+            "model": "gpt-4o",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "gpt-4o-2024-08-06",
+            "source": "span",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "gpt-4o": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          }
+        },
+        "credits": {
+          "gpt-4o": 7
+        }
+      },
+      "expected": {
+        "primary_model": "gpt-4o",
+        "llm_call_count": 1,
+        "call_events": 1,
+        "total_input_tokens": 1000,
+        "total_output_tokens": 500,
+        "total_cost_usd": 0.004,
+        "total_credits": 7,
+        "groups": [
+          {
+            "model": "gpt-4o",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "openai wrapper,span gpt-4o,gpt-4o-mini",
+      "description": "Another model of the family is another call, even in an overlapping window.",
+      "input": {
+        "provider": "openai",
+        "reports": [
+          {
+            "model": "gpt-4o",
+            "source": "wrapper",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "started_at": 100,
+            "ended_at": 110
+          },
+          {
+            "model": "gpt-4o-mini",
+            "source": "span",
+            "input_tokens": 200,
+            "output_tokens": 100,
+            "started_at": 100,
+            "ended_at": 110
+          }
+        ],
+        "prices": {
+          "gpt-4o": {
+            "input_per_mtok": 2,
+            "output_per_mtok": 4
+          },
+          "gpt-4o-mini": {
+            "input_per_mtok": 1,
+            "output_per_mtok": 2
+          }
+        },
+        "credits": {
+          "gpt-4o": 7,
+          "gpt-4o-mini": 1
+        }
+      },
+      "expected": {
+        "primary_model": "gpt-4o-mini",
+        "llm_call_count": 2,
+        "call_events": 2,
+        "total_input_tokens": 1200,
+        "total_output_tokens": 600,
+        "total_cost_usd": 0.0044,
+        "total_credits": 8,
+        "groups": [
+          {
+            "model": "gpt-4o",
+            "call_count": 1
+          },
+          {
+            "model": "gpt-4o-mini",
+            "call_count": 1
+          }
+        ]
+      }
+    },
+    {
       "name": "claude raw-row call counts",
       "adapter": "claude-agent-sdk",
       "description": "Node.js/Python only: Claude Agent SDK accounting; Go has no Claude Agent SDK adapter. Two dated raw usage rows with one canonical name count their own observed calls and credits once.",

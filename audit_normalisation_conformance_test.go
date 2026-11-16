@@ -82,8 +82,8 @@ func TestAuditNormalisationConformance(t *testing.T) {
 		t.Fatalf("unsupported fixture version %d", fixture.FixtureVersion)
 	}
 	total := len(fixture.PropertyNames) + len(fixture.CanonicalModels) + len(fixture.Calls) + len(fixture.Statuses)
-	if total != 188 {
-		t.Fatalf("expected 188 cases, got %d", total)
+	if total != 190 {
+		t.Fatalf("expected 190 cases, got %d", total)
 	}
 	passed, skipped := 0, 0
 	for n, tc := range fixture.PropertyNames {

@@ -300,7 +300,7 @@ Inspect only a plain object with top-level boolean `successful: false`, or a str
 
 Steps: `record_call` (`provider`, `model`, `input_tokens`?, `started_ms`?, `ended_ms`?, `output_text`?, `source`?: `"span"` reports it as a tracing span, otherwise as a wrapper call); `record_tool_call` (`calls`: `{ id?, name, agent_name?, result?, error? }`, recorded with their outcome when `result` or `error` is given); `on_event` (`event`, `steps`: runs `steps` once, synchronously, inside delivery of the next track event with that name, as an analytics client's callback would); `pause` (`json`?: serialise the snapshot to a JSON string and continue in a new interaction resumed from it); `resume` (in process); `end`.
 
-`expected.segments` lists every `ai_response_received` in order, each matched as a subset. `expected.call_events` lists the `input_tokens` of every `ai_llm_response_received` in order. `expected.tool_events` lists every declared tool event (any track event not starting with `ai_`) in order as `{ event, tool_call_id, tool_status }`.
+`expected.segments` lists every `ai_response_received` in order, each matched as a subset. `expected.call_events` lists the `input_tokens` of every `ai_llm_response_received` in order. `expected.tool_events` lists every declared tool event (any track event not starting with `ai_`) in order as `{ event, tool_call_id, tool_status }`, an absent property as `null`.
 
 ## span-dedup-v0.1.json
 

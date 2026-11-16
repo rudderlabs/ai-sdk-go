@@ -127,6 +127,7 @@ func TestSDK6111SameModel(t *testing.T) {
 		{"GPT-4o-2024-08-06", "gpt-4o", true},
 		{"gpt-4o", "", true},
 		{"gpt-4o", "gpt-4.1", false},
+		{"gpt-4o", "gpt-4o-mini", false},
 		{"claude-sonnet-4-5", "claude-sonnet-4-5-20250929", true},
 		{"claude-sonnet-4", "claude-sonnet-4-5", false},
 	} {

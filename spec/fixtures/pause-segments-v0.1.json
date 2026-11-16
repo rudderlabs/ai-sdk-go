@@ -310,6 +310,92 @@
       }
     },
     {
+      "name": "span recorded by a tool event during paused call delivery",
+      "description": "Delivery records a tool whose declared event, sent at pause, reports a held span; pause delivers that span's call event too before capturing totals.",
+      "config": {
+        "emit_llm_calls": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "name": "lookup"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "Looked Up",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "total_input_tokens": 30,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": null,
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
       "name": "call recorded during final call delivery is not counted",
       "description": "The final end delivers a held span call event after the interaction ended, so a call the callback records is refused, as any write after end is.",
       "config": {
