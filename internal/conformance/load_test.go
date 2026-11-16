@@ -288,7 +288,7 @@ func TestLoad(t *testing.T) {
 	plane.failing.Store(true)
 	phase2 := phase(seconds/2, nil)
 	plane.failing.Store(false)
-	rudderstackai.Flush(ctx)
+	recovered := rudderstackai.Flush(ctx)
 	for _, cs := range sessions {
 		_ = cs.Close()
 	}
@@ -312,6 +312,12 @@ func TestLoad(t *testing.T) {
 
 	if delivered != sent {
 		t.Errorf("phase 1 delivered %v (prompts, answers, tool calls), want %v", delivered, sent)
+	}
+	if plane.rejected == 0 {
+		t.Error("phase 2 never reached a failing data plane")
+	}
+	if !recovered {
+		t.Error("the flush after the data plane recovered timed out")
 	}
 	if errs["internal"] > 0 {
 		t.Errorf("%d SDK steps failed", errs["internal"])

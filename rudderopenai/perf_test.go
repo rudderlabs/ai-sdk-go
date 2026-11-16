@@ -244,7 +244,10 @@ func create(prompt string) func(context.Context, openai.Client) error {
 }
 
 func consumeStream(ctx context.Context, c openai.Client) error {
-	stream := c.Chat.Completions.NewStreaming(ctx, chatParams("Where is my order?"))
+	// Ask for usage on both sides: the fake always sends it, and the wrapper would otherwise hide it.
+	params := chatParams("Where is my order?")
+	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)}
+	stream := c.Chat.Completions.NewStreaming(ctx, params)
 	for stream.Next() {
 		_ = stream.Current()
 	}

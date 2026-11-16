@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -77,12 +78,13 @@ func FuzzTraceparent(f *testing.F) {
 		// The W3C rule: lowercase hex, not version ff, neither ID all zeros; version 00 is exactly
 		// 55 characters, and only later versions may add fields after the flags. Node.js and Go read
 		// 00 with extra fields today (SDK-6930), so that case is not checked.
+		// The parser trims the header first, so trailing space after the flags or extra fields is not part of it.
+		rest = strings.TrimRightFunc(rest, unicode.IsSpace)
 		if version == "00" && rest != "" {
 			return
 		}
 		valid := lowerHex(version, 2) && version != "ff" && lowerHex(traceID, 32) && strings.Trim(traceID, "0") != "" &&
-			lowerHex(parentID, 16) && strings.Trim(parentID, "0") != "" && lowerHex(flags, 2) &&
-			(rest == "" || rest[0] == '-') && rest == strings.TrimRight(rest, " \t\n\r\v\f")
+			lowerHex(parentID, 16) && strings.Trim(parentID, "0") != "" && lowerHex(flags, 2) && (rest == "" || rest[0] == '-')
 		if valid && got != traceID {
 			t.Fatalf("valid traceparent read as %q, want %q", got, traceID)
 		}
