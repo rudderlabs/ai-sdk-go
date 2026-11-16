@@ -91,11 +91,12 @@ func (i *Interaction) joinScope() (*contextValues, bool) {
 	return &cv, true
 }
 
-// openByID is the open (not paused) interaction with this ID in this process.
+// openByID is the most recently started open (not paused) interaction with this ID in this
+// process, so a reused explicit ID resolves as in Node.js and Python.
 func openByID(id string) *Interaction {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	for e := open.list.Front(); e != nil; e = e.Next() {
+	for e := open.list.Back(); e != nil; e = e.Prev() {
 		if i := e.Value.(*Interaction); i.id == id {
 			return i
 		}

@@ -289,3 +289,14 @@ func TestJoinInteractionRestoresTheInteractionScope(t *testing.T) {
 		})
 	}
 }
+
+func TestJoinInteractionNewestOwnsAReusedID(t *testing.T) {
+	setupAI(t)
+	_, older := StartInteraction(context.Background(), InteractionOptions{InteractionID: "dup", UserID: "a", Classify: Ptr(false)})
+	defer older.End(EndOptions{})
+	_, newer := StartInteraction(context.Background(), InteractionOptions{InteractionID: "dup", UserID: "b", Classify: Ptr(false)})
+	defer newer.End(EndOptions{})
+	if got := FromContext(JoinInteraction(context.Background(), "dup", JoinOptions{})); got != newer {
+		t.Error("the older interaction owned the reused ID")
+	}
+}
