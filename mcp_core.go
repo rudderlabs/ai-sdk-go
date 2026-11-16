@@ -304,6 +304,8 @@ func (w *wrapped) Begin(r mcpbridge.Request) mcpbridge.Call { return w.begin(r) 
 func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	received := time.Now()
 	sequence := requestSequence.Add(1)
+	// Before any app callback (Identify, ClientInfo, ClientInfoFallback) can change _meta.
+	caller := callerModel(r.Meta)
 	opts := w.opts.Load()
 	tok, _ := r.Token.(*auth.TokenInfo)
 	id := opts.identity(r.Ctx, tok)
@@ -399,7 +401,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 		client: seenClient, requestID: safeRequestID(r.RequestID), rawID: r.RequestID, responses: r.Responses, http: r.HTTP, meta: map[string]any{}, start: time.Now(),
 		initializeClient: r.InitializeClient, received: received, sequence: sequence, registeredTools: r.RegisteredTools, registeredPrompts: r.RegisteredPrompts,
 	}
-	rc.callerModel = callerModel(r.Meta)
+	rc.callerModel = caller
 	// A copy: the SDK may remove the protocol keys from _meta while it handles the request.
 	for _, k := range []string{metaProtocolVersion, metaClientInfo, metaClientCapabilities} {
 		if v, ok := r.Meta[k]; ok {

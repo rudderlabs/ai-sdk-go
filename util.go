@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"math"
 	"net"
 	"os"
@@ -44,6 +45,22 @@ const (
 	metaAIInvocation = "io.modelcontextprotocol/aiInvocation"
 	metaCodexTurn    = "x-codex-turn-metadata"
 )
+
+// snapshotMeta copies _meta and the objects in it one level deep, so app code that runs while the
+// request is handled (callbacks, schema marshalers) can't change what is read from it.
+func snapshotMeta(meta map[string]any) map[string]any {
+	if meta == nil {
+		return nil
+	}
+	out := make(map[string]any, len(meta))
+	for k, v := range meta {
+		if m, ok := v.(map[string]any); ok {
+			v = maps.Clone(m)
+		}
+		out[k] = v
+	}
+	return out
+}
 
 var callerModelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/+-]*(@[0-9]+)?$`)
 
