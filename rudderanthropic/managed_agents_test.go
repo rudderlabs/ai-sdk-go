@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
@@ -864,5 +866,217 @@ func TestManagedAgentsGivesAToolRefusedUpFrontNoDuration(t *testing.T) {
 	entry := got[0]["tool_breakdown"].([]any)[0].(map[string]any)
 	if _, has := entry["duration_ms"]; has || entry["error_types"].(map[string]any)["denied"] != float64(1) {
 		t.Fatalf("%v", entry)
+	}
+}
+
+// enteringStream is an SDK stream that reports when a Next starts waiting for its second event.
+type enteringStream struct {
+	*ssestream.Stream[anthropic.BetaManagedAgentsStreamSessionEventsUnion]
+	reads   int
+	waiting chan struct{}
+}
+
+func (e *enteringStream) Next() bool {
+	if e.reads++; e.reads == 2 {
+		close(e.waiting)
+	}
+	return e.Stream.Next()
+}
+
+func TestManagedAgentsCloseReleasesANextWaitingOnTheSDKStream(t *testing.T) {
+	_, rec := setup(t)
+	resetMA(t)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "event: user.message\ndata: {\"id\":\"sevt_wait_u\",\"type\":\"user.message\",\"content\":[]}\n\n")
+		w.(http.Flusher).Flush()
+		// No second event: the client's read waits until it closes the stream.
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+	client := anthropic.NewClient(option.WithAPIKey("test"), option.WithMaxRetries(0), option.WithBaseURL(srv.URL))
+	stream := &enteringStream{
+		Stream:  client.Beta.Sessions.Events.StreamEvents(context.Background(), "sesn_wait", anthropic.BetaSessionEventStreamParams{}),
+		waiting: make(chan struct{}),
+	}
+	events := rudderanthropic.TrackSessionEvents(context.Background(), stream, rudderanthropic.WithSessionID("sesn_wait"))
+	done := make(chan int, 1)
+	go func() {
+		n := 0
+		for events.Next() {
+			n++
+		}
+		done <- n
+	}()
+	select {
+	case <-stream.waiting:
+	case n := <-done:
+		t.Fatalf("stream ended after %d events: %v", n, events.Err())
+	}
+	time.Sleep(50 * time.Millisecond) // the read blocks on the response body
+	closed := make(chan error, 1)
+	go func() { closed <- events.Close() }()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close hung while a Next waited")
+	}
+	select {
+	case n := <-done:
+		if n != 1 {
+			t.Fatalf("read %d events", n)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close did not release the waiting Next")
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["response_status"] != "cancelled" {
+		t.Fatalf("%v", got)
+	}
+}
+
+// panickingStream panics in Current at its second event, or in Err at its end.
+type panickingStream struct {
+	*sliceStream
+	in string
+}
+
+func (p *panickingStream) Current() anthropic.BetaManagedAgentsStreamSessionEventsUnion {
+	if p.in == "Current" && p.n == 2 {
+		panic("decode failed")
+	}
+	return p.sliceStream.Current()
+}
+
+func (p *panickingStream) Err() error {
+	if p.in == "Err" {
+		panic("err failed")
+	}
+	return p.sliceStream.Err()
+}
+
+func TestManagedAgentsReleasesItsLockWhenTheSourcePanics(t *testing.T) {
+	for _, in := range []string{"Current", "Err"} {
+		t.Run(in, func(t *testing.T) {
+			_, rec := setup(t)
+			resetMA(t)
+			src := &panickingStream{in: in, sliceStream: maEvents(t,
+				`{"id":"sevt_panic_u","type":"user.message","content":[]}`,
+				`{"id":"sevt_panic_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1}}`,
+			)}
+			events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSessionID("sesn_panic_"+in))
+			panicked := false
+			func() {
+				defer func() { panicked = recover() != nil }()
+				for events.Next() {
+				}
+			}()
+			if !panicked {
+				t.Fatal("the source's panic did not reach the caller")
+			}
+			_ = events.Close()
+			next := make(chan bool, 1)
+			go func() { next <- events.Next() }()
+			select {
+			case more := <-next:
+				if more {
+					t.Fatal("Next after Close")
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("Next blocked on the lock the panic left held")
+			}
+			got := rec.events(t)["ai_response_received"]
+			if len(got) != 1 || got[0]["response_status"] != "cancelled" {
+				t.Fatalf("%v", got)
+			}
+		})
+	}
+}
+
+func TestManagedAgentsSettlesToolsAcrossAReconnectInTheCallersInteraction(t *testing.T) {
+	f, sc := maFixtureScenario(t, "custom_tool_error_after_resume")
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
+	resetMA(t)
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	session := rudderanthropic.WithSession(withID(f.Session, "sesn_borrowed_reconnect"))
+	for _, s := range sc.Streams {
+		events := rudderanthropic.TrackSessionEvents(ctx, &sliceStream{events: decodeEvents(t, s.Events)}, session)
+		for events.Next() {
+		}
+		_ = events.Close()
+	}
+	i.End(rudderstackai.EndOptions{Status: rudderstackai.StatusSuccess})
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 {
+		t.Fatalf("%v", got)
+	}
+	breakdown := got[0]["tool_breakdown"].([]any)
+	entry := breakdown[0].(map[string]any)
+	if len(breakdown) != 1 || entry["call_count"] != float64(1) || entry["error_count"] != float64(1) || entry["duration_ms"] != float64(1600) {
+		t.Fatalf("%v", breakdown)
+	}
+}
+
+// gatedStream holds its second event until gate closes; waiting closes when a read waits for it.
+type gatedStream struct {
+	*sliceStream
+	gate, waiting chan struct{}
+}
+
+func (g *gatedStream) Next() bool {
+	if g.n == 1 {
+		close(g.waiting)
+		<-g.gate
+	}
+	return g.sliceStream.Next()
+}
+
+func TestManagedAgentsOpensNoAnswerForAReadThatResolvesAfterClose(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 1}))
+	resetMA(t)
+	src := &gatedStream{sliceStream: maEvents(t,
+		`{"id":"sevt_late_u","type":"user.message","content":[]}`,
+		`{"id":"sevt_late_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1}}`,
+	), gate: make(chan struct{}), waiting: make(chan struct{})}
+	events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSessionID("sesn_late_read"))
+	if !events.Next() {
+		t.Fatal("no events")
+	}
+	pending := make(chan bool, 1)
+	go func() { pending <- events.Next() }()
+	<-src.waiting
+	_ = events.Close()
+	close(src.gate)
+	if <-pending {
+		t.Fatal("Next passed an event read after Close")
+	}
+	rudderstackai.Flush(context.Background())
+	rec.mu.Lock()
+	var names []string
+	for _, m := range rec.msgs {
+		names = append(names, m.Event)
+	}
+	rec.mu.Unlock()
+	if !reflect.DeepEqual(names, []string{"ai_user_prompt_created", "ai_response_received"}) {
+		t.Fatalf("%v", names)
+	}
+}
+
+func TestManagedAgentsEndsATurnAStreamTimeoutStoppedWithTheTimeoutStatus(t *testing.T) {
+	_, sc := maFixtureScenario(t, "text_turn_capture")
+	_, rec := setup(t)
+	resetMA(t)
+	src := &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)[:3], err: context.DeadlineExceeded}
+	events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSessionID("sesn_timeout"))
+	for events.Next() {
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["response_status"] != "timeout" || got[0]["error_type"] != "timeout" {
+		t.Fatalf("%v", got)
 	}
 }

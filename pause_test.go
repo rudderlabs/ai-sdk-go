@@ -833,6 +833,28 @@ func TestResumeFromASnapshot(t *testing.T) {
 	}
 }
 
+func TestBackdateMovesASegmentRestoredFromASnapshotLikeOneResumedInProcess(t *testing.T) {
+	r := setupAI(t)
+	_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	paused, _ := first.Pause(PauseOptions{})
+	b, _ := json.Marshal(paused)
+	var stored PausedInteraction
+	if err := json.Unmarshal(b, &stored); err != nil {
+		t.Fatal(err)
+	}
+	stored.PausedAt -= 60_000 // restored 60 s later, in another process
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	restored.backdate(time.Now().Add(-10 * time.Second))
+	restored.End(EndOptions{Status: StatusSuccess})
+	p := lastResponse(t, r)
+	// Real time between the calls adds a little to each.
+	latency, _ := p["latency_ms"].(int64)
+	pausedMS, _ := p["total_paused_ms"].(int64)
+	if latency < 10_000 || latency > 10_500 || pausedMS < 50_000 || pausedMS > 50_500 {
+		t.Fatalf("latency_ms %v, total_paused_ms %v", p["latency_ms"], p["total_paused_ms"])
+	}
+}
+
 func TestResumeFromAnUnusableSnapshot(t *testing.T) {
 	setupAI(t)
 	logs := captureLogs(t)

@@ -76,6 +76,11 @@ func Backdate(i *rudderstackai.Interaction, startedAt time.Time) { hook.Backdate
 // for one without a provider signal.
 func AppErrorType(err error) string { return hook.AppErrorType(err) }
 
+// StatusForErrorType is the response_status an error type ends an answer with.
+func StatusForErrorType(errorType string) rudderstackai.ResponseStatus {
+	return rudderstackai.ResponseStatus(hook.StatusForErrorType(errorType))
+}
+
 // ContextConversation is the conversation ID a context carries (rudderstackai.WithValues), or "".
 func ContextConversation(ctx context.Context) string { return hook.ContextConversation(ctx) }
 
