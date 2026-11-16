@@ -77,7 +77,10 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 		return true
 	}
 	// Only a span this processor will export can own a call; otherwise the SDK sends its own.
-	if !s.SpanContext().IsSampled() || !p.exports(s) {
+	// A panicking filter counts as a rejection.
+	exported := false
+	safe("tracing.filter", func() { exported = p.exports(s) })
+	if !s.SpanContext().IsSampled() || !exported {
 		return false
 	}
 	otelCalls.mu.Lock()
@@ -274,13 +277,14 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 				held[k] = v
 			}
 		}
-		covered := interaction != nil && hook.Tracing.EmitSpans() && p.dedup(ctx, s, interaction)
-		p.remember(key(s.SpanContext()), spanState{tags: held, owner: interaction, covered: covered})
 		if IsAISpan(s) {
 			for k, v := range tags {
 				s.SetAttributes(attribute.String(k, v))
 			}
 		}
+		// After tagging, so a filter that reads user.id sees the tagged span.
+		covered := interaction != nil && hook.Tracing.EmitSpans() && p.dedup(ctx, s, interaction)
+		p.remember(key(s.SpanContext()), spanState{tags: held, owner: interaction, covered: covered})
 		if p.options.ProductEvents {
 			p.recordAncestry(s, interaction)
 		}
@@ -299,11 +303,16 @@ func (s taggedSpan) Attributes() []attribute.KeyValue { return s.attrs }
 // OnEnd records only spans of an open interaction and skips suppressed classifier spans.
 func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	defer p.finish(key(s.SpanContext()))
-	owner := p.takeOTelCall(key(s.SpanContext()))
-	if p.closed.Load() {
-		if owner != nil {
-			safe("tracing.owner", func() { owner.Settle(false) })
+	// An owner always settles: unless the filter accepts the finished span (a panic, a closed
+	// processor or any failure counts as a rejection), its joined calls send their own spans.
+	exported := false
+	if owner := p.takeOTelCall(key(s.SpanContext())); owner != nil {
+		defer safe("tracing.owner", func() { owner.Settle(exported) })
+		if !p.closed.Load() {
+			defer safe("tracing.filter", func() { exported = p.exports(s) })
 		}
+	}
+	if p.closed.Load() {
 		return
 	}
 	safe("tracing.onEnd", func() {
@@ -323,10 +332,6 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 		}
 		if p.options.ProductEvents {
 			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
-		}
-		// An owner the filter rejects now (its final status or attributes) sends its joined calls' spans.
-		if owner != nil {
-			owner.Settle(p.exports(s))
 		}
 		if !state.covered {
 			p.inner.OnEnd(s)

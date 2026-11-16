@@ -337,3 +337,48 @@ func TestSpanDedupRejectedOwnerSendsTheJoinedSpan(t *testing.T) {
 		})
 	}
 }
+
+func TestSpanDedupStartFilterSeesIdentityTags(t *testing.T) {
+	// Exports only spans tagged with the interaction's user.
+	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
+		return IsAISpan(s) && asString(attributes(s.Attributes())["user.id"]) == "u"
+	}})
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	if wrapperIn(ctx, t, i, events) {
+		t.Error("the tagged OTel span did not own the call")
+	}
+	o.End()
+	i.End(rudderstackai.EndOptions{})
+	spans := spanEvents(events())
+	if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
+		t.Fatalf("want only the owner's span, got %d", len(spans))
+	}
+}
+
+func TestSpanDedupPanickingEndFilterSendsTheJoinedSpan(t *testing.T) {
+	// Accepts the span at start, panics once it has ended.
+	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
+		if !s.EndTime().IsZero() {
+			panic("filter exploded")
+		}
+		return IsAISpan(s)
+	}})
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	ctx, o := provider.Tracer("app").Start(ctx, "chat", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	if wrapperIn(ctx, t, i, events) {
+		t.Fatal("the joined span was sent before its owner settled")
+	}
+	o.End()
+	i.End(rudderstackai.EndOptions{})
+	spans := spanEvents(events())
+	if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
+		t.Fatalf("want the held span under the owner's ID, got %d", len(spans))
+	}
+}
