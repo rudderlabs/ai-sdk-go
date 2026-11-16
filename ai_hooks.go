@@ -60,5 +60,6 @@ func init() {
 	}
 	hook.Report = func(kind, where string, err error) { report(kind, where, err) }
 	hook.MaxMapEntries = func() int { return cfg().limits.MaxMapEntries }
+	hook.MaxCallsPerInteraction = func() int { return cfg().limits.MaxCallsPerInteraction }
 	hook.Reset = resetForTest
 }

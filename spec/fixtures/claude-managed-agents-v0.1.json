@@ -191,7 +191,7 @@
             "total_tokens": 154,
             "total_cached_input_tokens": 100,
             "total_cache_write_tokens": 30,
-            "total_cost_usd": 8.75e-06,
+            "total_cost_usd": 0.00000875,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -204,7 +204,7 @@
                 "cache_write_tokens": 30,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 8.75e-06
+                "cost_usd": 0.00000875
               }
             ],
             "response_text": "Hello!"
@@ -289,7 +289,7 @@
             "total_tokens": 15,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.7e-06,
+            "total_cost_usd": 0.0000027,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -302,7 +302,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 2.7e-06
+                "cost_usd": 0.0000027
               }
             ]
           }
@@ -452,7 +452,7 @@
             "total_tokens": 11,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 1.5e-06,
+            "total_cost_usd": 0.0000015,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -465,7 +465,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 1.5e-06
+                "cost_usd": 0.0000015
               }
             ]
           }
@@ -493,7 +493,7 @@
             "total_tokens": 31,
             "total_cached_input_tokens": 10,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2.6e-06,
+            "total_cost_usd": 0.0000026,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -506,7 +506,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 2.6e-06
+                "cost_usd": 0.0000026
               }
             ]
           }
@@ -667,7 +667,7 @@
             "total_tokens": 38,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 7e-06,
+            "total_cost_usd": 0.000007,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -680,7 +680,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 7e-06
+                "cost_usd": 0.000007
               }
             ],
             "tool_breakdown": [
@@ -707,7 +707,7 @@
             "total_tokens": 72,
             "total_cached_input_tokens": 30,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 5.3e-06,
+            "total_cost_usd": 0.0000053,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -720,7 +720,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 5.3e-06
+                "cost_usd": 0.0000053
               }
             ],
             "pause_count": 1
@@ -875,7 +875,7 @@
             "total_tokens": 84,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 1.4e-05,
+            "total_cost_usd": 0.000014,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -888,7 +888,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 1.4e-05
+                "cost_usd": 0.000014
               }
             ],
             "tool_breakdown": [
@@ -1042,7 +1042,7 @@
             "total_tokens": 83,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 1.35e-05,
+            "total_cost_usd": 0.0000135,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -1055,7 +1055,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 1.35e-05
+                "cost_usd": 0.0000135
               }
             ],
             "tool_breakdown": [
@@ -1153,7 +1153,7 @@
             "total_tokens": 10,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 1e-06,
+            "total_cost_usd": 0.000001,
             "error_type": "content_filter",
             "usage_breakdown": [
               {
@@ -1167,7 +1167,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 1e-06
+                "cost_usd": 0.000001
               }
             ]
           }
@@ -1391,7 +1391,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2e-06,
+            "total_cost_usd": 0.000002,
             "error_type": "max_budget_usd",
             "usage_breakdown": [
               {
@@ -1405,7 +1405,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 2e-06
+                "cost_usd": 0.000002
               }
             ]
           }
@@ -1494,7 +1494,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2e-06,
+            "total_cost_usd": 0.000002,
             "error_type": "cancelled",
             "usage_breakdown": [
               {
@@ -1508,7 +1508,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 2e-06
+                "cost_usd": 0.000002
               }
             ]
           }
@@ -1662,7 +1662,7 @@
             "total_tokens": 34,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 5e-06,
+            "total_cost_usd": 0.000005,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -1675,7 +1675,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 5e-06
+                "cost_usd": 0.000005
               }
             ]
           }
@@ -1793,7 +1793,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 1.5e-05
+                "cost_usd": 0.000015
               },
               {
                 "agent_name": "outcome_grader",
@@ -1900,7 +1900,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2e-06,
+            "total_cost_usd": 0.000002,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -1913,7 +1913,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "fast",
                 "error_count": 0,
-                "cost_usd": 2e-06
+                "cost_usd": 0.000002
               }
             ]
           }
@@ -2079,7 +2079,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2e-06,
+            "total_cost_usd": 0.000002,
             "usage_breakdown": [
               {
                 "provider": "anthropic",
@@ -2092,7 +2092,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 2e-06
+                "cost_usd": 0.000002
               }
             ]
           }
@@ -2183,7 +2183,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2e-06,
+            "total_cost_usd": 0.000002,
             "error_type": "cancelled",
             "usage_breakdown": [
               {
@@ -2197,7 +2197,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 2e-06
+                "cost_usd": 0.000002
               }
             ]
           }
@@ -2316,7 +2316,7 @@
             "total_tokens": 18,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 3e-06,
+            "total_cost_usd": 0.000003,
             "compaction_count": 1,
             "usage_breakdown": [
               {
@@ -2330,7 +2330,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 3e-06
+                "cost_usd": 0.000003
               }
             ]
           }
@@ -2423,7 +2423,7 @@
             "total_tokens": 12,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 2e-06,
+            "total_cost_usd": 0.000002,
             "error_type": "connection_error",
             "usage_breakdown": [
               {
@@ -2437,7 +2437,7 @@
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 2e-06
+                "cost_usd": 0.000002
               }
             ]
           }
@@ -2635,6 +2635,693 @@
                 "error_count": 0
               }
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "child_interrupt",
+      "description": "An interrupt aimed at a subagent thread (session_thread_id) does not cancel the primary turn.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_childint_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_childint_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            },
+            {
+              "id": "sevt_childint_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_childint_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_childint_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_childint_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "user.interrupt",
+              "session_thread_id": "sthr_child"
+            },
+            {
+              "id": "sevt_childint_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_childint_07",
+              "processed_at": "2026-11-16T10:00:01.160000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Done."
+                }
+              ]
+            },
+            {
+              "id": "sevt_childint_08",
+              "processed_at": "2026-11-16T10:00:01.210000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_childint_06",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 12,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_childint_09",
+              "processed_at": "2026-11-16T10:00:01.310000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 2,
+            "tool_call_count": 0,
+            "total_input_tokens": 22,
+            "total_output_tokens": 4,
+            "total_tokens": 26,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0000042,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 2,
+                "input_tokens": 22,
+                "output_tokens": 4,
+                "total_tokens": 26,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.0000042
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "terminated_after_interrupt",
+      "description": "An interrupted turn that ends with session.status_terminated is cancelled.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_termint_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_termint_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            },
+            {
+              "id": "sevt_termint_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_termint_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_termint_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_termint_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "user.interrupt"
+            },
+            {
+              "id": "sevt_termint_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_terminated"
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000002,
+            "error_type": "cancelled",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000002
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "resume_without_echo",
+      "description": "The app answered the custom tool before reopening the stream, so its user.custom_tool_result is not on the second stream: the second stream still resumes the paused answer, without a new prompt event.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_noecho_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_noecho_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Weather?"
+                }
+              ]
+            },
+            {
+              "id": "sevt_noecho_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_noecho_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_noecho_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_noecho_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "agent.custom_tool_use",
+              "name": "get_weather",
+              "input": {
+                "city": "Paris"
+              }
+            },
+            {
+              "id": "sevt_noecho_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_noecho_05"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "events": [
+            {
+              "id": "sevt_noecho_08",
+              "processed_at": "2026-11-16T10:00:01.820000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_noecho_09",
+              "processed_at": "2026-11-16T10:00:01.920000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_noecho_10",
+              "processed_at": "2026-11-16T10:00:02.270000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Sunny."
+                }
+              ]
+            },
+            {
+              "id": "sevt_noecho_11",
+              "processed_at": "2026-11-16T10:00:02.320000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_noecho_09",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 30,
+                "input_tokens": 40,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_noecho_12",
+              "processed_at": "2026-11-16T10:00:02.420000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "paused",
+            "pause_reason": "deferred_tool",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ]
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 70,
+            "total_output_tokens": 2,
+            "total_tokens": 72,
+            "total_cached_input_tokens": 30,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0000053,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 70,
+                "output_tokens": 2,
+                "total_tokens": 72,
+                "cached_input_tokens": 30,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.0000053
+              }
+            ],
+            "pause_count": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "reconnect_with_history",
+      "description": "The second stream reads the session's history (events.list) before the live events, as the reconnect pattern does: events the first stream already counted count once.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_history_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_history_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Weather?"
+                }
+              ]
+            },
+            {
+              "id": "sevt_history_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_history_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_history_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_history_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "agent.custom_tool_use",
+              "name": "get_weather",
+              "input": {
+                "city": "Paris"
+              }
+            },
+            {
+              "id": "sevt_history_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_history_05"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "events": [
+            {
+              "id": "sevt_history_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_history_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Weather?"
+                }
+              ]
+            },
+            {
+              "id": "sevt_history_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_history_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_history_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_history_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "agent.custom_tool_use",
+              "name": "get_weather",
+              "input": {
+                "city": "Paris"
+              }
+            },
+            {
+              "id": "sevt_history_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_history_05"
+                ]
+              }
+            },
+            {
+              "id": "sevt_history_07",
+              "processed_at": "2026-11-16T10:00:01.810000Z",
+              "type": "user.custom_tool_result",
+              "custom_tool_use_id": "sevt_history_05",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Sunny"
+                }
+              ],
+              "is_error": false
+            },
+            {
+              "id": "sevt_history_08",
+              "processed_at": "2026-11-16T10:00:01.820000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_history_09",
+              "processed_at": "2026-11-16T10:00:01.920000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_history_10",
+              "processed_at": "2026-11-16T10:00:02.270000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Sunny."
+                }
+              ]
+            },
+            {
+              "id": "sevt_history_11",
+              "processed_at": "2026-11-16T10:00:02.320000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_history_09",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 30,
+                "input_tokens": 40,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_history_12",
+              "processed_at": "2026-11-16T10:00:02.420000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "paused",
+            "pause_reason": "deferred_tool",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ]
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 70,
+            "total_output_tokens": 2,
+            "total_tokens": 72,
+            "total_cached_input_tokens": 30,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0000053,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 70,
+                "output_tokens": 2,
+                "total_tokens": 72,
+                "cached_input_tokens": 30,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.0000053
+              }
+            ],
+            "pause_count": 1
           }
         }
       ]

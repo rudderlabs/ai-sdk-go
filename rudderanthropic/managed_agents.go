@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,7 @@ type SessionOption func(*sessionConfig)
 
 type sessionConfig struct {
 	sessionID, model, agentName string
+	sessionModel                string // the session agent's; model wins
 	interaction                 rudderstackai.InteractionOptions
 	analytics                   analytics.Client
 }
@@ -47,6 +49,8 @@ type sessionConfig struct {
 // turn; its agent's model prices the calls.
 func WithSession(session interface{ RawJSON() string }) SessionOption {
 	return func(c *sessionConfig) {
+		// A typed nil (*anthropic.BetaManagedAgentsSession)(nil) panics in RawJSON.
+		defer func() { _ = recover() }()
 		var s struct {
 			ID    string `json:"id"`
 			Agent struct {
@@ -60,8 +64,8 @@ func WithSession(session interface{ RawJSON() string }) SessionOption {
 		var model struct {
 			ID string `json:"id"`
 		}
-		if json.Unmarshal(s.Agent.Model, &c.model) != nil && json.Unmarshal(s.Agent.Model, &model) == nil {
-			c.model = model.ID
+		if json.Unmarshal(s.Agent.Model, &c.sessionModel) != nil && json.Unmarshal(s.Agent.Model, &model) == nil {
+			c.sessionModel = model.ID
 		}
 	}
 }
@@ -91,8 +95,9 @@ func WithSessionAnalytics(client analytics.Client) SessionOption {
 // the stream it wraps; Close also closes that stream when it can be closed.
 type SessionEvents[T SessionEvent] struct {
 	src     SessionEventStream[T]
-	tracker *sessionTracker
-	once    sync.Once
+	tracker *sessionTracker // nil: untracked
+	mu      sync.Mutex      // guards tracker and closed; Close may run while Next is blocked
+	closed  bool
 }
 
 // TrackSessionEvents reads a Claude Managed Agents session's events and sends one
@@ -122,18 +127,43 @@ func TrackSessionEvents[T SessionEvent](ctx context.Context, stream SessionEvent
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return &SessionEvents[T]{src: stream, tracker: &sessionTracker{ctx: ctx, cfg: c, seen: newBoundedSet("claude-managed-agents events")}}
+	if c.model == "" {
+		c.model = c.sessionModel
+	}
+	events := &SessionEvents[T]{src: stream}
+	// The SDK's own calls (a classifier or evaluator) are never tracked.
+	if !kit.Untracked(ctx) {
+		events.tracker = &sessionTracker{ctx: ctx, cfg: c, seen: sessionSeen(c.sessionID)}
+	}
+	return events
 }
 
-// Next advances to the next event; false when the stream ended or failed (see Err).
+// Next advances to the next event; false when the stream ended, failed (see Err) or was closed.
 func (s *SessionEvents[T]) Next() bool {
-	if s.src.Next() {
+	if s.isClosed() {
+		return false
+	}
+	more := s.src.Next()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return false
+	}
+	if !more {
+		s.finishLocked(s.src.Err())
+		return false
+	}
+	if s.tracker != nil {
 		event := s.src.Current()
 		contain(func() { s.tracker.observe(event.RawJSON()) })
-		return true
 	}
-	s.finish(s.src.Err())
-	return false
+	return true
+}
+
+func (s *SessionEvents[T]) isClosed() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
 }
 
 // Current is the current event, unchanged.
@@ -143,17 +173,25 @@ func (s *SessionEvents[T]) Current() T { return s.src.Current() }
 func (s *SessionEvents[T]) Err() error { return s.src.Err() }
 
 // Close ends tracking (a turn still open is paused or cancelled) and closes the stream when it
-// has a Close method.
+// has a Close method. Next returns false after it.
 func (s *SessionEvents[T]) Close() error {
-	s.finish(nil)
+	s.mu.Lock()
+	s.finishLocked(nil)
+	s.mu.Unlock()
 	if closer, ok := s.src.(io.Closer); ok {
 		return closer.Close()
 	}
 	return nil
 }
 
-func (s *SessionEvents[T]) finish(err error) {
-	s.once.Do(func() { contain(func() { s.tracker.close(err) }) })
+func (s *SessionEvents[T]) finishLocked(err error) {
+	if s.closed {
+		return
+	}
+	s.closed = true
+	if s.tracker != nil {
+		contain(func() { s.tracker.close(err) })
+	}
 }
 
 // contain keeps tracking failures away from the app.
@@ -181,6 +219,35 @@ var sessionErrors = map[string]string{
 // settleEvents settle work already in progress: a turn they open continues an earlier one.
 var settleEvents = map[string]bool{
 	"user.custom_tool_result": true, "user.tool_confirmation": true, "user.tool_result": true, "user.interrupt": true,
+}
+
+// seenBySession holds the event IDs already read, by session ID: a reconnect that reads history
+// again counts them once.
+var seenBySession = struct {
+	sync.Mutex
+	m     map[string]*boundedSet
+	order []string
+}{m: map[string]*boundedSet{}}
+
+// sessionSeen is the session's set of read event IDs (a new one for a stream without a session).
+func sessionSeen(sessionID string) *boundedSet {
+	if sessionID == "" {
+		return newBoundedSet("claude-managed-agents events")
+	}
+	seenBySession.Lock()
+	defer seenBySession.Unlock()
+	if set := seenBySession.m[sessionID]; set != nil {
+		return set
+	}
+	set := newBoundedSet("claude-managed-agents events")
+	seenBySession.m[sessionID] = set
+	seenBySession.order = append(seenBySession.order, sessionID)
+	for len(seenBySession.m) > kit.MaxMapEntries() && len(seenBySession.order) > 0 {
+		delete(seenBySession.m, seenBySession.order[0])
+		seenBySession.order = seenBySession.order[1:]
+		kit.LimitReached("claude-managed-agents sessions")
+	}
+	return set
 }
 
 // pausedTurns are turns paused at requires_action, by session ID: a later stream resumes them.
@@ -222,6 +289,7 @@ type turnTool struct {
 	errorType           string
 	duration            *time.Duration
 	settled             bool
+	keep                bool // arguments and result are kept (under the call cap)
 }
 
 type turn struct {
@@ -303,8 +371,8 @@ func (s *sessionTracker) observe(raw string) {
 		s.seen.add(id)
 	}
 	at := timeOf(e)
-	if str(e["session_thread_id"]) != "" && strings.HasPrefix(kind, "agent.") {
-		// Cross-posted from a subagent thread: not this thread's work.
+	if str(e["session_thread_id"]) != "" && (strings.HasPrefix(kind, "agent.") || strings.HasPrefix(kind, "user.")) {
+		// Cross-posted from, or aimed at, a subagent thread: not this thread's work.
 		if s.turn != nil && id != "" {
 			if kind == "agent.custom_tool_use" {
 				s.turn.blocking[id] = rudderstackai.PauseDeferredTool
@@ -371,9 +439,12 @@ func (s *sessionTracker) observe(raw string) {
 		s.idle(e, at)
 	case "session.status_terminated":
 		if s.turn != nil {
-			if s.turn.errorType != "" {
+			switch {
+			case s.turn.errorType != "":
 				s.finish(turnEnd{status: rudderstackai.StatusError, errorType: s.turn.errorType}, at)
-			} else {
+			case s.turn.interrupted:
+				s.finish(turnEnd{status: rudderstackai.StatusCancelled, errorType: "cancelled"}, at)
+			default:
 				s.finish(turnEnd{status: rudderstackai.StatusSuccess}, at)
 			}
 		}
@@ -412,8 +483,11 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 		if s.runningAt.ok && at.ok && s.runningAt.v < at.v {
 			start = s.runningAt
 		}
+		// A turn that settles earlier work continues it, also when the settling event was sent
+		// before this stream opened (the paused turn is then the only trace of it).
+		continuation := settleEvents[kind] || (kind != "user.message" && kind != "user.define_outcome" && s.hasPausedTurn())
 		t = &turn{
-			startAt: start, continuation: settleEvents[kind], starts: map[string]msTime{},
+			startAt: start, continuation: continuation, starts: map[string]msTime{},
 			toolsByID: map[string]*turnTool{}, blocking: map[string]rudderstackai.PauseReason{},
 		}
 		s.turn, s.runningAt = t, msTime{}
@@ -429,6 +503,16 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 	return t
 }
 
+// hasPausedTurn reports whether this session has a paused turn to resume.
+func (s *sessionTracker) hasPausedTurn() bool {
+	if s.cfg.sessionID == "" {
+		return false
+	}
+	pausedTurns.Lock()
+	defer pausedTurns.Unlock()
+	return pausedTurns.m[s.cfg.sessionID] != nil
+}
+
 // resume resumes this session's paused answer now, so its paused time and latency are right.
 func (s *sessionTracker) resume() *rudderstackai.Interaction {
 	if active := rudderstackai.FromContext(s.ctx); (active != nil && !active.Ended()) || s.cfg.sessionID == "" {
@@ -437,6 +521,7 @@ func (s *sessionTracker) resume() *rudderstackai.Interaction {
 	pausedTurns.Lock()
 	paused := pausedTurns.m[s.cfg.sessionID]
 	delete(pausedTurns.m, s.cfg.sessionID)
+	pausedTurns.order = slices.DeleteFunc(pausedTurns.order, func(id string) bool { return id == s.cfg.sessionID })
 	pausedTurns.Unlock()
 	if paused == nil || paused.Ended() {
 		return nil
@@ -452,7 +537,11 @@ func (s *sessionTracker) call(t *turn, e map[string]any, at msTime) {
 	if s.cfg.model == "" {
 		kit.WarnOnce("claude-managed-agents-model", "claude-managed-agents: pass WithSession or WithSessionModel to TrackSessionEvents; calls are unpriced without a model")
 	}
-	c := turnCall{usage: usage, model: s.cfg.model, agent: s.cfg.agentName, outputText: t.requestText, endAt: at}
+	c := turnCall{usage: usage, model: s.cfg.model, agent: s.cfg.agentName, endAt: at}
+	// Past the call cap the core folds calls; their text is not kept.
+	if len(t.calls) < kit.MaxCallsPerInteraction() {
+		c.outputText = t.requestText
+	}
 	if speed := str(usage["speed"]); speed == "fast" || speed == "standard" {
 		c.serviceTier = speed
 	}
@@ -471,7 +560,11 @@ func (s *sessionTracker) call(t *turn, e map[string]any, at msTime) {
 }
 
 func (s *sessionTracker) tool(t *turn, kind string, e map[string]any, id string, at msTime) {
-	tool := &turnTool{id: id, name: str(e["name"]), args: e["input"], at: at}
+	tool := &turnTool{id: id, name: str(e["name"]), at: at}
+	// Arguments and results feed declared tool rules; past the call cap they are not kept.
+	if tool.keep = len(t.tools) < kit.MaxCallsPerInteraction(); tool.keep {
+		tool.args = e["input"]
+	}
 	if kind == "agent.mcp_tool_use" {
 		tool.mcpServer = str(e["mcp_server_name"])
 	}
@@ -495,7 +588,10 @@ func (s *sessionTracker) settle(t *turn, id string, e map[string]any, at msTime)
 	if tool == nil || tool.settled {
 		return
 	}
-	tool.settled, tool.result = true, e["content"]
+	tool.settled = true
+	if tool.keep {
+		tool.result = e["content"]
+	}
 	if tool.errorType != "denied" {
 		tool.err = rudderstackai.Ptr(e["is_error"] == true)
 	}

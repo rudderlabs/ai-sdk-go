@@ -62,6 +62,8 @@ var (
 	Report func(kind, where string, err error)
 	// MaxMapEntries is the configured cap of each SDK lookup map.
 	MaxMapEntries func() int
+	// MaxCallsPerInteraction is the configured cap of calls stored per interaction.
+	MaxCallsPerInteraction func() int
 	// Reset restores the defaults (tests only).
 	Reset func()
 )

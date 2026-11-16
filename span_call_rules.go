@@ -251,6 +251,9 @@ func (i *Interaction) filterSpanCallsLocked() {
 	if i.hint != nil {
 		i.hint.calls -= removedBefore(i.hint.calls)
 	}
+	if i.primary != nil {
+		i.primary.calls -= removedBefore(i.primary.calls)
+	}
 	i.successfulCallSequence -= removedBefore(i.successfulCallSequence)
 	removed := 0
 	for c := range skipped {
