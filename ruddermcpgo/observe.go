@@ -65,12 +65,19 @@ type observedWriter struct {
 	body      []byte
 	line      mcpbridge.Lines
 	data      []byte
+	// events are complete SSE events, delivered once a flush commits them.
+	events [][]byte
+	failed bool
 }
 
 func (o *observedWriter) Unwrap() http.ResponseWriter { return o.ResponseWriter }
 
 func (o *observedWriter) Write(p []byte) (int, error) {
 	n, err := o.ResponseWriter.Write(p)
+	if err != nil {
+		o.fail()
+		return n, err
+	}
 	safely(func() { o.observe(p[:n]) })
 	return n, err
 }
@@ -78,6 +85,9 @@ func (o *observedWriter) Write(p []byte) (int, error) {
 func (o *observedWriter) observe(p []byte) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if o.failed {
+		return
+	}
 	if !o.decided {
 		o.decided = true
 		o.sse = strings.HasPrefix(o.Header().Get("Content-Type"), "text/event-stream")
@@ -101,7 +111,7 @@ func (o *observedWriter) sseLine(line []byte) {
 	switch {
 	case len(line) == 0:
 		if len(o.data) > 0 {
-			o.responses.DeliverJSON(o.data)
+			o.events = append(o.events, append([]byte(nil), o.data...))
 		}
 		o.data = o.data[:0]
 	case bytes.HasPrefix(line, []byte("data:")):
@@ -113,20 +123,51 @@ func (o *observedWriter) sseLine(line []byte) {
 	}
 }
 
-// finish delivers a JSON body once the handler is done writing it.
+// fail releases every waiter of this HTTP request without a response: a write or flush
+// failed, so the client may not get what was accepted.
+func (o *observedWriter) fail() {
+	o.mu.Lock()
+	o.failed, o.body, o.events = true, nil, nil
+	o.mu.Unlock()
+	o.responses.Close()
+}
+
+// commit delivers the SSE events written so far, once a flush or the handler's end commits them.
+func (o *observedWriter) commit() {
+	o.mu.Lock()
+	events := o.events
+	o.events = nil
+	o.mu.Unlock()
+	for _, event := range events {
+		o.responses.DeliverJSON(event)
+	}
+}
+
+// finish delivers a JSON body, and SSE events not yet flushed, once the handler is done.
 func (o *observedWriter) finish() {
 	o.mu.Lock()
-	defer o.mu.Unlock()
-	if !o.sse && len(o.body) > 0 {
-		o.responses.DeliverJSON(o.body)
+	failed, body := o.failed, o.body
+	o.mu.Unlock()
+	if failed {
+		return
 	}
+	if !o.sse && len(body) > 0 {
+		o.responses.DeliverJSON(body)
+	}
+	o.commit()
 }
 
 type flushingWriter struct{ *observedWriter }
 
-func (f flushingWriter) Flush() { f.ResponseWriter.(http.Flusher).Flush() }
+func (f flushingWriter) Flush() { _ = f.FlushError() }
 
-// FlushError keeps http.ResponseController.Flush reporting the underlying writer's errors.
+// FlushError reports the underlying writer's flush error (http.ResponseController uses it) and
+// delivers the flushed SSE events only when the flush succeeds.
 func (f flushingWriter) FlushError() error {
-	return http.NewResponseController(f.ResponseWriter).Flush()
+	if err := http.NewResponseController(f.ResponseWriter).Flush(); err != nil {
+		f.fail()
+		return err
+	}
+	safely(f.commit)
+	return nil
 }

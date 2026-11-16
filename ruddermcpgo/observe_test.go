@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -191,4 +192,127 @@ func TestObserveHTTPReportsFlushErrors(t *testing.T) {
 	if !errors.Is(got, errFlush) {
 		t.Errorf("flush error = %v", got)
 	}
+}
+
+var errCommit = errors.New("commit failed")
+
+// commitFailingWriter accepts a whole frame carrying marker, then reports that writing or
+// flushing it failed; the client never receives it.
+type commitFailingWriter struct {
+	http.ResponseWriter
+	marker  string
+	onFlush bool
+	mu      sync.Mutex
+	pending bool
+}
+
+func (c *commitFailingWriter) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if strings.Contains(string(p), c.marker) {
+		if !c.onFlush {
+			return len(p), errCommit
+		}
+		c.pending = true
+		return len(p), nil
+	}
+	return c.ResponseWriter.Write(p)
+}
+
+func (c *commitFailingWriter) Flush() { _ = c.FlushError() }
+
+func (c *commitFailingWriter) FlushError() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.pending {
+		c.pending = false
+		return errCommit
+	}
+	return http.NewResponseController(c.ResponseWriter).Flush()
+}
+
+// stdioCommitFailing swallows a line carrying marker and reports an error.
+type stdioCommitFailing struct {
+	io.Writer
+	marker string
+}
+
+func (s stdioCommitFailing) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), s.marker) {
+		return len(p), errCommit
+	}
+	return s.Writer.Write(p)
+}
+
+func TestObserveFailedCommitSendsWithoutMessage(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		sse  bool
+		// serve connects a client to s through a writer that fails to commit the marker frame.
+		serve func(t *testing.T, s *server.MCPServer) *sdk.ClientSession
+	}{
+		{name: "stdio", serve: func(t *testing.T, s *server.MCPServer) *sdk.ClientSession {
+			serverIn, clientOut := io.Pipe()
+			clientIn, serverOut := io.Pipe()
+			ctx, cancel := context.WithCancel(context.Background())
+			listenCtx, in, out := ObserveStdio(ctx, serverIn, stdioCommitFailing{serverOut, "uncommitted failure"})
+			done := make(chan struct{})
+			go func() { defer close(done); _ = server.NewStdioServer(s).Listen(listenCtx, in, out) }()
+			cs, err := sdk.NewClient(testClient, nil).Connect(context.Background(), &sdk.IOTransport{Reader: clientIn, Writer: clientOut}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = cs.Close(); cancel(); _ = serverIn.Close(); _ = clientIn.Close(); <-done })
+			return cs
+		}},
+		{name: "http json", serve: func(t *testing.T, s *server.MCPServer) *sdk.ClientSession {
+			return connectHTTPThrough(t, s, false)
+		}},
+		{name: "http sse write", sse: true, serve: func(t *testing.T, s *server.MCPServer) *sdk.ClientSession {
+			return connectHTTPThrough(t, s, false)
+		}},
+		{name: "http sse flush", sse: true, serve: func(t *testing.T, s *server.MCPServer) *sdk.ClientSession {
+			return connectHTTPThrough(t, s, true)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := server.NewMCPServer("commit-mcpgo", "1", server.WithToolCapabilities(true), server.WithLogging())
+			s.AddTool(mcp.NewTool("lookup"), func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				if tc.sse {
+					_ = server.ServerFromContext(ctx).SendNotificationToClient(ctx, "notifications/message", map[string]any{"level": "info", "data": "working"})
+				}
+				return mcp.NewToolResultError("uncommitted failure"), nil
+			})
+			r := wrap(t, s, Options{CaptureContent: true})
+			cs := tc.serve(t, s)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if _, err := cs.CallTool(ctx, &sdk.CallToolParams{Name: "lookup"}); err == nil {
+				t.Fatal("the client received the uncommitted response")
+			}
+			p := waitProps(t, r, "mcp_tool_called")
+			if p["tool_status"] != "error" {
+				t.Errorf("status: %v", p)
+			}
+			if got, ok := p["error_message"]; ok {
+				t.Errorf("error_message from a response the client never got: %v", got)
+			}
+		})
+	}
+}
+
+func connectHTTPThrough(t *testing.T, s *server.MCPServer, onFlush bool) *sdk.ClientSession {
+	t.Helper()
+	observed := ObserveHTTP(server.NewStreamableHTTPServer(s))
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observed.ServeHTTP(&commitFailingWriter{ResponseWriter: w, marker: "uncommitted failure", onFlush: onFlush}, r)
+	}))
+	t.Cleanup(ts.Close)
+	cs, err := sdk.NewClient(testClient, nil).Connect(context.Background(),
+		&sdk.StreamableClientTransport{Endpoint: ts.URL, DisableStandaloneSSE: true, MaxRetries: -1}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+	return cs
 }

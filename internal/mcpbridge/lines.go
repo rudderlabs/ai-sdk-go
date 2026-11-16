@@ -69,6 +69,11 @@ func (x *Writer) Write(p []byte) (int, error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	n, err := x.w.Write(p)
+	if err != nil {
+		// Accepted bytes may never reach the client: release every waiter without a response.
+		x.r.Close()
+		return n, err
+	}
 	x.lines.Feed(p[:n], x.r, x.r.DeliverJSON)
 	return n, err
 }

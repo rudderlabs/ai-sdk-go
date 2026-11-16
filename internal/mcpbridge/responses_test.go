@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"runtime"
 	"strings"
@@ -183,3 +184,22 @@ func TestLineWriterAndReader(t *testing.T) {
 type nopWriteCloser struct{ io.Writer }
 
 func (nopWriteCloser) Close() error { return nil }
+
+type acceptThenFail struct{}
+
+func (acceptThenFail) Write(p []byte) (int, error) { return len(p), errors.New("commit failed") }
+
+// A write that reports an error never delivers, even when it accepted every byte.
+func TestWriterFailedWriteReleasesWithoutResponse(t *testing.T) {
+	r := NewResponses()
+	calls := 0
+	var got map[string]any
+	r.Await("w", func(m map[string]any) { calls++; got = m })
+	w := NewWriter(acceptThenFail{}, r)
+	if _, err := io.WriteString(w, `{"jsonrpc":"2.0","id":"w","error":{"code":0,"message":"lost"}}`+"\n"); err == nil {
+		t.Fatal("error swallowed")
+	}
+	if calls != 1 || got != nil {
+		t.Fatalf("calls=%d got=%v", calls, got)
+	}
+}
