@@ -269,7 +269,8 @@ func TestSDK6111WriteFromAnotherGoroutineDuringPauseIsDeliveredOrCarried(t *test
 						client := &sdk6111ReenterClient{recorder: r, event: window}
 						_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
 						i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "tracing", InputTokens: 10}, 100))
-						i.RecordToolCalls(ToolCall{ID: "first", Name: "lookup"})
+						// No ID: pause delivers this tool rather than waiting on approval.
+						i.RecordToolCalls(ToolCall{Name: "lookup"})
 						wantTools := 1.0
 						client.reenter = func() {
 							done := make(chan struct{})

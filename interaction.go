@@ -1038,7 +1038,11 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	}
 	earlier.pricingRevision++
 	// Publish before unlocking so nested repeats see the combined metadata.
+	named := earlier.agentName == "" && agent != ""
 	earlier.agentName, earlier.callPurpose = agent, purpose
+	if named {
+		i.restampCallLocked(earlier)
+	}
 	earlier.fallbackUsed, earlier.byok = fallback, byok
 	if credits == nil && !earlier.creditsExplicit && !earlier.pricingActive && hook != nil && earlier.errorType == "" && !earlier.usageUnknown {
 		for attempt := 0; attempt < 3; attempt++ {
