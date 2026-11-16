@@ -583,9 +583,10 @@ func TestManagedAgentsKeepsAResumedSegmentReadFromHistoryToItsOwnLatency(t *test
 	if len(got) != 2 {
 		t.Fatalf("%v", got)
 	}
-	// The segment ran 610 ms on the server (01.810 -> 02.420); the rest of the wait was paused.
+	// The segment ran 610 ms on the server (01.810 -> 02.420); the rest of the 800 ms wait was paused.
+	// Real time spent reading adds to either; without the backdate latency is near 0 and paused 800+.
 	latency, paused := got[1]["latency_ms"].(float64), got[1]["total_paused_ms"].(float64)
-	if latency < 600 || latency > 700 || paused > 300 {
+	if latency < 600 || latency > 1600 || paused > 600 {
 		t.Fatalf("latency %v, paused %v", latency, paused)
 	}
 }
