@@ -783,9 +783,6 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 	case o.ErrorType != "":
 		status = "error"
 		extra["error_type"] = o.ErrorType
-		if o.ErrorType != "cancelled" && rc.opts.CaptureContent {
-			put(extra, "error_message", rc.opts.errorMessage(map[string]any{"error": map[string]any{"message": o.ErrorMessage}}))
-		}
 	case o.InputRequired:
 		// A 2026-07-28 input_required leg: the call goes on in the client's retry.
 		rc.inputRequired(o.InputKeys, o.RequestState)
@@ -814,9 +811,6 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 				kind = "api_error"
 			}
 			extra["error_type"] = kind
-			if kind != "cancelled" && rc.opts.CaptureContent {
-				put(extra, "error_message", rc.opts.errorMessage(map[string]any{"result": result}))
-			}
 		}
 	}
 	rc.finish("mcp_tool_called", "tool_name", rc.toolName, status, extra)
@@ -824,7 +818,7 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 }
 
 // Finished records a resources/read or prompts/get.
-func (rc *reqCtx) Finished(method, name string, size int, errorType string, errorMessage ...string) {
+func (rc *reqCtx) Finished(method, name string, size int, errorType string) {
 	event, nameKey := "mcp_resource_read", "resource_name"
 	if method == "prompts/get" {
 		event, nameKey = "mcp_prompt_used", "prompt_name"
@@ -838,9 +832,6 @@ func (rc *reqCtx) Finished(method, name string, size int, errorType string, erro
 	if errorType != "" {
 		status = "error"
 		extra["error_type"] = errorType
-		if errorType != "cancelled" && rc.opts.CaptureContent && len(errorMessage) > 0 {
-			put(extra, "error_message", rc.opts.errorMessage(map[string]any{"error": map[string]any{"message": errorMessage[0]}}))
-		}
 	} else {
 		extra["result_size_bytes"] = size
 	}
@@ -1347,10 +1338,11 @@ var protocolVersionRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
 func cleanClient(client *mcpbridge.Client) *mcpbridge.Client { return mcpbridge.CleanClient(client) }
 
-// errorMessage reads an explicit {result} or {error} source as described by
+// errorMessage is a pure helper reserved for SDK-6893, when a final response is observable.
+// It reads an explicit {result} or {error} source as described by
 // spec/fixtures/mcp-error-message-v0.1.json: mask before capping,
 // and withhold empty text, failed masking and anything still matching a built-in pattern.
-func (o *options) errorMessage(failure map[string]any) string {
+func errorMessage(failure map[string]any, mask func(string) (string, bool)) string {
 	var text string
 	if rpc, ok := failure["error"].(map[string]any); ok {
 		text, _ = rpc["message"].(string)
@@ -1374,7 +1366,7 @@ func (o *options) errorMessage(failure map[string]any) string {
 	if text == "" {
 		return ""
 	}
-	masked, ok := o.mask(text)
+	masked, ok := mask(text)
 	if !ok || masked == "" || masked == redactionTimedOut || hasSensitive(masked) {
 		return ""
 	}

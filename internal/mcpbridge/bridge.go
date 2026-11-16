@@ -93,8 +93,6 @@ type Outcome struct {
 	ClassifiedError string
 	// ErrorType is set when the call failed with a protocol error.
 	ErrorType string
-	// ErrorMessage is the protocol error message as sent, excluding error data.
-	ErrorMessage string
 	// Cancelled reports a call the client cancelled.
 	Cancelled bool
 	// InputRequired reports a 2026-07-28 input_required result; InputKeys are its elicitation
@@ -145,8 +143,7 @@ type Call interface {
 	Feedback(args map[string]json.RawMessage) (text string, isError bool)
 	ToolDone(o Outcome)
 	// Finished records a resources/read or prompts/get; errorType is empty on success.
-	// The optional errorMessage is the protocol error message as sent, excluding error data.
-	Finished(method, name string, size int, errorType string, errorMessage ...string)
+	Finished(method, name string, size int, errorType string)
 	ResourceName(uri string) string
 	// PromptName is the registered prompt name, else "unknown"; an empty name stays empty.
 	PromptName(name string) string

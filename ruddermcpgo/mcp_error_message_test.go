@@ -3,7 +3,6 @@ package ruddermcpgo
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -26,57 +25,38 @@ func maskedErrorMessage(t *testing.T, s string) string {
 
 func testMCPGoErrorMessageCapture(t *testing.T, connect func(*testing.T, *server.MCPServer) *sdk.ClientSession) {
 	for _, tc := range []struct {
-		name    string
-		text    string
-		opts    Options
-		config  []rudderstackai.ConfigOption
-		success bool
-		want    string
+		name             string
+		capture, success bool
 	}{
-		{name: "capture", opts: Options{CaptureContent: true}, want: "Warehouse timed out for [email]"},
-		{name: "default off"},
-		{name: "success", opts: Options{CaptureContent: true}, success: true},
-		{name: "hook", opts: Options{CaptureContent: true, Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil }}, want: "[system] timed out for [email]"},
-		{name: "global masking off", config: []rudderstackai.ConfigOption{rudderstackai.WithRedaction(false)}, opts: Options{CaptureContent: true}, want: "Warehouse timed out for [email]"},
-		{name: "global masking off with wrapper hook", text: "Warehouse timed out", config: []rudderstackai.ConfigOption{rudderstackai.WithRedaction(false)}, opts: Options{CaptureContent: true, Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil }}, want: "[system] timed out"},
-		{name: "global masking off with hook error", text: "Warehouse timed out", config: []rudderstackai.ConfigOption{rudderstackai.WithRedaction(false)}, opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "", errors.New("boom") }}},
-		{name: "global masking off with hook panic", text: "Warehouse timed out", config: []rudderstackai.ConfigOption{rudderstackai.WithRedaction(false)}, opts: Options{CaptureContent: true, Redact: func(string) (string, error) { panic("boom") }}},
-		{name: "global hook is not inherited", config: []rudderstackai.ConfigOption{rudderstackai.WithRedactHook(func(string) (string, error) { return "global hook", nil })}, opts: Options{CaptureContent: true}, want: "Warehouse timed out for [email]"},
-		{name: "wrapper hook with global hook", config: []rudderstackai.ConfigOption{rudderstackai.WithRedactHook(func(string) (string, error) { return "global hook", nil })}, opts: Options{CaptureContent: true, Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil }}, want: "[system] timed out for [email]"},
-		{name: "wrapper masking off skips hook", text: "Warehouse timed out", opts: Options{CaptureContent: true, DisableRedaction: true, Redact: func(string) (string, error) { return "hook called", nil }}, want: "Warehouse timed out"},
-		{name: "hook error", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "", errors.New("boom") }}},
-		{name: "hook panic", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { panic("boom") }}},
-		{name: "hook sensitive", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "jane@example.com", nil }}},
-		{name: "hook empty", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "", nil }}},
-		{name: "mask off sensitive", opts: Options{CaptureContent: true, DisableRedaction: true}},
+		{name: "capture", capture: true}, {name: "default off"}, {name: "success", capture: true, success: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := rudderstackai.Configure(append([]rudderstackai.ConfigOption{rudderstackai.WithCaptureContent(false), rudderstackai.WithRedaction(true), rudderstackai.WithRedactHook(nil)}, tc.config...)...); err != nil {
+			if err := rudderstackai.Configure(rudderstackai.WithCaptureContent(false)); err != nil {
 				t.Fatal(err)
-			}
-			t.Cleanup(func() {
-				if err := rudderstackai.Configure(rudderstackai.WithCaptureContent(false), rudderstackai.WithRedaction(true), rudderstackai.WithRedactHook(nil)); err != nil {
-					t.Error(err)
-				}
-			})
-			text := tc.text
-			if text == "" {
-				text = "Warehouse timed out for jane@example.com"
 			}
 			s := server.NewMCPServer("errors-mcpgo", "1", server.WithToolCapabilities(true))
 			s.AddTool(mcp.NewTool("lookup"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				return &mcp.CallToolResult{IsError: !tc.success, Content: []mcp.Content{mcp.TextContent{Type: "text", Text: text}}}, nil
+				return &mcp.CallToolResult{IsError: !tc.success, Content: []mcp.Content{mcp.TextContent{Type: "text", Text: "Warehouse timed out for jane@example.com"}}}, nil
 			})
-			r := wrap(t, s, tc.opts)
+			r := wrap(t, s, Options{CaptureContent: tc.capture})
 			cs := connect(t, s)
-			callTool(t, cs, "lookup", map[string]any{}, nil)
+			result, err := cs.CallTool(context.Background(), &sdk.CallToolParams{Name: "lookup"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.IsError == tc.success {
+				t.Fatalf("unexpected result: %v", result)
+			}
 			p := r.props(t, "mcp_tool_called")
-			if tc.want == "" {
-				if _, ok := p["error_message"]; ok {
-					t.Errorf("unexpected error_message: %v", p)
-				}
-			} else if p["error_message"] != tc.want {
-				t.Errorf("error_message=%v, want %q", p["error_message"], tc.want)
+			wantStatus := "error"
+			if tc.success {
+				wantStatus = "success"
+			}
+			if p["tool_status"] != wantStatus {
+				t.Errorf("status=%v", p)
+			}
+			if _, ok := p["error_message"]; ok {
+				t.Errorf("unexpected error_message: %v", p)
 			}
 		})
 	}
@@ -126,12 +106,8 @@ func testMCPGoErrorMessageProtocolErrors(t *testing.T, connect func(*testing.T, 
 				if p["tool_status"] != "error" {
 					t.Errorf("status=%v", p)
 				}
-				if capture {
-					if p["error_message"] != tc.want {
-						t.Errorf("error_message=%v, want %q", p["error_message"], tc.want)
-					}
-				} else if _, ok := p["error_message"]; ok {
-					t.Errorf("error_message with capture off: %v", p)
+				if _, ok := p["error_message"]; ok {
+					t.Errorf("unexpected error_message: %v", p)
 				}
 			}
 		})

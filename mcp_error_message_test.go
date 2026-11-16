@@ -39,7 +39,7 @@ func TestMCPErrorMessageFixtures(t *testing.T) {
 			if tc.Expected != nil {
 				want = *tc.Expected
 			}
-			if got := (&options{}).errorMessage(source); got != want {
+			if got := errorMessage(source, MaskText); got != want {
 				t.Errorf("got %q, want %q", got, want)
 			}
 		})
@@ -61,7 +61,7 @@ func TestMCPErrorMessageSourcesAndWhitespace(t *testing.T) {
 				{"result": map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": tc.text}}}},
 				{"error": map[string]any{"message": tc.text, "data": "ignored"}},
 			} {
-				if got := (&options{}).errorMessage(source); got != tc.want {
+				if got := errorMessage(source, MaskText); got != tc.want {
 					t.Errorf("got %q, want %q", got, tc.want)
 				}
 			}
@@ -72,7 +72,7 @@ func TestMCPErrorMessageSourcesAndWhitespace(t *testing.T) {
 		{"result": map[string]any{"isError": false, "content": []any{map[string]any{"type": "text", "text": "success"}}}},
 		{"error": map[string]any{"data": "ignored"}, "result": map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "ignored"}}}},
 	} {
-		if got := (&options{}).errorMessage(source); got != "" {
+		if got := errorMessage(source, MaskText); got != "" {
 			t.Errorf("unexpected message %q from %v", got, source)
 		}
 	}
@@ -85,7 +85,7 @@ func TestMCPErrorMessageCancelledOutcomes(t *testing.T) {
 		outcome mcpbridge.Outcome
 	}{
 		{"classified result", mcpbridge.Outcome{Result: result, ClassifiedError: "cancelled"}},
-		{"protocol error", mcpbridge.Outcome{ErrorType: "cancelled", ErrorMessage: "cancelled secret"}},
+		{"protocol error", mcpbridge.Outcome{ErrorType: "cancelled"}},
 		{"cancelled call", mcpbridge.Outcome{Result: result, Cancelled: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,59 +107,67 @@ func TestMCPErrorMessageCancelledOutcomes(t *testing.T) {
 }
 
 func TestMCPErrorMessageCapture(t *testing.T) {
-	s := mcp.NewServer(&mcp.Implementation{Name: "errors-mcp", Version: "1"}, nil)
 	for _, tc := range []struct {
-		name    string
-		text    string
-		opts    Options
-		config  []ConfigOption
-		success bool
-		want    string
+		name                      string
+		capture, success, rewrite bool
 	}{
-		{name: "capture", opts: Options{CaptureContent: true}, want: "Warehouse timed out for [email]"},
+		{name: "capture", capture: true},
 		{name: "default off"},
-		{name: "success", opts: Options{CaptureContent: true}, success: true},
-		{name: "hook", opts: Options{CaptureContent: true, Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil }}, want: "[system] timed out for [email]"},
-		{name: "global masking off", config: []ConfigOption{WithRedaction(false)}, opts: Options{CaptureContent: true}, want: "Warehouse timed out for [email]"},
-		{name: "global masking off with wrapper hook", text: "Warehouse timed out", config: []ConfigOption{WithRedaction(false)}, opts: Options{CaptureContent: true, Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil }}, want: "[system] timed out"},
-		{name: "global masking off with hook error", text: "Warehouse timed out", config: []ConfigOption{WithRedaction(false)}, opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "", errors.New("boom") }}},
-		{name: "global masking off with hook panic", text: "Warehouse timed out", config: []ConfigOption{WithRedaction(false)}, opts: Options{CaptureContent: true, Redact: func(string) (string, error) { panic("boom") }}},
-		{name: "global hook is not inherited", config: []ConfigOption{WithRedactHook(func(string) (string, error) { return "global hook", nil })}, opts: Options{CaptureContent: true}, want: "Warehouse timed out for [email]"},
-		{name: "wrapper hook with global hook", config: []ConfigOption{WithRedactHook(func(string) (string, error) { return "global hook", nil })}, opts: Options{CaptureContent: true, Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil }}, want: "[system] timed out for [email]"},
-		{name: "wrapper masking off skips hook", text: "Warehouse timed out", opts: Options{CaptureContent: true, DisableRedaction: true, Redact: func(string) (string, error) { return "hook called", nil }}, want: "Warehouse timed out"},
-		{name: "hook error", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "", errors.New("boom") }}},
-		{name: "hook panic", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { panic("boom") }}},
-		{name: "hook sensitive", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "jane@example.com", nil }}},
-		{name: "hook empty", opts: Options{CaptureContent: true, Redact: func(string) (string, error) { return "", nil }}},
-		{name: "mask off sensitive", opts: Options{CaptureContent: true, DisableRedaction: true}},
+		{name: "success", capture: true, success: true},
+		{name: "later middleware", capture: true, rewrite: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			setupAI(t, append([]ConfigOption{WithCaptureContent(false)}, tc.config...)...)
-			text := tc.text
-			if text == "" {
-				text = "Warehouse timed out for jane@example.com"
-			}
+			setupAI(t, WithCaptureContent(false))
+			s := mcp.NewServer(&mcp.Implementation{Name: "errors-mcp", Version: "1"}, nil)
 			s.AddTool(&mcp.Tool{Name: "lookup", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-				return &mcp.CallToolResult{IsError: !tc.success, Content: []mcp.Content{&mcp.TextContent{Text: text}}}, nil
+				return &mcp.CallToolResult{IsError: !tc.success, Content: []mcp.Content{&mcp.TextContent{Text: "original failure"}}}, nil
 			})
-			r := wrap(t, s, tc.opts)
+			r := wrap(t, s, Options{CaptureContent: tc.capture})
+			if tc.rewrite {
+				s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+					return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+						res, err := next(ctx, method, req)
+						if method == "tools/call" {
+							return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "client-visible failure"}}}, nil
+						}
+						return res, err
+					}
+				})
+			}
 			cs := connect(t, s, "2025-06-18", nil)
-			callTool(t, cs, "lookup", map[string]any{}, nil)
+			result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "lookup"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.IsError == tc.success {
+				t.Fatalf("unexpected result: %v", result)
+			}
+			if tc.rewrite && result.Content[0].(*mcp.TextContent).Text != "client-visible failure" {
+				t.Fatalf("middleware did not rewrite result: %v", result)
+			}
 			p := r.props(t, "mcp_tool_called")
-			if tc.want == "" {
-				if _, ok := p["error_message"]; ok {
-					t.Errorf("unexpected error_message: %v", p)
-				}
-			} else if p["error_message"] != tc.want {
-				t.Errorf("error_message=%v, want %q", p["error_message"], tc.want)
+			wantStatus := "error"
+			if tc.success {
+				wantStatus = "success"
+			}
+			if p["tool_status"] != wantStatus {
+				t.Errorf("status=%v", p)
+			}
+			if _, ok := p["error_message"]; ok {
+				t.Errorf("unexpected error_message: %v", p)
 			}
 		})
 	}
 }
 
 func TestMCPErrorMessageProtocolErrors(t *testing.T) {
-	for _, capture := range []bool{false, true} {
-		t.Run(map[bool]string{false: "off", true: "on"}[capture], func(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		capture, rewrite bool
+	}{
+		{name: "off"}, {name: "on", capture: true}, {name: "later middleware", capture: true, rewrite: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			setupAI(t)
 			s := mcp.NewServer(&mcp.Implementation{Name: "rpc-errors-mcp", Version: "1"}, nil)
 			s.AddTool(&mcp.Tool{Name: "lookup", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -171,13 +179,24 @@ func TestMCPErrorMessageProtocolErrors(t *testing.T) {
 			s.AddPrompt(&mcp.Prompt{Name: "summary"}, func(context.Context, *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 				return nil, &jsonrpc.Error{Code: -32603, Message: "Prompt store unavailable"}
 			})
-			r := wrap(t, s, Options{CaptureContent: capture})
+			r := wrap(t, s, Options{CaptureContent: tc.capture})
+			if tc.rewrite {
+				s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+					return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+						res, err := next(ctx, method, req)
+						if err != nil {
+							return nil, &jsonrpc.Error{Code: -32603, Message: "client-visible failure"}
+						}
+						return res, err
+					}
+				})
+			}
 			cs := connect(t, s, "2025-06-18", nil)
 			ctx := context.Background()
 			_, te := cs.CallTool(ctx, &mcp.CallToolParams{Name: "lookup"})
 			_, re := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "db://x"})
 			_, pe := cs.GetPrompt(ctx, &mcp.GetPromptParams{Name: "summary"})
-			for _, tc := range []struct {
+			for _, failure := range []struct {
 				event, want string
 				err         error
 			}{
@@ -185,26 +204,26 @@ func TestMCPErrorMessageProtocolErrors(t *testing.T) {
 				{"mcp_resource_read", "Resource db://[email] not found", re},
 				{"mcp_prompt_used", "Prompt store unavailable", pe},
 			} {
-				if tc.err == nil {
+				if failure.err == nil {
 					t.Fatal("expected JSON-RPC error")
 				}
 				var wire *jsonrpc.Error
-				if !errors.As(tc.err, &wire) {
-					t.Fatalf("not a JSON-RPC error: %v", tc.err)
+				if !errors.As(failure.err, &wire) {
+					t.Fatalf("not a JSON-RPC error: %v", failure.err)
 				}
-				if got := maskBuiltIn(wire.Message); got != tc.want {
-					t.Errorf("wire message=%q, want %q", got, tc.want)
+				want := failure.want
+				if tc.rewrite {
+					want = "client-visible failure"
 				}
-				p := r.props(t, tc.event)
+				if got := maskBuiltIn(wire.Message); got != want {
+					t.Errorf("wire message=%q, want %q", got, want)
+				}
+				p := r.props(t, failure.event)
 				if p["tool_status"] != "error" {
 					t.Errorf("status=%v", p)
 				}
-				if capture {
-					if p["error_message"] != tc.want {
-						t.Errorf("error_message=%v, want %q", p["error_message"], tc.want)
-					}
-				} else if _, ok := p["error_message"]; ok {
-					t.Errorf("error_message with capture off: %v", p)
+				if _, ok := p["error_message"]; ok {
+					t.Errorf("unexpected error_message: %v", p)
 				}
 			}
 		})
@@ -214,21 +233,18 @@ func TestMCPErrorMessageProtocolErrors(t *testing.T) {
 func TestMCPErrorMessageMaskingFailures(t *testing.T) {
 	for _, tc := range []struct {
 		name, text string
-		opts       Options
-		config     []ConfigOption
+		mask       func(string) (string, bool)
 		want       string
 	}{
-		{name: "global hook", text: "Warehouse jane@example.com", config: []ConfigOption{WithRedactHook(func(s string) (string, error) { return strings.ReplaceAll(s, "Warehouse", "[system]"), nil })}, want: "Warehouse [email]"},
-		{name: "global masking off", text: "jane@example.com", config: []ConfigOption{WithRedaction(false)}, want: "[email]"},
-		{name: "mask off safe", text: "plain failure", opts: Options{DisableRedaction: true}, want: "plain failure"},
-		{name: "too long", text: strings.Repeat("x", maxMaskedCodePoints+1)},
-		{name: "timeout", text: "failure", opts: Options{Redact: func(string) (string, error) { return redactionTimedOut, nil }}},
-		{name: "sensitive after cap", text: "failure", opts: Options{Redact: func(string) (string, error) { return strings.Repeat("x", 201) + " jane@example.com", nil }}},
+		{name: "built-in", text: "jane@example.com", mask: MaskText, want: "[email]"},
+		{name: "too long", text: strings.Repeat("x", maxMaskedCodePoints+1), mask: MaskText},
+		{name: "failed masking", text: "failure", mask: func(string) (string, bool) { return "", false }},
+		{name: "empty", text: "failure", mask: func(string) (string, bool) { return "", true }},
+		{name: "timeout", text: "failure", mask: func(string) (string, bool) { return redactionTimedOut, true }},
+		{name: "sensitive after cap", text: "failure", mask: func(string) (string, bool) { return strings.Repeat("x", 201) + " jane@example.com", true }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			setupAI(t, tc.config...)
-			o := &options{Options: tc.opts}
-			if got := o.errorMessage(map[string]any{"error": map[string]any{"message": tc.text}}); got != tc.want {
+			if got := errorMessage(map[string]any{"error": map[string]any{"message": tc.text}}, tc.mask); got != tc.want {
 				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})

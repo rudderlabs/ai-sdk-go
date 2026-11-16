@@ -395,18 +395,6 @@ func findIDKeyType(ctx context.Context) reflect.Type {
 	return nil
 }
 
-// protocolErrorMessage follows jsonrpc.EncodeMessage: a direct structured error uses its
-// message; any other error (including a wrapped structured error) uses the outer Error().
-func protocolErrorMessage(err error) string {
-	if err == nil {
-		return ""
-	}
-	if wire, ok := err.(*jsonrpc.Error); ok {
-		return wire.Message
-	}
-	return err.Error()
-}
-
 // failure is the error_type of a failed request, or "" when it succeeded. A request is
 // cancelled only when it failed (an error, or an error result) while its context was cancelled:
 // a call that succeeded stays a success.
@@ -473,7 +461,7 @@ func (w *wrapped) after(h *handling, res mcp.Result, err, ctxErr error) mcp.Resu
 			w.RememberTemplates(templates)
 		}
 	case "tools/call":
-		o := mcpbridge.Outcome{ErrorType: errType, Cancelled: cancelled, ErrorMessage: protocolErrorMessage(err)}
+		o := mcpbridge.Outcome{ErrorType: errType, Cancelled: cancelled}
 		if r, ok := res.(*mcp.CallToolResult); ok && r != nil && err == nil {
 			o.Result = r
 			if r.IsError && rc.opts.ClassifyToolError != nil {
@@ -494,7 +482,7 @@ func (w *wrapped) after(h *handling, res mcp.Result, err, ctxErr error) mcp.Resu
 		if err == nil {
 			size = byteSize(res)
 		}
-		rc.Finished(h.method, h.name, size, errType, protocolErrorMessage(err))
+		rc.Finished(h.method, h.name, size, errType)
 	}
 	return nil
 }
