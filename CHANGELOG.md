@@ -14,6 +14,36 @@
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
 - SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events.
 
+## [0.10.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.9.0...v0.10.0) (2026-11-16)
+
+
+### Features
+
+* accept a per-feature content capture policy ([#83](https://github.com/rudderlabs/ai-sdk-go/issues/83)) ([511489d](https://github.com/rudderlabs/ai-sdk-go/commit/511489d3752301ecca2c5059d112d99159239b31))
+* **mcp:** add the error_message spec and guards ahead of capture ([#74](https://github.com/rudderlabs/ai-sdk-go/issues/74)) ([0c9d637](https://github.com/rudderlabs/ai-sdk-go/commit/0c9d63744f82cd3d758878a93378f0990bd6cfbd))
+* **mcp:** name HTTP clients from the User-Agent when no clientInfo is found ([#73](https://github.com/rudderlabs/ai-sdk-go/issues/73)) ([4e85149](https://github.com/rudderlabs/ai-sdk-go/commit/4e8514913078481d7c600f28e019888c68d9296f))
+* **mcp:** send error_message from the observed final response ([#80](https://github.com/rudderlabs/ai-sdk-go/issues/80)) ([f0b260d](https://github.com/rudderlabs/ai-sdk-go/commit/f0b260d3a94df8273eeee1814d90d6b49e84f16d))
+
+
+### Bug Fixes
+
+* count a forced schema tool with no result as structured output ([#85](https://github.com/rudderlabs/ai-sdk-go/issues/85)) ([f6c062a](https://github.com/rudderlabs/ai-sdk-go/commit/f6c062a091778364f31973732f54734ec2dbcfc1))
+* count a model request once when spans nest or LlamaIndex adds a prep span ([#82](https://github.com/rudderlabs/ai-sdk-go/issues/82)) ([50bdf88](https://github.com/rudderlabs/ai-sdk-go/commit/50bdf880309a22a9e0315652a78a36b965a4e090))
+* map cache writes, provider IDs, finish reasons, Traceloop tools and Mirascope usage ([#81](https://github.com/rudderlabs/ai-sdk-go/issues/81)) ([a7e2cee](https://github.com/rudderlabs/ai-sdk-go/commit/a7e2cee7d7be564c6773f52449f34986b023d974))
+* treat Pydantic AI, Mirascope and Eve message keys as span content ([#79](https://github.com/rudderlabs/ai-sdk-go/issues/79)) ([f82840f](https://github.com/rudderlabs/ai-sdk-go/commit/f82840feed63a74be753ae2370ac454455f22344))
+
+
+### Miscellaneous
+
+* cover goroutine span parents and integration-span platform limits ([#75](https://github.com/rudderlabs/ai-sdk-go/issues/75)) ([e925996](https://github.com/rudderlabs/ai-sdk-go/commit/e9259964d6eee0a866a61ca9be09fda403f919dc))
+* sync spec/ with the Node.js capture policy fixtures ([#84](https://github.com/rudderlabs/ai-sdk-go/issues/84)) ([89607ed](https://github.com/rudderlabs/ai-sdk-go/commit/89607edde5cae28adc5851e3a7c169521d66c8ba))
+
+
+### Documentation
+
+* **mcp:** add auth provider recipe for identifying users ([#76](https://github.com/rudderlabs/ai-sdk-go/issues/76)) ([b886c39](https://github.com/rudderlabs/ai-sdk-go/commit/b886c39edbf50458cd8a3f8f922ee1f4aacf65da))
+* note that Mastra is Node.js only ([#78](https://github.com/rudderlabs/ai-sdk-go/issues/78)) ([fa5d306](https://github.com/rudderlabs/ai-sdk-go/commit/fa5d306acc79ad494e2b9093c3e9703977447d1e))
+
 ## [0.9.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.8.0...v0.9.0) (2026-11-13)
 
 

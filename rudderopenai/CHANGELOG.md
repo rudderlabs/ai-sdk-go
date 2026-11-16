@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/rudderlabs/ai-sdk-go/compare/rudderopenai/v0.5.0...rudderopenai/v0.5.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* count a forced schema tool with no result as structured output ([#85](https://github.com/rudderlabs/ai-sdk-go/issues/85)) ([f6c062a](https://github.com/rudderlabs/ai-sdk-go/commit/f6c062a091778364f31973732f54734ec2dbcfc1))
+
 ## [0.5.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderopenai/v0.4.0...rudderopenai/v0.5.0) (2026-11-13)
 
 

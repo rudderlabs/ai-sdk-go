@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderotel/v0.3.0...rudderotel/v0.4.0) (2026-11-16)
+
+
+### Features
+
+* accept a per-feature content capture policy ([#83](https://github.com/rudderlabs/ai-sdk-go/issues/83)) ([511489d](https://github.com/rudderlabs/ai-sdk-go/commit/511489d3752301ecca2c5059d112d99159239b31))
+
+
+### Bug Fixes
+
+* count a forced schema tool with no result as structured output ([#85](https://github.com/rudderlabs/ai-sdk-go/issues/85)) ([f6c062a](https://github.com/rudderlabs/ai-sdk-go/commit/f6c062a091778364f31973732f54734ec2dbcfc1))
+* count a model request once when spans nest or LlamaIndex adds a prep span ([#82](https://github.com/rudderlabs/ai-sdk-go/issues/82)) ([50bdf88](https://github.com/rudderlabs/ai-sdk-go/commit/50bdf880309a22a9e0315652a78a36b965a4e090))
+* map cache writes, provider IDs, finish reasons, Traceloop tools and Mirascope usage ([#81](https://github.com/rudderlabs/ai-sdk-go/issues/81)) ([a7e2cee](https://github.com/rudderlabs/ai-sdk-go/commit/a7e2cee7d7be564c6773f52449f34986b023d974))
+
 ## [0.3.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderotel/v0.2.0...rudderotel/v0.3.0) (2026-11-13)
 
 

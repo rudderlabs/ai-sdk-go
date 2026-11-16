@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.6.0...cmd/aicheck/v0.7.0) (2026-11-16)
+
+
+### Features
+
+* accept a per-feature content capture policy ([#83](https://github.com/rudderlabs/ai-sdk-go/issues/83)) ([511489d](https://github.com/rudderlabs/ai-sdk-go/commit/511489d3752301ecca2c5059d112d99159239b31))
+* **mcp:** add the error_message spec and guards ahead of capture ([#74](https://github.com/rudderlabs/ai-sdk-go/issues/74)) ([0c9d637](https://github.com/rudderlabs/ai-sdk-go/commit/0c9d63744f82cd3d758878a93378f0990bd6cfbd))
+* **mcp:** name HTTP clients from the User-Agent when no clientInfo is found ([#73](https://github.com/rudderlabs/ai-sdk-go/issues/73)) ([4e85149](https://github.com/rudderlabs/ai-sdk-go/commit/4e8514913078481d7c600f28e019888c68d9296f))
+
 ## [0.6.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.5.0...cmd/aicheck/v0.6.0) (2026-11-12)
 
 
