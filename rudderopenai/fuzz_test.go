@@ -155,6 +155,9 @@ func FuzzChatUsage(f *testing.F) {
 		ctx := context.Background()
 		plain, wrapped := fakeClient(rt), fakeClient(rt, rudderopenai.WithTracking())
 		raw := outcome(rawJSON(plain.Chat.Completions.New(ctx, chatParams("hi"))))
+		if strings.HasPrefix(raw, "error: ") { // openai-go does not validate usage: the call must succeed
+			t.Fatalf("the call failed without the SDK: %s", raw)
+		}
 		rec := track(t)
 		var tracked string
 		_ = interaction(ctx, benchUser, func(ctx context.Context) error {

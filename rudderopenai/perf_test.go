@@ -149,7 +149,7 @@ func newFakeOpenAI(streamChunks int, long bool, failEvery int64) *fakeOpenAI {
 
 func fakeClient(rt http.RoundTripper, opts ...option.RequestOption) openai.Client {
 	return openai.NewClient(append([]option.RequestOption{
-		option.WithBaseURL("http://bench.invalid/v1"), option.WithAPIKey("bench"), option.WithMaxRetries(0),
+		option.WithBaseURL("https://bench.invalid/v1"), option.WithAPIKey("bench"), option.WithMaxRetries(0),
 		option.WithHTTPClient(&http.Client{Transport: rt}),
 	}, opts...)...)
 }

@@ -64,7 +64,7 @@ func FuzzUsage(f *testing.F) {
 			`"modelVersion":"gemini-2.5-flash","responseId":"resp-f","usageMetadata":` + string(usage) + `}`)
 		call := func(ctx context.Context, hc *http.Client) string {
 			c, err := genai.NewClient(ctx, &genai.ClientConfig{
-				APIKey: "fuzz", Backend: genai.BackendGeminiAPI, HTTPOptions: genai.HTTPOptions{BaseURL: "http://fuzz.invalid/"}, HTTPClient: hc,
+				APIKey: "fuzz", Backend: genai.BackendGeminiAPI, HTTPOptions: genai.HTTPOptions{BaseURL: "https://fuzz.invalid/"}, HTTPClient: hc,
 			})
 			if err != nil {
 				t.Fatal(err)

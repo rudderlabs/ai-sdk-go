@@ -176,7 +176,7 @@ func TestLoad(t *testing.T) {
 		})); err != nil {
 		t.Fatal(err)
 	}
-	llm := openai.NewClient(option.WithBaseURL("http://load.invalid/v1"), option.WithAPIKey("load"), option.WithMaxRetries(0),
+	llm := openai.NewClient(option.WithBaseURL("https://load.invalid/v1"), option.WithAPIKey("load"), option.WithMaxRetries(0),
 		option.WithHTTPClient(&http.Client{Transport: &fakeOpenAI{}}), rudderopenai.WithTracking())
 	tools := []openai.ChatCompletionToolUnionParam{openai.ChatCompletionFunctionTool(openai.FunctionDefinitionParam{Name: "lookup_order"})}
 

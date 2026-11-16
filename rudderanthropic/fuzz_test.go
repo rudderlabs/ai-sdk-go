@@ -69,7 +69,7 @@ func (s static) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func client(rt http.RoundTripper, wrap bool) anthropic.Client {
 	opts := []option.RequestOption{
-		option.WithBaseURL("http://fuzz.invalid"), option.WithAPIKey("fuzz"), option.WithMaxRetries(0),
+		option.WithBaseURL("https://fuzz.invalid"), option.WithAPIKey("fuzz"), option.WithMaxRetries(0),
 		option.WithHTTPClient(&http.Client{Transport: rt}),
 	}
 	if wrap {
@@ -170,6 +170,9 @@ func FuzzMessagesUsage(f *testing.F) {
 			return m.RawJSON()
 		}
 		raw := call(context.Background(), false)
+		if strings.HasPrefix(raw, "error: ") { // anthropic-sdk-go does not validate usage: the call must succeed
+			t.Fatalf("the call failed without the SDK: %s", raw)
+		}
 		got, rec := tracked(t, func(ctx context.Context) string { return call(ctx, true) })
 		if got != raw {
 			t.Fatalf("the app saw %q, without the SDK %q", got, raw)
