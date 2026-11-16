@@ -53051,5 +53051,343 @@
         }
       ]
     }
-  ]
+  ],
+  "native_content_cases": [
+  {
+    "name": "dataclass",
+    "input": {
+      "construct_as": {
+        "python": "dataclass",
+        "node": "class",
+        "go": "pointer"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytes"
+        },
+        "nested": {
+          "raw": {
+            "binary": "memoryview"
+          },
+          "keep": "nested"
+        }
+      }
+    },
+    "expected": {
+      "keep": "ok",
+      "nested": {
+        "keep": "nested"
+      }
+    }
+  },
+  {
+    "name": "frozen_dataclass",
+    "input": {
+      "construct_as": {
+        "python": "frozen_dataclass",
+        "node": "frozen",
+        "go": "pointer"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytes"
+        },
+        "nested": {
+          "raw": {
+            "binary": "memoryview"
+          },
+          "keep": "nested"
+        }
+      }
+    },
+    "expected": {
+      "keep": "ok",
+      "nested": {
+        "keep": "nested"
+      }
+    }
+  },
+  {
+    "name": "namespace",
+    "input": {
+      "construct_as": {
+        "python": "namespace",
+        "node": "class",
+        "go": "pointer"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytes"
+        },
+        "nested": {
+          "raw": {
+            "binary": "memoryview"
+          },
+          "keep": "nested"
+        }
+      }
+    },
+    "expected": {
+      "keep": "ok",
+      "nested": {
+        "keep": "nested"
+      }
+    }
+  },
+  {
+    "name": "object",
+    "input": {
+      "construct_as": {
+        "python": "object",
+        "node": "class",
+        "go": "pointer"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytes"
+        },
+        "nested": {
+          "raw": {
+            "binary": "memoryview"
+          },
+          "keep": "nested"
+        }
+      }
+    },
+    "expected": {
+      "keep": "ok",
+      "nested": {
+        "keep": "nested"
+      }
+    }
+  },
+  {
+    "name": "slots",
+    "input": {
+      "construct_as": {
+        "python": "slots",
+        "node": "class",
+        "go": "pointer"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytes"
+        },
+        "nested": {
+          "raw": {
+            "binary": "memoryview"
+          },
+          "keep": "nested"
+        }
+      }
+    },
+    "expected": {
+      "keep": "ok",
+      "nested": {
+        "keep": "nested"
+      }
+    }
+  },
+  {
+    "name": "dict_slots",
+    "input": {
+      "construct_as": {
+        "python": "dict_slots",
+        "node": "class",
+        "go": "embedded"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytes"
+        },
+        "nested": {
+          "raw": {
+            "binary": "memoryview"
+          },
+          "keep": "nested"
+        }
+      }
+    },
+    "expected": {
+      "keep": "ok",
+      "nested": {
+        "keep": "nested"
+      }
+    }
+  },
+  {
+    "name": "pydantic_v2",
+    "input": {
+      "construct_as": {
+        "python": "pydantic_v2",
+        "node": "class",
+        "go": "marshaler"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytes"
+        },
+        "nested": {
+          "raw": {
+            "binary": "memoryview"
+          },
+          "keep": "nested"
+        }
+      }
+    },
+    "expected": {
+      "keep": "ok",
+      "nested": {
+        "keep": "nested"
+      }
+    }
+  },
+  {
+    "name": "pydantic_v1",
+    "input": {
+      "construct_as": {
+        "python": "pydantic_v1",
+        "node": "class",
+        "go": "marshaler"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytes"
+        },
+        "nested": {
+          "raw": {
+            "binary": "memoryview"
+          },
+          "keep": "nested"
+        }
+      }
+    },
+    "expected": {
+      "keep": "ok",
+      "nested": {
+        "keep": "nested"
+      }
+    }
+  },
+  {
+    "name": "nested_combinations",
+    "input": {
+      "construct_as": {
+        "python": "frozen_dataclass",
+        "node": "frozen",
+        "go": "pointer"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytearray"
+        },
+        "nested": [
+          {
+            "construct_as": {
+              "python": "namespace",
+              "node": "class",
+              "go": "struct"
+            },
+            "fields": {
+              "keep": "nested",
+              "raw": {
+                "binary": "arraybuffer"
+              },
+              "nested": null
+            }
+          },
+          {
+            "binary": "dataview"
+          }
+        ]
+      }
+    },
+    "expected": {
+      "keep": "ok",
+      "nested": [
+        {
+          "keep": "nested",
+          "nested": null
+        }
+      ]
+    }
+  },
+  {
+    "name": "cyclic_object",
+    "input": {
+      "construct_as": {
+        "python": "slots",
+        "node": "class",
+        "go": "pointer"
+      },
+      "fields": {
+        "keep": "ok",
+        "raw": {
+          "binary": "bytes"
+        },
+        "nested": null
+      },
+      "cycle": true
+    },
+    "expected": {
+      "keep": "ok"
+    }
+  },
+  {
+    "name": "numeric_map",
+    "input": {
+      "entries": [
+        [
+          7,
+          {
+            "construct_as": {
+              "python": "namespace",
+              "node": "class",
+              "go": "struct"
+            },
+            "fields": {
+              "keep": "ok",
+              "raw": {
+                "binary": "bytes"
+              },
+              "nested": null
+            }
+          }
+        ]
+      ]
+    },
+    "expected": {
+      "7": {
+        "keep": "ok",
+        "nested": null
+      }
+    }
+  },
+  {
+    "name": "set",
+    "input": {
+      "set": [
+        "ok",
+        {
+          "binary": "bytes"
+        },
+        {
+          "binary": "bytearray"
+        }
+      ]
+    },
+    "expected": [
+      "ok"
+    ]
+  }
+]
 }

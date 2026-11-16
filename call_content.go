@@ -327,7 +327,6 @@ func stripMap(x map[string]any) map[string]any {
 var (
 	rawMessageType = reflect.TypeFor[json.RawMessage]()
 	jsonNumberType = reflect.TypeFor[json.Number]()
-	marshalerType  = reflect.TypeFor[json.Marshaler]()
 	textType       = reflect.TypeFor[encoding.TextMarshaler]()
 )
 
@@ -398,7 +397,10 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	}
 	w.omitted = false
 	t := rv.Type()
-	if !w.legacy && t == reflect.TypeFor[time.Time]() {
+	if t == reflect.TypeFor[time.Time]() {
+		if w.legacy {
+			return jsonSafe(rv.Interface())
+		}
 		return rv.Interface().(time.Time).UTC().Format("2006-01-02T15:04:05.000Z"), true
 	}
 	if t == rawMessageType {
@@ -408,12 +410,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		}
 		return w.strip(decoded)
 	}
-	if w.legacy && (t.Implements(marshalerType) || t.Implements(textType) || (rv.CanAddr() && reflect.PointerTo(t).Implements(marshalerType))) {
-		if (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) && rv.IsNil() {
-			return nil, true
-		}
-		return jsonSafe(rv.Interface())
-	}
+	// Inspect native fields before any serializer can turn a byte field into text/base64.
 	key, ok := w.enter(rv)
 	if !ok {
 		w.omitted = true

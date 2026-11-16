@@ -306,6 +306,12 @@ Steps: `record_call` (`provider`, `model`, `input_tokens`?, `started_ms`?, `ende
 
 `expected.segments` lists every `ai_response_received` in order, each matched as a subset. `expected.call_events` lists the `input_tokens` of every `ai_llm_response_received` in order. `expected.tool_events` lists every declared tool event (any track event not starting with `ai_`) in order as `{ event, tool_call_id, tool_status }`, an absent property as `null`.
 
+### Native content containers (SDK-6942)
+
+`conformance-v0.4.json.native_content_cases` extends the per-call binary cases with native values JSON cannot represent. Each case has `name`, `input`, and the common stripped `expected` value. A driver recursively constructs `input`: `binary` creates a native buffer (the spelling selects bytes, bytearray, memoryview, ArrayBuffer or DataView where supported); `construct_as` chooses each language's native object built from `fields`; `cycle: true` replaces its `nested` field with itself; `entries` builds a map with native keys; `set` builds a native collection. Ordinary arrays and objects recurse. Python v1 models run when installed; Node class/frozen instances and Go exported structs/pointers/embedded structs are the portable equivalents. The Go `marshaler` and Python model cases include serializers that would expose bytes if invoked before stripping. Drivers exercise per-call fields and span attributes/events, retaining safe fields and dropping binary/cyclic edges.
+
+`pause-pending-usage-v0.1.json.cross_sdk.aggregate_report_order` (SDK-6942) uses the same snapshot/expected pattern for the aggregate + intervening-record variant. Its Python legacy snapshot omits optional `report_sequence`; all drivers restore it, merge `second` with the wrapper, then record `third` and compare primary model, outcome, call count and token sums. A reader must reconstruct report order independently of `call_count`.
+
 ## span-dedup-v0.1.json
 
 One `ai_otel_span` per model call when SDK spans (`emitSpans`) and the RudderStack span processor both see it, with `fixture_version: 2`, span schema `0.1` and product event spec `0.4.0`. Each scenario has `emit_spans`, optional `processor: "simple" | "batch"` (default `simple`), an optional `requires: "integration"` (drivers without framework integrations skip it), a `tree` of nested scopes, `expected_spans`, `call_span` and `other_processors_see`. Run every scenario with `emitLlmCalls` on, the processor and a second plain processor on one provider, and a context manager that makes started spans active.
