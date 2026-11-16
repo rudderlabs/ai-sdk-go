@@ -395,16 +395,24 @@ func ownerSpan(tracer trace.Tracer) (context.Context, *rudderstackai.Interaction
 func rejectErrors(s sdktrace.ReadOnlySpan) bool { return IsAISpan(s) && s.Status().Code != codes.Error }
 
 func TestSpanDedupFlushFinishesAJoinedCall(t *testing.T) {
-	for _, rejected := range []bool{true, false} {
-		t.Run("owner rejected="+strconvBool(rejected), func(t *testing.T) {
+	for _, c := range []struct {
+		method   string
+		rejected bool
+	}{{"Flush", true}, {"Flush", false}, {"Shutdown", true}} {
+		rejected := c.rejected
+		t.Run(c.method+"/owner rejected="+strconvBool(rejected), func(t *testing.T) {
 			provider, _, events := testProvider(t, Options{Simple: true, Filter: rejectErrors})
 			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
 				t.Fatal(err)
 			}
 			ctx, i, o := ownerSpan(provider.Tracer("app"))
 			hook.Tracing.BeginWrapper(ctx, i, time.Now()) // an unread joined call
-			if !rudderstackai.Flush(context.Background()) {
-				t.Fatal("flush did not finish")
+			finish := rudderstackai.Flush
+			if c.method == "Shutdown" {
+				finish = rudderstackai.Shutdown
+			}
+			if !finish(context.Background()) {
+				t.Fatalf("%s did not finish", c.method)
 			}
 			if rejected {
 				o.SetStatus(codes.Error, "")
@@ -441,33 +449,31 @@ func TestSpanDedupExporterUsesTheProcessorDecision(t *testing.T) {
 }
 
 func TestSpanDedupProcessorsSettleTogether(t *testing.T) {
+	accept := func(sdktrace.ReadOnlySpan) bool { return true }
+	reject := func(s sdktrace.ReadOnlySpan) bool { return s.Status().Code != codes.Error }
+	explode := func(sdktrace.ReadOnlySpan) bool { panic("filter exploded") }
 	for _, c := range []struct {
-		name         string
-		second       func(sdktrace.ReadOnlySpan) bool
-		wantFallback bool
+		name     string
+		ends     [2]func(sdktrace.ReadOnlySpan) bool
+		count    int
+		fallback bool
 	}{
-		{name: "one exports", second: func(sdktrace.ReadOnlySpan) bool { return false }},
-		{name: "none exports", second: func(sdktrace.ReadOnlySpan) bool { return false }, wantFallback: true},
-		{name: "second panics", second: func(s sdktrace.ReadOnlySpan) bool {
-			if !s.EndTime().IsZero() {
-				panic("filter exploded")
-			}
-			return true
-		}},
+		{"one exports, one rejects", [2]func(sdktrace.ReadOnlySpan) bool{accept, reject}, 1, false},
+		{"both reject", [2]func(sdktrace.ReadOnlySpan) bool{reject, reject}, 1, true},
+		{"both export", [2]func(sdktrace.ReadOnlySpan) bool{accept, accept}, 2, false},
+		{"one panics, one rejects", [2]func(sdktrace.ReadOnlySpan) bool{explode, reject}, 1, true},
+		{"one exports, one panics", [2]func(sdktrace.ReadOnlySpan) bool{accept, explode}, 1, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			first := Options{Simple: true}
-			if c.wantFallback {
-				first.Filter = rejectErrors
+			// Accepted at start, so both processors register the owner; each decides at the end.
+			filter := func(end func(sdktrace.ReadOnlySpan) bool) func(sdktrace.ReadOnlySpan) bool {
+				return func(s sdktrace.ReadOnlySpan) bool { return s.EndTime().IsZero() || end(s) }
 			}
-			_, p1, events := testProvider(t, first)
+			_, p1, events := testProvider(t, Options{Simple: true, Filter: filter(c.ends[0])})
 			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
 				t.Fatal(err)
 			}
-			p2, err := NewSpanProcessor(Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
-				// Accepted at start, so both processors register the owner.
-				return s.EndTime().IsZero() && IsAISpan(s) || c.second(s)
-			}})
+			p2, err := NewSpanProcessor(Options{Simple: true, Filter: filter(c.ends[1])})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -475,23 +481,59 @@ func TestSpanDedupProcessorsSettleTogether(t *testing.T) {
 			t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
 			ctx, i, o := ownerSpan(provider.Tracer("app"))
 			wrapperIn(ctx, t, i, events)
-			if c.wantFallback {
-				o.SetStatus(codes.Error, "")
-			}
+			o.SetStatus(codes.Error, "")
 			o.End()
 			i.End(rudderstackai.EndOptions{})
 			spans := spanEvents(events())
 			fallbacks := 0
 			for _, s := range spans {
+				if s["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() {
+					t.Errorf("span %v is not the owner's", s["properties"].(object)["span_id"])
+				}
 				if strings.Contains(render(s), "rudderstack.span_source") {
 					fallbacks++
 				}
 			}
-			want := map[bool]int{true: 1, false: 0}[c.wantFallback]
-			if fallbacks != want || len(spans) != 1 {
-				t.Fatalf("spans=%d fallbacks=%d, want 1 span and %d fallbacks", len(spans), fallbacks, want)
+			if len(spans) != c.count || (fallbacks > 0) != c.fallback {
+				t.Fatalf("spans=%d fallbacks=%d, want %d spans and fallback=%v", len(spans), fallbacks, c.count, c.fallback)
 			}
 		})
+	}
+}
+
+func TestSpanDedupExporterReusesARejection(t *testing.T) {
+	// Accepts at start, rejects at the processor's end decision, accepts any later call.
+	var calls atomic.Int32
+	provider, _, events := testProvider(t, Options{Simple: true, Filter: func(s sdktrace.ReadOnlySpan) bool {
+		return calls.Add(1) != 2 && IsAISpan(s)
+	}})
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, i, o := ownerSpan(provider.Tracer("app"))
+	wrapperIn(ctx, t, i, events)
+	o.End()
+	i.End(rudderstackai.EndOptions{})
+	spans := spanEvents(events())
+	if len(spans) != 1 || !strings.Contains(render(spans[0]), "rudderstack.span_source") {
+		t.Fatalf("want only the SDK span in the rejected owner's place, got %d", len(spans))
+	}
+}
+
+func TestSpanDedupShutdownSendsTheJoinedSpanOfAnOpenOwner(t *testing.T) {
+	provider, p, events := testProvider(t, Options{Simple: true})
+	if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, i, o := ownerSpan(provider.Tracer("app"))
+	defer i.End(rudderstackai.EndOptions{})
+	wrapperIn(ctx, t, i, events)
+	if err := p.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	spans := spanEvents(events())
+	if len(spans) != 1 || spans[0]["properties"].(object)["span_id"] != o.SpanContext().SpanID().String() || !strings.Contains(render(spans[0]), "rudderstack.span_source") {
+		t.Fatalf("want the held SDK span under the open owner's ID, got %d", len(spans))
 	}
 }
 
