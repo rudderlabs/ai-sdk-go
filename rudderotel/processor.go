@@ -48,6 +48,8 @@ type otelCall struct {
 	owner *hook.OTelOwner
 	// processors registered the span and have not decided yet; Shutdown decides for its own.
 	processors map[*SpanProcessor]struct{}
+	// accepted: a processor's filter accepted the span at start, so it can own calls.
+	accepted bool
 }
 
 func init() {
@@ -58,9 +60,9 @@ func init() {
 		}
 		sc := s.SpanContext()
 		otelCalls.mu.Lock()
-		c, ok := otelCalls.m[key(sc)]
-		otelCalls.mu.Unlock()
-		if !ok {
+		defer otelCalls.mu.Unlock()
+		c := otelCalls.m[key(sc)]
+		if c == nil || !c.accepted {
 			return hook.OTelCall{}, false
 		}
 		return hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: c.parentID, Seq: c.seq, Interaction: c.interaction, Owner: c.owner}, true
@@ -76,13 +78,15 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	if hook.Tracing.SDKOwnsCall(ctx, interaction) {
 		return true
 	}
-	// Only a span this processor will export can own a call; otherwise the SDK sends its own.
-	// A panicking filter counts as a rejection.
-	exported := false
-	safe("tracing.filter", func() { exported = p.exports(s) })
-	if !s.SpanContext().IsSampled() || !exported {
+	// An unsampled span is never exported, so it never owns a call.
+	if !s.SpanContext().IsSampled() {
 		return false
 	}
+	// Every processor that sees the span decides on it at its end, but it can own calls only if
+	// one of them accepts it now; otherwise the SDK sends its own span.
+	// A panicking filter counts as a rejection.
+	accepted := false
+	safe("tracing.filter", func() { accepted = p.exports(s) })
 	k := key(s.SpanContext())
 	otelCalls.mu.Lock()
 	defer otelCalls.mu.Unlock()
@@ -105,6 +109,7 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 		otelCalls.m[k] = c
 		otelCalls.n.Store(int64(len(otelCalls.m)))
 	}
+	c.accepted = c.accepted || accepted
 	if _, in := c.processors[p]; !in {
 		c.processors[p] = struct{}{}
 		c.owner.Register()
