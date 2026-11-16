@@ -134,6 +134,74 @@ func TestObserveMCPHTTPClonedHeaders(t *testing.T) {
 	}
 }
 
+// A middleware that hands several requests one header map makes them indistinguishable: none
+// may get another's text.
+func TestObserveMCPHTTPSharedHeaderMap(t *testing.T) {
+	setupAI(t)
+	const n = 2
+	s := mcp.NewServer(&mcp.Implementation{Name: "shared-header-mcp", Version: "1"}, nil)
+	var arrived sync.WaitGroup
+	arrived.Add(n)
+	for i := range n {
+		name := "lookup_" + strconv.Itoa(i)
+		s.AddTool(&mcp.Tool{Name: name, InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			arrived.Done()
+			arrived.Wait()
+			return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{&mcp.TextContent{Text: "failed " + name}}}, nil
+		})
+	}
+	r := wrap(t, s, Options{CaptureContent: true})
+	var mu sync.Mutex
+	var shared http.Header
+	sharing := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			mu.Lock()
+			if shared == nil {
+				shared = req.Header
+			}
+			req.Header = shared
+			mu.Unlock()
+			h.ServeHTTP(w, req)
+		})
+	}
+	url := serveStreamable(t, s, &mcp.StreamableHTTPOptions{Stateless: true}, func(h http.Handler) http.Handler { return sharing(ObserveMCPHTTP(h)) })
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Go(func() {
+			body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"lookup_` + strconv.Itoa(i) + `","arguments":{}}}`
+			req, _ := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			req.Header.Set("Mcp-Protocol-Version", "2025-06-18")
+			req.Header.Set("Authorization", "Bearer tok_secret")
+			res, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			_ = res.Body.Close()
+		})
+	}
+	wg.Wait()
+	for _, e := range r.wait(t, "mcp_tool_called", n) {
+		if msg, ok := e.Properties["error_message"]; ok && msg != "failed "+e.Properties["tool_name"].(string) {
+			t.Errorf("%v got another request's error_message %q", e.Properties["tool_name"], msg)
+		}
+	}
+}
+
+func TestObserveMCPHTTPNested(t *testing.T) {
+	setupAI(t)
+	s := errorServer("nested-http-mcp")
+	r := wrap(t, s, Options{CaptureContent: true})
+	twice := func(h http.Handler) http.Handler { return ObserveMCPHTTP(ObserveMCPHTTP(h)) }
+	cs := connectHTTP(t, serveStreamable(t, s, nil, twice), "2025-06-18")
+	_, _ = cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "lookup", Arguments: map[string]any{"text": "lookup failed"}})
+	if p := r.wait(t, "mcp_tool_called", 1)[0].Properties; p["error_message"] != "lookup failed" {
+		t.Errorf("error_message=%v through nested wrappers", p["error_message"])
+	}
+}
+
 // Stateless clients send no session id and number their requests alike: concurrent requests
 // with the same id must each get their own response's text.
 func TestObserveMCPHTTPStatelessSameRequestID(t *testing.T) {

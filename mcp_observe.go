@@ -61,31 +61,62 @@ func ObserveMCPTransport(ctx context.Context, t mcp.Transport) (context.Context,
 //
 // It works for stateful and stateless handlers. The request's header map identifies it to the
 // server's handlers, which the go-sdk passes on as RequestExtra.Header; a middleware between the
-// two that copies the headers (Request.Clone) leaves error_message out. Responses pass through
+// two that copies the headers (Request.Clone) leaves error_message out, as do requests in
+// flight together that share one header map. Responses pass through
 // unchanged. A failed request's events are sent once its response is written, or without
 // error_message when the HTTP request ends first.
 func ObserveMCPHTTP(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := headerKey(r.Header)
-		if key == nil {
+		// Wrapped twice: the outer wrapper observes.
+		if key == nil || r.Context().Value(observingHTTP{}) != nil {
 			h.ServeHTTP(w, r)
 			return
 		}
 		responses := mcpbridge.NewResponses()
-		// Wrapped twice: the outer wrapper observes.
-		if _, nested := httpObservers.LoadOrStore(key, responses); nested {
-			h.ServeHTTP(w, r)
-			return
-		}
-		defer httpObservers.Delete(key)
-		mcpbridge.ServeHTTP(h, w, r, responses)
+		defer observeHTTP(key, responses)()
+		mcpbridge.ServeHTTP(h, w, r.WithContext(context.WithValue(r.Context(), observingHTTP{}, true)), responses)
 	})
 }
+
+type observingHTTP struct{}
 
 // httpObservers maps the header map of each HTTP request ObserveMCPHTTP is serving to its
 // observer. A stateful session runs every request on its own context, never the POST's, so the
 // header map is the only per-request value the server's handlers can match on.
-var httpObservers sync.Map
+var (
+	httpObserversMu sync.Mutex
+	httpObservers   = map[unsafe.Pointer]*httpObserver{}
+)
+
+type httpObserver struct {
+	// responses is nil once two requests in flight share the header map: their requests can't
+	// be told apart, so neither is observed.
+	responses *mcpbridge.Responses
+	inFlight  int
+}
+
+// observeHTTP registers responses for the HTTP request with header map key, and returns its
+// release.
+func observeHTTP(key unsafe.Pointer, responses *mcpbridge.Responses) (release func()) {
+	httpObserversMu.Lock()
+	defer httpObserversMu.Unlock()
+	o := httpObservers[key]
+	if o == nil {
+		o = &httpObserver{responses: responses}
+		httpObservers[key] = o
+	} else {
+		o.responses = nil
+	}
+	o.inFlight++
+	return func() {
+		httpObserversMu.Lock()
+		defer httpObserversMu.Unlock()
+		if o.inFlight--; o.inFlight == 0 {
+			delete(httpObservers, key)
+		}
+	}
+}
 
 func headerKey(h http.Header) unsafe.Pointer {
 	if h == nil {
@@ -100,9 +131,12 @@ func observedHTTP(h http.Header) *mcpbridge.Responses {
 	if key == nil {
 		return nil
 	}
-	r, _ := httpObservers.Load(key)
-	responses, _ := r.(*mcpbridge.Responses)
-	return responses
+	httpObserversMu.Lock()
+	defer httpObserversMu.Unlock()
+	if o := httpObservers[key]; o != nil {
+		return o.responses
+	}
+	return nil
 }
 
 type nopCloser struct{ io.Writer }

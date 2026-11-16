@@ -19,10 +19,27 @@ func ServeHTTP(h http.Handler, w http.ResponseWriter, r *http.Request, responses
 		responses.Close()
 	}()
 	var out http.ResponseWriter = ow
-	if _, ok := w.(http.Flusher); ok {
+	if canFlush(w) {
 		out = flushingWriter{ow}
 	}
 	h.ServeHTTP(out, r)
+}
+
+// canFlush reports whether w, or a writer it unwraps to, flushes. http.ResponseController
+// flushes through Unwrap, so the observer must offer Flush whenever that would succeed, or the
+// flush skips it.
+func canFlush(w http.ResponseWriter) bool {
+	for w != nil {
+		switch x := w.(type) {
+		case http.Flusher, interface{ FlushError() error }:
+			return true
+		case interface{ Unwrap() http.ResponseWriter }:
+			w = x.Unwrap()
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 func safely(f func()) {
