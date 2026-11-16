@@ -75,6 +75,7 @@ With `CaptureContent`, a failed `mcp_tool_called`, `mcp_resource_read` or `mcp_p
 | Library | Wrap | API |
 | --- | --- | --- |
 | go-sdk, `Server.Run` / `Server.Connect` with `*mcp.StdioTransport` or `*mcp.IOTransport` | the context and transport | `rudderstackai.ObserveMCPTransport(ctx context.Context, t mcp.Transport) (context.Context, mcp.Transport)` |
+| go-sdk, `mcp.NewStreamableHTTPHandler` (stateful or stateless) | the HTTP handler | `rudderstackai.ObserveMCPHTTP(h http.Handler) http.Handler` |
 | mcp-go, `server.NewStreamableHTTPServer` | the HTTP handler | `ruddermcpgo.ObserveHTTP(h http.Handler) http.Handler` |
 | mcp-go, `StdioServer.Listen` | the context, input and output | `ruddermcpgo.ObserveStdio(ctx context.Context, r io.Reader, w io.Writer) (context.Context, io.Reader, io.Writer)` |
 
@@ -82,6 +83,9 @@ With `CaptureContent`, a failed `mcp_tool_called`, `mcp_resource_read` or `mcp_p
 // go-sdk over stdio: pass the returned context to Run or Connect
 ctx, t := rudderstackai.ObserveMCPTransport(ctx, &mcp.StdioTransport{})
 err := server.Run(ctx, t)
+
+// go-sdk over streamable HTTP
+http.Handle("/mcp", rudderstackai.ObserveMCPHTTP(mcp.NewStreamableHTTPHandler(getServer, opts)))
 
 // mcp-go over streamable HTTP
 s := server.NewMCPServer("rudderstack-mcp", version, opts...)
@@ -95,7 +99,7 @@ ctx, in, out := ruddermcpgo.ObserveStdio(ctx, os.Stdin, os.Stdout)
 err := server.NewStdioServer(s).Listen(ctx, in, out)
 ```
 
-Messages pass through unchanged, and the libraries' own connections and protocol handling stay in place: the go-sdk wrapper observes the transport's reader and writer, not its connection. A failed request's event, and any declared tool event after it, is held until its response is written. **The hold lasts at most 10 seconds: if no response is written by then, the event goes out without `error_message`**, as it does when the connection, the context or the HTTP request ends first. If a client reuses a request id (MCP forbids it) before the earlier response is written, the earlier event also goes out without it; later matches are not guaranteed for such a client. Cancelled requests never carry it. `ObserveHTTP` reads JSON responses and SSE `data:` frames of the request it wraps (mcp-go's legacy SSE transport answers on another stream, so it gets no `error_message`); a response over 1 MiB is not read. The go-sdk's `StreamableHTTPHandler` builds its transports internally, so go-sdk HTTP servers cannot opt in yet ([SDK-6904](https://linear.app/rudderstack/issue/SDK-6904/mcp-ai-events-error-message-for-go-sdk-streamablehttphandler-apps)). On the go-sdk, other transports (in-memory, SSE, streamable HTTP, custom) are returned unchanged.
+Messages pass through unchanged, and the libraries' own connections and protocol handling stay in place: the go-sdk wrapper observes the transport's reader and writer, not its connection. A failed request's event, and any declared tool event after it, is held until its response is written. **The hold lasts at most 10 seconds: if no response is written by then, the event goes out without `error_message`**, as it does when the connection, the context or the HTTP request ends first. If a client reuses a request id (MCP forbids it) before the earlier response is written, the earlier event also goes out without it; later matches are not guaranteed for such a client. Cancelled requests never carry it. `ObserveHTTP` and `ObserveMCPHTTP` read JSON responses and SSE `data:` frames of the request they wrap (mcp-go's legacy SSE transport answers on another stream, so it gets no `error_message`); a response over 1 MiB is not read. A stateful go-sdk session handles every request on the session's context, not the HTTP request's, so `ObserveMCPHTTP` matches a request to its HTTP request by the request's header map, which the go-sdk passes to the server as `RequestExtra.Header`. Put it outside any middleware that copies the request headers (`Request.Clone`): behind one, `error_message` is left out. `ObserveMCPTransport` returns other transports (in-memory, SSE, custom) unchanged.
 
 ## Options
 
