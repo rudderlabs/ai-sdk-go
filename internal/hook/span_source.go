@@ -15,4 +15,6 @@ type SpanSource struct {
 	Error         bool     `json:"error"`
 	LLM           bool     `json:"llm"`
 	Ancestors     []string `json:"ancestors"`
+	// AncestorsComplete is true only when known parent edges reach a root.
+	AncestorsComplete bool `json:"ancestorsComplete,omitempty"`
 }

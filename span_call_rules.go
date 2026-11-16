@@ -54,6 +54,11 @@ func restoredSpanSource(value any) *hook.SpanSource {
 			return nil
 		}
 	}
+	if v, exists := s["ancestorsComplete"]; exists {
+		if _, ok := v.(bool); !ok {
+			return nil
+		}
+	}
 	switch a := s["ancestors"].(type) {
 	case []string:
 		if a == nil {
@@ -116,32 +121,60 @@ func (i *Interaction) completeSpanAncestryLocked() {
 			continue
 		}
 		visited := map[string]bool{s.SpanID: true}
-		for parent := s.ParentSpanID; parent != "" && !visited[parent]; parent = parents[s.TraceID+":"+parent] {
+		parent := s.ParentSpanID
+		for parent != "" && !visited[parent] {
 			visited[parent] = true
 			if !slices.Contains(s.Ancestors, parent) {
 				s.Ancestors = append(s.Ancestors, parent)
 			}
+			// A missing edge cannot establish that this ancestor is a root.
+			next, known := parents[s.TraceID+":"+parent]
+			if !known {
+				break
+			}
+			parent = next
 		}
+		s.AncestorsComplete = s.AncestorsComplete || parent == ""
 	}
+}
+
+// Wrappers and merged wrapper twins remain authoritative, even before emission.
+func isSkippableSpanCall(call *recordedCall) bool {
+	return call.spanSource != nil && call.fromSpan && !call.twinMatched && !call.callEventEmitted
 }
 
 // Resolve surviving evidence before its users. A cycle cannot remove every call.
 func skippedSpanCalls(calls []*recordedCall, endedAt float64) map[*recordedCall]bool {
 	const (
-		keep  = 1
-		skip  = 2
-		cycle = 3
+		keep            = 1
+		skip            = 2
+		cycle           = 3
+		unknownAncestry = 0
+		unrelated       = 1
+		related         = 2
 	)
 	decisions := map[*recordedCall]int{}
 	visiting := map[*recordedCall]bool{}
-	descendant := func(child, parent *hook.SpanSource) bool {
-		return child.TraceID == parent.TraceID && slices.Contains(child.Ancestors, parent.SpanID)
+	descendant := func(child, parent *hook.SpanSource) int {
+		if child.TraceID != parent.TraceID {
+			return unrelated
+		}
+		if slices.Contains(child.Ancestors, parent.SpanID) {
+			return related
+		}
+		// A shared ancestor proves separate branches even if its own edge is missing.
+		if child.AncestorsComplete || slices.ContainsFunc(child.Ancestors, func(id string) bool {
+			return slices.Contains(parent.Ancestors, id)
+		}) {
+			return unrelated
+		}
+		return unknownAncestry
 	}
 	var decide func(*recordedCall) int
 	decide = func(call *recordedCall) int {
 		// Wrapper reports are authoritative, even before their call event is released.
 		// Keep their span tags available as evidence for pure, unmatched span calls.
-		if !call.fromSpan || call.twinMatched || call.callEventEmitted {
+		if !isSkippableSpanCall(call) {
 			return keep
 		}
 		if known := decisions[call]; known != 0 {
@@ -152,16 +185,13 @@ func skippedSpanCalls(calls []*recordedCall, endedAt float64) map[*recordedCall]
 		}
 		visiting[call] = true
 		node := call.spanSource
-		if node == nil {
-			return keep
-		}
 		result := keep
 		for _, other := range calls {
 			evidence := other.spanSource
 			if evidence == nil || other == call || evidence.TraceID != node.TraceID {
 				continue
 			}
-			prep := node.LLM && !node.Usage && node.ResponseID == "" && !node.Output && !node.Error && evidence.Usage && evidence.Start >= node.Start-1 && evidence.Start <= endedAt && !descendant(evidence, node) && !descendant(node, evidence)
+			prep := node.LLM && !node.Usage && node.ResponseID == "" && !node.Output && !node.Error && evidence.Usage && evidence.Start >= node.Start-1 && evidence.Start <= endedAt && descendant(evidence, node) == unrelated && descendant(node, evidence) == unrelated
 			sameModel := false
 			for _, model := range []string{node.RequestModel, node.ResponseModel} {
 				if model != "" && (model == evidence.RequestModel || model == evidence.ResponseModel) {
@@ -173,7 +203,7 @@ func skippedSpanCalls(calls []*recordedCall, endedAt float64) map[*recordedCall]
 			if node.Error {
 				matching = evidence.Error && sameModel && overlaps
 			}
-			nested := descendant(evidence, node) && (evidence.ResponseID != "" || evidence.Usage) && matching
+			nested := descendant(evidence, node) == related && (evidence.ResponseID != "" || evidence.Usage) && matching
 			if (prep || nested) && decide(other) == keep {
 				result = skip
 				break

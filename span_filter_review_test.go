@@ -6,6 +6,43 @@ import (
 	"time"
 )
 
+func TestSpanRulesMissingBridgeAncestryKeepsCalls(t *testing.T) {
+	for _, missing := range []string{"evicted", "unknown"} {
+		for _, rule := range []string{"prep", "nested"} {
+			t.Run(missing+"/"+rule, func(t *testing.T) {
+				r := setupAI(t, WithLLMCallEvents(true), WithLimits(Limits{MaxMapEntries: 1}))
+				_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+				i.recordSpanAncestry("trace", "A", "")
+				parent := taggedRuleCall("A", "", false, "", "")
+				parent.InputTokens, parent.spanSource.LLM = 0, true
+				if rule == "nested" {
+					parent.OutputText, parent.spanSource.Output = "A answer", true
+				}
+				i.RecordCall(parent)
+				if missing == "evicted" {
+					i.recordSpanAncestry("trace", "bridge", "A")
+				}
+				i.recordSpanAncestry("trace", "child", "bridge")
+				if _, present := i.spanParents["trace:bridge"]; present {
+					t.Fatal("bridge edge was not evicted")
+				}
+				child := taggedRuleCall("child", "bridge", true, "", "")
+				if rule == "prep" {
+					child.Model, child.spanSource.ResponseModel = "other-model", "other-model"
+				}
+				i.RecordCall(child)
+				i.End(EndOptions{})
+				if response := lastResponse(t, r); response["llm_call_count"] != 2 || response["total_input_tokens"] != 7 {
+					t.Fatal(response)
+				}
+				if calls := r.named("ai_llm_response_received"); len(calls) != 2 {
+					t.Fatal(calls)
+				}
+			})
+		}
+	}
+}
+
 func TestSpanRulesPreserveNewerAnswer(t *testing.T) {
 	for _, source := range []string{"folded span", "folded wrapper", "keep answer", "other wrapper"} {
 		t.Run(source, func(t *testing.T) {

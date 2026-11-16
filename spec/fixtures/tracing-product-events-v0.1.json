@@ -18710,6 +18710,564 @@
           }
         }
       ]
+    },
+    {
+      "name": "sdk6898_wrapper_overlapping_provider_span_keeps_one_call",
+      "description": "A wrapper-recorded call and an overlapping provider span for the same request merge into exactly one call with the wrapper model and tokens. Only pure span-sourced calls can be skipped.",
+      "config": {
+        "advanceClock": true,
+        "emitLlmCalls": true,
+        "perCallContent": true
+      },
+      "interaction": {
+        "interactionId": "int_fixture_1",
+        "conversationId": "conv_fixture_1",
+        "userId": "user_1",
+        "feature": "support_bot",
+        "promptText": "Where is my order 1234?"
+      },
+      "steps": [
+        {
+          "op": "wrapper_call",
+          "call": {
+            "integration": "openai",
+            "provider": "anthropic",
+            "model": "claude-sonnet-5",
+            "responseId": "authoritative-wrapper-response",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000900000000"
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000c0",
+            "name": "Anthropic provider span",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000200000000",
+            "endTimeUnixNano": "1760000000800000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "gen_ai.operation.name": "chat",
+              "gen_ai.provider.name": "anthropic",
+              "gen_ai.request.model": "claude-sonnet-5",
+              "gen_ai.response.id": "authoritative-wrapper-response",
+              "gen_ai.response.model": "claude-haiku-5",
+              "gen_ai.usage.input_tokens": 7,
+              "gen_ai.usage.output_tokens": 1
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "expect_recorded_calls",
+          "count": 1
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": "anthropic",
+            "model": "claude-sonnet-5",
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "total_tokens": 120,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "response_id": "authoritative-wrapper-response",
+            "call_index": 1
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-sonnet-5",
+            "primary_provider": "anthropic",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_tokens": 120,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-sonnet-5",
+                "requested_model": "claude-sonnet-5",
+                "call_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "sdk6898_litellm_wrapper_outer_provider_child_keeps_one_call",
+      "description": "LiteLLM-over-Anthropic: the wrapper records the outer call and the provider span is its child for the same request. Exactly one call survives with the wrapper model and tokens; a wrapper or merged twin is never skippable.",
+      "config": {
+        "advanceClock": true,
+        "emitLlmCalls": true,
+        "perCallContent": true
+      },
+      "interaction": {
+        "interactionId": "int_fixture_1",
+        "conversationId": "conv_fixture_1",
+        "userId": "user_1",
+        "feature": "support_bot",
+        "promptText": "Where is my order 1234?"
+      },
+      "steps": [
+        {
+          "op": "span_start",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "0000000000006910",
+            "name": "LiteLLM outer call",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000900000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "gen_ai.operation.name": "invoke_agent"
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "wrapper_call",
+          "call": {
+            "integration": "openai",
+            "provider": "litellm",
+            "model": "anthropic/claude-sonnet-5",
+            "responseId": "authoritative-wrapper-response",
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000900000000"
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000c2",
+            "parentSpanId": "0000000000006910",
+            "name": "Anthropic provider span",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000200000000",
+            "endTimeUnixNano": "1760000000800000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "gen_ai.operation.name": "chat",
+              "gen_ai.provider.name": "anthropic",
+              "gen_ai.request.model": "claude-sonnet-5",
+              "gen_ai.response.id": "authoritative-wrapper-response",
+              "gen_ai.response.model": "claude-haiku-5",
+              "gen_ai.usage.input_tokens": 7,
+              "gen_ai.usage.output_tokens": 1
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "0000000000006910",
+            "name": "LiteLLM outer call",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000900000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "gen_ai.operation.name": "invoke_agent"
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "expect_recorded_calls",
+          "count": 1
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": "anthropic",
+            "model": "claude-sonnet-5",
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "total_tokens": 120,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "response_id": "authoritative-wrapper-response",
+            "call_index": 1
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-sonnet-5",
+            "primary_provider": "anthropic",
+            "latency_ms": "<number>",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 100,
+            "total_output_tokens": 20,
+            "total_tokens": 120,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-sonnet-5",
+                "requested_model": "claude-sonnet-5",
+                "call_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "total_tokens": 120,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "openai"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "sdk6898_unknown_bridge_ancestry_keeps_both_calls",
+      "description": "A root OpenInference LLM call A and a usage-bearing call B whose parent is an unknown non-model bridge both survive. The missing bridge edge cannot prove nesting or the unrelated relationship required by prep suppression.",
+      "config": {
+        "advanceClock": true,
+        "emitLlmCalls": true,
+        "perCallContent": true
+      },
+      "interaction": {
+        "interactionId": "int_fixture_1",
+        "conversationId": "conv_fixture_1",
+        "userId": "user_1",
+        "feature": "support_bot",
+        "promptText": "Where is my order 1234?"
+      },
+      "steps": [
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "0000000000006911",
+            "name": "A",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000100000000",
+            "endTimeUnixNano": "1760000000900000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "openinference.span.kind": "LLM",
+              "llm.model_name": "gpt-5"
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "span",
+          "span": {
+            "traceId": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "spanId": "00000000000000c5",
+            "parentSpanId": "0000000000006912",
+            "name": "B",
+            "kind": "client",
+            "startTimeUnixNano": "1760000000200000000",
+            "endTimeUnixNano": "1760000000800000000",
+            "attributes": {
+              "rudderstack.interaction_id": "int_fixture_1",
+              "gen_ai.operation.name": "chat",
+              "gen_ai.provider.name": "openai",
+              "gen_ai.request.model": "gpt-5",
+              "gen_ai.response.model": "gpt-5-2026-08-01",
+              "gen_ai.usage.input_tokens": 1200,
+              "gen_ai.usage.output_tokens": 300,
+              "gen_ai.response.finish_reasons": [
+                "stop"
+              ]
+            },
+            "status": {
+              "code": "ok"
+            },
+            "resource": {
+              "service.name": "chat-api"
+            },
+            "scope": {
+              "name": "fixture-instrumentation",
+              "version": "1.0.0"
+            }
+          }
+        },
+        {
+          "op": "expect_recorded_calls",
+          "count": 2
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot"
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": null,
+            "model": "gpt-5",
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "call_index": 1
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_llm_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "provider": "openai",
+            "model": "gpt-5-2026-08-01",
+            "input_tokens": 1200,
+            "output_tokens": 300,
+            "total_tokens": 1500,
+            "cached_input_tokens": 0,
+            "cache_write_tokens": 0,
+            "latency_ms": "<number>",
+            "finish_reason": "stop",
+            "call_index": 2
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "userId": "user_1",
+          "properties": {
+            "conversation_id": "conv_fixture_1",
+            "interaction_id": "int_fixture_1",
+            "feature": "support_bot",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "gpt-5-2026-08-01",
+            "primary_provider": "openai",
+            "latency_ms": "<number>",
+            "llm_call_count": 2,
+            "tool_call_count": 0,
+            "total_input_tokens": 1200,
+            "total_output_tokens": 300,
+            "total_tokens": 1500,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "finish_reason": "stop",
+            "usage_breakdown": [
+              {
+                "provider": null,
+                "model": "gpt-5",
+                "call_count": 1,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              },
+              {
+                "provider": "openai",
+                "model": "gpt-5-2026-08-01",
+                "call_count": 1,
+                "input_tokens": 1200,
+                "output_tokens": 300,
+                "total_tokens": 1500,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ]
+          },
+          "context": {
+            "wrapperLibrary": {
+              "specVersion": "0.4.0",
+              "integration": "tracing"
+            }
+          }
+        }
+      ]
     }
   ]
 }

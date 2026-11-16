@@ -91,7 +91,7 @@ func TestSpanRulesPendingEvidenceAcrossPause(t *testing.T) {
 				t.Fatal(snapshot, ok)
 			}
 			source := restoredSpanSource(snapshot.PendingCalls[1]["span_source"])
-			if source == nil || !slices.Contains(source.Ancestors, "parent") {
+			if source == nil || !source.AncestorsComplete || !slices.Contains(source.Ancestors, "parent") {
 				t.Fatal(snapshot.PendingCalls)
 			}
 			if restore {
@@ -236,7 +236,7 @@ func TestSpanRulesPauseFiltersOnceAndClearsAncestry(t *testing.T) {
 
 func TestSpanRulesInvalidSnapshotEvidenceCountsConservatively(t *testing.T) {
 	good := spanSourceSnapshot(taggedRuleCall("span", "", true, "response", "").spanSource)
-	for _, field := range []string{"spanId", "start", "usage", "ancestors"} {
+	for _, field := range []string{"spanId", "start", "usage", "ancestors", "ancestorsComplete"} {
 		t.Run(field, func(t *testing.T) {
 			b, _ := json.Marshal(good)
 			var broken map[string]any
