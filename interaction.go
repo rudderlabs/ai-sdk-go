@@ -221,6 +221,9 @@ func foldCallInto(r *recordedCall, calls *[]*recordedCall) {
 	dst.cachedInputTokens += r.cachedInputTokens
 	dst.cacheWriteTokens += r.cacheWriteTokens
 	dst.cacheWrite1 += r.cacheWrite1
+	if dst.serverToolCallCount > 0 && dst.serverToolCostUSD == nil {
+		dst.feesUnknown = true
+	}
 	if r.serverToolCallCount > 0 {
 		dst.serverToolCallCount += r.serverToolCallCount
 		if r.serverToolCostUSD == nil {
@@ -237,6 +240,10 @@ func foldCallInto(r *recordedCall, calls *[]*recordedCall) {
 		dst.costUSD = Ptr(round8(derefFloat(dst.costUSD) + *r.costUSD))
 	case r.errorType == "":
 		dst.unpriced = true
+	}
+	// Read as one call by the totals: successful when any was.
+	if r.errorType == "" {
+		dst.errorType = ""
 	}
 }
 
@@ -1300,7 +1307,7 @@ func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
 		if earlier.fromSpan == call.fromSpan || earlier.twinMatched || earlier.provider != call.provider ||
 			(earlier.responseID != "" && call.responseID != "") ||
 			(earlier.agentName != "" && call.agentName != "" && earlier.agentName != call.agentName) ||
-			(earlier.model != "" && call.model != "" && earlier.model != call.model) ||
+			!sameModel(earlier.model, call.model) ||
 			earlier.startedAt.IsZero() || earlier.endedAt.IsZero() ||
 			earlier.startedAt.After(call.endedAt.Add(time.Millisecond)) || call.startedAt.After(earlier.endedAt.Add(time.Millisecond)) {
 			continue
@@ -1311,6 +1318,19 @@ func (i *Interaction) callTwinLocked(call *recordedCall) *recordedCall {
 		}
 	}
 	return best
+}
+
+// sameModel reports whether two model names can be one call's: equal, or one extends the other
+// (gpt-4o-2024-08-06). Claude IDs must match exactly, since their family names prefix each other.
+func sameModel(a, b string) bool {
+	if a == "" || b == "" {
+		return true
+	}
+	x, y := strings.ToLower(canonicalModel(a)), strings.ToLower(canonicalModel(b))
+	if strings.Contains(x, "claude") || strings.Contains(y, "claude") {
+		return x == y
+	}
+	return strings.HasPrefix(x, y) || strings.HasPrefix(y, x)
 }
 
 func mergeCallTwin(kept, later *recordedCall) {
@@ -1869,13 +1889,14 @@ func (i *Interaction) callEventLocked(c *recordedCall) map[string]any {
 	if c.serverToolCallCount > 0 {
 		p["server_tool_call_count"] = c.serverToolCallCount
 	}
-	if c.serverToolCostUSD != nil {
+	// A folded overflow group sends a sum only when every call in it had one.
+	if c.serverToolCostUSD != nil && !c.feesUnknown {
 		p["server_tool_cost_usd"] = *c.serverToolCostUSD
 	}
-	if c.costUSD != nil {
+	if c.costUSD != nil && !c.unpriced {
 		p["cost_usd"] = *c.costUSD
 	}
-	if c.credits != nil {
+	if c.credits != nil && !c.uncredited {
 		p["credits"] = *c.credits
 	}
 	put(p, "call_purpose", c.callPurpose)

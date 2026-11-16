@@ -88,5 +88,55 @@
     "total_cost_usd": 0.02,
     "finish_reason": "stop",
     "compaction_count": 1
+  },
+  "explicit_credits": {
+    "description": "A pending call's report-supplied credits survive JSON restoration through credits_explicit. Configure a credits hook that returns hook_credits for every call, restore the snapshot, record span (a tracing report of the same response ID that stands for call_count calls), then end. The span merges into the pending call, which keeps its explicit credits instead of the hook's.",
+    "hook_credits": 1,
+    "snapshot": {
+      "interaction_id": "explicit-credits-run",
+      "conversation_id": "explicit-credits-conversation",
+      "trigger": "user",
+      "user_id": "u",
+      "pause_count": 1,
+      "total_paused_ms": 0,
+      "paused_at": 1,
+      "seen_response_ids": [
+        [
+          "openai",
+          "resp_1"
+        ]
+      ],
+      "report_count": 1,
+      "successful_call_sequence": 1,
+      "pending_calls": [
+        {
+          "provider": "openai",
+          "model": "gpt-4o",
+          "response_id": "resp_1",
+          "call_count": 1,
+          "input_tokens": 10,
+          "output_tokens": 2,
+          "credits": 7,
+          "credits_explicit": true,
+          "from_span": false,
+          "matched": false,
+          "last": true,
+          "last_ok": true
+        }
+      ]
+    },
+    "span": {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "response_id": "resp_1",
+      "call_count": 2,
+      "input_tokens": 10,
+      "output_tokens": 2
+    },
+    "expected": {
+      "llm_call_count": 2,
+      "total_input_tokens": 10,
+      "total_credits": 7
+    }
   }
 }
