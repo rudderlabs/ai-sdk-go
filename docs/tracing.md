@@ -110,43 +110,39 @@ are dropped, cycles are dropped, and other unrepresentable list entries keep nul
 ### One span per call with the span processor
 
 When `WithEmitSpans(true)` and a `rudderotel` span processor (`NewSpanProcessor` or
-`RegisterTracing`) both see a model call, one `ai_otel_span` is sent. The outer span owns the
-call:
+`RegisterTracing`) both see a model call, the SDK span is always the one sent.
 
 - An OpenTelemetry model-call span (the conventions in
   [product events from spans](#product-events-from-spans): GenAI `chat` / `text_completion` /
   `generate_content`, OpenInference `LLM`, older OpenLLMetry `llm.request.type`) that starts
-  inside a wrapper call is not exported by the `rudderotel` processor. Your other processors and
-  exporters still receive it, and `ProductEvents` still counts the call once.
-- A wrapper call that starts inside such an OpenTelemetry span of the same interaction sends no
-  span of its own, provided the processor exports that span: it must be sampled and pass the
-  export filter when it starts. If it fails the filter when it ends, the SDK span is sent in its
-  place, with its IDs; with several `rudderotel` processors, only when none of them exports it.
-  Each processor decides once, when the span ends, and exports by that same decision; one that
-  has shut down counts as not exporting it, and a filter that panics rejects the span and is
-  reported to `WithOnError` as `user_callback`. An owning span a processor exports goes straight to
-  its exporter, outside the batch queue, so a full queue never drops it. `Flush`
-  and `Shutdown` finish an unread joined call too, and its span then follows the same rule. Its
-  `ai_llm_response_received.span_id` is the OpenTelemetry span's ID.
-  No wrapper usage or content is copied onto your span; the processor's usual identity attributes
-  still apply.
-- Any other span in between keeps both: a wrapper call inside a `StartSpan` span that is itself
-  inside an OpenTelemetry model-call span gets its own span, a child of the manual one.
+  inside a wrapper call is dropped by every `rudderotel` processor. Other processors and
+  exporters receive it unchanged. Span-built product events still count the call once.
+- For an active, still-recording model-call span a processor observed outside an SDK call, in the
+  same open interaction, the first wrapper call that starts directly inside it takes its place.
+  The SDK span adopts its trace ID, span ID and parent span ID, and fixes the interaction's SDK
+  trace, including pause snapshots. It is sent normally, through the SDK's own path;
+  `ai_llm_response_received.span_id` carries the adopted ID. Later wrapper calls inside that span
+  are ordinary children of that ID. Every `rudderotel` processor drops the replaced span when it
+  ends, synchronously, by a mark they share. Filters, sampling, batching, analytics-client
+  failures and processor shutdown do not decide whether the call's span is sent, and a stream
+  read after the OpenTelemetry span ended still sends the adopted span.
+- An outer model-call span with no wrapper call inside is exported normally. A newer SDK span in
+  between prevents adoption: the most recently started active SDK span decides.
 
-Matching uses context nesting only, never times or model names, and the most recently started
-active SDK span decides. Limits:
+The trade-off: RudderStack gets the SDK span, with its attributes and timing, under the
+OpenTelemetry span's IDs, not the attributes and timing your application put on its span.
+Processors that are not RudderStack's (your APM exporter, for example) receive your original span
+unchanged: nothing from the SDK is copied onto it, and the processor's usual identity attributes
+still apply.
 
-- Instrumentations that never put their span on the context passed downstream, and spans your
-  sampler drops, cannot be matched, so the call can still produce two spans.
-- The bare `Exporter` has no start hook and cannot deduplicate; use the processor.
-- A span is classified when it starts: one that gets its model-call attributes later is not
-  matched.
-- An owning span the exporter drops because it cannot fit `rudderotel.Options.MaxEventBytes`
-  leaves the call without a span.
-- At most `Limits.MaxMapEntries` owning spans are open, and each holds at most that many SDK
-  spans waiting on its decision. Past either cap, `WithOnError` gets `limit_reached`: a new span
-  cannot own calls (they send their own spans), or a waiting SDK span is dropped.
-- A span that already ended, or that started in another interaction, is never joined.
+Matching uses context nesting only, never times or model names. Limits:
+
+- Instrumentations that never put their span on the context passed downstream cannot be matched.
+- The bare `Exporter` has no start hook; use the processor.
+- A span is classified when it starts: model-call attributes added later cannot enable adoption.
+  A recording span the sampler does not sample is eligible too.
+- A span that already ended, an ended interaction, and a span that started in another interaction
+  never adopt.
 - An exported child of a dropped OpenTelemetry span keeps that span as its `parent_span_id`,
   although RudderStack never received it.
 - Go has no framework integrations, so no integration model spans take part.
