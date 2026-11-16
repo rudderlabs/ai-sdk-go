@@ -547,11 +547,14 @@ func (s *sessionTracker) ending(kind string, at msTime) *turn {
 	if s.turn != nil {
 		return s.turn
 	}
-	if !s.hasPausedTurn() {
+	paused := s.hasPausedTurn()
+	// A running session that ends before any other event (an agent stopped before its first
+	// request) still has a turn.
+	if !paused && !s.runningAt.ok {
 		return nil
 	}
 	t := s.open(kind, at)
-	t.abandoned = true
+	t.abandoned = paused
 	return t
 }
 
@@ -652,7 +655,20 @@ func (s *sessionTracker) call(t *turn, e map[string]any, at msTime) {
 // push buffers a call; past the call cap the turn's buffered calls and tools go to its answer.
 func (s *sessionTracker) push(t *turn, c turnCall) {
 	t.calls = append(t.calls, c)
+	if s.report(t) {
+		return
+	}
 	s.spillIfFull(t)
+}
+
+// report records what a turn in the caller's interaction holds as it arrives, so the caller's pause
+// snapshot or end holds it. It returns whether it did.
+func (s *sessionTracker) report(t *turn) bool {
+	if t.borrowed == nil || t.borrowed.Ended() {
+		return false
+	}
+	contain(func() { s.flush(t, clockAt(t.lastAt), false, map[string]bool{}) })
+	return true
 }
 
 func (s *sessionTracker) tool(t *turn, kind string, e map[string]any, id string, at msTime) {
@@ -675,6 +691,9 @@ func (s *sessionTracker) tool(t *turn, kind string, e map[string]any, id string,
 	}
 	t.tools[key] = tool
 	t.toolOrder = append(t.toolOrder, key)
+	if s.report(t) {
+		return
+	}
 	s.spillIfFull(t)
 }
 
@@ -688,16 +707,17 @@ func (s *sessionTracker) settle(t *turn, id string, e map[string]any, at msTime,
 			return
 		}
 		tool.settled = true
+		// A denial is timed from the tool use to the confirmation, like a result.
+		if tool.at.ok && at.ok {
+			d := time.Duration(max(0, at.v-tool.at.v)) * time.Millisecond
+			tool.duration = &d
+		}
 		if errorType != "" {
 			tool.err, tool.errorType = rudderstackai.Ptr(true), errorType
 			return
 		}
 		tool.hasResult, tool.result = true, e["content"]
 		tool.err = rudderstackai.Ptr(e["is_error"] == true)
-		if tool.at.ok && at.ok {
-			d := time.Duration(max(0, at.v-tool.at.v)) * time.Millisecond
-			tool.duration = &d
-		}
 		return
 	}
 	// A tool already recorded into the answer (past the call cap).
@@ -706,15 +726,16 @@ func (s *sessionTracker) settle(t *turn, id string, e map[string]any, at msTime,
 		return
 	}
 	t.recorded.delete(id)
-	if errorType != "" {
-		kit.RecordToolResult(t.interaction, id, rudderstackai.ToolResult{Error: rudderstackai.Ptr(true), ErrorType: errorType}, false)
-		return
-	}
-	result := rudderstackai.ToolResult{Error: rudderstackai.Ptr(e["is_error"] == true), Result: e["content"]}
+	var duration *time.Duration
 	if startedAt.ok && at.ok {
 		d := time.Duration(max(0, at.v-startedAt.v)) * time.Millisecond
-		result.Duration = &d
+		duration = &d
 	}
+	if errorType != "" {
+		kit.RecordToolResult(t.interaction, id, rudderstackai.ToolResult{Error: rudderstackai.Ptr(true), ErrorType: errorType, Duration: duration}, false)
+		return
+	}
+	result := rudderstackai.ToolResult{Error: rudderstackai.Ptr(e["is_error"] == true), Result: e["content"], Duration: duration}
 	kit.RecordToolResult(t.interaction, id, result, true)
 }
 
