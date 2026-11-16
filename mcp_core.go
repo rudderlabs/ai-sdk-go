@@ -305,7 +305,10 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	received := time.Now()
 	sequence := requestSequence.Add(1)
 	// Before any app callback (Identify, ClientInfo, ClientInfoFallback) can change _meta.
-	caller := callerModel(r.Meta)
+	caller := r.CallerModel
+	if !r.CallerModelRead {
+		caller = callerModel(r.Meta)
+	}
 	opts := w.opts.Load()
 	tok, _ := r.Token.(*auth.TokenInfo)
 	id := opts.identity(r.Ctx, tok)

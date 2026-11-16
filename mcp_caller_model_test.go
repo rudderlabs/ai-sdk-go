@@ -156,3 +156,41 @@ func TestMCPCallerModelReadBeforeSchemaMarshalers(t *testing.T) {
 		t.Fatalf("caller_model = %v, want the client's", p["caller_model"])
 	}
 }
+
+// App goroutines may write to _meta maps the wrapper never reads; it must not touch them.
+func TestMCPCallerModelLeavesOtherMetaMapsAlone(t *testing.T) {
+	s := workspaceServer(t.Name(), nil)
+	r := wrap(t, s, Options{})
+	live := map[string]any{}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+				live["k"] = i
+			}
+		}
+	}()
+	// Added after WrapMCPServer, so it runs first: attaches the app's live map to _meta.
+	s.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if call, ok := req.(*mcp.CallToolRequest); ok && call.Params.Meta != nil {
+				call.Params.Meta["app/live"] = live
+			}
+			return next(ctx, method, req)
+		}
+	})
+	cs := connect(t, s, "2025-11-25", nil)
+	for range 20 {
+		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, mcp.Meta{metaCodexTurn: map[string]any{"model": "gpt-5.2-codex"}})
+	}
+	close(stop)
+	<-done
+	if got := r.wait(t, "mcp_tool_called", 20); got[0].Properties["caller_model"] != "gpt-5.2-codex" {
+		t.Fatalf("caller_model = %v", got[0].Properties["caller_model"])
+	}
+}

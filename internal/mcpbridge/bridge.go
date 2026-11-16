@@ -50,6 +50,11 @@ type Request struct {
 	HTTP bool
 	// UserAgent is the HTTP request header, used only by the built-in client fallback.
 	UserAgent string
+	// CallerModel is caller_model and its source, read from Meta by the adapter before any app code
+	// (schema marshalers, callbacks) runs; CallerModelRead reports that it did. Otherwise Begin
+	// reads Meta first.
+	CallerModel     map[string]any
+	CallerModelRead bool
 	// Responses observes the final responses written for this request's connection or HTTP
 	// request; nil when the application did not opt in, and error_message stays out.
 	Responses *Responses
