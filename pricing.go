@@ -358,7 +358,19 @@ func creditsOf(v *float64) *float64 {
 	return nil
 }
 
+// copyCreditPointer isolates app hooks from retained usage and caller-owned flags.
+func copyCreditPointer[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	return Ptr(*p)
+}
+
 func priceCredits(fn CreditsFunc, call CreditCall) (amount *float64) {
+	call.ReasoningTokens = copyCreditPointer(call.ReasoningTokens)
+	call.CostUSD = copyCreditPointer(call.CostUSD)
+	call.FallbackUsed = copyCreditPointer(call.FallbackUsed)
+	call.BYOK = copyCreditPointer(call.BYOK)
 	defer func() {
 		if r := recover(); r != nil {
 			report(KindUserCallback, "credits", recovered(r))

@@ -1037,6 +1037,8 @@ func (i *Interaction) RecordCall(call LLMCall) (recorded bool) {
 }
 
 func (i *Interaction) recordCall(call LLMCall) bool {
+	call.FallbackUsed = copyCreditPointer(call.FallbackUsed)
+	call.BYOK = copyCreditPointer(call.BYOK)
 	c := cfg()
 	// Freeze the provider boundary before pricing or waiting for the interaction lock.
 	if !call.StartedAt.IsZero() && call.EndedAt.IsZero() {
