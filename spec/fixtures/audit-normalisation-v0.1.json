@@ -4985,5 +4985,464 @@
         "response_status": "success"
       }
     }
+  ],
+  "claude_turn_edges": [
+    {
+      "name": "alias groups keep first-seen model order",
+      "input": {
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "09647853-5cf2-4e98-a76b-8b312a852fe8",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "launch",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20250929",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "id": "task-a",
+                  "name": "Task",
+                  "input": {
+                    "subagent_type": "a",
+                    "prompt": "Research"
+                  }
+                },
+                {
+                  "type": "tool_use",
+                  "id": "task-b",
+                  "name": "Task",
+                  "input": {
+                    "subagent_type": "b",
+                    "prompt": "Research"
+                  }
+                },
+                {
+                  "type": "tool_use",
+                  "id": "task-c",
+                  "name": "Task",
+                  "input": {
+                    "subagent_type": "c",
+                    "prompt": "Research"
+                  }
+                }
+              ],
+              "usage": {
+                "input_tokens": 1,
+                "output_tokens": 1,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "8ad6161c-845e-41ad-a427-184774d964dd",
+            "parent_tool_use_id": "task-a",
+            "message": {
+              "id": "a",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20250929",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 10,
+                "output_tokens": 1,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "40d3edcb-b5cb-47c5-98ca-77ecd0bbac26",
+            "parent_tool_use_id": "task-b",
+            "message": {
+              "id": "b",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 20,
+                "output_tokens": 2,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "c870b09d-5c5b-4b48-8680-aec6e22dc1f0",
+            "parent_tool_use_id": "task-c",
+            "message": {
+              "id": "c",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20250929",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 30,
+                "output_tokens": 3,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "05b3f20b-86c8-4ff1-aa01-fc8fc16a5c56",
+            "is_error": false,
+            "num_turns": 1,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 1,
+              "output_tokens": 1,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5": {
+                "inputTokens": 61,
+                "outputTokens": 7,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "provider": "firstParty",
+                "costUSD": 0,
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            },
+            "total_cost_usd": 0
+          }
+        ],
+        "reverse_range": [
+          1,
+          4
+        ]
+      },
+      "expected": {
+        "credit_calls": [
+          [
+            "claude-sonnet-4-5-20250929",
+            "a",
+            10
+          ],
+          [
+            "claude-sonnet-4-5-20250929",
+            "c",
+            30
+          ],
+          [
+            "claude-sonnet-4-5-20251001",
+            "b",
+            20
+          ],
+          [
+            "claude-sonnet-4-5-20250929",
+            null,
+            1
+          ]
+        ],
+        "reverse_credit_calls": [
+          [
+            "claude-sonnet-4-5-20250929",
+            "c",
+            30
+          ],
+          [
+            "claude-sonnet-4-5-20250929",
+            "a",
+            10
+          ],
+          [
+            "claude-sonnet-4-5-20251001",
+            "b",
+            20
+          ],
+          [
+            "claude-sonnet-4-5-20250929",
+            null,
+            1
+          ]
+        ],
+        "response": {
+          "primary_model": "claude-sonnet-4-5",
+          "primary_provider": "anthropic",
+          "response_status": "success",
+          "llm_call_count": 4,
+          "total_input_tokens": 61,
+          "total_output_tokens": 7
+        }
+      }
+    },
+    {
+      "name": "assistant model ids remain seen across results",
+      "input": {
+        "messages": [
+          {
+            "type": "assistant",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "8717de6b-bae5-4859-a646-5d03425c0894",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "old",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20250929",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "assistant",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "ecb74c8a-8522-4459-aa3d-bf4635c5a568",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "new",
+              "role": "assistant",
+              "model": "claude-sonnet-4-5-20251001",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 20,
+                "output_tokens": 4,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "d8d1f0f5-acce-455d-a905-da9f8ee3f029",
+            "is_error": false,
+            "num_turns": 2,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 30,
+              "output_tokens": 6,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5-20250929": {
+                "inputTokens": 10,
+                "outputTokens": 2,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "provider": "firstParty",
+                "costUSD": 0,
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5-20251001": {
+                "inputTokens": 20,
+                "outputTokens": 4,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "provider": "firstParty",
+                "costUSD": 0,
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            },
+            "total_cost_usd": 0
+          },
+          {
+            "type": "assistant",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "dea69e99-287b-4239-86fc-85f52dba605c",
+            "parent_tool_use_id": null,
+            "message": {
+              "id": "opus",
+              "role": "assistant",
+              "model": "claude-opus-4-1-20250805",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ],
+              "usage": {
+                "input_tokens": 40,
+                "output_tokens": 8,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0
+              }
+            }
+          },
+          {
+            "type": "result",
+            "subtype": "success",
+            "session_id": "sdk6111-turn-edges",
+            "uuid": "9c7fa05a-a6f9-4bd0-9fb0-5fd1675dd694",
+            "is_error": false,
+            "num_turns": 1,
+            "duration_ms": 100,
+            "duration_api_ms": 90,
+            "stop_reason": "end_turn",
+            "result": "Hello",
+            "permission_denials": [],
+            "usage": {
+              "input_tokens": 40,
+              "output_tokens": 8,
+              "cache_read_input_tokens": 0,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": {
+              "claude-sonnet-4-5-20250929": {
+                "inputTokens": 10,
+                "outputTokens": 2,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "provider": "firstParty",
+                "costUSD": 0,
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5-20251001": {
+                "inputTokens": 20,
+                "outputTokens": 4,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "provider": "firstParty",
+                "costUSD": 0,
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-sonnet-4-5": {
+                "inputTokens": 5,
+                "outputTokens": 1,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "provider": "firstParty",
+                "costUSD": 0,
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              },
+              "claude-opus-4-1-20250805": {
+                "inputTokens": 40,
+                "outputTokens": 8,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "provider": "firstParty",
+                "costUSD": 0,
+                "webSearchRequests": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000
+              }
+            },
+            "total_cost_usd": 0
+          }
+        ],
+        "reverse_range": [
+          0,
+          2
+        ]
+      },
+      "expected": {
+        "credit_calls": [
+          [
+            "claude-sonnet-4-5-20250929",
+            null,
+            10
+          ],
+          [
+            "claude-sonnet-4-5-20251001",
+            null,
+            20
+          ],
+          [
+            "claude-sonnet-4-5-20251001",
+            null,
+            5
+          ],
+          [
+            "claude-opus-4-1-20250805",
+            null,
+            40
+          ]
+        ],
+        "response": {
+          "primary_model": "claude-opus-4-1",
+          "primary_provider": "anthropic",
+          "response_status": "success",
+          "llm_call_count": 4,
+          "total_input_tokens": 75,
+          "total_output_tokens": 15
+        },
+        "reverse_credit_calls": [
+          [
+            "claude-sonnet-4-5-20251001",
+            null,
+            20
+          ],
+          [
+            "claude-sonnet-4-5-20250929",
+            null,
+            10
+          ],
+          [
+            "claude-sonnet-4-5-20251001",
+            null,
+            5
+          ],
+          [
+            "claude-opus-4-1-20250805",
+            null,
+            40
+          ]
+        ]
+      }
+    }
   ]
 }
