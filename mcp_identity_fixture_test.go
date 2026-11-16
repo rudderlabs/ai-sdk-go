@@ -30,7 +30,7 @@ func TestMCPIdentitySharedFixture(t *testing.T) {
 	for _, tc := range fixture.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
 			text := func(key string) string { s, _ := tc.Identity[key].(string); return s }
-			id := Identity{UserID: text("user_id"), AnonymousID: text("anonymous_id"), AccountID: text("account_id"), OAuthClientID: text("oauth_client_id")}
+			id := Identity{UserID: text("user_id"), AnonymousID: text("anonymous_id"), AccountID: text("account_id"), OAuthClientID: text("oauth_client_id"), AuthMethod: text("auth_method"), Country: text("country")}
 			if scopes, ok := tc.Identity["token_scopes"].([]any); ok {
 				id.TokenScopes = []string{} // a typed list: non-string entries can't be passed
 				for _, s := range scopes {
@@ -43,9 +43,19 @@ func TestMCPIdentitySharedFixture(t *testing.T) {
 			r := wrap(t, s, Options{Identify: func(context.Context, *auth.TokenInfo) (Identity, error) { return id, nil }})
 			cs := connect(t, s, "2025-06-18", nil)
 			callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
+			// auth_method has a default ("oauth" or "none"): checked, like country, where the case sets it.
+			var seenLabels, toolLabels []string
+			for _, key := range []string{"auth_method", "country"} {
+				if _, ok := tc.Expected[key]; ok {
+					seenLabels = append(seenLabels, key)
+					if key == "auth_method" {
+						toolLabels = append(toolLabels, key)
+					}
+				}
+			}
 			for event, keys := range map[string][]string{
-				"mcp_client_seen": {"account_id", "oauth_client_id", "token_scopes"},
-				"mcp_tool_called": {"account_id", "oauth_client_id"},
+				"mcp_client_seen": append([]string{"account_id", "oauth_client_id", "token_scopes"}, seenLabels...),
+				"mcp_tool_called": append([]string{"account_id", "oauth_client_id"}, toolLabels...),
 			} {
 				m := r.named(event)
 				if len(m) != 1 {
