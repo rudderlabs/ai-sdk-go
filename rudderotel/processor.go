@@ -84,9 +84,7 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	}
 	// Every processor that sees the span decides on it at its end, but it can own calls only if
 	// one of them accepts it now; otherwise the SDK sends its own span.
-	// A panicking filter counts as a rejection.
-	accepted := false
-	safe("tracing.filter", func() { accepted = p.exports(s) })
+	accepted := p.exports(s)
 	k := key(s.SpanContext())
 	otelCalls.mu.Lock()
 	defer otelCalls.mu.Unlock()
@@ -117,10 +115,10 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	return false
 }
 
-// exports applies the exporter's filter to a span as it starts.
+// exports applies the exporter's filter to a span; a panicking filter rejects it.
 func (p *SpanProcessor) exports(s sdktrace.ReadOnlySpan) bool {
 	if p.options.Filter != nil {
-		return p.options.Filter(s)
+		return filterSpan(p.options.Filter, s)
 	}
 	return p.options.ExportAllSpans || IsAISpan(s)
 }
@@ -357,7 +355,7 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 			s = taggedSpan{ReadOnlySpan: s, attrs: attrs}
 		}
 		if owner != nil {
-			safe("tracing.filter", func() { exported = p.exports(s) })
+			exported = p.exports(s)
 		}
 		if p.options.ProductEvents {
 			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
