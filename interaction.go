@@ -1991,6 +1991,25 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		snapshot, ok = i.snapshotLocked()
 		return snapshot, ok
 	}
+	// As in Node and Python, deliver held call events after redaction but before the totals: a call
+	// or tool the app records during delivery joins this segment (pausedAt is still zero), and its
+	// events go too.
+	for fired := len(i.tools); ; {
+		for fired < len(i.tools) {
+			tools := slices.Clone(i.tools[fired:])
+			fired = len(i.tools)
+			i.mu.Unlock()
+			i.fireToolEvents(tools, true)
+			i.mu.Lock()
+		}
+		i.filterSpanCallsLocked()
+		i.emitPendingCallsLocked()
+		if len(i.outbox) == 0 {
+			break
+		}
+		i.unlock()
+		i.mu.Lock()
+	}
 	var props map[string]any
 	i.buildSafelyLocked(func() {
 		owned := i.buildLocked(EndOptions{Status: StatusPaused, PauseReason: o.Reason}, responseText, responseOK, false)
@@ -1999,7 +2018,6 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	})
 	// Finalization belongs to segment latency, not the subsequent paused interval.
 	i.pausedAt = time.Now()
-	i.emitPendingCallsLocked()
 	if props != nil {
 		i.sendLocked("ai_response_received", func() map[string]any { return props })
 	}

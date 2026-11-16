@@ -1,0 +1,298 @@
+{
+  "fixture_version": 1,
+  "description": "Which segment counts a call or tool recorded while a pause or the final end delivers events. Usage recorded during pause delivery belongs to the paused segment, counted once, with its own call and tool events; the final end refuses it, as any write after end.",
+  "cases": [
+    {
+      "name": "wrapper call recorded during paused call delivery",
+      "description": "A held span call event is delivered by pause; the app's transport callback records another call. The paused segment counts both.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "total_input_tokens": 30
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "span call recorded during paused call delivery",
+      "description": "The late call is a held span too, so pause delivers it in the same pass before capturing totals.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "total_input_tokens": 30
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "call recorded during paused call delivery, then JSON restore",
+      "description": "Nothing recorded during delivery is left pending in the snapshot.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "total_input_tokens": 30
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "settled tool recorded during paused call delivery",
+      "description": "A tool recorded with its result during delivery counts in the paused segment and sends its declared event once.",
+      "config": {
+        "emit_llm_calls": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "id": "call_1",
+                  "name": "lookup",
+                  "result": "ok",
+                  "error": false
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": "call_1",
+            "tool_status": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "call recorded during final call delivery is not counted",
+      "description": "The final end delivers a held span call event after the interaction ended, so a call the callback records is refused, as any write after end is.",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310
+            }
+          ]
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "tool_events": []
+      }
+    }
+  ]
+}

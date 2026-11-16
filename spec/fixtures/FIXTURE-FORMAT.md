@@ -294,6 +294,14 @@ spans are off; the LangChain synchronous tracer protocol is disabled in that cas
 
 Inspect only a plain object with top-level boolean `successful: false`, or a string that parses to such an object. Before parsing strings, require the string after leading whitespace to start with `{` and contain `successful`. Arrays, nested failures (including inner results of `COMPOSIO_MULTI_EXECUTE_TOOL`), `successful: "false"`, true, missing keys, null and malformed or non-JSON strings do not signal a failure. Preserve framework failure signals and their categories; never count one call twice. Drivers should assert the helper's classification and run the cases through a framework adapter, checking declared tool events and `tool_breakdown`. Other outputs retain the adapter's original outcome and result content. Deferred declared tool events preserve the vendor category across pause/resume in optional `pending_tools[].rule_outcome.error_type: "api_error"`, after raw output is discarded.
 
+## Pause segments fixture
+
+`pause-segments-v0.1.json` is shared byte for byte by Node.js, Python and Go, and all three run it. Each case starts a fresh interaction with `config` (`emit_llm_calls`, `event_rules.tools`: tool name to declared event name), runs `steps` in order and checks `expected`.
+
+Steps: `record_call` (`provider`, `model`, `input_tokens`?, `started_ms`?, `ended_ms`?, `source`?: `"span"` reports it as a tracing span, otherwise as a wrapper call); `record_tool_call` (`calls`: `{ id?, name, agent_name?, result?, error? }`, recorded with their outcome when `result` or `error` is given); `on_event` (`event`, `steps`: runs `steps` once, synchronously, inside delivery of the next track event with that name, as an analytics client's callback would); `pause` (`json`?: serialise the snapshot to a JSON string and continue in a new interaction resumed from it); `resume` (in process); `end`.
+
+`expected.segments` lists every `ai_response_received` in order, each matched as a subset. `expected.call_events` lists the `input_tokens` of every `ai_llm_response_received` in order. `expected.tool_events` lists every declared tool event (any track event not starting with `ai_`) in order as `{ event, tool_call_id, tool_status }`.
+
 ## span-dedup-v0.1.json
 
 One `ai_otel_span` per model call when SDK spans (`emitSpans`) and the RudderStack span processor both see it, with `fixture_version: 2`, span schema `0.1` and product event spec `0.4.0`. Each scenario has `emit_spans`, optional `processor: "simple" | "batch"` (default `simple`), an optional `requires: "integration"` (drivers without framework integrations skip it), a `tree` of nested scopes, `expected_spans`, `call_span` and `other_processors_see`. Run every scenario with `emitLlmCalls` on, the processor and a second plain processor on one provider, and a context manager that makes started spans active.

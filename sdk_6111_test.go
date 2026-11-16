@@ -193,12 +193,13 @@ func TestSDK6111ToolRecordedDuringPausedCallDeliveryIsCountedOnceWithItsEvent(t 
 	}
 	i.Resume()
 	i.End(EndOptions{})
-	tools := 0.0
-	for _, e := range r.named("ai_response_received") {
-		tools += sdk6111Num(e.Properties["tool_call_count"])
+	segments := r.named("ai_response_received")
+	if len(segments) != 2 {
+		t.Fatalf("segments = %d, want 2", len(segments))
 	}
-	if tools != 1 {
-		t.Fatalf("tool_call_count across segments = %g, want 1", tools)
+	// The paused segment counts it, as in Node and Python.
+	if paused, final := sdk6111Num(segments[0].Properties["tool_call_count"]), sdk6111Num(segments[1].Properties["tool_call_count"]); paused != 1 || final != 0 {
+		t.Fatalf("tool_call_count paused=%g final=%g, want 1 and 0", paused, final)
 	}
 	if n := len(r.named("Looked Up")); n != 1 {
 		t.Fatalf("declared tool events = %d, want 1", n)
