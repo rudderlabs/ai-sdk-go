@@ -623,3 +623,116 @@ func TestSDK6017MergeThatNamesTheAgentOfACall(t *testing.T) {
 		})
 	}
 }
+
+func TestSDK6017ToolRecordedPastTheCallCap(t *testing.T) {
+	ok := ToolCall{ID: "wait", Name: "approve_me", Result: "ok", Error: Ptr(false)}
+	for _, restore := range []bool{false, true} {
+		mode := map[bool]string{false: "in-process", true: "json"}[restore]
+		capped := func(t *testing.T) *recorder {
+			return setupAI(t, WithLimits(Limits{MaxCallsPerInteraction: 1}), WithToolBreakdown(true), WithOnError(func(error, ErrorInfo) {}),
+				sdk6017Rules(map[string]string{"approve_me": "Approved", "lookup": "Looked Up"}))
+		}
+		// One settled tool fills the cap; the next one is recorded past it.
+		started := func(client analytics.Client) *Interaction {
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+			i.RecordCall(sdk6017Call("", 10))
+			i.RecordToolCalls(ToolCall{ID: "done", Name: "lookup", Result: "ok", Error: Ptr(false)})
+			return i
+		}
+
+		t.Run(mode+"/is carried when the pause waits on it, and counted once when it runs", func(t *testing.T) {
+			r := capped(t)
+			first := started(r)
+			first.RecordToolCalls(ToolCall{ID: "wait", Name: "approve_me"})
+			i := sdk6017Continue(t, first, restore)
+			i.RecordToolCalls(ok)
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{1, 1})
+			// Carried into a segment with room: an ordinary tool there, with its event.
+			sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"wait", "success"}})
+		})
+
+		t.Run(mode+"/is counted at pause, without an event, when its agent made a later call", func(t *testing.T) {
+			r := capped(t)
+			first := started(r)
+			first.RecordToolCalls(ToolCall{ID: "wait", Name: "approve_me"})
+			first.RecordCall(sdk6017Call("", 10))
+			i := sdk6017Continue(t, first, restore)
+			i.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{2, 0})
+			sdk6017Expect(t, "Approved", len(r.named("Approved")), 0)
+		})
+
+		for _, ran := range []string{"record", "span", "result", "duration"} {
+			t.Run(mode+"/is counted once when it runs in the segment that recorded it ("+ran+")", func(t *testing.T) {
+				r := capped(t)
+				first := started(r)
+				first.RecordToolCalls(ToolCall{ID: "wait", Name: "approve_me"})
+				switch ran {
+				case "record":
+					first.RecordToolCalls(ok)
+				case "span":
+					first.recordToolCalls(true, ToolCall{Name: "approve_me", Error: Ptr(false)})
+				case "result":
+					first.RecordToolResult("wait", ToolResult{Result: "ok", Error: Ptr(false)})
+				default:
+					first.RecordToolResult("wait", ToolResult{Duration: Ptr(5 * time.Millisecond)})
+				}
+				i := sdk6017Continue(t, first, restore)
+				i.End(EndOptions{})
+				sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{2, 0})
+				// Past the cap only its identity is counted: no outcome, no event.
+				breakdown := pauseSegmentsJSON(t, r.named("ai_response_received")[0].Properties["tool_breakdown"]).([]any)
+				found := false
+				for _, entry := range breakdown {
+					found = found || reflect.DeepEqual(entry, map[string]any{"tool_name": "approve_me", "call_count": 1.0})
+				}
+				if len(breakdown) != 2 || !found {
+					t.Fatalf("tool_breakdown = %v, want lookup and an approve_me entry without an outcome", breakdown)
+				}
+				sdk6017Expect(t, "Approved", len(r.named("Approved")), 0)
+			})
+		}
+
+		t.Run(mode+"/recorded during paused delivery stays past the cap: no event, carried by the next pause", func(t *testing.T) {
+			r := capped(t)
+			client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+			_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+			first.RecordCall(sdk6017Call("", 10))
+			client.reenter = func() {
+				first.RecordToolCalls(ToolCall{ID: "kept", Name: "lookup"}, ToolCall{ID: "wait", Name: "approve_me"})
+			}
+			second := sdk6017Continue(t, first, restore)
+			second.RecordToolResult("kept", ToolResult{Error: Ptr(false)})
+			third := sdk6017Continue(t, second, restore)
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1})
+			third.RecordToolResult("wait", ToolResult{Error: Ptr(false)})
+			third.End(EndOptions{})
+			sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{0, 1, 1})
+			sdk6017Expect(t, "Looked Up", sdk6017ToolEvents(r, "Looked Up"), [][2]any{{"kept", "success"}})
+			sdk6017Expect(t, "Approved", sdk6017ToolEvents(r, "Approved"), [][2]any{{"wait", "success"}})
+		})
+	}
+
+	t.Run("is never counted when the run ends while paused", func(t *testing.T) {
+		r := setupAI(t, WithLimits(Limits{MaxCallsPerInteraction: 1}), WithOnError(func(error, ErrorInfo) {}))
+		i := sdk6017Start()
+		i.RecordCall(sdk6017Call("", 10))
+		i.RecordToolCalls(ToolCall{ID: "done", Name: "lookup", Error: Ptr(false)})
+		i.RecordToolCalls(ToolCall{ID: "wait", Name: "approve_me"})
+		i.Pause(PauseOptions{})
+		i.End(EndOptions{})
+		sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{1, 0})
+	})
+
+	t.Run("counts as unknown at the end of the segment that recorded it", func(t *testing.T) {
+		r := setupAI(t, WithLimits(Limits{MaxCallsPerInteraction: 1}), WithOnError(func(error, ErrorInfo) {}), sdk6017Rules(map[string]string{"approve_me": "Approved"}))
+		i := sdk6017Start()
+		i.RecordCall(sdk6017Call("", 10))
+		i.RecordToolCalls(ToolCall{ID: "done", Name: "lookup", Error: Ptr(false)})
+		i.RecordToolCalls(ToolCall{ID: "wait", Name: "approve_me"})
+		i.End(EndOptions{})
+		sdk6017Expect(t, "tool_call_count", sdk6017ToolCounts(r), []int{2})
+		sdk6017Expect(t, "Approved", len(r.named("Approved")), 0)
+	})
+}

@@ -116,7 +116,8 @@ func TestMaxCallsPerInteractionKeepsTotals(t *testing.T) {
 		}
 		i.RecordCall(LLMCall{Provider: "openai", Model: "other", ErrorType: "rate_limit"})
 		for n := range 3 {
-			i.RecordToolCalls(ToolCall{ID: string(rune('a' + n)), Name: "search"})
+			// They ran: one with an ID and no outcome past the cap is kept, in case a pause waits on it.
+			i.RecordToolCalls(ToolCall{ID: string(rune('a' + n)), Name: "search", Error: Ptr(false)})
 		}
 		i.RecordToolCallCount(2)
 	})

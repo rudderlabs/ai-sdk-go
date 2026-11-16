@@ -480,6 +480,9 @@ type recordedTool struct {
 	// keyCall is the stamp of the model call whose agent it took (0: none, or its own agent), so a
 	// merge that names that agent re-keys it.
 	keyCall int
+	// capped: recorded past the cap but possibly waiting on an approval, so kept for a pause to carry.
+	// Until then it counts by identity only, with no outcome or event, as folded tools do.
+	capped bool
 	// unkeyed: restored from a snapshot written before agent_key, so keyed by its own agent.
 	unkeyed bool
 }
@@ -1781,15 +1784,28 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 					}
 				}
 			}
+			ran := fromSpan || call.Error != nil || call.Result != nil
+			if tool != nil && tool.capped {
+				// Counted when it was recorded; past the cap its outcome and event are dropped.
+				tool.settled = tool.settled || ran
+				continue
+			}
 			if tool == nil {
-				if len(i.tools) >= cfg().limits.MaxCallsPerInteraction {
+				limit := cfg().limits.MaxCallsPerInteraction
+				capped := len(i.tools) >= limit
+				// One that may wait on an approval is still stored past the cap, as many again at
+				// most, so that a pause can carry it instead of counting it twice (SDK-6017).
+				if capped && (call.ID == "" || ran || call.StructuredCandidate || len(i.tools) >= 2*limit) {
 					// Counted in its tool_breakdown identity only: no declared event.
 					i.foldToolLocked(&recordedTool{name: name, mcpServer: server, parentTool: call.ParentTool, agentName: call.AgentName, calls: 1})
 					continue
 				}
+				if capped {
+					i.capLocked()
+				}
 				// Wrappers record a call's tools right after it, so those take that call's agent.
 				i.order++
-				tool = &recordedTool{calls: 1, agentKey: first(call.AgentName, i.lastAgent), order: i.order}
+				tool = &recordedTool{calls: 1, agentKey: first(call.AgentName, i.lastAgent), order: i.order, capped: capped}
 				if call.AgentName == "" {
 					tool.keyCall = i.agentCalls[i.lastAgent]
 				}
@@ -1859,7 +1875,10 @@ func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult b
 				}
 			}
 		}
-		if tool != nil {
+		if tool != nil && tool.capped {
+			// It ran: counted when it was recorded, its outcome and event dropped past the cap.
+			tool.settled = true
+		} else if tool != nil {
 			tool.resultSeen = true
 			mergeToolResult(tool, result, hasResult)
 		}
@@ -1976,7 +1995,7 @@ func (i *Interaction) toolEventJobsLocked(tools []*recordedTool, final bool) []t
 		// A tool the pause waits on fires in the segment that runs it, or as unknown at a resumed
 		// run's final End; an End while still paused never ran it, so it never fires.
 		// While paused, a settled tool's event waits for the run to go on, as in Node.
-		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || (!final && !i.pausedAt.IsZero()) || t.fired || t.name == "" || (final && t.structuredPending()) ||
+		if i.ended || (i.pausing && !i.pausedAt.IsZero()) || (!final && !i.pausedAt.IsZero()) || t.fired || t.capped || t.name == "" || (final && t.structuredPending()) ||
 			(final && (i.pausing || !i.pausedAt.IsZero()) && i.awaitedLocked(t)) || (!t.settled && !final) {
 			continue
 		}
@@ -2454,6 +2473,8 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	i.tools, i.toolOverflow, i.toolsByID = carried, nil, map[string]*recordedTool{}
 	for _, tool := range carried {
+		// Carried into a new segment, it is an ordinary tool there, as after a JSON restore.
+		tool.capped = false
 		if tool.id != "" {
 			i.toolsByID[tool.id] = tool
 		}
@@ -2620,7 +2641,11 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		snapshot.PendingCalls = append(snapshot.PendingCalls, p)
 	}
 	for _, t := range i.tools {
-		snapshot.PendingTools = append(snapshot.PendingTools, pendingTool(t))
+		p := pendingTool(t)
+		if t.capped {
+			p["overflow"] = true
+		}
+		snapshot.PendingTools = append(snapshot.PendingTools, p)
 	}
 	for _, t := range i.toolOverflow {
 		p := pendingTool(t)
@@ -3041,8 +3066,12 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 			}
 		}
 		if pendingBool(p, "overflow") {
-			i.toolOverflow = append(i.toolOverflow, c)
-			continue
+			// An overflow record with an ID that never ran was kept past the cap, in case a pause waits on it.
+			c.capped = c.id != "" && !c.settled
+			if !c.capped {
+				i.toolOverflow = append(i.toolOverflow, c)
+				continue
+			}
 		}
 		i.tools = append(i.tools, c)
 		if c.id != "" {
