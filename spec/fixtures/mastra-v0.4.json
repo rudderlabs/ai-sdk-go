@@ -1,0 +1,133 @@
+{
+  "fixture_version": 1,
+  "spec_version": "0.4.0",
+  "supported_sdks": [
+    "node"
+  ],
+  "description": "Mastra is a Node-only framework. Real Agent/workflow scenarios against the shared mock LLM server; expected fields are asserted in addition to schema validation, one answer and one call per MODEL_STEP. Python drivers do not load this adapter-specific fixture.",
+  "scenarios": [
+    {
+      "name": "mastra_answer",
+      "mode": "generate",
+      "prompt": "Hello",
+      "model": "claude-haiku-4-5",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 1,
+        "tool_call_count": 0,
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "mastra_content",
+      "mode": "generate",
+      "prompt": "Hello private@example.com",
+      "model": "claude-haiku-4-5",
+      "capture_content": true,
+      "expected": {
+        "llm_call_count": 1,
+        "tool_call_count": 0,
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "mastra_tools",
+      "mode": "generate",
+      "prompt": "Where is order 1234?",
+      "model": "claude-haiku-4-5",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 2,
+        "tool_call_count": 1,
+        "tool_breakdown": [
+          {
+            "tool_name": "lookup_order",
+            "call_count": 1,
+            "error_count": 0
+          }
+        ],
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "mastra_failed_tool",
+      "mode": "tool_failure",
+      "prompt": "Where is order 1234?",
+      "model": "claude-haiku-4-5",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 2,
+        "tool_call_count": 1,
+        "tool_breakdown": [
+          {
+            "tool_name": "lookup_order",
+            "call_count": 1,
+            "error_count": 1
+          }
+        ],
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "mastra_stream",
+      "mode": "stream",
+      "prompt": "Hello",
+      "model": "claude-haiku-4-5",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 1,
+        "tool_call_count": 0,
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "mastra_cached",
+      "mode": "generate",
+      "prompt": "Hello",
+      "model": "claude-haiku-4-5-cache-1h",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 1,
+        "total_cached_input_tokens": 1000,
+        "total_cache_write_tokens": 200,
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "mastra_provider_error",
+      "mode": "generate",
+      "prompt": "Hello",
+      "model": "mock-unauthorized",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 1,
+        "response_status": "error",
+        "error_type": "auth_error"
+      }
+    },
+    {
+      "name": "mastra_nested_agent",
+      "mode": "nested_agent",
+      "prompt": "Ask Researcher to say hello.",
+      "model": "claude-haiku-4-5",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 3,
+        "tool_call_count": 1,
+        "response_status": "success"
+      }
+    },
+    {
+      "name": "mastra_workflow",
+      "mode": "workflow",
+      "prompt": "Where is order 1234?",
+      "model": "claude-haiku-4-5",
+      "capture_content": false,
+      "expected": {
+        "llm_call_count": 2,
+        "tool_call_count": 1,
+        "response_status": "success"
+      }
+    }
+  ]
+}

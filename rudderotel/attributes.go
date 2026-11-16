@@ -67,11 +67,12 @@ func stringArray(v attribute.Value) []string {
 	return nil
 }
 
-// IsAISpan is the default export filter: GenAI, OpenInference, or legacy ai.operationId.
+// IsAISpan is the default export filter: GenAI, OpenInference, Traceloop tools, or legacy ai.operationId.
 func IsAISpan(s sdktrace.ReadOnlySpan) bool {
 	for _, kv := range s.Attributes() {
 		k := string(kv.Key)
-		if strings.HasPrefix(k, "gen_ai.") || k == "openinference.span.kind" || k == "ai.operationId" {
+		if strings.HasPrefix(k, "gen_ai.") || k == "openinference.span.kind" || k == "ai.operationId" ||
+			(k == "traceloop.span.kind" && kv.Value.Type() == attribute.STRING && kv.Value.AsString() == "tool") {
 			return true
 		}
 	}

@@ -40,6 +40,9 @@ func spanRole(s sdktrace.ReadOnlySpan) string {
 			return ""
 		}
 	}
+	if v := a["traceloop.span.kind"]; v.Type() == attribute.STRING && v.AsString() == "tool" {
+		return "tool"
+	}
 	switch firstString(a, "llm.request.type") {
 	case "chat", "completion":
 		return "llm"
@@ -101,18 +104,66 @@ func outputText(a map[string]attribute.Value) string {
 	return ""
 }
 
+// Mirascope 2.8.2 serialize_mirascope_usage supplies independent fallback counts.
+// Bound the UTF-8 JSON before parsing; malformed and non-object values are ignored.
+func mirascopeUsage(v attribute.Value) map[string]attribute.Value {
+	if v.Type() != attribute.STRING || len(v.AsString()) > 65536 {
+		return nil
+	}
+	var usage map[string]json.RawMessage
+	if json.Unmarshal([]byte(v.AsString()), &usage) != nil {
+		return nil
+	}
+	out := map[string]attribute.Value{}
+	for _, key := range []string{"input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"} {
+		var value any
+		if json.Unmarshal(usage[key], &value) == nil {
+			if n, ok := value.(float64); ok {
+				out[key] = attribute.Float64Value(n)
+			}
+		}
+	}
+	return out
+}
+
+func usageCount(a, usage map[string]attribute.Value, fallback string, keys ...string) (int, bool) {
+	if n, ok := count(a, keys...); ok {
+		return n, true
+	}
+	return count(usage, fallback)
+}
+
+// Only known API provider IDs are aliases; dotted semconv names stay intact.
+func productProvider(provider string) string {
+	switch provider {
+	case "anthropic.messages":
+		return "anthropic"
+	case "openai.chat", "openai.responses":
+		return "openai"
+	case "google.generative-ai":
+		return "gcp.gemini"
+	default:
+		return provider
+	}
+}
+
 func spanCall(s sdktrace.ReadOnlySpan) rudderstackai.LLMCall {
 	a := attributes(s.Attributes())
-	input, inputKnown := count(a, "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens", "llm.token_count.prompt")
-	output, outputKnown := count(a, "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens", "llm.token_count.completion")
-	cacheRead, _ := count(a, "gen_ai.usage.cache_read.input_tokens", "gen_ai.usage.cache_read_input_tokens", "llm.token_count.prompt_details.cache_read")
-	cacheWrite, _ := count(a, "gen_ai.usage.cache_creation.input_tokens", "gen_ai.usage.cache_creation_input_tokens", "llm.token_count.prompt_details.cache_write")
+	usage := mirascopeUsage(a["mirascope.response.usage"])
+	input, inputKnown := usageCount(a, usage, "input_tokens", "gen_ai.usage.input_tokens", "gen_ai.usage.prompt_tokens", "llm.token_count.prompt")
+	output, outputKnown := usageCount(a, usage, "output_tokens", "gen_ai.usage.output_tokens", "gen_ai.usage.completion_tokens", "llm.token_count.completion")
+	cacheRead, _ := usageCount(a, usage, "cache_read_tokens", "gen_ai.usage.cache_read.input_tokens", "gen_ai.usage.cache_read_input_tokens", "llm.token_count.prompt_details.cache_read")
+	cacheWrite, _ := usageCount(a, usage, "cache_write_tokens", "gen_ai.usage.cache_write.input_tokens", "gen_ai.usage.cache_creation.input_tokens", "gen_ai.usage.cache_creation_input_tokens", "llm.token_count.prompt_details.cache_write")
 	reason := firstString(a, "llm.finish_reason", "gen_ai.completion.0.finish_reason")
 	if reasons := stringArray(a["gen_ai.response.finish_reasons"]); len(reasons) > 0 {
 		reason = reasons[0]
+	} else if _, exists := a["gen_ai.response.finish_reasons"]; !exists {
+		if singular := firstString(a, "gen_ai.response.finish_reason"); singular != "" {
+			reason = strings.ToLower(singular[strings.LastIndex(singular, ".")+1:])
+		}
 	}
 	call := rudderstackai.LLMCall{
-		Provider:       strings.ToLower(firstString(a, "gen_ai.provider.name", "gen_ai.system", "llm.provider", "llm.system")),
+		Provider:       productProvider(strings.ToLower(firstString(a, "gen_ai.provider.name", "gen_ai.system", "llm.provider", "llm.system"))),
 		Model:          firstString(a, "gen_ai.response.model", "llm.response.model_name", "llm.model_name", "gen_ai.request.model", "llm.request.model_name"),
 		RequestedModel: firstString(a, "gen_ai.request.model", "llm.request.model_name"),
 		InputTokens:    input, OutputTokens: output, CachedInputTokens: cacheRead, CacheWriteTokens: cacheWrite,
@@ -230,11 +281,11 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 	}
 	failed, duration := s.Status().Code == codes.Error, max(s.EndTime().Sub(s.StartTime()), 0)
 	call := rudderstackai.ToolCall{
-		ID: firstString(a, "gen_ai.tool.call.id", "tool_call.id", "tool.id"), Name: firstString(a, "gen_ai.tool.name", "tool.name"),
+		ID: firstString(a, "gen_ai.tool.call.id", "tool_call.id", "tool.id"), Name: firstString(a, "gen_ai.tool.name", "tool.name", "traceloop.entity.name"),
 		AgentName: firstString(a, "gen_ai.agent.name", "agent.name"), MCPServer: firstString(a, "gen_ai.tool.mcp.server", "mcp.server.name"),
 		ParentTool: firstString(a, "gen_ai.tool.parent.name", "tool.parent.name"), Error: &failed, Duration: &duration,
 		StartedAt: s.StartTime(),
-		Args:      toolValue(a, "gen_ai.tool.call.arguments", "input.value"), Result: toolValue(a, "gen_ai.tool.call.result", "output.value"),
+		Args:      toolValue(a, "gen_ai.tool.call.arguments", "input.value", "traceloop.entity.input"), Result: toolValue(a, "gen_ai.tool.call.result", "output.value", "traceloop.entity.output"),
 	}
 	if failed {
 		call.ErrorType = spanErrorType(s)
