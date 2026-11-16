@@ -121,7 +121,8 @@ call:
 - A wrapper call that starts inside such an OpenTelemetry span of the same interaction sends no
   span of its own, provided the processor exports that span: it must be sampled and pass the
   export filter when it starts. If it fails the filter when it ends, the SDK span is sent in its
-  place, with its IDs. Its `ai_llm_response_received.span_id` is the OpenTelemetry span's ID.
+  place, with its IDs. `Flush` and `Shutdown` finish an unread joined call too, and its span then
+  follows the same rule. Its `ai_llm_response_received.span_id` is the OpenTelemetry span's ID.
   No wrapper usage or content is copied onto your span; the processor's usual identity attributes
   still apply.
 - Any other span in between keeps both: a wrapper call inside a `StartSpan` span that is itself
