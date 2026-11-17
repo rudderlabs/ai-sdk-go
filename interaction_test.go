@@ -499,7 +499,7 @@ func TestHooksReachTheInteraction(t *testing.T) {
 	}
 	hook.KeepMessages(got, "earlier prompt")
 	hook.FirstToken(got, time.Now())
-	hook.OnBeforeEnd(got, func() { hook.HintOutcome(got, string(StatusTimeout), "timeout") })
+	hook.OnBeforeEnd(got, func() { hook.HintOutcome(got, string(StatusTimeout), "timeout", "") })
 	i.End(EndOptions{})
 	if p := r.response(t); p["response_status"] != "timeout" || p["error_type"] != "timeout" {
 		t.Fatal(p)

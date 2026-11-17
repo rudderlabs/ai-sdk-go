@@ -59,7 +59,7 @@ func StartLLM() *LLM {
 }
 
 // Script queues replies for a route (`openai.chat`, `openai.responses`, `anthropic.messages`,
-// `google.generate`, `google.stream`), served in order, one per request.
+// `google.generate`, `google.stream`, `anthropic.managed_agents`), served in order, one per request.
 func (l *LLM) Script(route string, replies ...Reply) {
 	for _, r := range replies {
 		l.enqueue(route, r)
@@ -108,6 +108,10 @@ func (l *LLM) Close() {
 
 var bedrockPath = regexp.MustCompile(`^/model/[^/]+/(converse|converse-stream)$`)
 
+// managedAgentsPath matches the Claude Managed Agents API: environments, agents, sessions and their
+// events. Any method; scripted replies only, served in order.
+var managedAgentsPath = regexp.MustCompile(`^/v1/(environments|agents|sessions)(/|$)`)
+
 // routeOf maps a request path (escaped, no query) to its route; "" when none.
 func routeOf(path string) string {
 	switch {
@@ -136,7 +140,9 @@ func (l *LLM) handle(w http.ResponseWriter, r *http.Request) {
 	// The escaped path keeps a `/` inside a Bedrock model ID (an ARN) from splitting the route.
 	path := r.URL.EscapedPath()
 	route := ""
-	if r.Method == http.MethodPost {
+	if managedAgentsPath.MatchString(path) {
+		route = "anthropic.managed_agents"
+	} else if r.Method == http.MethodPost {
 		route = routeOf(path)
 	}
 	if route == "" {

@@ -5,6 +5,7 @@ package kit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
@@ -38,8 +39,72 @@ func FirstToken(i *rudderstackai.Interaction, at time.Time) { hook.FirstToken(i,
 
 // HintOutcome sets the status End reports unless a call is recorded afterwards.
 func HintOutcome(i *rudderstackai.Interaction, errorType string) {
-	hook.HintOutcome(i, hook.StatusForErrorType(errorType), errorType)
+	hook.HintOutcome(i, hook.StatusForErrorType(errorType), errorType, "")
 }
+
+// HintStatus sets the status End reports unless a call is recorded afterwards; pauseReason says
+// what a paused run waits for.
+func HintStatus(i *rudderstackai.Interaction, status rudderstackai.ResponseStatus, errorType string, pauseReason rudderstackai.PauseReason) {
+	hook.HintOutcome(i, string(status), errorType, string(pauseReason))
+}
+
+// StartInteraction starts an interaction the integration opens after the fact: tagged with the
+// integration, offered its client, and started at startedAt when it is set.
+func StartInteraction(ctx context.Context, o rudderstackai.InteractionOptions, integration string, client analytics.Client, startedAt time.Time) (context.Context, *rudderstackai.Interaction) {
+	ctx, i := hook.StartInteraction(ctx, o, integration, client, startedAt)
+	return ctx, i.(*rudderstackai.Interaction)
+}
+
+// StartPrompt keeps o.PromptText for the classifier and sends the prompt event as StartInteraction
+// does, for an integration that learns the prompt after it started the interaction.
+func StartPrompt(i *rudderstackai.Interaction, o rudderstackai.InteractionOptions) {
+	hook.StartPrompt(i, o)
+}
+
+// Adopt tags an interaction with the integration and offers its client; the first of each wins.
+func Adopt(i *rudderstackai.Interaction, integration string, client analytics.Client) {
+	hook.Adopt(i, integration, client)
+}
+
+// PrimaryModel sets primary_model and primary_provider unless a later call succeeds.
+func PrimaryModel(i *rudderstackai.Interaction, model, provider string) {
+	hook.PrimaryModel(i, model, provider)
+}
+
+// KeepAnswer keeps answer text for the classifier and evaluator.
+func KeepAnswer(i *rudderstackai.Interaction, text string) { hook.KeepAnswer(i, text) }
+
+// Backdate moves the current segment's start to when its events happened, back or forward; a
+// resumed segment's time moves out of or into the latest pause.
+func Backdate(i *rudderstackai.Interaction, startedAt time.Time) { hook.Backdate(i, startedAt) }
+
+// AppErrorType is the error_type of an error the app's own code ended an answer with: app_error
+// for one without a provider signal.
+func AppErrorType(err error) string { return hook.AppErrorType(err) }
+
+// StatusForErrorType is the response_status an error type ends an answer with.
+func StatusForErrorType(errorType string) rudderstackai.ResponseStatus {
+	return rudderstackai.ResponseStatus(hook.StatusForErrorType(errorType))
+}
+
+// ContextConversation is the conversation ID a context carries (rudderstackai.WithValues), or "".
+func ContextConversation(ctx context.Context) string { return hook.ContextConversation(ctx) }
+
+// WarnOnce logs a warning the first time key is seen.
+func WarnOnce(key, message string) { hook.WarnOnce(key, message) }
+
+// MaxCallsPerInteraction is the configured cap of model and tool calls stored per interaction.
+func MaxCallsPerInteraction() int { return hook.MaxCallsPerInteraction() }
+
+// MaxMapEntries is the configured cap of each SDK lookup map.
+func MaxMapEntries() int { return hook.MaxMapEntries() }
+
+// LimitReached reports that the lookup map where dropped its oldest entries at the cap.
+func LimitReached(where string) {
+	hook.Report("limit_reached", "MaxMapEntries ("+where+")", errMapFull)
+}
+
+var errMapFull = errors.New("rudderstackai: a lookup map reached limits.MaxMapEntries; dropped its oldest entries")
 
 // OnBeforeEnd runs fn just before the interaction's ai_response_received is built.
 func OnBeforeEnd(i *rudderstackai.Interaction, fn func()) { hook.OnBeforeEnd(i, fn) }

@@ -467,9 +467,16 @@ type pendingEvent struct {
 }
 
 type outcomeHint struct {
-	status    ResponseStatus
-	errorType string
-	calls     int
+	status      ResponseStatus
+	errorType   string
+	pauseReason PauseReason
+	calls       int
+}
+
+// primaryOverride is the primary model an integration named; a later successful call replaces it.
+type primaryOverride struct {
+	model, provider string
+	calls           int
 }
 
 // Interaction is one user prompt and the one answer it gets, however many model calls, tools or
@@ -511,12 +518,15 @@ type Interaction struct {
 	pendingRunning         int           // queued ends being delivered; pendingDone stays until zero
 	pauseCount             int
 	pausedTotal            time.Duration
+	lastPause              time.Duration // the latest pause's length: how much time backdate may take from paused time
+	beyondPause            time.Duration // how far backdate moved the start back beyond the latest pause
 	adapterAnalytics       analytics.Client
 	intent, outcome        string
 	traceID                string
 	sdkTraceID             string
 	restored               bool // from a snapshot: the request context never supplies the trace ID
 	integration            string
+	primary                *primaryOverride
 	ended                  bool
 	ending                 bool // capture callbacks may record calls while finalization is in progress
 	firstToken             time.Duration
@@ -739,8 +749,9 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 			i.seen[pair[0]+"\x00"+pair[1]] = nil
 		}
 		i.restorePending(snapshot)
-		i.pausedTotal = time.Duration(max(snapshot.TotalPausedMS, 0))*time.Millisecond +
-			max(now.Sub(time.UnixMilli(snapshot.PausedAt)), 0)
+		// The wait since the snapshot is this restore's pause: backdate may move time out of it.
+		i.lastPause = max(now.Sub(time.UnixMilli(snapshot.PausedAt)), 0)
+		i.pausedTotal = time.Duration(max(snapshot.TotalPausedMS, 0))*time.Millisecond + i.lastPause
 	}
 	i.fillTraceID(ctx)
 	return i
@@ -805,6 +816,14 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 		i = &Interaction{id: uuid.NewString(), conversationID: uuid.NewString(), trigger: TriggerUser, ended: true, untracked: true, seen: map[string]*recordedCall{}, toolsByID: map[string]*recordedTool{}}
 		return context.WithValue(ctx, keyInteraction, i), i
 	}
+	i.startPrompt(o)
+	return context.WithValue(ctx, keyInteraction, i), i
+}
+
+// startPrompt keeps the prompt text for the classifier and, for a user-triggered interaction that
+// is not a resume, holds its ai_user_prompt_created. Integrations that learn the prompt after the
+// interaction started call it through the hook.
+func (i *Interaction) startPrompt(o InteractionOptions) {
 	i.mu.Lock()
 	if i.keepsTextLocked() && o.PromptText != "" {
 		i.prompt = o.PromptText
@@ -813,7 +832,6 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 	if !o.NoPromptEvent && i.trigger == TriggerUser && !i.resumed {
 		i.emitPrompt(o)
 	}
-	return context.WithValue(ctx, keyInteraction, i), i
 }
 
 // RunInteraction runs fn with a new interaction in its context (and the interaction's identity
@@ -1998,7 +2016,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 			i.toolsByID[tool.id] = tool
 		}
 	}
-	i.hint, i.clientDisconnected, i.firstToken = nil, false, -1
+	i.hint, i.primary, i.clientDisconnected, i.firstToken = nil, nil, false, -1
 	i.answerSource, i.spanAnswerSource = nil, nil
 	i.prompt, i.answer, i.spanAnswer, i.messages = "", "", "", nil // not in the snapshot, so not in an in-process resume
 	i.compactions = 0
@@ -2065,10 +2083,43 @@ func (i *Interaction) resumeAtLocked(start time.Time) {
 	if start.IsZero() || start.Before(i.pausedAt) {
 		start = time.Now()
 	}
-	i.pausedTotal += max(start.Sub(i.pausedAt), 0)
+	i.lastPause = max(start.Sub(i.pausedAt), 0)
+	i.beyondPause = 0 // a new segment: nothing moved beyond this pause yet
+	i.pausedTotal += i.lastPause
 	i.pausedAt = time.Time{}
 	i.started = start
 	reopen(i)
+}
+
+// backdate moves the current segment's start to startedAt (never past now), for an adapter that
+// reads a segment's events after they happened (its latency is the events' own). On a resumed
+// segment the moved time comes out of the latest pause, as far as that pause goes. No-op while paused.
+func (i *Interaction) backdate(startedAt time.Time) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.ended || !i.pausedAt.IsZero() || startedAt.IsZero() {
+		return
+	}
+	first := !i.restored && i.pauseCount == 0
+	// Positive moves the start back, negative forward (a reader that fell behind the events).
+	shift := i.started.Sub(startedAt)
+	// Forward never past now on the clock latency reads (time.Since(i.started)).
+	shift = max(shift, -time.Since(i.started))
+	if shift == 0 {
+		return
+	}
+	i.started = i.started.Add(-shift)
+	if first {
+		return
+	}
+	// Paused time gives what it has; a forward move first undoes time taken beyond the pause.
+	beyond := -min(-shift, i.beyondPause)
+	if shift > 0 {
+		beyond = max(0, shift-i.lastPause)
+	}
+	i.beyondPause += beyond
+	i.pausedTotal -= shift - beyond
+	i.lastPause -= shift - beyond
 }
 
 // Paused reports whether the run is paused and not resumed or ended yet.
@@ -2543,8 +2594,12 @@ func (i *Interaction) end(o EndOptions) {
 		if o.ClientDisconnected {
 			i.clientDisconnected = true
 		}
+		reason := o.PauseReason
+		if pausingHint {
+			reason = cmp.Or(reason, i.hint.pauseReason)
+		}
 		i.mu.Unlock()
-		i.pause(PauseOptions{Reason: o.PauseReason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
+		i.pause(PauseOptions{Reason: reason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
 		return
 	}
 	hooks := i.beforeEnd
@@ -2581,8 +2636,12 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	hintedPause := o.Status == "" && i.hint != nil && i.hint.calls == i.callCount && i.hint.status == StatusPaused
 	if o.endReason == "" && (o.Status == StatusPaused || hintedPause) {
+		reason := o.PauseReason
+		if hintedPause {
+			reason = cmp.Or(reason, i.hint.pauseReason)
+		}
 		i.mu.Unlock()
-		i.pause(PauseOptions{Reason: o.PauseReason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
+		i.pause(PauseOptions{Reason: reason, ResponseText: o.ResponseText, ExtraProperties: o.ExtraProperties})
 		return
 	}
 	i.filterSpanCallsLocked()
@@ -2772,7 +2831,10 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	if named == nil {
 		named = last
 	}
-	if named != nil {
+	if po := i.primary; po != nil && (lastOK == nil || lastOK.reportSequence <= po.calls) {
+		put(p, "primary_model", po.model)
+		put(p, "primary_provider", po.provider)
+	} else if named != nil {
 		put(p, "primary_model", named.model)
 		put(p, "primary_provider", named.provider)
 	}
@@ -3215,7 +3277,7 @@ func (i *Interaction) providerFailureLocked() (ResponseStatus, string) {
 
 // hintOutcome sets the status End reports unless a call is recorded afterwards.
 // Generic application errors preserve the current provider or finish-reason classification.
-func (i *Interaction) hintOutcome(status ResponseStatus, errorType string) {
+func (i *Interaction) hintOutcome(status ResponseStatus, errorType string, pauseReason ...PauseReason) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if status == StatusError && errorType == "app_error" {
@@ -3223,7 +3285,35 @@ func (i *Interaction) hintOutcome(status ResponseStatus, errorType string) {
 			return
 		}
 	}
-	i.hint = &outcomeHint{status: status, errorType: errorType, calls: i.callCount}
+	hint := &outcomeHint{status: status, errorType: errorType, calls: i.callCount}
+	if len(pauseReason) > 0 {
+		hint.pauseReason = pauseReason[0]
+	}
+	i.hint = hint
+}
+
+// adopt tags the interaction with an integration and offers its client; the first of each wins.
+func (i *Interaction) adopt(integration string, client analytics.Client) {
+	i.adoptAnalytics(client)
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.integration == "" {
+		i.integration = integration
+	}
+}
+
+// setPrimaryModel names primary_model and primary_provider unless a later call succeeds.
+func (i *Interaction) setPrimaryModel(model, provider string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.primary = &primaryOverride{model: canonicalModel(model), provider: provider, calls: i.callCount}
+}
+
+// keepAnswer keeps answer text for the classifier and evaluator.
+func (i *Interaction) keepAnswer(text string) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.keepAnswerLocked(text, false)
 }
 
 // onBeforeEnd runs fn just before ai_response_received is built.
