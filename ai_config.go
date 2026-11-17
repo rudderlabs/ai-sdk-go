@@ -101,6 +101,7 @@ func Configure(options ...ConfigOption) error {
 		delete(global.warned, "error:"+KindUserCallback)
 	}
 	global.cfg = next
+	emitSpans.Store(next.emitSpans)
 	for k, v := range entries {
 		global.prices[k] = v
 	}
@@ -289,6 +290,7 @@ func WithAzureDeploymentModels(deployments map[string]string) ConfigOption {
 func resetForTest() {
 	global.mu.Lock()
 	global.cfg = defaultConfig()
+	emitSpans.Store(false)
 	global.prices = map[string]price{}
 	global.warned = map[string]time.Time{}
 	global.mu.Unlock()

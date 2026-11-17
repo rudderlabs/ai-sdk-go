@@ -24,6 +24,8 @@ type Limits struct {
 	MaxCallsPerInteraction int
 	// MaxMapEntries caps each of the SDK's own lookup maps (default 10,000): remembered clients,
 	// failed attempts held for a retry, and each MCP map per server. The oldest entries go first.
+	// It also caps the open model-call spans rudderotel tracks for span dedup: once full, a new
+	// one exports without dedup, and none is evicted.
 	MaxMapEntries int
 }
 

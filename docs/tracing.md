@@ -5,6 +5,36 @@ instrumentation already creates. Each finished AI span becomes one `ai_otel_span
 track event. `properties.otlp` is a complete OTLP/JSON `ExportTraceServiceRequest` containing that
 span, forwardable to `/v1/traces`. The core module has no OpenTelemetry dependency.
 
+## Choose a setup
+
+| Setup                  | Turn on                                                     | You get                                                                                         |
+| ---------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Product only (default) | Provider wrappers inside an interaction                     | `ai_response_received` and the other product events; no spans                                  |
+| Traces only            | Your OpenTelemetry instrumentation and `rudderotel`         | One `ai_otel_span` per AI span; no product events unless you set `ProductEvents: true`          |
+| Both                   | `rudderstackai.WithEmitSpans(true)` with your wrappers      | Product events plus one `ai_otel_span` per model call and manual span; no OpenTelemetry needed |
+
+```go
+// Product only
+err := rudderstackai.Configure(rudderstackai.WithAnalytics(client))
+llm := openai.NewClient(rudderopenai.WithTracking())
+err = rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID: userID},
+    func(ctx context.Context, _ *rudderstackai.Interaction) error {
+        _, err := llm.Chat.Completions.New(ctx, params)
+        return err
+    })
+
+// Traces only: keep your instrumentation; it creates the spans.
+provider, err := rudderotel.RegisterTracing(rudderotel.Options{Analytics: client})
+
+// Both: one option on the product setup
+err = rudderstackai.Configure(rudderstackai.WithAnalytics(client), rudderstackai.WithEmitSpans(true))
+```
+
+Already exporting OpenTelemetry spans and adding `WithEmitSpans(true)`? Keep the processor: each
+model call is still sent once ([one span per call](#one-span-per-call-with-the-span-processor)).
+Examples: [`openai`](../examples/openai) (product only; `EMIT_SPANS=1` adds spans) and
+[`tracing`](../examples/tracing) (traces only).
+
 ## Wrapper and manual spans
 
 Enable `rudderstackai.WithEmitSpans(true)` to emit one `ai_otel_span` per wrapped provider call,
@@ -77,8 +107,91 @@ encode bytes before inspection: binary
 payloads are stripped, numeric maps are preserved, primitive map keys become strings, other keys
 are dropped, cycles are dropped, and other unrepresentable list entries keep null placeholders.
 
-Interim behavior: enabling wrapper spans and an OTel processor instrumenting the same provider
-call can emit two spans. Cross-source span deduplication is not currently applied.
+### One span per call with the span processor
+
+When `WithEmitSpans(true)` and a `rudderotel` span processor (`NewSpanProcessor` or
+`RegisterTracing`) both see a model call, the SDK span is the one sent when it has an analytics
+client and its mandatory core encodes as JSON and fits the span size budget with room for
+completion timing and status. A message context that JSON cannot encode (a NaN or infinite
+number, an invalid `json.Number`) never fits. Otherwise the OpenTelemetry span exports normally,
+and the SDK span follows its ordinary delivery path.
+
+- An OpenTelemetry model-call span (the conventions in
+  [product events from spans](#product-events-from-spans): GenAI `chat` / `text_completion` /
+  `generate_content`, OpenInference `LLM`, older OpenLLMetry `llm.request.type`) that starts
+  inside any active wrapper call ancestor in the current interaction is dropped by every
+  `rudderotel` processor, using a mark they share. Manual tool, retrieval and agent middleware do
+  not hide the call; the ancestry stops at the interaction boundary. Other processors and
+  exporters receive it unchanged. Exported descendants of a covered OpenTelemetry model span keep
+  their span IDs in the SDK owner's trace; direct children use the SDK owner as parent, and deeper
+  parent links stay intact. `Filter`, `ResolveIdentity` and `ExtraPropertiesFrom` get your
+  original span, with its own trace, span and parent IDs; the exported IDs are applied after them.
+  Your APM spans keep the original OpenTelemetry data. Span-built product events still count the
+  call once.
+- If an earlier processor already sent a child under an OpenTelemetry model span's original IDs
+  before RudderStack observed that parent, the original parent is kept as well as the SDK span.
+  Buffered children still resolve to the SDK owner at export.
+- For an active, still-recording model-call span a processor observed outside an SDK call, in the
+  same open interaction, the first wrapper call that starts directly inside it takes its place.
+  The SDK span adopts its trace ID, span ID and parent span ID, and fixes the interaction's SDK
+  trace, including pause snapshots. It is sent normally, through the SDK's own path;
+  `ai_llm_response_received.span_id` carries the adopted ID. Later wrapper calls inside that span
+  are ordinary children of that ID. Every `rudderotel` processor drops the replaced span when it
+  ends, synchronously, by a mark they share, including one registered after the span started.
+  Filters, sampling, batching, analytics-client failures and processor shutdown do not decide
+  whether the call's span is sent, and a stream read after the OpenTelemetry span ended still
+  sends the adopted span.
+- An outer model-call span with no wrapper call inside is exported normally. A newer SDK span in
+  between prevents adoption: the most recently started active SDK span decides.
+- An SDK span that replaced or covered an OpenTelemetry span sheds optional fields in this order
+  after ordinary string truncation: (1) content span, resource and scope attributes and events
+  identified by [`span-content-keys-v0.1.json`](../spec/fixtures/span-content-keys-v0.1.json), OTLP
+  `status.message` and property `status_message`; (2) all other optional span, resource and scope
+  attributes, events, links, optional `gen_ai` entries and properties, and span
+  `droppedAttributesCount`, `droppedEventsCount`, `droppedLinksCount`. Each group sheds the
+  largest compact-JSON UTF-8 value first; ties follow the
+  [shared delivery rule](../spec/fixtures/FIXTURE-FORMAT.md#sdk-span-delivery-budget). The message
+  identity and context, span IDs, name, kind, timing and status, session, interaction and
+  conversation IDs, the OTLP envelope and scope, and the core GenAI summary are never shed. Core
+  span attribute keys, when present at admission, are `gen_ai.operation.name`,
+  `gen_ai.provider.name`, `gen_ai.system`, `gen_ai.request.model`, `gen_ai.conversation.id`,
+  `rudderstack.interaction_id`, `rudderstack.span_source`, `user.id` and
+  `rudderstack.anonymous_id`. String shortening or shedding sets `truncated: true`; an ordinary
+  oversized SDK span that replaced or covered nothing still drops.
+
+The trade-off: RudderStack gets the SDK span, with its attributes and timing, under the
+OpenTelemetry span's IDs, not the attributes and timing your application put on its span.
+Processors that are not RudderStack's (your APM exporter, for example) receive your original span
+unchanged: nothing from the SDK is copied onto it, and the processor's usual identity attributes
+still apply.
+
+Matching uses context nesting only, never times or model names. Limits:
+
+- When RudderStack processors replace an OTel model span, the SDK span is the one kept; if the SDK's own client fails to deliver, that span is lost, as the call's product events are.
+- Instrumentations that never put their span on the context passed downstream cannot be matched.
+- The bare `Exporter` has no start hook; use the processor.
+- A span is classified when it starts: model-call attributes added later cannot enable adoption.
+  A recording span the sampler does not sample is eligible too.
+- A span that already ended, an ended interaction, and a span that started in another interaction
+  never adopt.
+- Go has no framework integrations, so no integration model spans take part.
+- Dedup tracks at most `Limits.MaxMapEntries` open model-call spans (default 10,000). A
+  model-call span that starts while that many are open, for example behind spans that never end,
+  is neither covered nor adopted and exports as without dedup (`limit_reached`). A span stays
+  open until every `rudderotel` processor that saw it start has ended it or shut down (one behind
+  an adapter that drops ends holds it until it shuts down); descendants of an already covered
+  span are tracked until they end, so its tree stays intact. Nothing is evicted: after that, a
+  replaced or covered span's mark and a covered tree stay as long as your span object, or the
+  snapshot OpenTelemetry passes to the processors at its end, is reachable, without keeping it
+  alive. Processors that end the span later, behind a slow one or registered after it started,
+  still drop it, and a child started later from a context that holds an ended covered span still
+  joins the SDK owner's tree.
+- With two copies of the tracing module (for example a vendored fork under another import path),
+  replacement marks are not shared between copies, so an adopted span can be exported twice;
+  register processors from one copy.
+- With the simple processor (`Simple: true`), filter, identity, extra-properties and redact callbacks
+  must not end spans: OpenTelemetry's simple processor holds its own lock while exporting, so a span
+  ended there deadlocks.
 
 ## Framework trees with manual spans
 

@@ -9,6 +9,7 @@ import (
 	"maps"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
@@ -43,8 +44,85 @@ type Span struct {
 	capture    capture.Spans
 	llmCalls   bool
 	msgContext map[string]any
+	// seq: start order, compared with OTel model-call spans to tell which one is nested.
+	seq uint64
+	// call: a provider wrapper's model call.
+	call bool
+	// replaced: it adopted an OTel span's IDs. covered: an OTel model-call span inside it is not
+	// exported. Either way delivery sheds optional fields instead of dropping it.
+	replaced bool
+	covered  atomic.Bool
+	// admission: set once, by the first size check to finish.
+	admission atomic.Pointer[admission]
 }
+
+// admission is whether a span can be sent (it has a client and its mandatory core fits the
+// budget), and that core.
+type admission struct {
+	sendable bool
+	core     *analytics.Track
+}
+
+// canSend reports whether this span can replace or cover an OTel span: it has an analytics
+// client, and its mandatory core as known now, plus room for completion, fits the span size
+// budget (FIXTURE-FORMAT.md, SDK span delivery budget). The check maps the span as delivery
+// does, which can call app code (the redact hook, on content) that starts a model span inside
+// this call and so asks again: no lock is held, and the first answer stored wins.
+func (s *Span) canSend() bool {
+	a := s.admission.Load()
+	if a == nil {
+		core, sendable := s.admit(s.TraceID, s.SpanID, s.parentID)
+		s.admission.CompareAndSwap(nil, &admission{sendable: sendable, core: core})
+		a = s.admission.Load()
+	}
+	return a.sendable
+}
+
+// admit is the span's mandatory core under the given trace, span and parent IDs, and whether it
+// is admitted.
+func (s *Span) admit(traceID, spanID, parentID string) (*analytics.Track, bool) {
+	return s.admitAt(time.Now(), traceID, spanID, parentID)
+}
+
+// admitAt is admit for a span ending at ended, built as delivery builds it from what is known now.
+func (s *Span) admitAt(ended time.Time, traceID, spanID, parentID string) (*analytics.Track, bool) {
+	if s.client == nil {
+		return nil, false
+	}
+	n := s.model("chat", "chat", "wrapper", nil, nil, nil, ended)
+	n.Context.TraceID, n.Context.SpanID = traceID, spanID
+	n.Parent = spanmodel.Context{}
+	if parentID != "" {
+		n.Parent = spanmodel.Context{TraceID: traceID, SpanID: parentID}
+	}
+	return spanmodel.DeliveryCore(n, s.trackOptions(false))
+}
+
+func (s *Span) trackOptions(masked bool) spanmodel.Options {
+	return spanmodel.Options{Capture: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version}
+}
+
+// ownsCall is the active SDK call span of interaction i that encloses ctx's innermost active SDK
+// span, or is it. A manual span inside the call does not hide it; the walk stops at the
+// interaction boundary.
+func ownsCall(ctx context.Context, i any) *Span {
+	for s := activeSDKSpan(ctx); s != nil && any(s.interaction) == i; s = s.parent {
+		s.mu.Lock()
+		ended := s.ended
+		s.mu.Unlock()
+		if !ended && s.call && s.canSend() {
+			return s
+		}
+	}
+	return nil
+}
+
 type sdkSpanKey struct{}
+
+var spanSeq atomic.Uint64
+
+// emitSpans mirrors the EmitSpans setting for hot paths that must not copy the config.
+var emitSpans atomic.Bool
 
 // WithEmitSpans enables wrapper and manual ai_otel_span events. Off by default,
 // independent of WithLLMCallEvents; no OpenTelemetry dependency is required.
@@ -148,6 +226,61 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
 	}
 	s.msgContext, _ = stripBinary(msgContext).(map[string]any)
 	s.SpanID = randomSpanID(8)
+	s.seq = spanSeq.Add(1)
+	return s
+}
+
+// otelReplacementSpan is the SDK span of a model call starting inside an active OTel model-call
+// span a span processor saw start in this interaction, nested inside every active SDK span. The
+// first such call adopts the OTel span's trace, span and parent IDs, so RudderStack gets this
+// span in its place; later calls inside are its children. The app's span is never modified.
+func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
+	if hook.Tracing.AdoptOTelCall == nil || i == nil || i.Ended() {
+		return nil
+	}
+	active := activeSDKSpan(ctx)
+	if active != nil && active.interaction != i {
+		active = nil
+	}
+	var activeSeq uint64
+	if active != nil {
+		activeSeq = active.seq
+	}
+	// Keeps the active SDK parent, so work on a retained context still finds it once this ends.
+	s := &Span{started: started, interaction: i, attributes: map[string]any{}, parent: active, seq: spanSeq.Add(1), call: true}
+	i.mu.Lock()
+	s.userID, s.anonymousID, s.interactionID, s.conversationID = i.userID, i.anonymousID, i.id, i.conversationID
+	s.client, s.capture, s.llmCalls = i.analytics(), i.capture.Spans, i.capture.LLMCalls
+	msgContext := i.msgContext
+	i.mu.Unlock()
+	s.msgContext, _ = stripBinary(msgContext).(map[string]any)
+	// An SDK span that cannot be sent under the IDs it would take never replaces the OTel span:
+	// the processor keeps it. Measured before the OTel span is marked replaced.
+	childID := randomSpanID(8)
+	var core *analytics.Track
+	o, ok := hook.Tracing.AdoptOTelCall(ctx, i, activeSeq, func(o hook.OTelCall) (admitted bool) {
+		if o.Adopted {
+			core, admitted = s.admit(o.TraceID, o.SpanID, o.ParentID)
+		} else {
+			core, admitted = s.admit(o.TraceID, childID, o.SpanID)
+		}
+		return admitted
+	})
+	if !ok {
+		return nil
+	}
+	s.admission.Store(&admission{sendable: true, core: core})
+	s.replaced = o.Adopted
+	s.TraceID, s.SpanID, s.parentID = o.TraceID, o.SpanID, o.ParentID
+	if !o.Adopted {
+		s.SpanID, s.parentID = childID, o.SpanID
+	}
+	if o.Adopted {
+		// The first SDK span fixes the interaction's trace, persisted across pause and JSON restore.
+		i.mu.Lock()
+		i.sdkTraceID = o.TraceID
+		i.mu.Unlock()
+	}
 	return s
 }
 
@@ -217,7 +350,11 @@ func beginWrapperSpan(ctx context.Context, i *Interaction, started time.Time) (c
 	if !cfg().emitSpans || isUntracked(ctx) || (i != nil && !i.Ended() && i.untracked) {
 		return ctx, nil
 	}
-	s := newSDKSpan(ctx, i, started)
+	s := otelReplacementSpan(ctx, i, started)
+	if s == nil {
+		s = newSDKSpan(ctx, i, started)
+		s.call = true
+	}
 	ctx = context.WithValue(ctx, keyInteraction, s.interaction)
 	pendingWrapperSpans.mu.Lock()
 	pendingWrapperSpans.spans[s] = wrapperMetadata{}
@@ -280,6 +417,14 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 	pendingWrapperSpans.mu.Unlock()
 	attrs := maps.Clone(s.attributes)
 	s.mu.Unlock()
+	n := s.model(name, operation, source, attrs, a, err, ended)
+	safely(func() { s.send(n, masked) })
+}
+
+// model is the span as a model span: the attributes and the identity it carries, its IDs, times,
+// status and exception event. Delivery and the size check build it the same way.
+func (s *Span) model(name, operation, source string, attrs, a map[string]any, err error, ended time.Time) spanmodel.Span {
+	attrs = maps.Clone(attrs)
 	if attrs == nil {
 		attrs = map[string]any{}
 	}
@@ -312,22 +457,29 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 			return fmt.Sprintf("%T", err)
 		}(), "exception.message": n.StatusMessage}}}
 	}
-	safely(func() {
-		if s.client == nil {
-			return
+	return n
+}
+
+// send maps and enqueues a finished SDK span.
+func (s *Span) send(n spanmodel.Span, masked bool) {
+	if s.client == nil {
+		return
+	}
+	options := s.trackOptions(masked)
+	if a := s.admission.Load(); a != nil && (s.replaced || s.covered.Load()) {
+		options.DeliveryCore = a.core
+	}
+	m, e := spanmodel.ToTrack(n, options)
+	if e != nil {
+		report(KindInternal, "span.map", e)
+		return
+	}
+	if m != nil {
+		rememberClient(s.client)
+		if e := s.client.Enqueue(*m); e != nil {
+			report(KindInternal, "span.track", e)
 		}
-		m, e := spanmodel.ToTrack(n, spanmodel.Options{Capture: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version})
-		if e != nil {
-			report(KindInternal, "span.map", e)
-			return
-		}
-		if m != nil {
-			rememberClient(s.client)
-			if e := s.client.Enqueue(*m); e != nil {
-				report(KindInternal, "span.track", e)
-			}
-		}
-	})
+	}
 }
 func (i *Interaction) recordWrapperCall(call LLMCall, s *Span, status int) bool {
 	call.wrapperSpan = s
@@ -377,7 +529,24 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 	s.finish(strings.TrimSpace("chat "+first(call.RequestedModel, call.Model)), "chat", "wrapper", a, err, true, call.EndedAt)
 }
 func init() {
-	hook.Tracing.EmitSpans = func() bool { return cfg().emitSpans }
+	hook.Tracing.EmitSpans = emitSpans.Load
+	hook.Tracing.NextSpanSeq = func() uint64 { return spanSeq.Add(1) }
+	hook.Tracing.SDKOwnsCall = func(ctx context.Context, i any) (hook.SDKCall, bool) {
+		s := ownsCall(ctx, i)
+		if s == nil {
+			return hook.SDKCall{}, false
+		}
+		return hook.SDKCall{TraceID: s.TraceID, SpanID: s.SpanID, Cover: func() bool {
+			// Under the span's lock, so an end either sees the mark or comes first and is seen.
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if s.ended {
+				return false
+			}
+			s.covered.Store(true)
+			return true
+		}}, true
+	}
 	hook.Tracing.WrapperCaptureContent = func(value any) bool {
 		s, _ := value.(*Span)
 		return s != nil && s.capturesContent()

@@ -1,0 +1,1557 @@
+{
+  "fixture_version": 2,
+  "span_schema_version": "0.1",
+  "event_spec_version": "0.4.0",
+  "description": "The SDK span is always sent: inner OTel model spans are dropped and the first direct SDK call replaces an outer OTel span under its IDs. Other processors receive OTel spans unchanged. See FIXTURE-FORMAT.md.",
+  "scenarios": [
+    {
+      "name": "otel-model-span-inside-wrapper",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "wrapper",
+            "label": "w",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "i",
+                "operation": "chat"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "w",
+          "parent": null
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "i"
+      ]
+    },
+    {
+      "name": "wrapper-inside-otel-model-span",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "w",
+          "parent": null,
+          "replaces": "o"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "instrumentation-inside-joined-wrapper",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w",
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "i",
+                    "operation": "chat"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "w",
+          "parent": null,
+          "replaces": "o"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "i",
+        "o"
+      ]
+    },
+    {
+      "name": "manual-span-between-otel-model-span-and-wrapper",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "manual",
+                "label": "t",
+                "operation": "execute_tool",
+                "children": [
+                  {
+                    "kind": "wrapper",
+                    "label": "w"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "t",
+          "parent": "o"
+        },
+        {
+          "label": "w",
+          "parent": "t"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "wrapper-inside-otel-agent-span",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "a",
+            "operation": "invoke_agent",
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "a",
+          "parent": null
+        },
+        {
+          "label": "w",
+          "parent": "a"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "a"
+      ]
+    },
+    {
+      "name": "wrapper-in-another-interaction-inside-otel-model-span",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "interaction",
+                "label": "B",
+                "children": [
+                  {
+                    "kind": "wrapper",
+                    "label": "w"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "w",
+          "parent": "o"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "wrapper-under-ended-otel-model-span",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "e",
+            "operation": "chat",
+            "end_before_children": true,
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "e",
+          "parent": null
+        },
+        {
+          "label": "w",
+          "parent": "e"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "e"
+      ]
+    },
+    {
+      "name": "integration-model-run-inside-otel-model-span",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "integration",
+                "label": "m",
+                "operation": "chat",
+                "children": [
+                  {
+                    "kind": "wrapper",
+                    "label": "w"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null,
+          "replaces": "o"
+        }
+      ],
+      "call_span": "m",
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "otel-model-span-inside-integration-model-run",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "i",
+                "operation": "chat"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "i"
+      ]
+    },
+    {
+      "name": "otel-model-span-inside-wrapper-inside-integration-tool",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "execute_tool",
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w",
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "i",
+                    "operation": "chat"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "w",
+          "parent": "m"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "i"
+      ]
+    },
+    {
+      "name": "manual-span-between-integration-model-run-and-otel-model-span",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "manual",
+                "label": "t",
+                "operation": "execute_tool",
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "i",
+                    "operation": "chat"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "t",
+          "parent": "m"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "i"
+      ]
+    },
+    {
+      "name": "framework-parented-model-run-under-a-newer-manual-span",
+      "emit_spans": true,
+      "requires": "integration",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "r",
+            "operation": "invoke_agent",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "children": [
+                  {
+                    "kind": "manual",
+                    "label": "t",
+                    "operation": "execute_tool",
+                    "children": [
+                      {
+                        "kind": "integration",
+                        "label": "m",
+                        "operation": "chat",
+                        "framework_parent": "r"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "r",
+          "parent": null
+        },
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "t",
+          "parent": "r"
+        },
+        {
+          "label": "m",
+          "parent": "r"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "wrapper-inside-an-otel-model-span-the-processor-does-not-export",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "legacy": true,
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "w",
+          "parent": null,
+          "replaces": "o"
+        }
+      ],
+      "call_span": "w",
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "spans-off-exports-the-otel-model-span",
+      "emit_spans": false,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "wrapper",
+            "label": "w",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "i",
+                "operation": "chat"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "i",
+          "parent": null
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "i"
+      ]
+    },
+    {
+      "name": "first-wrapper-replaces-outer-later-wrapper-is-child",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "wrapper",
+                "label": "w"
+              },
+              {
+                "kind": "wrapper",
+                "label": "later"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "w",
+          "parent": null,
+          "replaces": "o"
+        },
+        {
+          "label": "later",
+          "parent": "w"
+        }
+      ],
+      "call_span": [
+        "w",
+        "later"
+      ],
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "outer-model-span-without-sdk-call",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": []
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-generation-sent-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "generation",
+                "child_state": "sent"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "generation",
+          "parent": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "generation"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-generation-unsent-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "generation",
+                "child_state": "unsent"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "generation",
+          "parent": null,
+          "replaces": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "generation"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-generation-mixed-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "generation",
+                "child_state": "mixed"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "generation",
+          "parent": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "generation"
+        },
+        {
+          "label": "second",
+          "parent": "generation"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-response-sent-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "response",
+                "child_state": "sent"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "response",
+          "parent": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "response"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-response-unsent-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "response",
+                "child_state": "unsent"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "response",
+          "parent": null,
+          "replaces": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "response"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "agents-delayed-response-mixed-children",
+      "requires": "integration",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "agents_delayed_model",
+                "label": "response",
+                "child_state": "mixed"
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "response",
+          "parent": "o"
+        },
+        {
+          "label": "lookup",
+          "parent": "response"
+        },
+        {
+          "label": "second",
+          "parent": "response"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "oversized-sdk-replacement-content-first",
+      "description": "Fixed numeric arrays cannot shorten; shed content before larger non-content arrays, then largest first, retaining the mandatory core.",
+      "emit_spans": true,
+      "capture_content": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "anonymous_id": "anon",
+        "conversation_id": "conversation",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "integration",
+                "label": "m",
+                "operation": "chat",
+                "initial_attributes": {
+                  "gen_ai.provider.name": "openai",
+                  "gen_ai.system": "openai",
+                  "gen_ai.request.model": "m"
+                },
+                "completion_attributes": {
+                  "gen_ai.input.messages": {
+                    "repeat": 7,
+                    "count": 400
+                  },
+                  "optional.large": {
+                    "repeat": 7,
+                    "count": 1400
+                  },
+                  "optional.medium": {
+                    "repeat": 7,
+                    "count": 100
+                  },
+                  "optional.tiny": true
+                },
+                "start_time_ms": 1760000000000,
+                "end_time_ms": 1760000001500
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null,
+          "replaces": "o",
+          "attribute_keys": [
+            "gen_ai.conversation.id",
+            "gen_ai.operation.name",
+            "gen_ai.provider.name",
+            "gen_ai.request.model",
+            "gen_ai.system",
+            "optional.large",
+            "optional.medium",
+            "optional.tiny",
+            "rudderstack.anonymous_id",
+            "rudderstack.interaction_id",
+            "rudderstack.span_source",
+            "user.id"
+          ],
+          "shed_attribute_keys": [
+            "gen_ai.input.messages"
+          ],
+          "truncated": true
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "oversized-sdk-replacement-largest-next",
+      "description": "Fixed numeric arrays cannot shorten; shed content before larger non-content arrays, then largest first, retaining the mandatory core.",
+      "emit_spans": true,
+      "capture_content": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "anonymous_id": "anon",
+        "conversation_id": "conversation",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "integration",
+                "label": "m",
+                "operation": "chat",
+                "initial_attributes": {
+                  "gen_ai.provider.name": "openai",
+                  "gen_ai.system": "openai",
+                  "gen_ai.request.model": "m"
+                },
+                "completion_attributes": {
+                  "gen_ai.input.messages": {
+                    "repeat": 7,
+                    "count": 400
+                  },
+                  "optional.large": {
+                    "repeat": 7,
+                    "count": 2400
+                  },
+                  "optional.medium": {
+                    "repeat": 7,
+                    "count": 100
+                  },
+                  "optional.tiny": true
+                },
+                "start_time_ms": 1760000000000,
+                "end_time_ms": 1760000001500
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null,
+          "replaces": "o",
+          "attribute_keys": [
+            "gen_ai.conversation.id",
+            "gen_ai.operation.name",
+            "gen_ai.provider.name",
+            "gen_ai.request.model",
+            "gen_ai.system",
+            "optional.medium",
+            "optional.tiny",
+            "rudderstack.anonymous_id",
+            "rudderstack.interaction_id",
+            "rudderstack.span_source",
+            "user.id"
+          ],
+          "shed_attribute_keys": [
+            "gen_ai.input.messages",
+            "optional.large"
+          ],
+          "truncated": true
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "oversized-sdk-replacement-largest-then-medium",
+      "description": "Fixed numeric arrays cannot shorten; shed content before larger non-content arrays, then largest first, retaining the mandatory core.",
+      "emit_spans": true,
+      "capture_content": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "anonymous_id": "anon",
+        "conversation_id": "conversation",
+        "children": [
+          {
+            "kind": "otel",
+            "label": "o",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "integration",
+                "label": "m",
+                "operation": "chat",
+                "initial_attributes": {
+                  "gen_ai.provider.name": "openai",
+                  "gen_ai.system": "openai",
+                  "gen_ai.request.model": "m"
+                },
+                "completion_attributes": {
+                  "gen_ai.input.messages": {
+                    "repeat": 7,
+                    "count": 2000
+                  },
+                  "optional.large": {
+                    "repeat": 7,
+                    "count": 2400
+                  },
+                  "optional.medium": {
+                    "repeat": 7,
+                    "count": 2200
+                  },
+                  "optional.tiny": true
+                },
+                "start_time_ms": 1760000000000,
+                "end_time_ms": 1760000001500
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null,
+          "replaces": "o",
+          "attribute_keys": [
+            "gen_ai.conversation.id",
+            "gen_ai.operation.name",
+            "gen_ai.provider.name",
+            "gen_ai.request.model",
+            "gen_ai.system",
+            "optional.tiny",
+            "rudderstack.anonymous_id",
+            "rudderstack.interaction_id",
+            "rudderstack.span_source",
+            "user.id"
+          ],
+          "shed_attribute_keys": [
+            "gen_ai.input.messages",
+            "optional.large",
+            "optional.medium"
+          ],
+          "truncated": true
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o"
+      ]
+    },
+    {
+      "name": "oversized-non-dedup-sdk-span-still-dropped",
+      "description": "The same completion without OTel suppression remains oversized after string truncation and is dropped.",
+      "emit_spans": true,
+      "capture_content": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "anonymous_id": "anon",
+        "conversation_id": "conversation",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "chat",
+            "initial_attributes": {
+              "gen_ai.provider.name": "openai",
+              "gen_ai.system": "openai",
+              "gen_ai.request.model": "m"
+            },
+            "completion_attributes": {
+              "gen_ai.input.messages": {
+                "repeat": 7,
+                "count": 2000
+              },
+              "optional.large": {
+                "repeat": 7,
+                "count": 2400
+              },
+              "optional.medium": {
+                "repeat": 7,
+                "count": 2200
+              },
+              "optional.tiny": true
+            },
+            "start_time_ms": 1760000000000,
+            "end_time_ms": 1760000001500
+          }
+        ]
+      },
+      "expected_spans": [],
+      "call_span": null,
+      "other_processors_see": []
+    },
+    {
+      "name": "covered-model-descendants-wrapper-before-model-end",
+      "description": "Covered OTel descendants keep their IDs and tree in the SDK owner trace; plain processors retain the original OTel tree.",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "wrapper",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "end_before_children": false,
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "tool",
+                    "operation": "execute_tool",
+                    "children": [
+                      {
+                        "kind": "otel",
+                        "label": "retrieval",
+                        "operation": "retrieval"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "tool",
+          "parent": "m"
+        },
+        {
+          "label": "retrieval",
+          "parent": "tool"
+        }
+      ],
+      "call_span": "m",
+      "other_processors_see": [
+        "o",
+        "tool",
+        "retrieval"
+      ]
+    },
+    {
+      "name": "covered-model-descendants-wrapper-after-model-end",
+      "description": "Covered OTel descendants keep their IDs and tree in the SDK owner trace; plain processors retain the original OTel tree.",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "wrapper",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "end_before_children": true,
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "tool",
+                    "operation": "execute_tool",
+                    "children": [
+                      {
+                        "kind": "otel",
+                        "label": "retrieval",
+                        "operation": "retrieval"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "tool",
+          "parent": "m"
+        },
+        {
+          "label": "retrieval",
+          "parent": "tool"
+        }
+      ],
+      "call_span": "m",
+      "other_processors_see": [
+        "o",
+        "tool",
+        "retrieval"
+      ]
+    },
+    {
+      "name": "covered-model-descendants-integration-before-model-end",
+      "description": "Covered OTel descendants keep their IDs and tree in the SDK owner trace; plain processors retain the original OTel tree.",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "end_before_children": false,
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "tool",
+                    "operation": "execute_tool",
+                    "children": [
+                      {
+                        "kind": "otel",
+                        "label": "retrieval",
+                        "operation": "retrieval"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "tool",
+          "parent": "m"
+        },
+        {
+          "label": "retrieval",
+          "parent": "tool"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o",
+        "tool",
+        "retrieval"
+      ]
+    },
+    {
+      "name": "covered-model-descendants-integration-after-model-end",
+      "description": "Covered OTel descendants keep their IDs and tree in the SDK owner trace; plain processors retain the original OTel tree.",
+      "emit_spans": true,
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "end_before_children": true,
+                "children": [
+                  {
+                    "kind": "otel",
+                    "label": "tool",
+                    "operation": "execute_tool",
+                    "children": [
+                      {
+                        "kind": "otel",
+                        "label": "retrieval",
+                        "operation": "retrieval"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "tool",
+          "parent": "m"
+        },
+        {
+          "label": "retrieval",
+          "parent": "tool"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o",
+        "tool",
+        "retrieval"
+      ]
+    },
+    {
+      "name": "child-before-rudderstack-on-start-wrapper-simple",
+      "description": "Retain an original parent if its child was already sent; unsent batch children resolve the covered parent at export.",
+      "emit_spans": true,
+      "processor": "simple",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "wrapper",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "child_before_processor": {
+                  "label": "early",
+                  "operation": "execute_tool"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "early",
+          "parent": "o"
+        }
+      ],
+      "call_span": "m",
+      "other_processors_see": [
+        "o",
+        "early"
+      ]
+    },
+    {
+      "name": "child-before-rudderstack-on-start-wrapper-batch",
+      "description": "Retain an original parent if its child was already sent; unsent batch children resolve the covered parent at export.",
+      "emit_spans": true,
+      "processor": "batch",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "wrapper",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "child_before_processor": {
+                  "label": "early",
+                  "operation": "execute_tool"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "early",
+          "parent": "m"
+        }
+      ],
+      "call_span": "m",
+      "other_processors_see": [
+        "o",
+        "early"
+      ]
+    },
+    {
+      "name": "child-before-rudderstack-on-start-integration-simple",
+      "description": "Retain an original parent if its child was already sent; unsent batch children resolve the covered parent at export.",
+      "emit_spans": true,
+      "processor": "simple",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "child_before_processor": {
+                  "label": "early",
+                  "operation": "execute_tool"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "o",
+          "parent": null
+        },
+        {
+          "label": "early",
+          "parent": "o"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o",
+        "early"
+      ]
+    },
+    {
+      "name": "child-before-rudderstack-on-start-integration-batch",
+      "description": "Retain an original parent if its child was already sent; unsent batch children resolve the covered parent at export.",
+      "emit_spans": true,
+      "processor": "batch",
+      "tree": {
+        "kind": "interaction",
+        "label": "A",
+        "children": [
+          {
+            "kind": "integration",
+            "label": "m",
+            "operation": "chat",
+            "children": [
+              {
+                "kind": "otel",
+                "label": "o",
+                "operation": "chat",
+                "child_before_processor": {
+                  "label": "early",
+                  "operation": "execute_tool"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected_spans": [
+        {
+          "label": "m",
+          "parent": null
+        },
+        {
+          "label": "early",
+          "parent": "m"
+        }
+      ],
+      "call_span": null,
+      "other_processors_see": [
+        "o",
+        "early"
+      ]
+    }
+  ]
+}

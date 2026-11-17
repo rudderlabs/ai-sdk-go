@@ -29,6 +29,20 @@ type spanState struct {
 	suppressed bool
 }
 
+// dedupInteraction is the interaction whose SDK calls may cover or adopt a span that carried
+// rudderstack.interaction_id named before tagging. No ID, or the ambient interaction's own: the
+// ambient one. Another ID: only the open, unpaused interaction it names; otherwise none, and the
+// span exports as without dedup. A span routed elsewhere is never given to the ambient call.
+func dedupInteraction(named string, ambient *rudderstackai.Interaction) *rudderstackai.Interaction {
+	if named == "" || (ambient != nil && named == ambient.ID()) {
+		return ambient
+	}
+	if found, ok := hook.Tracing.Open(named).(*rudderstackai.Interaction); ok && found != nil && !found.Ended() && !found.Paused() {
+		return found
+	}
+	return nil
+}
+
 // SpanProcessor adds interaction identity and optionally records product calls before export.
 type SpanProcessor struct {
 	inner      sdktrace.SpanProcessor
@@ -69,6 +83,14 @@ func (p *SpanProcessor) state(k spanKey) spanState {
 		return s
 	}
 	return p.held[k]
+}
+
+// started reports whether p saw span k start and has not seen it end.
+func (p *SpanProcessor) started(k spanKey) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.states[k]
+	return ok
 }
 
 func (p *SpanProcessor) remember(k spanKey, s spanState) {
@@ -123,6 +145,9 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 			p.remember(key(s.SpanContext()), spanState{suppressed: true})
 			return
 		}
+		if hook.Tracing.EmitSpans() {
+			p.track(ctx, s)
+		}
 		if !system && (p.options.PropagateIdentity == nil || *p.options.PropagateIdentity) {
 			parentAttrs := map[string]attribute.Value{}
 			if readable, ok := parent.(sdktrace.ReadOnlySpan); ok {
@@ -164,12 +189,19 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 				held[k] = v
 			}
 		}
-		p.remember(key(s.SpanContext()), spanState{tags: held, owner: interaction})
 		if IsAISpan(s) {
 			for k, v := range tags {
 				s.SetAttributes(attribute.String(k, v))
 			}
 		}
+		// After tagging, so a filter that reads user.id sees the tagged span.
+		if hook.Tracing.EmitSpans() {
+			// The span's own interaction ID, as set before tagging.
+			if routed := dedupInteraction(firstString(own, InteractionIDAttribute), interaction); routed != nil {
+				p.dedup(ctx, s, routed)
+			}
+		}
+		p.remember(key(s.SpanContext()), spanState{tags: held, owner: interaction})
 		if p.options.ProductEvents {
 			p.recordAncestry(s, interaction)
 		}
@@ -188,6 +220,10 @@ func (s taggedSpan) Attributes() []attribute.KeyValue { return s.attrs }
 // OnEnd records only spans of an open interaction and skips suppressed classifier spans.
 func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	defer p.finish(key(s.SpanContext()))
+	// An SDK call that adopted this span's IDs, or covers it, sends the span instead: every
+	// processor that ends it drops it here, synchronously, whatever its filter says, whether or
+	// not it saw the span start.
+	drop, own, parent := p.endSpan(s)
 	if p.closed.Load() {
 		return
 	}
@@ -209,7 +245,12 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 		if p.options.ProductEvents {
 			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
 		}
-		p.inner.OnEnd(s)
+		if !drop {
+			if own != nil || parent != nil {
+				s = newDeliveredSpan(s, own, parent)
+			}
+			p.inner.OnEnd(s)
+		}
 	})
 }
 
@@ -243,6 +284,7 @@ func (p *SpanProcessor) Shutdown(ctx context.Context) error {
 		waitErr = ctx.Err()
 	}
 	p.closed.Store(true)
+	forgetSpans(p)
 	err := errors.Join(waitErr, p.inner.Shutdown(ctx))
 	p.mu.Lock()
 	p.states = map[spanKey]spanState{}

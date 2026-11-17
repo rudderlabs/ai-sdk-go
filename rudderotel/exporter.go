@@ -61,31 +61,63 @@ func (e *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 			return errors.Join(append(failures, err)...)
 		}
 		safe("tracing.export", func() {
-			keep := IsAISpan(s)
+			// User callbacks get the app's span; the IDs RudderStack exports under are resolved
+			// after the filter, right before mapping.
+			app := s
+			d, delivered := s.(*deliveredSpan)
+			if delivered {
+				app = d.ReadOnlySpan
+			}
+			keep := IsAISpan(app)
 			if e.options.Filter != nil {
-				keep = e.options.Filter(s)
+				keep = filterSpan(e.options.Filter, app)
 			} else if e.options.ExportAllSpans {
 				keep = true
 			}
 			if !keep {
 				return
 			}
-			m, err := SpanToTrack(s, e.options)
-			if err != nil {
-				hook.Report(rudderstackai.KindInternal, "tracing.map", err)
-				return
+			if delivered {
+				d.resolve()
 			}
-			if m == nil {
-				return
-			}
-			// A transport panic is an export failure, like an Enqueue error.
-			err = enqueue(e.client, *m)
+			sent, err := e.send(app, s)
 			if err != nil {
 				failures = append(failures, err)
+			} else if sent && delivered {
+				sentRaw(d)
 			}
 		})
 	}
 	return errors.Join(failures...)
+}
+
+// filterSpan runs the app's Filter; a panic rejects the span and is reported as user_callback.
+func filterSpan(filter func(sdktrace.ReadOnlySpan) bool, s sdktrace.ReadOnlySpan) (keep bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			keep = false
+			hook.Report(rudderstackai.KindUserCallback, "tracing.filter", fmt.Errorf("rudderotel: Filter panicked (%T)", r))
+		}
+	}()
+	return filter(s)
+}
+
+// send maps one span, delivered as RudderStack exports it with app's callbacks, and enqueues it,
+// reporting whether it was enqueued; a transport panic is an export failure, like an Enqueue
+// error.
+func (e *Exporter) send(app, delivered sdktrace.ReadOnlySpan) (bool, error) {
+	m, err := spanToTrack(app, delivered, e.options)
+	if err != nil {
+		hook.Report(rudderstackai.KindInternal, "tracing.map", err)
+		return false, nil
+	}
+	if m == nil {
+		return false, nil
+	}
+	if err := enqueue(e.client, *m); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func enqueue(c analytics.Client, m analytics.Track) (err error) {

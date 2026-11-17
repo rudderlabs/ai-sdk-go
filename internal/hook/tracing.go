@@ -36,4 +36,34 @@ var Tracing struct {
 	RememberClient        func(analytics.Client)
 	Wait                  func(context.Context) bool
 	FlushClient           func(context.Context, analytics.Client) bool
+	// NextSpanSeq orders SDK spans and processor-seen OTel model-call spans by start.
+	NextSpanSeq func() uint64
+	// SDKOwnsCall is the active SDK call span in ctx that a model-call span starting now belongs
+	// to, if any.
+	SDKOwnsCall func(ctx context.Context, interaction any) (SDKCall, bool)
+	// AdoptOTelCall matches the active, still-recording OTel model-call span in ctx that a span
+	// processor registered, when it belongs to interaction and is nested inside the active SDK
+	// span with start order activeSeq (0 if none). The first call adopts its IDs and marks it
+	// replaced, so every processor drops it at its end; later calls inside are children. fits is
+	// asked, before anything is marked and with no lock held (it can run app code), whether the
+	// SDK span can be sent under the IDs it would take; when it cannot, or the span's state
+	// changed while it ran, nothing is adopted and the OTel span exports normally.
+	// Set by rudderotel.
+	AdoptOTelCall func(ctx context.Context, interaction any, activeSeq uint64, fits func(OTelCall) bool) (OTelCall, bool)
+}
+
+// SDKCall is an SDK call span an OTel model-call span starts inside. Cover marks that the OTel
+// span is not exported, so the SDK span sheds optional fields instead of being dropped; false,
+// marking nothing, when the call already ended.
+type SDKCall struct {
+	TraceID, SpanID string
+	Cover           func() bool
+}
+
+// OTelCall is an OTel model-call span an SDK call starts inside.
+type OTelCall struct {
+	TraceID, SpanID, ParentID string
+	// Adopted: this call is the first, and takes the span's trace, span and parent IDs; otherwise
+	// the call is a child of the span with SpanID.
+	Adopted bool
 }
