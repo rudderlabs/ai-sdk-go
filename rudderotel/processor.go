@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"weak"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -24,8 +25,10 @@ type spanKey struct {
 func key(s trace.SpanContext) spanKey { return spanKey{s.TraceID(), s.SpanID()} }
 
 type spanState struct {
-	tags       map[string]string
-	owner      *rudderstackai.Interaction
+	tags map[string]string
+	// Identity survives its request; an open span must not keep a dropped paused run alive.
+	owner      weak.Pointer[rudderstackai.Interaction]
+	ownerID    string
 	suppressed bool
 }
 
@@ -201,7 +204,11 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 				p.dedup(ctx, s, routed)
 			}
 		}
-		p.remember(key(s.SpanContext()), spanState{tags: held, owner: interaction})
+		ownerID := ""
+		if interaction != nil {
+			ownerID = interaction.ID()
+		}
+		p.remember(key(s.SpanContext()), spanState{tags: held, owner: weak.Make(interaction), ownerID: ownerID})
 		if p.options.ProductEvents {
 			p.recordAncestry(s, interaction)
 		}
@@ -243,7 +250,13 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 			s = taggedSpan{ReadOnlySpan: s, attrs: attrs}
 		}
 		if p.options.ProductEvents {
-			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
+			owner := state.owner.Value()
+			// An expired owner is not an unknown owner: looking up its reused ID would
+			// deliver this span's calls and content into another tenant's interaction.
+			id := firstString(attributes(s.Attributes()), InteractionIDAttribute)
+			if owner != nil || state.ownerID == "" || id != state.ownerID {
+				safe("tracing.productEvents", func() { p.recordAncestry(s, owner); recordSpan(s, p.exporter.client, owner) })
+			}
 		}
 		if !drop {
 			if own != nil || parent != nil {
