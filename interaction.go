@@ -433,6 +433,7 @@ type recordedCall struct {
 	callEventPending                                 bool
 	pricingRevision                                  int
 	pricingActive                                    bool
+	pricingPending                                   bool
 	reportSequence                                   int
 	creditsExplicit                                  bool
 	credits                                          *float64
@@ -541,6 +542,7 @@ type Interaction struct {
 	ended                  bool
 	ending                 bool // capture callbacks may record calls while finalization is in progress
 	firstToken             time.Duration
+	heldPricing            []*recordedCall
 	calls                  []*recordedCall
 	callCount              int
 	successfulCallSequence int
@@ -827,6 +829,9 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 		i = &Interaction{id: uuid.NewString(), conversationID: uuid.NewString(), trigger: TriggerUser, ended: true, untracked: true, seen: map[string]*recordedCall{}, toolsByID: map[string]*recordedTool{}}
 		return context.WithValue(ctx, keyInteraction, i), i
 	}
+	if i.resumed {
+		i.priceRestoredCalls()
+	}
 	i.mu.Lock()
 	if i.keepsTextLocked() && o.PromptText != "" {
 		i.prompt = o.PromptText
@@ -1027,11 +1032,14 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 				AgentName: earlier.agentName, CallPurpose: earlier.callPurpose, FallbackUsed: earlier.fallbackUsed, BYOK: earlier.byok,
 			}
 			earlier.pricingActive = true
+			earlier.pricingPending = true
+			earlier.credits = nil
 			i.mu.Unlock()
-			credits = priceCredits(hook, basis)
+			var failed bool
+			credits, failed = priceCreditsAttempt(hook, basis)
 			i.mu.Lock()
 			earlier.pricingActive = false
-			if version == earlier.pricingRevision {
+			if failed || version == earlier.pricingRevision {
 				break
 			}
 			if attempt == 2 {
@@ -1042,11 +1050,17 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 			}
 		}
 	}
-	if i.ended || !slices.Contains(i.calls, earlier) {
+	if i.ended || (!slices.Contains(i.calls, earlier) && !slices.Contains(i.heldPricing, earlier)) {
 		return
 	}
 	if !earlier.creditsExplicit {
 		earlier.credits, earlier.creditsExplicit = credits, explicit
+	}
+	if !earlier.pricingActive || earlier.creditsExplicit {
+		earlier.pricingPending = false
+	}
+	if !i.pausedAt.IsZero() || i.pausing {
+		return
 	}
 	i.emitReadyCallsLocked()
 }
@@ -2218,6 +2232,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 			i.mu.Lock()
 		}
 		i.filterSpanCallsLocked()
+		i.holdPricingCallsLocked()
 		i.emitPendingCallsLocked()
 		if len(i.outbox) == 0 && len(i.tools) <= fired && len(i.pendingOverflowCalls) == 0 &&
 			!slices.ContainsFunc(i.calls, func(call *recordedCall) bool { return call.callEventPending }) {
@@ -2238,9 +2253,19 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		i.sendLocked("ai_response_received", func() map[string]any { return props })
 	}
 	i.calls, i.overflow, i.lastCall, i.lastOK = nil, nil, nil, nil
-	for key := range i.seen {
-		i.seen[key] = nil
+	for key, kept := range i.seen {
+		if !slices.Contains(i.heldPricing, kept) {
+			i.seen[key] = nil
+		}
 	}
+	for _, call := range i.heldPricing {
+		i.calls = append(i.calls, call)
+		i.lastCall = call
+		if call.errorType == "" {
+			i.lastOK = call
+		}
+	}
+	i.heldPricing = nil
 	structured := make([]*recordedTool, 0)
 	for _, tool := range i.tools {
 		if tool.structuredPending() {
@@ -2294,6 +2319,72 @@ func (i *Interaction) checkDisconnected() {
 		i.mu.Lock()
 		i.clientDisconnected = true
 		i.mu.Unlock()
+	}
+}
+
+// holdPricingCallsLocked removes unfinished revisions from the segment being closed.
+func (i *Interaction) holdPricingCallsLocked() {
+	kept := i.calls[:0]
+	for _, call := range i.calls {
+		if call.pricingActive && call.pricingPending {
+			call.credits = nil
+			i.heldPricing = append(i.heldPricing, call)
+			if i.lastCall == call {
+				i.lastCall = nil
+			}
+			if i.lastOK == call {
+				i.lastOK = nil
+			}
+		} else {
+			kept = append(kept, call)
+		}
+	}
+	i.calls = kept
+}
+
+func (i *Interaction) priceRestoredCalls() {
+	i.mu.Lock()
+	defer i.unlock()
+	hook := cfg().credits
+	for _, call := range slices.Clone(i.calls) {
+		if !call.pricingPending {
+			continue
+		}
+		call.credits = nil
+		if hook != nil && call.errorType == "" && !call.usageUnknown {
+			for attempt := 0; attempt < 3; attempt++ {
+				if i.ended || call.creditsExplicit || call.errorType != "" || call.usageUnknown {
+					break
+				}
+				version := call.pricingRevision
+				basis := CreditCall{
+					Provider: call.provider, Model: first(call.rawModel, call.model),
+					InputTokens: call.inputTokens, OutputTokens: call.outputTokens,
+					ReasoningTokens: copyCreditPointer(call.reasoningTokens), CachedInputTokens: call.cachedInputTokens,
+					CacheWriteTokens: call.cacheWriteTokens, ServiceTier: call.serviceTier,
+					CostUSD: copyCreditPointer(call.costUSD), CallCount: call.callCount,
+					AgentName: call.agentName, CallPurpose: call.callPurpose,
+					FallbackUsed: copyCreditPointer(call.fallbackUsed), BYOK: copyCreditPointer(call.byok),
+				}
+				call.pricingActive = true
+				i.mu.Unlock()
+				credits, failed := priceCreditsAttempt(hook, basis)
+				i.mu.Lock()
+				call.pricingActive = false
+				if failed || version == call.pricingRevision {
+					if !i.ended {
+						call.credits = credits
+					}
+					break
+				}
+				if attempt == 2 {
+					i.mu.Unlock()
+					report("credits_unstable", "credits", fmt.Errorf("pricing basis changed during three credits attempts"))
+					i.mu.Lock()
+				}
+			}
+		}
+		call.pricingPending = false
 	}
 }
 
@@ -2455,6 +2546,9 @@ func pendingCall(c *recordedCall) map[string]any {
 	// The keys and value types Node.js writes, shared by the three SDKs.
 	p["from_span"], p["matched"], p["usage_known"] = c.fromSpan, c.twinMatched, !c.usageUnknown
 	p["credits_explicit"] = c.creditsExplicit
+	if c.pricingPending {
+		p["pricing_pending"] = true
+	}
 	p["report_sequence"] = c.reportSequence
 	if c.callIndex > 0 {
 		p["call_index"] = c.callIndex
@@ -2651,6 +2745,7 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	}
 	for _, p := range snapshot.PendingCalls {
 		c := &recordedCall{}
+		c.pricingPending = pendingBool(p, "pricing_pending")
 		c.callEventPending = pendingBool(p, "call_event_pending")
 		c.callEventEmitted = pendingBool(p, "call_event_emitted")
 		c.spanSource = restoredSpanSource(p["span_source"])

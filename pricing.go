@@ -370,7 +370,12 @@ func copyCreditPointer[T any](p *T) *T {
 	return Ptr(*p)
 }
 
-func priceCredits(fn CreditsFunc, call CreditCall) (amount *float64) {
+func priceCredits(fn CreditsFunc, call CreditCall) *float64 {
+	amount, _ := priceCreditsAttempt(fn, call)
+	return amount
+}
+
+func priceCreditsAttempt(fn CreditsFunc, call CreditCall) (amount *float64, failed bool) {
 	call.ReasoningTokens = copyCreditPointer(call.ReasoningTokens)
 	call.CostUSD = copyCreditPointer(call.CostUSD)
 	call.FallbackUsed = copyCreditPointer(call.FallbackUsed)
@@ -378,17 +383,17 @@ func priceCredits(fn CreditsFunc, call CreditCall) (amount *float64) {
 	defer func() {
 		if r := recover(); r != nil {
 			report(KindUserCallback, "credits", recovered(r))
-			amount = nil
+			amount, failed = nil, true
 		}
 	}()
 	v, err := fn(call)
 	if err != nil {
 		report(KindUserCallback, "credits", err)
-		return nil
+		return nil, true
 	}
 	if v != nil && !validRate(*v) {
 		report(KindUserCallback, "credits", errors.New("rudderstackai: credits must be finite and non-negative"))
-		return nil
+		return nil, true
 	}
-	return creditsOf(v)
+	return creditsOf(v), false
 }

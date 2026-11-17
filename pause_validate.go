@@ -44,7 +44,7 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 					return false
 				}
 			}
-			for _, key := range []string{"last", "last_ok", "history_only", "fallback_used", "byok", "uncredited", "unpriced", "fees_unknown", "error", "settled", "fired", "call_event_pending", "call_event_emitted", "from_span", "matched", "usage_known", "twin_matched", "usage_unknown", "credits_explicit", "structured_candidate", "result_seen", "tool_event_emitted"} {
+			for _, key := range []string{"pricing_pending", "last", "last_ok", "history_only", "fallback_used", "byok", "uncredited", "unpriced", "fees_unknown", "error", "settled", "fired", "call_event_pending", "call_event_emitted", "from_span", "matched", "usage_known", "twin_matched", "usage_unknown", "credits_explicit", "structured_candidate", "result_seen", "tool_event_emitted"} {
 				if key == "twin_matched" {
 					if _, present := p["matched"]; present {
 						continue

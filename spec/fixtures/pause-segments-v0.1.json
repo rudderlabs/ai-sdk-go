@@ -1745,6 +1745,309 @@
         ],
         "tool_events": []
       }
+    },
+    {
+      "name": "pause during repeat pricing defers final credits in process",
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "per_input_token": 1,
+          "byok_multiplier": 2,
+          "on_hook": [
+            [],
+            [
+              {
+                "op": "pause"
+              }
+            ]
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": false,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": true,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0,
+            "total_input_tokens": 0
+          },
+          {
+            "response_status": "success",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 20
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "pause during repeat pricing defers final credits through JSON restore",
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "per_input_token": 1,
+          "byok_multiplier": 2,
+          "on_hook": [
+            [],
+            [
+              {
+                "op": "pause",
+                "json": true
+              }
+            ]
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": false,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": true,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0,
+            "total_input_tokens": 0
+          },
+          {
+            "response_status": "success",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 20
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "repeat pricing retries changed metadata after pause",
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "per_input_token": 1,
+          "byok_multiplier": 2,
+          "on_hook": [
+            [],
+            [
+              {
+                "op": "pause"
+              },
+              {
+                "op": "record_call",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "input_tokens": 10,
+                "source": "span",
+                "response_id": "pricing-pending",
+                "byok": false,
+                "started_ms": 100,
+                "ended_ms": 110
+              }
+            ]
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": false,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": true,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0,
+            "total_input_tokens": 0
+          },
+          {
+            "response_status": "success",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          10
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "pause after nested repeat keeps the outer pricing flight held",
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "per_input_token": 1,
+          "byok_multiplier": 2,
+          "on_hook": [
+            [],
+            [
+              {
+                "op": "record_call",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "input_tokens": 10,
+                "source": "span",
+                "response_id": "pricing-pending",
+                "byok": false,
+                "started_ms": 100,
+                "ended_ms": 110
+              },
+              {
+                "op": "pause"
+              }
+            ]
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": false,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": true,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0,
+            "total_input_tokens": 0
+          },
+          {
+            "response_status": "success",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          10
+        ],
+        "tool_events": []
+      }
     }
   ]
 }
