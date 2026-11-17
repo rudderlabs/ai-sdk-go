@@ -53227,7 +53227,7 @@
       "construct_as": {
         "python": "pydantic_v2",
         "node": "class",
-        "go": "marshaler"
+        "go": "struct"
       },
       "fields": {
         "keep": "ok",
@@ -53255,7 +53255,7 @@
       "construct_as": {
         "python": "pydantic_v1",
         "node": "class",
-        "go": "marshaler"
+        "go": "struct"
       },
       "fields": {
         "keep": "ok",

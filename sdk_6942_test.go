@@ -3,6 +3,7 @@ package rudderstackai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"reflect"
 	"strings"
@@ -17,11 +18,7 @@ type sdk6942Fields struct {
 	Nested any    `json:"nested"`
 }
 type sdk6942Embedded struct{ sdk6942Fields }
-type sdk6942Marshaler struct{ sdk6942Fields }
 
-func (s sdk6942Marshaler) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]any{"keep": s.Keep, "raw": string(s.Raw), "nested": s.Nested})
-}
 func sdk6942Build(v any) any {
 	if a, ok := v.([]any); ok {
 		for n, x := range a {
@@ -55,8 +52,6 @@ func sdk6942Build(v any) any {
 			p.Nested = p
 		}
 		switch shapes["go"] {
-		case "marshaler":
-			return sdk6942Marshaler{*p}
 		case "embedded":
 			return sdk6942Embedded{*p}
 		case "struct":
@@ -124,5 +119,39 @@ func TestSDK6942NativeContentContainers(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+type sdk6942Hidden struct {
+	Visible string
+	Secret  string
+}
+
+// The app's MarshalJSON leaves Secret out on purpose.
+func (h sdk6942Hidden) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]string{"visible": h.Visible})
+}
+
+type sdk6942Failing struct{ Value string }
+
+func (sdk6942Failing) MarshalJSON() ([]byte, error) { return nil, errors.New("no JSON form") }
+
+// Values with their own JSON form keep it, as on main; plain values are walked so bytes drop.
+func TestSDK6942CustomMarshalersKeepTheirRepresentation(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   any
+		want any
+	}{
+		{"map of byte slices drops its bytes", map[string][]byte{"raw": []byte("PRIVATE")}, map[string]any{}},
+		{"marshaler hiding a field keeps it hidden", sdk6942Hidden{Visible: "ok", Secret: "PRIVATE"}, map[string]any{"visible": "ok"}},
+		{"pointer to a hiding marshaler", &sdk6942Hidden{Visible: "ok", Secret: "PRIVATE"}, map[string]any{"visible": "ok"}},
+		{"failing marshaler drops the value", map[string]any{"keep": "ok", "bad": sdk6942Failing{Value: "PRIVATE"}}, map[string]any{"keep": "ok"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := stripBinary(tc.in); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("stripBinary() = %#v, want %#v", got, tc.want)
+			}
+		})
 	}
 }

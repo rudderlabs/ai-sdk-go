@@ -1,6 +1,7 @@
 package rudderstackai
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/json"
 	"math"
@@ -328,7 +329,27 @@ var (
 	rawMessageType = reflect.TypeFor[json.RawMessage]()
 	jsonNumberType = reflect.TypeFor[json.Number]()
 	textType       = reflect.TypeFor[encoding.TextMarshaler]()
+	marshalerType  = reflect.TypeFor[json.Marshaler]()
 )
+
+// customJSON marshals a value whose type (or addressable pointer) implements json.Marshaler or
+// encoding.TextMarshaler; custom is false for every other value.
+func customJSON(rv reflect.Value) (b []byte, custom bool, err error) {
+	t := rv.Type()
+	target := rv
+	switch {
+	case t.Implements(marshalerType) || t.Implements(textType):
+	case rv.CanAddr() && (reflect.PointerTo(t).Implements(marshalerType) || reflect.PointerTo(t).Implements(textType)):
+		target = rv.Addr()
+	default:
+		return nil, false, nil
+	}
+	if (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) && rv.IsNil() {
+		return []byte("null"), true, nil
+	}
+	b, err = json.Marshal(target.Interface())
+	return b, true, err
+}
 
 // Primitive map keys use Node String() conventions; other keys are dropped.
 func primitiveFloatKey(f float64) string {
@@ -410,7 +431,22 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		}
 		return w.strip(decoded)
 	}
-	// Inspect native fields before any serializer can turn a byte field into text/base64.
+	// Without spans, as on main, a type's own JSON or text form is the app's chosen
+	// representation: call it and strip its output as plain data. Other values are walked.
+	if w.legacy {
+		if b, custom, err := customJSON(rv); custom {
+			if err != nil {
+				return nil, false
+			}
+			var decoded any
+			dec := json.NewDecoder(bytes.NewReader(b))
+			dec.UseNumber()
+			if dec.Decode(&decoded) != nil {
+				return nil, false
+			}
+			return w.strip(decoded)
+		}
+	}
 	key, ok := w.enter(rv)
 	if !ok {
 		w.omitted = true
