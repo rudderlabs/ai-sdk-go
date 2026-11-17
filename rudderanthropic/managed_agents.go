@@ -836,7 +836,8 @@ func (s *sessionTracker) settle(t *turn, id string, e map[string]any, at msTime,
 			tool.err, tool.errorType = rudderstackai.Ptr(true), errorType
 			return
 		}
-		tool.hasResult, tool.result = true, e["content"]
+		// Read as the Anthropic wrapper reads a tool_result, so vendor failures count as errors.
+		tool.hasResult, tool.result = true, kit.ToolResultValue(e["content"])
 		tool.err = rudderstackai.Ptr(e["is_error"] == true)
 		return
 	}
@@ -859,7 +860,7 @@ func (s *sessionTracker) settle(t *turn, id string, e map[string]any, at msTime,
 		kit.RecordToolResult(i, id, rudderstackai.ToolResult{Error: rudderstackai.Ptr(true), ErrorType: errorType, Duration: duration}, false)
 		return
 	}
-	result := rudderstackai.ToolResult{Error: rudderstackai.Ptr(e["is_error"] == true), Result: e["content"], Duration: duration}
+	result := rudderstackai.ToolResult{Error: rudderstackai.Ptr(e["is_error"] == true), Result: kit.ToolResultValue(e["content"]), Duration: duration}
 	kit.RecordToolResult(i, id, result, true)
 }
 
