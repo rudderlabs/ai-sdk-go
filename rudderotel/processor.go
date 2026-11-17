@@ -150,6 +150,20 @@ func init() {
 
 // dedup registers an OTel model-call span an SDK call may replace. A span starting inside an
 // SDK call span is covered: it is recorded, never exported. Spans off, it is never called.
+// spanInteraction is the open interaction a span's rudderstack.interaction_id names, else the
+// ambient one, as product events route it: dedup never gives one interaction's span to another
+// interaction's call.
+func spanInteraction(s sdktrace.ReadWriteSpan, ambient *rudderstackai.Interaction) *rudderstackai.Interaction {
+	named := firstString(attributes(s.Attributes()), InteractionIDAttribute)
+	if named == "" || (ambient != nil && named == ambient.ID()) {
+		return ambient
+	}
+	if found, ok := hook.Tracing.Open(named).(*rudderstackai.Interaction); ok && found != nil && !found.Ended() {
+		return found
+	}
+	return ambient
+}
+
 func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, interaction *rudderstackai.Interaction) (covered bool) {
 	if interaction == nil || interaction.Ended() || spanRole(s) != "llm" {
 		return false
@@ -369,8 +383,10 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 			}
 		}
 		// After tagging, so a filter that reads user.id sees the tagged span.
-		if interaction != nil && hook.Tracing.EmitSpans() {
-			p.dedup(ctx, s, interaction)
+		if hook.Tracing.EmitSpans() {
+			if routed := spanInteraction(s, interaction); routed != nil {
+				p.dedup(ctx, s, routed)
+			}
 		}
 		p.remember(key(s.SpanContext()), spanState{tags: held, owner: interaction})
 		if p.options.ProductEvents {
