@@ -2,7 +2,13 @@ package ruddermcpgo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +18,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
 
 func maskedErrorMessage(t *testing.T, s string) string {
@@ -205,6 +212,122 @@ func testMCPGoErrorMessageSuccessfulReadsAndPrompts(t *testing.T, connect func(*
 		}
 		if _, ok := p["error_message"]; ok {
 			t.Errorf("error_message on success: %v", p)
+		}
+	}
+}
+
+type capoffWriter struct {
+	started chan struct{}
+	release chan struct{}
+	header  http.Header
+}
+
+func (w *capoffWriter) Header() http.Header { return w.header }
+func (*capoffWriter) WriteHeader(int)       {}
+func (w *capoffWriter) Write(p []byte) (int, error) {
+	close(w.started)
+	<-w.release
+	return len(p), nil
+}
+
+type capoffClient struct{ *recorder }
+
+func (c *capoffClient) Flush(context.Context) error {
+	if len(c.named("mcp_tool_called")) != 1 {
+		return errors.New("event missing at analytics flush")
+	}
+	return nil
+}
+
+func TestMCPGoErrorMessageNoWriteWait(t *testing.T) {
+	for _, transport := range []string{"stdio", "http"} {
+		for _, mode := range []string{"off-result", "off-rpc", "split-result", "split-rpc", "on-success"} {
+			t.Run(transport+"/"+mode, func(t *testing.T) {
+				if err := rudderstackai.Configure(rudderstackai.WithCaptureContent(false)); err != nil {
+					t.Fatal(err)
+				}
+				s := server.NewMCPServer("no-write-wait-mcpgo", "1", server.WithToolCapabilities(true))
+				s.AddTool(mcp.NewTool("lookup"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+					if strings.HasSuffix(mode, "rpc") {
+						return nil, errors.New("failure")
+					}
+					return &mcp.CallToolResult{IsError: mode != "on-success", Content: []mcp.Content{mcp.TextContent{Type: "text", Text: "response"}}}, nil
+				})
+				r := wrap(t, s, Options{})
+				client := &capoffClient{r}
+				opts := Options{Analytics: client, CaptureContent: mode == "on-success"}
+				if strings.HasPrefix(mode, "split") {
+					opts.CaptureContent = true
+					opts.ContentCapture = &rudderstackai.ContentCapture{ErrorMessage: rudderstackai.Ptr(false)}
+				}
+				if err := WrapServer(s, opts); err != nil {
+					t.Fatal(err)
+				}
+				if err := rudderstackai.Configure(rudderstackai.WithAnalytics(client)); err != nil {
+					t.Fatal(err)
+				}
+				writer := &capoffWriter{started: make(chan struct{}), release: make(chan struct{}), header: make(http.Header)}
+				release := sync.OnceFunc(func() { close(writer.release) })
+				defer release()
+				done := make(chan struct{})
+				returned := make(chan struct{})
+				waiting := make(chan bool, 1)
+				handle := func(ctx context.Context, out io.Writer) {
+					response := s.HandleMessage(ctx, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"lookup","arguments":{}}}`))
+					// Handler has returned; inspect observation before any write starts.
+					waiting <- mcpbridge.ResponsesFrom(ctx).Waiting()
+					close(returned)
+					data, _ := json.Marshal(response)
+					_, _ = out.Write(append(data, '\n'))
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				if transport == "stdio" {
+					observed, _, out := ObserveStdio(ctx, strings.NewReader(""), writer)
+					go func() { defer close(done); handle(observed, out) }()
+				} else {
+					h := ObserveHTTP(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handle(r.Context(), w) }))
+					req := httptest.NewRequest(http.MethodPost, "/mcp", nil).WithContext(ctx)
+					go func() { defer close(done); h.ServeHTTP(writer, req) }()
+				}
+				select {
+				case <-returned:
+				case <-time.After(2 * time.Second):
+					t.Fatal("handler never returned")
+				}
+				if <-waiting {
+					t.Error("response observer/timer registered")
+				}
+				select {
+				case <-writer.started:
+				case <-time.After(2 * time.Second):
+					t.Fatal("write never started")
+				}
+				deadline, stop := context.WithTimeout(context.Background(), time.Second)
+				defer stop()
+				if !rudderstackai.Flush(deadline) {
+					t.Error("application Flush failed")
+				}
+				if !rudderstackai.CloseClient(deadline, client) {
+					t.Error("application CloseClient failed")
+				}
+				if len(r.named("mcp_tool_called")) != 1 {
+					t.Error("event missing before flush returned")
+				}
+				if len(r.named("mcp_tool_called")) == 1 {
+					if _, ok := r.props(t, "mcp_tool_called")["error_message"]; ok {
+						t.Error("unexpected error_message")
+					}
+				}
+				select {
+				case <-done:
+					t.Error("write completed before release")
+				default:
+				}
+				// Join before the next test changes the global configuration.
+				release()
+				<-done
+			})
 		}
 	}
 }

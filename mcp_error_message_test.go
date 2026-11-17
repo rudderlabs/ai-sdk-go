@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -314,4 +317,115 @@ type fixtureFailingWriter struct{}
 
 func (fixtureFailingWriter) Write(p []byte) (int, error) {
 	return len(p), errors.New("fixture write failed")
+}
+
+// A blocked response writer lets the application drain analytics while the wire is pending.
+type capoffWriter struct {
+	net.Conn
+	started chan struct{}
+	release chan struct{}
+}
+
+func (w *capoffWriter) Write(p []byte) (int, error) {
+	var msg map[string]any
+	_ = json.Unmarshal(p, &msg)
+	if msg["id"] == float64(2) {
+		close(w.started)
+		<-w.release
+	}
+	return w.Conn.Write(p)
+}
+
+type capoffClient struct{ *recorder }
+
+func (c *capoffClient) Flush(context.Context) error {
+	if len(c.named("mcp_tool_called")) != 1 {
+		return errors.New("event missing at analytics flush")
+	}
+	return nil
+}
+
+func TestMCPErrorMessageNoWriteWait(t *testing.T) {
+	for _, mode := range []string{"off-result", "off-rpc", "split-result", "split-rpc", "on-success"} {
+		t.Run(mode, func(t *testing.T) {
+			setupAI(t, WithCaptureContent(false))
+			s := mcp.NewServer(&mcp.Implementation{Name: "no-write-wait", Version: "1"}, nil)
+			calls := make(chan *reqCtx, 1)
+			s.AddTool(&mcp.Tool{Name: "lookup", InputSchema: map[string]any{"type": "object"}}, func(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				calls <- ctx.Value(reqCtxKey{}).(*reqCtx)
+				if strings.HasSuffix(mode, "rpc") {
+					return nil, &jsonrpc.Error{Code: -32603, Message: "failure"}
+				}
+				return &mcp.CallToolResult{IsError: mode != "on-success", Content: []mcp.Content{&mcp.TextContent{Text: "response"}}}, nil
+			})
+			r := wrap(t, s, Options{})
+			client := &capoffClient{r}
+			opts := Options{Analytics: client, CaptureContent: mode == "on-success"}
+			if strings.HasPrefix(mode, "split") {
+				opts.CaptureContent = true
+				opts.ContentCapture = &ContentCapture{ErrorMessage: Ptr(false)}
+			}
+			if err := WrapMCPServer(s, opts); err != nil {
+				t.Fatal(err)
+			}
+			if err := Configure(WithAnalytics(client)); err != nil {
+				t.Fatal(err)
+			}
+			c1, c2 := net.Pipe()
+			writer := &capoffWriter{Conn: c2, started: make(chan struct{}), release: make(chan struct{})}
+			ctx, st := ObserveMCPTransport(context.Background(), &mcp.IOTransport{Reader: c2, Writer: writer})
+			responses := mcpbridge.ResponsesFrom(ctx)
+			ss, err := s.Connect(ctx, st, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cs, err := mcp.NewClient(testClientInfo, nil).Connect(context.Background(), &mcp.IOTransport{Reader: c1, Writer: c1}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = cs.Close(); _ = ss.Close() })
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, _ = cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "lookup"})
+			}()
+			select {
+			case <-writer.started:
+			case <-time.After(2 * time.Second):
+				t.Fatal("write never started")
+			}
+			// Release even when an assertion fails, before sessions are closed.
+			release := sync.OnceFunc(func() { close(writer.release) })
+			defer release()
+			rc := <-calls
+			if rc.held != nil || responses.Waiting() {
+				t.Error("hold/response observer/timer registered")
+			}
+			deadline, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			if !Flush(deadline) {
+				t.Error("application Flush failed")
+			}
+			if !CloseClient(deadline, client) {
+				t.Error("application CloseClient failed")
+			}
+			if len(r.named("mcp_tool_called")) != 1 {
+				t.Error("event missing before flush returned")
+			}
+			if len(r.named("mcp_tool_called")) == 1 {
+				p := r.props(t, "mcp_tool_called")
+				if _, ok := p["error_message"]; ok {
+					t.Error("unexpected error_message")
+				}
+			}
+			// The client call is still blocked by the response write.
+			select {
+			case <-done:
+				t.Error("response write completed before release")
+			default:
+			}
+			release()
+			<-done
+		})
+	}
 }
