@@ -2001,3 +2001,63 @@ func TestManagedAgentsIgnoresResume(t *testing.T) {
 		t.Fatalf("interaction IDs=%v, snapshot=%s", ids, snapshot.InteractionID)
 	}
 }
+
+func TestManagedAgentsCarriesEveryToolAPauseNamesWhateverItsOrder(t *testing.T) {
+	for _, order := range []string{`["sevt_mix_approval","sevt_mix_bash"]`, `["sevt_mix_bash","sevt_mix_approval"]`} {
+		t.Run(order, func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
+			resetMA(t)
+			at := func(n int) string { return fmt.Sprintf(`"processed_at":"2026-11-16T10:00:0%d.000Z"`, n) }
+			segments := [][]string{{
+				`{"id":"sevt_mix_prompt","type":"user.message","content":[],` + at(0) + `}`,
+				`{"id":"sevt_mix_approval","type":"agent.tool_use","name":"ask_tool","evaluated_permission":"ask","input":{},` + at(1) + `}`,
+				`{"id":"sevt_mix_bash","type":"agent.tool_use","name":"bash","evaluated_permission":"allow","input":{},` + at(2) + `}`,
+				`{"id":"sevt_mix_pause","type":"session.status_idle","stop_reason":{"type":"requires_action","event_ids":` + order + `},` + at(3) + `}`,
+			}, {
+				`{"id":"sevt_mix_deny","type":"user.tool_confirmation","tool_use_id":"sevt_mix_approval","result":"deny",` + at(4) + `}`,
+				`{"id":"sevt_mix_result","type":"user.tool_result","tool_use_id":"sevt_mix_bash","is_error":true,"content":[{"type":"text","text":"failed"}],` + at(5) + `}`,
+				`{"id":"sevt_mix_idle","type":"session.status_idle","stop_reason":{"type":"end_turn"},` + at(6) + `}`,
+			}}
+			for _, raw := range segments {
+				events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t, raw...), rudderanthropic.WithSessionID("sesn_mix_"+strconv.Itoa(len(order))+order[2:6]))
+				for events.Next() {
+				}
+				_ = events.Close()
+			}
+			got := rec.events(t)["ai_response_received"]
+			if len(got) != 2 || got[0]["tool_call_count"] != float64(0) || got[1]["tool_call_count"] != float64(2) {
+				t.Fatalf("%v", got)
+			}
+			for _, e := range got[1]["tool_breakdown"].([]any) {
+				b := e.(map[string]any)
+				if b["tool_name"] == "bash" && (b["error_count"] != float64(1) || b["duration_ms"] == nil || b["duration_ms"] == float64(0)) {
+					t.Fatalf("%v", b)
+				}
+			}
+		})
+	}
+}
+
+func TestManagedAgentsKeepsARequestsOutputAcrossAReconnectWhenItsStartWasNotRead(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLLMCallEvents(true), rudderstackai.WithCaptureContent(true))
+	resetMA(t)
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	segments := [][]string{{
+		`{"id":"sevt_rc_u","type":"user.message","content":[],"processed_at":"2026-11-16T10:00:00.000Z"}`,
+		`{"id":"sevt_rc_a","type":"agent.message","content":[{"type":"text","text":"Hi"}],"processed_at":"2026-11-16T10:00:01.000Z"}`,
+	}, {
+		`{"id":"sevt_rc_e","type":"span.model_request_end","model_request_start_id":"sevt_not_read","is_error":false,"model_usage":{"input_tokens":10,"output_tokens":2},"processed_at":"2026-11-16T10:00:02.000Z"}`,
+		`{"id":"sevt_rc_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},"processed_at":"2026-11-16T10:00:03.000Z"}`,
+	}}
+	for _, raw := range segments {
+		events := rudderanthropic.TrackSessionEvents(ctx, maEvents(t, raw...), rudderanthropic.WithSessionID("sesn_rc_no_start"))
+		for events.Next() {
+		}
+		_ = events.Close()
+	}
+	i.End(rudderstackai.EndOptions{Status: rudderstackai.StatusSuccess})
+	got := rec.events(t)["ai_llm_response_received"]
+	if len(got) != 1 || got[0]["output_text"] != "Hi" {
+		t.Fatalf("%v", got)
+	}
+}

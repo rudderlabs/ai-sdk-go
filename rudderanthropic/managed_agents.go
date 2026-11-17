@@ -1118,7 +1118,7 @@ func (s *sessionTracker) idle(e map[string]any, at msTime) {
 	case "requires_action":
 		ids, _ := stop["event_ids"].([]any)
 		t.waiting = rudderstackai.PauseOther
-		found := false
+		// Mark every named tool first, so one named after an approval is carried across too.
 		for _, id := range ids {
 			// A tool the session waits on is the app's to run or answer (a sandbox tool too).
 			_, open := t.tools[str(id)]
@@ -1127,6 +1127,9 @@ func (s *sessionTracker) idle(e map[string]any, at msTime) {
 					t.blocking.set(str(id), rudderstackai.PauseDeferredTool)
 				}
 			}
+		}
+		found := false
+		for _, id := range ids {
 			reason, ok := t.blocking.get(str(id))
 			if !ok {
 				continue
@@ -1299,8 +1302,8 @@ func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime) {
 	if t.borrowed != nil && i == t.borrowed {
 		kit.KeepAnswer(i, t.answer)
 		kit.HintStatus(i, end.status, end.errorType, end.pauseReason)
-		// A reconnect in the same interaction settles the tools still open.
-		if t.recorded.len() > 0 || t.starts.len() > 0 {
+		// A reconnect in the same interaction settles the tools and requests still open.
+		if t.recorded.len() > 0 || t.starts.len() > 0 || t.requestText != "" || t.modelError != "" {
 			s.shared.mu.Lock()
 			s.shared.borrowed = &borrowedTurn{i: i, blocking: t.blocking.entries(), pending: pendingOf(t)}
 			s.shared.mu.Unlock()
