@@ -69,7 +69,7 @@ Go's native fuzzing covers the parsers the Node.js and Python SDKs check with pr
 | Target | Package | Checks |
 | --- | --- | --- |
 | `FuzzJoinIDs` | root | Any `_meta` JSON gives bounded IDs, and a valid `traceparent` wins over `com.rudderstack/trace_id` |
-| `FuzzTraceparent` | root | A `traceparent` whose fields are hex of the right length gives a trace ID exactly when it is valid W3C; any other gives a 32-digit lowercase ID or none (version 00 with extra fields is left out until SDK-6930) |
+| `FuzzTraceparent` | root | A `traceparent` whose fields are hex of the right length gives a trace ID exactly when it is valid W3C; any other gives a 32-digit lowercase ID or none |
 | `FuzzChatUsage`, `FuzzMessagesUsage`, `FuzzUsage` | `rudderopenai`, `rudderanthropic`, `ruddergenai` | Whatever a response carries as usage, the app gets the provider SDK's result unchanged, and every event validates with non-negative integer token totals |
 | `FuzzChatStreamSplit`, `FuzzResponsesStreamSplit`, `FuzzMessagesStreamSplit` | `rudderopenai`, `rudderanthropic` | A recorded stream gives the same chunks and events however its bytes are split |
 | `FuzzChatStreamCut`, `FuzzResponsesStreamCut`, `FuzzMessagesStreamCut` | `rudderopenai`, `rudderanthropic` | A cut or corrupted stream reaches the app exactly as the provider SDK alone delivers it, and still ends in one conforming answer |
