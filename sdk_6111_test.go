@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"reflect"
 	"slices"
@@ -684,11 +685,23 @@ func TestSDK6111WritesTheSharedPendingCallKeys(t *testing.T) {
 	if !reflect.DeepEqual(written, any(records["go"])) {
 		t.Fatalf("pending_calls = %v, want the fixture's go entry %v", written, records["go"])
 	}
-	// Every key Node.js writes has the same value here; report_sequence is this SDK's own.
+	// Shared fields agree; Go writes timestamps as text for released Go readers.
 	for n, node := range records["node"] {
 		record := records["go"][n].(map[string]any)
 		for key, want := range node.(map[string]any) {
-			if !reflect.DeepEqual(record[key], want) {
+			got := record[key]
+			if key == "started_at" || key == "ended_at" {
+				text, ok := got.(string)
+				if !ok {
+					t.Fatalf("%s must be RFC3339 text, got %T", key, got)
+				}
+				at, err := time.Parse(time.RFC3339Nano, text)
+				if err != nil {
+					t.Fatal(err)
+				}
+				got = float64(at.UnixNano()) / 1e6
+			}
+			if !reflect.DeepEqual(got, want) {
 				t.Errorf("record %d %s = %v, want %v as Node.js writes it", n, key, record[key], want)
 			}
 		}
@@ -698,6 +711,31 @@ func TestSDK6111WritesTheSharedPendingCallKeys(t *testing.T) {
 			}
 		}
 	}
+
+	var restoredSnapshot PausedInteraction
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &restoredSnapshot); err != nil {
+		t.Fatal(err)
+	}
+	client.reenter = nil
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &restoredSnapshot})
+	if restored.ID() != i.ID() {
+		t.Fatal("round trip started a fresh interaction")
+	}
+	restored.mu.Lock()
+	if len(restored.calls) != 2 {
+		t.Fatalf("restored calls = %d, want 2", len(restored.calls))
+	}
+	for n, call := range restored.calls {
+		if !call.startedAt.Equal(time.UnixMilli(int64(100+100*n))) || !call.endedAt.Equal(time.UnixMilli(int64(110+100*n))) {
+			t.Errorf("call %d lost timing: %v..%v", n, call.startedAt, call.endedAt)
+		}
+	}
+	restored.mu.Unlock()
+	restored.End(EndOptions{})
 }
 
 func TestSDK6111GAEnrichingSameSourceRepeatRepricesRetainedUsage(t *testing.T) {
@@ -2037,5 +2075,25 @@ func TestSDK6111CanonicalFieldsSupersedeLegacyAliases(t *testing.T) {
 				t.Fatal(props)
 			}
 		})
+	}
+}
+
+func TestSDK6111PendingTimestampNumbersAreFiniteAndNonnegative(t *testing.T) {
+	for _, value := range []any{float64(0), 100.25, float64(1e16), "1970-01-01T00:00:00.10025Z"} {
+		s := PausedInteraction{PendingCalls: []map[string]any{{"started_at": value, "ended_at": value}}}
+		if !validPendingSnapshot(&s) {
+			t.Errorf("rejected timestamp %v", value)
+		}
+	}
+	for _, value := range []any{float64(-1), math.NaN(), math.Inf(1), "bad-time", nil, true} {
+		s := PausedInteraction{PendingCalls: []map[string]any{{"started_at": value}}}
+		if validPendingSnapshot(&s) {
+			t.Errorf("accepted invalid timestamp %v", value)
+		}
+	}
+	want := time.Unix(10000000000000, 0)
+	got := pendingTime(map[string]any{"started_at": float64(1e16)}, "started")
+	if !got.Equal(want) {
+		t.Errorf("large finite timestamp = %v, want %v", got, want)
 	}
 }

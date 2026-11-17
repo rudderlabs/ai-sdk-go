@@ -256,7 +256,7 @@
         "response_status": "success"
       }
     },
-    "description": "A pending_calls record uses the same keys and value types in the three SDKs: matched, usage_known, and started_at / ended_at in epoch milliseconds. Each snapshot holds the same two calls recorded during paused-response delivery with emitLlmCalls on, as its written_by SDK writes them: a span with known usage and a wrapper call with unknown usage, both unmatched and timed. The two entries marked before SDK-6111 use the keys Python (started_ns, ended_ns) and Go (twin_matched, usage_unknown, RFC 3339 times) wrote until then, which every reader still accepts. For each snapshot: restore it with emitLlmCalls on, record reports in order (source wrapper or span, started_ms / ended_ms in epoch milliseconds), then end. Each report merges into its pending twin in the restored run, so expected.response is a subset of the final ai_response_received and expected.call_events lists a subset of each ai_llm_response_received, in order. Each SDK also writes the scenario itself and compares its pending_calls with its own entry. Top-level primary and outcome_hint use Node objects in current snapshots, legacy positional lists in the old entries; a persistent primary override and a cancelled outcome survive twin merges in either arrival order.",
+    "description": "A pending_calls record uses the same matched and usage_known keys in the three SDKs. Node and Python write started_at / ended_at in epoch milliseconds; Go writes RFC3339Nano UTC text until released Go readers accept numbers. All three readers accept both encodings. The timestamp-epoch-ms and timestamp-rfc3339 entries differ only in these timestamps and must restore the same timing, event ordering and counts. Each snapshot holds the same two calls recorded during paused-response delivery with emitLlmCalls on, as its written_by SDK writes them: a span with known usage and a wrapper call with unknown usage, both unmatched and timed. The two entries marked before SDK-6111 use the keys Python (started_ns, ended_ns) and Go (twin_matched, usage_unknown, RFC 3339 times) wrote until then, which every reader still accepts. For each snapshot: restore it with emitLlmCalls on, record reports in order (source wrapper or span, started_ms / ended_ms in epoch milliseconds), then end. Each report merges into its pending twin in the restored run, so expected.response is a subset of the final ai_response_received and expected.call_events lists a subset of each ai_llm_response_received, in order. Each SDK also writes the scenario itself and compares its pending_calls with its own entry. Top-level primary and outcome_hint use Node objects in current snapshots, legacy positional lists in the old entries; a persistent primary override and a cancelled outcome survive twin merges in either arrival order.",
     "snapshots": [
       {
         "written_by": "node",
@@ -437,7 +437,7 @@
               "call_event_pending": true,
               "call_index": 1,
               "credits_explicit": false,
-              "ended_at": 110,
+              "ended_at": "1970-01-01T00:00:00.11Z",
               "error_count": 0,
               "from_span": true,
               "input_tokens": 3,
@@ -449,7 +449,7 @@
               "raw_model": "example-model",
               "report_sequence": 1,
               "server_tool_call_count": 0,
-              "started_at": 100,
+              "started_at": "1970-01-01T00:00:00.1Z",
               "usage_known": true
             },
             {
@@ -461,7 +461,7 @@
               "call_event_pending": true,
               "call_index": 2,
               "credits_explicit": false,
-              "ended_at": 210,
+              "ended_at": "1970-01-01T00:00:00.21Z",
               "error_count": 0,
               "from_span": false,
               "input_tokens": 0,
@@ -475,7 +475,7 @@
               "raw_model": "example-model",
               "report_sequence": 2,
               "server_tool_call_count": 0,
-              "started_at": 200,
+              "started_at": "1970-01-01T00:00:00.2Z",
               "usage_known": false
             }
           ],
@@ -650,6 +650,166 @@
             2,
             null
           ]
+        }
+      },
+      {
+        "written_by": "timestamp-epoch-ms",
+        "snapshot": {
+          "interaction_id": "cross-sdk-run",
+          "conversation_id": "cross-sdk-conversation",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "report_count": 2,
+          "successful_call_sequence": 2,
+          "pending_compactions": 0,
+          "call_sequence": 2,
+          "pending_calls": [
+            {
+              "call_event_pending": true,
+              "call_event_emitted": false,
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "call_index": 1,
+              "error_count": 0,
+              "input_tokens": 3,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "cache_write_tokens": 0,
+              "cache_write_1h_tokens": 0,
+              "credits_explicit": false,
+              "latency_ms": 10,
+              "server_tool_call_count": 0,
+              "usage_known": true,
+              "from_span": true,
+              "matched": false,
+              "started_at": 100,
+              "ended_at": 110,
+              "raw_model": "example-model",
+              "report_sequence": 1
+            },
+            {
+              "call_event_pending": true,
+              "call_event_emitted": false,
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "call_index": 2,
+              "error_count": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "cache_write_tokens": 0,
+              "cache_write_1h_tokens": 0,
+              "credits_explicit": false,
+              "latency_ms": 10,
+              "server_tool_call_count": 0,
+              "usage_known": false,
+              "from_span": false,
+              "matched": false,
+              "started_at": 200,
+              "ended_at": 210,
+              "last": true,
+              "last_ok": true,
+              "raw_model": "example-model",
+              "report_sequence": 2
+            }
+          ],
+          "user_id": "u",
+          "integration": "tracing",
+          "primary": {
+            "model": "selected-model",
+            "provider": "aws.bedrock",
+            "calls": 2,
+            "persistent": true
+          },
+          "outcome_hint": {
+            "status": "cancelled",
+            "errorType": "cancelled",
+            "calls": 2
+          }
+        }
+      },
+      {
+        "written_by": "timestamp-rfc3339",
+        "snapshot": {
+          "interaction_id": "cross-sdk-run",
+          "conversation_id": "cross-sdk-conversation",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "report_count": 2,
+          "successful_call_sequence": 2,
+          "pending_compactions": 0,
+          "call_sequence": 2,
+          "pending_calls": [
+            {
+              "call_event_pending": true,
+              "call_event_emitted": false,
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "call_index": 1,
+              "error_count": 0,
+              "input_tokens": 3,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "cache_write_tokens": 0,
+              "cache_write_1h_tokens": 0,
+              "credits_explicit": false,
+              "latency_ms": 10,
+              "server_tool_call_count": 0,
+              "usage_known": true,
+              "from_span": true,
+              "matched": false,
+              "started_at": "1970-01-01T00:00:00.1Z",
+              "ended_at": "1970-01-01T00:00:00.11Z",
+              "raw_model": "example-model",
+              "report_sequence": 1
+            },
+            {
+              "call_event_pending": true,
+              "call_event_emitted": false,
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "call_index": 2,
+              "error_count": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cached_input_tokens": 0,
+              "cache_write_tokens": 0,
+              "cache_write_1h_tokens": 0,
+              "credits_explicit": false,
+              "latency_ms": 10,
+              "server_tool_call_count": 0,
+              "usage_known": false,
+              "from_span": false,
+              "matched": false,
+              "started_at": "1970-01-01T00:00:00.2Z",
+              "ended_at": "1970-01-01T00:00:00.21Z",
+              "last": true,
+              "last_ok": true,
+              "raw_model": "example-model",
+              "report_sequence": 2
+            }
+          ],
+          "user_id": "u",
+          "integration": "tracing",
+          "primary": {
+            "model": "selected-model",
+            "provider": "aws.bedrock",
+            "calls": 2,
+            "persistent": true
+          },
+          "outcome_hint": {
+            "status": "cancelled",
+            "errorType": "cancelled",
+            "calls": 2
+          }
         }
       }
     ],

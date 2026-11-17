@@ -2526,7 +2526,7 @@ func pendingNumber(p map[string]any, key string) float64 {
 	case json.Number: // a snapshot decoded with Decoder.UseNumber
 		n, _ = v.Float64()
 	}
-	if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || n > 9007199254740991 {
+	if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || (key != "started_at" && key != "ended_at" && n > 9007199254740991) {
 		return 0
 	}
 	return n
@@ -2543,7 +2543,7 @@ func pendingCall(c *recordedCall) map[string]any {
 	if c.spanSource != nil {
 		p["span_source"] = spanSourceSnapshot(c.spanSource)
 	}
-	// The keys and value types Node.js writes, shared by the three SDKs.
+	// Shared twin keys; keep RFC3339Nano UTC timestamps for released Go readers.
 	p["from_span"], p["matched"], p["usage_known"] = c.fromSpan, c.twinMatched, !c.usageUnknown
 	p["credits_explicit"] = c.creditsExplicit
 	if c.pricingPending {
@@ -2554,10 +2554,10 @@ func pendingCall(c *recordedCall) map[string]any {
 		p["call_index"] = c.callIndex
 	}
 	if !c.startedAt.IsZero() {
-		p["started_at"] = float64(c.startedAt.UnixNano()) / 1e6
+		p["started_at"] = c.startedAt.UTC().Format(time.RFC3339Nano)
 	}
 	if !c.endedAt.IsZero() {
-		p["ended_at"] = float64(c.endedAt.UnixNano()) / 1e6
+		p["ended_at"] = c.endedAt.UTC().Format(time.RFC3339Nano)
 	}
 	// A folded group's partial sums are unknown to the other SDKs: written only when complete.
 	if c.credits != nil && !c.uncredited {
@@ -2650,7 +2650,8 @@ func pendingTime(p map[string]any, edge string) time.Time {
 		}
 		return time.Time{}
 	}
-	return time.Unix(0, int64(math.Round(pendingNumber(p, edge+"_at")*1e6)))
+	seconds, fraction := math.Modf(pendingNumber(p, edge+"_at") / 1000)
+	return time.Unix(int64(seconds), int64(math.Round(fraction*1e9)))
 }
 
 func pendingTool(c *recordedTool) map[string]any {

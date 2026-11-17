@@ -62,7 +62,7 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 				}
 			}
 			numbers := []string{"credits", "cost_usd", "server_tool_cost_usd", "latency_ms", "time_to_first_token_ms", "duration_ms"}
-			// Epoch milliseconds; RFC 3339 is what Go wrote before SDK-6111.
+			// Accept both encodings while Go keeps writing RFC3339Nano text.
 			for _, key := range []string{"started_at", "ended_at"} {
 				if s, ok := p[key].(string); ok {
 					if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
@@ -101,7 +101,7 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 							return false
 						}
 					}
-					if n < 0 || n > 9007199254740991 || math.IsNaN(n) || math.IsInf(n, 0) {
+					if n < 0 || (key != "started_at" && key != "ended_at" && n > 9007199254740991) || math.IsNaN(n) || math.IsInf(n, 0) {
 						return false
 					}
 				}
