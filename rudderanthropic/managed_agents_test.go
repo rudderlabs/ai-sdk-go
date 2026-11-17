@@ -1156,3 +1156,106 @@ func TestManagedAgentsKeepsAHistoryTurnsLatencyWhenTheReaderFallsBehindAfterASpi
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestManagedAgentsResumesAPausedAnswerWhenTheNextStreamStartsWithAPromptEcho(t *testing.T) {
+	f, sc := maFixtureScenario(t, "custom_tool_pause_resume")
+	_, rec := setup(t)
+	resetMA(t)
+	session := rudderanthropic.WithSession(withID(f.Session, "sesn_echo"))
+	track := func(events *sliceStream) {
+		stream := rudderanthropic.TrackSessionEvents(context.Background(), events, session)
+		for stream.Next() {
+		}
+		_ = stream.Close()
+	}
+	track(&sliceStream{events: decodeEvents(t, sc.Streams[0].Events)})
+	track(maEvents(t,
+		`{"id":"sevt_echo_u","type":"user.message","content":[],"processed_at":"2026-11-16T10:00:03.000Z"}`,
+		`{"id":"sevt_echo_r","type":"session.status_running","processed_at":"2026-11-16T10:00:03.000Z"}`,
+		`{"id":"sevt_echo_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},"processed_at":"2026-11-16T10:00:04.000Z"}`,
+		`{"id":"sevt_echo_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},"processed_at":"2026-11-16T10:00:05.000Z"}`,
+	))
+	got := rec.events(t)
+	responses := got["ai_response_received"]
+	if len(got["ai_user_prompt_created"]) != 1 || len(responses) != 2 ||
+		responses[0]["interaction_id"] != responses[1]["interaction_id"] ||
+		responses[0]["response_status"] != "paused" || responses[0]["tool_call_count"] != float64(0) ||
+		responses[1]["response_status"] != "success" || responses[1]["tool_call_count"] != float64(1) {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestManagedAgentsKnowsASubagentThreadFromItsCrossPostedEventsAlone(t *testing.T) {
+	f := loadMAFixture(t)
+	_, rec := setup(t)
+	resetMA(t)
+	session := rudderanthropic.WithSession(withID(f.Session, "sesn_kid"))
+	const at = `"processed_at":"2026-11-16T10:00:01.000Z"`
+	track := func(events *sliceStream) {
+		stream := rudderanthropic.TrackSessionEvents(context.Background(), events, session)
+		for stream.Next() {
+		}
+		_ = stream.Close()
+	}
+	track(maEvents(t,
+		`{"id":"sevt_kid_u","type":"user.message","content":[],`+at+`}`,
+		`{"id":"sevt_kid_s","type":"session.thread_status_running","session_thread_id":"sthr_kid",`+at+`}`,
+		`{"id":"sevt_kid_x","type":"user.interrupt","session_thread_id":"sthr_kid",`+at+`}`,
+		`{"id":"sevt_kid_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at+`}`,
+	))
+	// A subagent's custom tool, answered without naming its thread, after the turn ended.
+	track(maEvents(t,
+		`{"id":"ctu_kid","type":"agent.custom_tool_use","name":"lookup","input":{},"session_thread_id":"sthr_kid",`+at+`}`,
+		`{"id":"sevt_kid_a","type":"user.custom_tool_result","custom_tool_use_id":"ctu_kid","content":[],`+at+`}`,
+	))
+	responses := rec.events(t)["ai_response_received"]
+	if len(responses) != 1 || responses[0]["response_status"] != "success" {
+		t.Fatalf("%v", responses)
+	}
+}
+
+func TestManagedAgentsOpensNoSecondAnswerWhenTheCallerEndsItsInteractionMidTurn(t *testing.T) {
+	f := loadMAFixture(t)
+	_, rec := setup(t)
+	resetMA(t)
+	const at = `"processed_at":"2026-11-16T10:00:01.000Z"`
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	events := rudderanthropic.TrackSessionEvents(ctx, maEvents(t,
+		`{"id":"sevt_end_u","type":"user.message","content":[],`+at+`}`,
+		`{"id":"sevt_end_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},`+at+`}`,
+		`{"id":"sevt_end_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at+`}`,
+	), rudderanthropic.WithSession(withID(f.Session, "sesn_caller_end")))
+	if !events.Next() {
+		t.Fatal("no events")
+	}
+	i.End(rudderstackai.EndOptions{Status: rudderstackai.StatusSuccess})
+	for events.Next() {
+	}
+	_ = events.Close()
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 || got[0]["llm_call_count"] != float64(0) {
+		t.Fatalf("%v", got)
+	}
+}
+
+// closeCounter is a stream that counts its Close calls.
+type closeCounter struct {
+	sliceStream
+	closes int
+}
+
+func (c *closeCounter) Close() error { c.closes++; return nil }
+
+func TestManagedAgentsClosesTheSourceAtMostOnce(t *testing.T) {
+	_, _ = setup(t)
+	resetMA(t)
+	src := &closeCounter{sliceStream: *maEvents(t, `{"id":"sevt_once_u","type":"user.message","content":[]}`)}
+	events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSessionID("sesn_once"))
+	for events.Next() {
+	}
+	_ = events.Close()
+	_ = events.Close()
+	if src.closes != 1 {
+		t.Fatalf("closed %d times", src.closes)
+	}
+}

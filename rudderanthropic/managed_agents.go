@@ -96,11 +96,12 @@ func WithSessionAnalytics(client analytics.Client) SessionOption {
 // SessionEvents passes a session's events through unchanged while it tracks them. Use it as
 // the stream it wraps; Close also closes that stream when it can be closed.
 type SessionEvents[T SessionEvent] struct {
-	src      SessionEventStream[T]
-	tracker  *sessionTracker // nil: untracked
-	mu       sync.Mutex      // guards tracker and finished; never held while reading src or by Close
-	closed   atomic.Bool     // Close was called: whoever releases mu last finishes the tracker
-	finished bool
+	src       SessionEventStream[T]
+	tracker   *sessionTracker // nil: untracked
+	mu        sync.Mutex      // guards tracker and finished; never held while reading src or by Close
+	closed    atomic.Bool     // Close was called: whoever releases mu last finishes the tracker
+	srcClosed atomic.Bool     // the source was closed: it is closed at most once
+	finished  bool
 }
 
 // TrackSessionEvents reads a Claude Managed Agents session's events and sends one
@@ -202,7 +203,8 @@ func (s *SessionEvents[T]) Err() error { return s.src.Err() }
 func (s *SessionEvents[T]) Close() error {
 	s.closed.Store(true)
 	s.finishIfClosed()
-	if closer, ok := s.src.(io.Closer); ok {
+	// Closed at most once, also after the stream ended or failed.
+	if closer, ok := s.src.(io.Closer); ok && s.srcClosed.CompareAndSwap(false, true) {
 		return closer.Close()
 	}
 	return nil
@@ -261,6 +263,9 @@ var seenEvents = newBoundedSet("claude-managed-agents events")
 
 // childThreads holds the subagent threads each session started, keyed like seenEvents.
 var childThreads = newBoundedSet("claude-managed-agents threads")
+
+// childTools holds the tool uses of subagent threads, keyed like seenEvents: the app's answers to them.
+var childTools = newBoundedSet("claude-managed-agents child tools")
 
 // streams numbers the streams without a session, for their keys in seenEvents and childThreads.
 var streams atomic.Uint64
@@ -448,8 +453,19 @@ func (s *sessionTracker) observe(raw string) {
 	}
 	at := timeOf(e)
 	thread := str(e["session_thread_id"])
-	if thread != "" && (strings.HasPrefix(kind, "agent.") || (strings.HasPrefix(kind, "user.") && childThreads.has(s.scope+thread))) {
+	// Agent and thread status events naming a thread are cross-posted from a subagent thread, so
+	// it is a child even when its session.thread_created was not read.
+	if thread != "" && (strings.HasPrefix(kind, "agent.") || strings.HasPrefix(kind, "session.thread_")) {
+		childThreads.add(s.scope + thread)
+	}
+	// The app's answer to a subagent's tool, by the tool's ID (answers need not name the thread).
+	answered := first(str(e["custom_tool_use_id"]), str(e["tool_use_id"]))
+	if (thread != "" && (strings.HasPrefix(kind, "agent.") || (strings.HasPrefix(kind, "user.") && childThreads.has(s.scope+thread)))) ||
+		(strings.HasPrefix(kind, "user.") && answered != "" && childTools.has(s.scope+answered)) {
 		// Cross-posted from a subagent thread (agent events), or aimed at one: not this thread's work.
+		if id != "" && strings.HasPrefix(kind, "agent.") && strings.HasSuffix(kind, "tool_use") {
+			childTools.add(s.scope + id)
+		}
 		if s.turn != nil && id != "" {
 			if kind == "agent.custom_tool_use" {
 				s.turn.blocking.set(id, rudderstackai.PauseDeferredTool)
@@ -595,7 +611,8 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 		}
 		// A turn that settles earlier work continues it, also when the settling event was sent
 		// before this stream opened (the paused turn is then the only trace of it).
-		continuation := settleEvents[kind] || (kind != "user.message" && kind != "user.define_outcome" && s.hasPausedTurn())
+		// A paused session's next stream continues its turn even when it starts with a prompt echo.
+		continuation := settleEvents[kind] || s.hasPausedTurn()
 		t = &turn{
 			startAt: start, continuation: continuation, tools: map[string]*turnTool{},
 			starts:   newBoundedMap[msTime]("claude-managed-agents starts"),
@@ -710,8 +727,13 @@ func (s *sessionTracker) push(t *turn, c turnCall) {
 // report records what a turn in the caller's interaction holds as it arrives, so the caller's pause
 // snapshot or end holds it. It returns whether it did.
 func (s *sessionTracker) report(t *turn) bool {
-	if t.borrowed == nil || t.borrowed.Ended() {
+	if t.borrowed == nil {
 		return false
+	}
+	// The caller ended its answer mid-turn: the rest of the turn has nowhere to go.
+	if t.borrowed.Ended() {
+		t.calls, t.tools, t.toolOrder = nil, map[string]*turnTool{}, nil
+		return true
 	}
 	contain(func() { s.flush(t, clockAt(t.lastAt), false, map[string]bool{}) })
 	return true
@@ -889,7 +911,7 @@ func (s *sessionTracker) interactionFor(t *turn, local func(msTime) time.Time) *
 	}
 	var i *rudderstackai.Interaction
 	switch {
-	case t.borrowed != nil && !t.borrowed.Ended():
+	case t.borrowed != nil: // the caller's answer stays the turn's, also once the caller ended it
 		i = t.borrowed
 	case t.resumed != nil && !t.resumed.Ended():
 		i = t.resumed
