@@ -47,6 +47,7 @@ Per-call content follows the binary sanitization rules in `fixtures/FIXTURE-FORM
 
 ## Known limits
 
+- Go and Python only: when a cancelled wrapper call restored from a snapshot carries explicit credits and its span twin later reports different explicit credits, Go and Python keep the wrapper's credits; Node takes the twin's.
 - Corrupt snapshots: Node accepts some non-RFC3339 timestamp strings that `Date.parse` understands (for example `"2026-11-17"`); Python and Go reject the snapshot.
 - Go only: a credits hook that changes the call's metadata and then fails (error, panic or invalid value) is retried, and the retry's credits are published; Node and Python stop at the failing attempt and omit credits.
 - Manually reported twins with conflicting service tiers: the tier kept after the merge differs by SDK (Node and Go fall back to `standard`; Python keeps the faster tier), so later enrichment can reprice the call differently. Twins from instrumented providers always report the same tier.
