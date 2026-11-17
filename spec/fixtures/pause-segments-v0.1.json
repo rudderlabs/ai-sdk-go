@@ -720,7 +720,10 @@
           10,
           50
         ],
-        "tool_events": []
+        "tool_events": [],
+        "errors": [
+          "limit_reached"
+        ]
       }
     },
     {
@@ -785,7 +788,10 @@
           10,
           50
         ],
-        "tool_events": []
+        "tool_events": [],
+        "errors": [
+          "limit_reached"
+        ]
       }
     },
     {
@@ -1345,6 +1351,399 @@
             "tool_status": "unknown"
           }
         ]
+      }
+    },
+    {
+      "name": "credits reentrant enrichment prices final authoritative usage",
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "per_input_token": 1,
+          "byok_multiplier": 2,
+          "on_hook": [
+            [],
+            [
+              {
+                "op": "record_call",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "input_tokens": 10,
+                "source": "span",
+                "response_id": "pricing",
+                "byok": true,
+                "started_ms": 100,
+                "ended_ms": 110
+              }
+            ]
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing",
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 100,
+          "response_id": "pricing",
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "pause"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "total_input_tokens": 100,
+            "total_credits": 200
+          }
+        ],
+        "call_events": [
+          100
+        ],
+        "call_credits": [
+          200
+        ],
+        "errors": [],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "credits unstable basis omits credits after three attempts",
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "per_input_token": 1,
+          "byok_multiplier": 2,
+          "on_hook": [
+            [],
+            [
+              {
+                "op": "record_call",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "input_tokens": 10,
+                "source": "span",
+                "response_id": "pricing",
+                "byok": true,
+                "started_ms": 100,
+                "ended_ms": 110
+              }
+            ],
+            [
+              {
+                "op": "record_call",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "input_tokens": 10,
+                "source": "span",
+                "response_id": "pricing",
+                "byok": false,
+                "started_ms": 100,
+                "ended_ms": 110
+              }
+            ],
+            [
+              {
+                "op": "record_call",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "input_tokens": 10,
+                "source": "span",
+                "response_id": "pricing",
+                "byok": true,
+                "started_ms": 100,
+                "ended_ms": 110
+              }
+            ],
+            [
+              {
+                "op": "record_call",
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "input_tokens": 10,
+                "source": "span",
+                "response_id": "pricing",
+                "byok": false,
+                "started_ms": 100,
+                "ended_ms": 110
+              }
+            ]
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing",
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 100,
+          "response_id": "pricing",
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "pause"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "total_input_tokens": 100
+          }
+        ],
+        "call_events": [
+          100
+        ],
+        "call_credits": [
+          null
+        ],
+        "errors": [
+          "credits_unstable"
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "pause delivery retains all calls pending at pass start (segment)",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "span_id": "barrier",
+          "started_ms": 10,
+          "ended_ms": 20
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "span_id": "parent",
+          "started_ms": 100,
+          "ended_ms": 200,
+          "output_text": "filtered-parent"
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "source": "span",
+              "span_id": "child",
+              "parent_span_id": "parent",
+              "started_ms": 110,
+              "ended_ms": 190,
+              "output_text": "retained-child"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 3,
+            "total_input_tokens": 40,
+            "response_text": "filtered-parent"
+          }
+        ],
+        "call_events": [
+          10,
+          10,
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "pause delivery retains all calls pending at pass start (in-process)",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "span_id": "barrier",
+          "started_ms": 10,
+          "ended_ms": 20
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "span_id": "parent",
+          "started_ms": 100,
+          "ended_ms": 200,
+          "output_text": "filtered-parent"
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "source": "span",
+              "span_id": "child",
+              "parent_span_id": "parent",
+              "started_ms": 110,
+              "ended_ms": 190,
+              "output_text": "retained-child"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 3,
+            "total_input_tokens": 40,
+            "response_text": "filtered-parent"
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          10,
+          20
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "pause delivery retains all calls pending at pass start (json)",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "span_id": "barrier",
+          "started_ms": 10,
+          "ended_ms": 20
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "span_id": "parent",
+          "started_ms": 100,
+          "ended_ms": 200,
+          "output_text": "filtered-parent"
+        },
+        {
+          "op": "on_event",
+          "event": "ai_llm_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "source": "span",
+              "span_id": "child",
+              "parent_span_id": "parent",
+              "started_ms": 110,
+              "ended_ms": 190,
+              "output_text": "retained-child"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 3,
+            "total_input_tokens": 40,
+            "response_text": "filtered-parent"
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          10,
+          20
+        ],
+        "tool_events": []
       }
     }
   ]

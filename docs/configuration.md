@@ -284,6 +284,8 @@ err := rudderstackai.Configure(
 
 ## Pricing
 
+`WithCredits` prices each successful `CreditCall` in app credits after USD pricing. The credits hook must be side-effect free and idempotent: it can run more than once for one call if usage or pricing metadata changes while it runs, through re-entrant enrichment inside the hook or concurrent enrichment from another thread/goroutine. After 3 attempts, continued changes omit the call's credits and report `credits_unstable` through the error hook (with `where: credits`), distinct from a throwing hook's `user_callback`.
+
 No prices ship with the SDK: list prices change and many customers negotiate their own. Register the models you use; unpriced calls keep their tokens and have no cost ([rules](events.md#cost)).
 
 ```go

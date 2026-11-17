@@ -1036,7 +1036,7 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 			if attempt == 2 {
 				credits = nil
 				i.mu.Unlock()
-				report("user_callback", "credits", fmt.Errorf("pricing basis changed during three credits attempts"))
+				report("credits_unstable", "credits", fmt.Errorf("pricing basis changed during three credits attempts"))
 				i.mu.Lock()
 			}
 		}
@@ -1232,7 +1232,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			if attempt == 2 {
 				credits = nil
 				i.mu.Unlock()
-				report("user_callback", "credits", fmt.Errorf("pricing basis changed during three credits attempts"))
+				report("credits_unstable", "credits", fmt.Errorf("pricing basis changed during three credits attempts"))
 				i.mu.Lock()
 			}
 		}

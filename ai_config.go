@@ -378,6 +378,10 @@ func warnOnce(key, msg string, every time.Duration) {
 func warnf(format string, args ...any) { slog.Warn(logPrefix + fmt.Sprintf(format, args...)) }
 
 // WithCredits prices successful calls in app credits after USD pricing. Nil clears the hook.
+// The hook must be side-effect free and idempotent: re-entrant enrichment inside it or
+// concurrent enrichment from another goroutine can change usage/pricing metadata and run
+// it more than once per call. After 3 attempts credits are omitted and WithOnError receives
+// KindCreditsUnstable, where credits.
 func WithCredits(price CreditsFunc) ConfigOption {
 	return func(c *config, _ *pending) error { c.credits = price; return nil }
 }

@@ -15,6 +15,8 @@ const (
 	// KindUserCallback is a hook you configured (redact, identify, event rules, classifier,
 	// evaluator, trace ID) that failed or panicked; the SDK used its documented fallback.
 	KindUserCallback = "user_callback"
+	// KindCreditsUnstable means pricing changed during all three credits attempts.
+	KindCreditsUnstable = "credits_unstable"
 	// KindLimitReached is a memory cap of [Limits] that was hit.
 	KindLimitReached = "limit_reached"
 	// KindRedactionTimeout is a redaction pattern that ran out of time; the field was sent as

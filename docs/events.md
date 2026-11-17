@@ -512,7 +512,7 @@ usage entries omit credits when any successful call has no credit price; cancell
 `TrackLimitReached(ctx, TrackLimitReachedOptions{LimitType: "credits", Feature: "chat"})` records an
 app-enforced usage limit. Provider rate limits remain model errors.
 
-If a call's usage or pricing metadata changes while its credits hook runs, the SDK retries with the current final basis, up to three attempts. Continued changes leave that call without credits and report a `user_callback` failure for `credits`.
+The credits hook must be side-effect free and idempotent: it can run more than once for one call if usage or pricing metadata changes while it runs, through re-entrant enrichment inside the hook or concurrent enrichment from another thread/goroutine. After 3 attempts, continued changes omit the call's credits and report `credits_unstable` through the error hook (with `where: credits`), distinct from a throwing hook's `user_callback`.
 
 Every provider integration offers `WithCallPurpose`, `WithFallbackUsed`, and `WithBYOK`.
 `WithCallDetails` can scope metadata to calls made with a context. Manual `LLMCall` records accept

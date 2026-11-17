@@ -335,6 +335,10 @@ func ReportedCost(v any) (float64, bool) {
 }
 
 // CreditCall is a successful call passed to the app's credit pricing hook after USD pricing.
+// The hook must be side-effect free and idempotent: re-entrant enrichment inside it or
+// concurrent enrichment from another goroutine can change usage/pricing metadata and run
+// it more than once per call. After 3 attempts credits are omitted and WithOnError receives
+// KindCreditsUnstable, where credits.
 type CreditCall struct {
 	Provider, Model                     string
 	InputTokens, OutputTokens           int

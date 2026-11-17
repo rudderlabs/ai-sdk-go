@@ -18,6 +18,8 @@ import (
 )
 
 type pauseSegmentsStep struct {
+	ResponseID  string              `json:"response_id"`
+	BYOK        *bool               `json:"byok"`
 	Text        string              `json:"text"`
 	Op          string              `json:"op"`
 	Source      string              `json:"source"`
@@ -98,6 +100,11 @@ func TestPauseSegmentsFixture(t *testing.T) {
 		Cases []struct {
 			Name   string `json:"name"`
 			Config struct {
+				Credits *struct {
+					PerInputToken  float64               `json:"per_input_token"`
+					BYOKMultiplier float64               `json:"byok_multiplier"`
+					OnHook         [][]pauseSegmentsStep `json:"on_hook"`
+				} `json:"credits"`
 				EmitLLMCalls   bool `json:"emit_llm_calls"`
 				CaptureContent bool `json:"capture_content"`
 				MaxCalls       int  `json:"max_calls_per_interaction"`
@@ -107,9 +114,11 @@ func TestPauseSegmentsFixture(t *testing.T) {
 			} `json:"config"`
 			Steps    []pauseSegmentsStep `json:"steps"`
 			Expected struct {
-				Segments   []map[string]any `json:"segments"`
-				CallEvents []float64        `json:"call_events"`
-				ToolEvents []map[string]any `json:"tool_events"`
+				Segments    []map[string]any `json:"segments"`
+				Errors      []string         `json:"errors"`
+				CallCredits []*float64       `json:"call_credits"`
+				CallEvents  []float64        `json:"call_events"`
+				ToolEvents  []map[string]any `json:"tool_events"`
 			} `json:"expected"`
 		} `json:"cases"`
 	}
@@ -131,6 +140,23 @@ func TestPauseSegmentsFixture(t *testing.T) {
 			}
 			var redactors []pauseSegmentsStep
 			var run func([]pauseSegmentsStep)
+			errors := []string{}
+			opts = append(opts, WithOnError(func(_ error, info ErrorInfo) { errors = append(errors, info.Kind) }))
+			if pricing := tc.Config.Credits; pricing != nil {
+				attempts := 0
+				opts = append(opts, WithCredits(func(call CreditCall) (*float64, error) {
+					invocation := attempts
+					attempts++
+					if invocation < len(pricing.OnHook) {
+						run(pricing.OnHook[invocation])
+					}
+					price := float64(call.InputTokens) * pricing.PerInputToken
+					if call.BYOK != nil && *call.BYOK {
+						price *= pricing.BYOKMultiplier
+					}
+					return Ptr(price), nil
+				}))
+			}
 			opts = append(opts, WithRedactHook(func(text string) (string, error) {
 				for n, h := range redactors {
 					if h.Text == text {
@@ -148,7 +174,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				for _, step := range steps {
 					switch step.Op {
 					case "record_call":
-						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: derefInt(step.InputTokens), OutputText: step.OutputText}
+						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: derefInt(step.InputTokens), OutputText: step.OutputText, ResponseID: step.ResponseID, BYOK: step.BYOK}
 						if step.Source == "span" {
 							call.Integration = "tracing"
 						}
@@ -220,6 +246,29 @@ func TestPauseSegmentsFixture(t *testing.T) {
 			}
 			if !reflect.DeepEqual(calls, tc.Expected.CallEvents) {
 				t.Errorf("call event input_tokens = %v, want %v", calls, tc.Expected.CallEvents)
+			}
+			if !reflect.DeepEqual(errors, append([]string{}, tc.Expected.Errors...)) {
+				t.Errorf("errors = %v, want %v", errors, tc.Expected.Errors)
+			}
+			if tc.Expected.CallCredits != nil {
+				got := []*float64{}
+				for _, e := range r.named("ai_llm_response_received") {
+					var amount *float64
+					if value, ok := e.Properties["credits"]; ok {
+						amount = Ptr(pauseSegmentsJSON(t, value).(float64))
+					}
+					got = append(got, amount)
+				}
+				if !reflect.DeepEqual(got, tc.Expected.CallCredits) {
+					t.Errorf("credits = %v, want %v", pauseSegmentsJSON(t, got), pauseSegmentsJSON(t, tc.Expected.CallCredits))
+				}
+				for _, amount := range tc.Expected.CallCredits {
+					if amount == nil {
+						if _, ok := segments[0].Properties["total_credits"]; ok {
+							t.Error("uncredited call has total_credits")
+						}
+					}
+				}
 			}
 			tools := []map[string]any{}
 			for _, e := range r.all() {
