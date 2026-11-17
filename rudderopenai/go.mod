@@ -3,7 +3,7 @@ module github.com/rudderlabs/ai-sdk-go/rudderopenai
 go 1.26.11
 
 require (
-	github.com/openai/openai-go/v3 v3.70.0
+	github.com/openai/openai-go/v3 v3.94.0
 	github.com/rudderlabs/ai-sdk-go v0.10.0 // x-release-please-version
 	github.com/rudderlabs/analytics-go/v4 v4.5.1
 )
@@ -19,13 +19,14 @@ require (
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/backo-go v1.1.0 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
-	github.com/tidwall/gjson v1.19.0 // indirect
+	github.com/tidwall/gjson v1.20.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
