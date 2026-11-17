@@ -577,6 +577,10 @@ func (s *sessionTracker) observe(raw string) {
 // close: the stream ended or failed; a turn still open is paused, failed or cancelled.
 func (s *sessionTracker) close(err error) {
 	t := s.turn
+	// A running session whose stream stopped before any other event still had a turn.
+	if t == nil && s.runningAt.ok {
+		t = s.open("session.status_running", s.runningAt)
+	}
 	if t == nil {
 		return
 	}
@@ -777,7 +781,13 @@ func (s *sessionTracker) report(t *turn) bool {
 		t.calls, t.tools, t.toolOrder = nil, map[string]*turnTool{}, nil
 		return true
 	}
-	contain(func() { s.flush(t, clockAt(t.lastAt), false, map[string]bool{}) })
+	contain(func() {
+		s.flush(t, clockAt(t.lastAt), false, map[string]bool{})
+		// The caller may pause or end its answer before the turn ends: correct it now.
+		if t.hasGrader && t.lastModel != "" {
+			kit.PrimaryModel(t.borrowed, t.lastModel, "anthropic")
+		}
+	})
 	return true
 }
 

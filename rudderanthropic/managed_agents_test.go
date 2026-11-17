@@ -1236,3 +1236,59 @@ func TestManagedAgentsClosesTheSourceAtMostOnce(t *testing.T) {
 		t.Fatalf("closed %d times", src.closes)
 	}
 }
+
+func TestManagedAgentsEndsTheTurnOfARunningSessionWhoseStreamStopsBeforeAnyOtherEvent(t *testing.T) {
+	_, rec := setup(t)
+	resetMA(t)
+	running := func(id string) []json.RawMessage {
+		return []json.RawMessage{json.RawMessage(`{"id":"` + id + `","type":"session.status_running","processed_at":"2026-11-16T10:00:01.000Z"}`)}
+	}
+	eof := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, running("sevt_only_r1"))}, rudderanthropic.WithSessionID("sesn_only_eof"))
+	for eof.Next() {
+	}
+	failed := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, running("sevt_only_r2")), err: errors.New("stop")}, rudderanthropic.WithSessionID("sesn_only_err"))
+	for failed.Next() {
+	}
+	var ends [][2]any
+	for _, p := range rec.events(t)["ai_response_received"] {
+		ends = append(ends, [2]any{p["response_status"], p["error_type"]})
+	}
+	if want := [][2]any{{"cancelled", "cancelled"}, {"error", "app_error"}}; !reflect.DeepEqual(ends, want) {
+		t.Fatalf("%v", ends)
+	}
+}
+
+func TestManagedAgentsKeepsPrimaryModelWhenTheCallerPausesOrEndsRightAfterAGraderCycle(t *testing.T) {
+	f, sc := maFixtureScenario(t, "grader_then_failed_call")
+	var beforeIdle []json.RawMessage
+	for _, raw := range sc.Streams[0].Events {
+		var e struct{ Type string }
+		_ = json.Unmarshal(raw, &e)
+		if e.Type != "session.status_idle" {
+			beforeIdle = append(beforeIdle, raw)
+		}
+	}
+	for _, name := range []string{"pause", "end"} {
+		_, rec := setup(t)
+		resetMA(t)
+		ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+		events := rudderanthropic.TrackSessionEvents(ctx, &sliceStream{events: decodeEvents(t, beforeIdle)}, rudderanthropic.WithSession(withID(f.Session, "sesn_grader_"+name)))
+		// Read every event but not the stream's end, which would settle the turn into the answer.
+		for range beforeIdle {
+			if !events.Next() {
+				t.Fatal("stream ended early")
+			}
+		}
+		if name == "pause" {
+			if _, ok := i.Pause(rudderstackai.PauseOptions{}); !ok {
+				t.Fatal("not paused")
+			}
+		} else {
+			i.End(rudderstackai.EndOptions{})
+		}
+		got := rec.events(t)["ai_response_received"]
+		if len(got) != 1 || got[0]["primary_model"] != "claude-haiku-5-5" || got[0]["llm_call_count"] != float64(3) {
+			t.Fatalf("%s: %v", name, got)
+		}
+	}
+}
