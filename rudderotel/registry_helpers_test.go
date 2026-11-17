@@ -6,3 +6,10 @@ func liveRegistrations() int {
 	defer otelSpans.mu.Unlock()
 	return len(otelSpans.open)
 }
+
+// closedEntry reports whether the shared dedup state still holds span k's closed entry.
+func closedEntry(k spanKey) bool {
+	otelSpans.mu.Lock()
+	defer otelSpans.mu.Unlock()
+	return otelSpans.ended[k] != nil
+}

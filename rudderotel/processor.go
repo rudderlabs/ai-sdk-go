@@ -223,7 +223,7 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 	// An SDK call that adopted this span's IDs, or covers it, sends the span instead: every
 	// processor that ends it drops it here, synchronously, whatever its filter says, whether or
 	// not it saw the span start.
-	drop, own, parent := endSpan(s)
+	drop, own, parent := p.endSpan(s)
 	if p.closed.Load() {
 		return
 	}

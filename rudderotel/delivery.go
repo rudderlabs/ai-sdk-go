@@ -3,9 +3,12 @@ package rudderotel
 import (
 	"context"
 	"errors"
+	"reflect"
+	"runtime"
 	"slices"
 	"sync"
 	"sync/atomic"
+	"weak"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -19,23 +22,24 @@ import (
 // the descendants of a covered span (they export under its SDK owner), and an open model-call
 // span an earlier processor started a child under before RudderStack saw it start.
 //
-// An entry is open from the span's start to its first end, or until every processor that
-// started it shut down, and an open entry is never evicted. At most Limits.MaxMapEntries entries
+// An entry is open from the span's start until every RudderStack processor that saw it start has
+// ended it, or shut down, and an open entry is never evicted. At most Limits.MaxMapEntries entries
 // are open: a model-call span starting while they are full gets none, so it is never covered or
 // adopted and exports as without dedup. Descendants of a covered span always get one, so its tree
-// stays intact. At the span's end, an entry later readers may need moves to the ended entries, at
-// most MaxMapEntries, oldest out: a replaced or covered span, for processors that end it after
-// the first, and a covered tree, for children started after their parent ended. Export reads no
-// map: a delivered span holds its entry, and an entry its parent's.
+// stays intact. A closed entry later readers may need (a replaced or covered span, for processors
+// that end it without having seen it start; a covered tree, for children started later from a
+// context that holds the span) stays in ended while the span object, or the snapshot its end
+// passes to every processor, is reachable. It is weak-keyed on those objects, so it is never
+// evicted and goes once Go collects both. Export reads no map: a delivered span holds its entry,
+// and an entry its parent's.
 //
 // No app code runs while mu is held: an SDK call's size check, whose mapper can call the redact
 // hook, runs before the lock, and the span's state is checked again under it.
 var otelSpans = struct {
-	mu    sync.Mutex
-	open  map[spanKey]*otelSpan
+	mu   sync.Mutex
+	open map[spanKey]*otelSpan
+	// ended holds closed entries while an object they are anchored to is reachable.
 	ended map[spanKey]*otelSpan
-	// order is the ended keys, oldest first.
-	order []spanKey
 	// unseen counts open entries of spans no RudderStack processor saw start.
 	unseen int
 	// n mirrors len(open)+len(ended), so a span's end skips the lock while nothing takes part.
@@ -58,7 +62,7 @@ type otelSpan struct {
 	// decided: a processor saw the span start and made the dedup decision.
 	decided bool
 	// candidate: an outer model-call span the first SDK call of interaction starting inside it
-	// adopts, while open, unless that call's active SDK span started after seq.
+	// adopts, until a processor ends it, unless that call's active SDK span started after seq.
 	candidate   bool
 	seq         uint64
 	interaction *rudderstackai.Interaction
@@ -67,13 +71,80 @@ type otelSpan struct {
 	replaced bool
 	// unseen is the span of an open entry no RudderStack processor saw start.
 	unseen trace.Span
-	// processors that started the span (or tracked it) and have not shut down.
+	// processors that started the span (or tracked it) and have neither ended it nor shut down.
 	processors []*SpanProcessor
+	// span is the span object, held weakly: a closed entry is anchored to it.
+	span weak.Pointer[spanObject]
+	// anchors counts the objects a closed entry is anchored to that Go has not collected.
+	anchors int
+}
+
+func newEntry(s trace.Span, p *SpanProcessor) *otelSpan {
+	return &otelSpan{span: weak.Make(objectOf(s)), processors: []*SpanProcessor{p}}
 }
 
 func (e *otelSpan) join(p *SpanProcessor) {
 	if !slices.Contains(e.processors, p) {
 		e.processors = append(e.processors, p)
+	}
+}
+
+// leave removes p, reporting whether no processor that saw the span start is left to end it.
+func (e *otelSpan) leave(p *SpanProcessor) bool {
+	i := slices.Index(e.processors, p)
+	if i < 0 {
+		return false
+	}
+	e.processors = slices.Delete(e.processors, i, i+1)
+	return len(e.processors) == 0
+}
+
+// spanObject stands for the object behind a span value, the OTel SDK's span or its end
+// snapshot. Only its address is used, for weak pointers and cleanups; it is never read.
+type spanObject struct{ _ byte }
+
+// objectOf is the object v points to, or nil when v holds no pointer.
+func objectOf(v any) *spanObject {
+	r := reflect.ValueOf(v)
+	if r.Kind() != reflect.Pointer || r.IsNil() {
+		return nil
+	}
+	return (*spanObject)(r.UnsafePointer())
+}
+
+// anchoredEntry is a closed entry and its key, as a cleanup receives it.
+type anchoredEntry struct {
+	k spanKey
+	e *otelSpan
+}
+
+// anchor keeps k's closed entry e in ended while obj is reachable. Holds the lock.
+func anchor(k spanKey, e *otelSpan, obj *spanObject) {
+	if obj != nil && addCleanup(obj, anchoredEntry{k, e}) {
+		e.anchors++
+	}
+}
+
+// addCleanup runs unanchor(a) once obj is unreachable; false when the runtime refuses obj.
+func addCleanup(obj *spanObject, a anchoredEntry) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = false
+		}
+	}()
+	runtime.AddCleanup(obj, unanchor, a)
+	return true
+}
+
+// unanchor is a cleanup: an object a.e is anchored to was collected. The entry leaves ended with
+// its last anchor.
+func unanchor(a anchoredEntry) {
+	otelSpans.mu.Lock()
+	defer otelSpans.mu.Unlock()
+	a.e.anchors--
+	if a.e.anchors == 0 && otelSpans.ended[a.k] == a.e {
+		delete(otelSpans.ended, a.k)
+		countEntries()
 	}
 }
 
@@ -93,7 +164,7 @@ func lookup(k spanKey) *otelSpan {
 	return otelSpans.ended[k]
 }
 
-// room reports whether a new open entry fits within limit. A full map first drops the entries
+// room reports whether a new open entry fits within limit. A full map first closes the entries
 // of spans no processor saw start that ended meanwhile. Holds the lock.
 func room(limit int) bool {
 	if len(otelSpans.open) < limit {
@@ -102,30 +173,29 @@ func room(limit int) bool {
 	if otelSpans.unseen > 0 {
 		for k, e := range otelSpans.open {
 			if e.unseen != nil && !e.unseen.IsRecording() {
-				release(k, e, limit)
+				release(k, e, nil)
 			}
 		}
 	}
 	return len(otelSpans.open) < limit
 }
 
-// release closes k's open entry, keeping it among the ended entries when later readers may need
-// it. Holds the lock.
-func release(k spanKey, e *otelSpan, limit int) {
+// release closes k's open entry; snapshot is the span's end snapshot, when a processor's end
+// closes it. An entry later readers may need stays in ended, anchored to the span object and the
+// snapshot. Holds the lock.
+func release(k spanKey, e *otelSpan, snapshot sdktrace.ReadOnlySpan) {
 	delete(otelSpans.open, k)
+	span := e.span.Value()
 	if e.unseen != nil {
 		e.unseen = nil
 		otelSpans.unseen--
 	}
 	e.interaction, e.processors = nil, nil
 	if e.covered || e.replaced || e.tree {
-		if _, kept := otelSpans.ended[k]; !kept {
-			otelSpans.order = append(otelSpans.order, k)
-		}
-		otelSpans.ended[k] = e
-		for len(otelSpans.order) > limit {
-			delete(otelSpans.ended, otelSpans.order[0])
-			otelSpans.order = otelSpans.order[1:]
+		anchor(k, e, span)
+		anchor(k, e, objectOf(snapshot))
+		if e.anchors > 0 {
+			otelSpans.ended[k] = e
 		}
 	}
 	countEntries()
@@ -158,13 +228,14 @@ func (p *SpanProcessor) track(ctx context.Context, s sdktrace.ReadWriteSpan) {
 		return
 	}
 	limit := limit()
-	if !p.trackLocked(k, pk, parentSpan, unseen, limit) {
+	if !p.trackLocked(s, k, pk, parentSpan, unseen, limit) {
 		reportFull()
 	}
 }
 
-// trackLocked is track under the lock; false when the parent needed an entry and none was free.
-func (p *SpanProcessor) trackLocked(k, pk spanKey, parentSpan trace.Span, unseen bool, limit int) bool {
+// trackLocked is track under the lock for span s with key k; false when the parent needed an
+// entry and none was free.
+func (p *SpanProcessor) trackLocked(s trace.Span, k, pk spanKey, parentSpan trace.Span, unseen bool, limit int) bool {
 	otelSpans.mu.Lock()
 	defer otelSpans.mu.Unlock()
 	// Under the lock, so an entry never outlives this processor's Shutdown.
@@ -183,14 +254,17 @@ func (p *SpanProcessor) trackLocked(k, pk spanKey, parentSpan trace.Span, unseen
 		if !room(limit) {
 			return false
 		}
-		pe = &otelSpan{tree: true, unseen: parentSpan, processors: []*SpanProcessor{p}}
+		pe = newEntry(parentSpan, p)
+		pe.tree, pe.unseen = true, parentSpan
 		otelSpans.open[pk] = pe
 		otelSpans.unseen++
 	case !pe.tree:
 		return true
 	}
 	// A descendant of a covered span: always admitted, it is what keeps the tree intact.
-	otelSpans.open[k] = &otelSpan{parent: pe, tree: true, processors: []*SpanProcessor{p}}
+	e := newEntry(s, p)
+	e.parent, e.tree = pe, true
+	otelSpans.open[k] = e
 	countEntries()
 	return true
 }
@@ -237,7 +311,7 @@ func (p *SpanProcessor) dedupLocked(s trace.Span, parentID string, owner *hook.S
 		if !room(limit) {
 			return false
 		}
-		e = &otelSpan{}
+		e = newEntry(s, p)
 		otelSpans.open[k] = e
 	case e.unseen != nil:
 		e.unseen = nil
@@ -302,21 +376,25 @@ func adoptable(s trace.Span, interaction any, activeSeq uint64) (*otelSpan, hook
 	return e, hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: e.parentID, Adopted: !e.replaced}, true
 }
 
-// endSpan is a processor reaching s's end, whether or not it saw the span start. The first end
-// closes the span's entry, so the decision is final: a span one processor exported is never
-// adopted by a call whose span another drops. It reports whether an SDK call span sends the span
-// instead (replaced or covered), and the entry delivery resolves from: the span's own, or else
-// its parent's.
-func endSpan(s sdktrace.ReadOnlySpan) (drop bool, own, parent *otelSpan) {
+// endSpan is p reaching s's end, whether or not it saw the span start. The first end makes the
+// decision final: no call adopts the span after that, so a span one processor exported is never
+// adopted by a call whose span another drops. The entry closes when the last processor that saw
+// the span start ends it; one that never saw it start still finds it, closed. It reports whether
+// an SDK call span sends the span instead (replaced or covered), and the entry delivery resolves
+// from: the span's own, or else its parent's.
+func (p *SpanProcessor) endSpan(s sdktrace.ReadOnlySpan) (drop bool, own, parent *otelSpan) {
 	if otelSpans.n.Load() == 0 {
 		return false, nil, nil
 	}
 	k := key(s.SpanContext())
-	limit := limit()
 	otelSpans.mu.Lock()
 	defer otelSpans.mu.Unlock()
 	if own = otelSpans.open[k]; own != nil {
-		release(k, own, limit)
+		// A processor read the decision: no call adopts the span from now on.
+		own.candidate = false
+		if own.leave(p) {
+			release(k, own, s)
+		}
 	} else if own = otelSpans.ended[k]; own == nil {
 		if s.Parent().IsValid() {
 			if pe := lookup(key(s.Parent())); pe != nil && pe.tree {
@@ -329,17 +407,14 @@ func endSpan(s sdktrace.ReadOnlySpan) (drop bool, own, parent *otelSpan) {
 }
 
 // forgetSpans closes the open entries no live processor that started them is left for: they
-// are never adopted, and nothing of theirs ends them.
+// are never adopted, and nothing of theirs ends them. Processors that end such a span later
+// still find its closed entry while the span is reachable.
 func forgetSpans(p *SpanProcessor) {
-	limit := limit()
 	otelSpans.mu.Lock()
 	defer otelSpans.mu.Unlock()
 	for k, e := range otelSpans.open {
-		if i := slices.Index(e.processors, p); i >= 0 {
-			e.processors = slices.Delete(e.processors, i, i+1)
-			if len(e.processors) == 0 {
-				release(k, e, limit)
-			}
+		if e.leave(p) {
+			release(k, e, nil)
 		}
 	}
 }
