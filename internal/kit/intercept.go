@@ -292,7 +292,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 		var h StreamHandler
 		safe(func() { h = s.NewStream(c, resp) })
 		if h != nil {
-			body := &sseBody{src: resp.Body, h: h, i: i, ctx: req.Context(), reader: bufio.NewReader(resp.Body), preferTerminal: c.Span != nil}
+			body := &sseBody{src: resp.Body, h: h, i: i, ctx: req.Context(), reader: bufio.NewReader(resp.Body), preferTerminal: c.Span != nil, span: c.Span}
 			body.filter, _ = h.(EventFilter)
 			if c.Span != nil {
 				body.mu.Lock()
@@ -473,6 +473,7 @@ type sseBody struct {
 	h        StreamHandler
 	i        *rudderstackai.Interaction
 	ctx      context.Context
+	span     any
 	buf      bytes.Buffer
 	event    string
 	data     []string
@@ -633,6 +634,8 @@ func (b *sseBody) end(err error) {
 		return
 	}
 	b.finished = true
+	// Reserve reporting while termination is claimed, before observers run.
+	done := hook.Tracing.ReserveWrapperCompletion(b.span)
 	if b.stopCancellation != nil {
 		b.stopCancellation()
 	}
@@ -640,6 +643,7 @@ func (b *sseBody) end(err error) {
 		b.parse([]byte("\n"))
 	}
 	b.callbacks = append(b.callbacks, func() {
+		defer done()
 		complete := false
 		if b.preferTerminal {
 			safe(func() { complete = b.h.Complete() })
@@ -671,10 +675,12 @@ func (b *sseBody) Close() error {
 	b.mu.Lock()
 	if !b.finished {
 		b.finished = true
+		done := hook.Tracing.ReserveWrapperCompletion(b.span)
 		if b.stopCancellation != nil {
 			b.stopCancellation()
 		}
 		b.callbacks = append(b.callbacks, func() {
+			defer done()
 			complete := false
 			safe(func() { complete = b.h.Complete() })
 			if complete {

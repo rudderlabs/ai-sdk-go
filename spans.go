@@ -31,6 +31,7 @@ type Span struct {
 	TraceID, SpanID                                    string
 	mu                                                 sync.Mutex
 	ended                                              bool
+	reporting                                          int
 	parent                                             *Span
 	parentID                                           string
 	traceState                                         string
@@ -380,7 +381,7 @@ func finishPendingWrapperSpans(ctx context.Context) bool {
 		wg.Go(func() {
 			defer done()
 			safely(func() {
-				hook.Tracing.FinishRaw(s, metadata.provider, metadata.model, 0, time.Now(), errors.New("cancelled"))
+				s.finishUnsafe(strings.TrimSpace("chat "+metadata.model), "chat", "wrapper", map[string]any{"gen_ai.provider.name": metadata.provider, "gen_ai.request.model": metadata.model, "gen_ai.response.model": metadata.model, "http.response.status_code": 0}, errors.New("cancelled"), true, time.Now(), true)
 			})
 		})
 	}
@@ -395,15 +396,15 @@ func finishPendingWrapperSpans(ctx context.Context) bool {
 }
 
 func (s *Span) finish(name, operation, source string, a map[string]any, err error, masked bool, ended time.Time) {
-	safely(func() { s.finishUnsafe(name, operation, source, a, err, masked, ended) })
+	safely(func() { s.finishUnsafe(name, operation, source, a, err, masked, ended, false) })
 }
 
-func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, err error, masked bool, ended time.Time) {
+func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, err error, masked bool, ended time.Time, pendingOnly bool) {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
-	if s.ended {
+	if s.ended || (pendingOnly && s.reporting > 0) {
 		s.mu.Unlock()
 		return
 	}
@@ -546,6 +547,25 @@ func init() {
 			s.covered.Store(true)
 			return true
 		}}, true
+	}
+	hook.Tracing.ReserveWrapperCompletion = func(value any) func() {
+		s, _ := value.(*Span)
+		if s == nil {
+			return func() {}
+		}
+		s.mu.Lock()
+		done := hook.Track()
+		s.reporting++
+		s.mu.Unlock()
+		var once sync.Once
+		return func() {
+			once.Do(func() {
+				s.mu.Lock()
+				s.reporting--
+				s.mu.Unlock()
+				done()
+			})
+		}
 	}
 	hook.Tracing.WrapperCaptureContent = func(value any) bool {
 		s, _ := value.(*Span)

@@ -13,6 +13,7 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
 type reentryHandler struct {
@@ -147,5 +148,47 @@ func TestSDK6111RetryBodyCallbackReenter(t *testing.T) {
 			}
 			i.End(rudderstackai.EndOptions{})
 		})
+	}
+}
+
+func TestFlushWaitsForReservedStreamCompletion(t *testing.T) {
+	r := newRecorder(t)
+	if err := rudderstackai.Configure(rudderstackai.WithAnalytics(r), rudderstackai.WithEmitSpans(true)); err != nil {
+		t.Fatal(err)
+	}
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	ctx, span := hook.Tracing.BeginWrapper(ctx, i, time.Now())
+	call := &Call{Interaction: i, Span: span, Provider: "openai", Model: "gpt-4o", StartedAt: time.Now()}
+	observer := NewObserver(call)
+	observer.InputTokens = rudderstackai.Ptr(10)
+	h := &reentryHandler{finish: func() { observer.Finish(Completed, "") }}
+	body := &sseBody{ctx: ctx, h: h, span: span}
+	body.mu.Lock()
+	body.end(io.EOF)
+	body.mu.Unlock()
+	flushCtx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	early := rudderstackai.Flush(flushCtx)
+	cancel()
+	body.drainCallbacks()
+	i.End(rudderstackai.EndOptions{})
+	if early {
+		t.Error("flush returned true before stream reporting")
+	}
+	flushCtx, cancel = context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if !rudderstackai.Flush(flushCtx) {
+		t.Error("completion did not settle")
+	}
+	spans := r.named("ai_otel_span")
+	if len(spans) != 1 {
+		t.Fatalf("spans: %v", spans)
+	}
+	p := spans[0].Properties
+	if p["status_code"] != "ok" {
+		t.Fatalf("span: %v", p)
+	}
+	genAI := p["gen_ai"].(map[string]any)
+	if genAI["input_tokens"] != 10 {
+		t.Fatalf("usage: %v", genAI)
 	}
 }

@@ -137,3 +137,79 @@ func TestReview137CaptureEnrichment(t *testing.T) {
 		})
 	}
 }
+
+func TestCaptureBeforeThirdPricingAttempt(t *testing.T) {
+	for _, flag := range []string{"byok", "fallback_used"} {
+		for _, source := range []string{"redactor", "marshaler"} {
+			t.Run(flag+"/"+source, func(t *testing.T) {
+				var i *Interaction
+				armed, attempts := false, 0
+				var notices []string
+				call := review137Call()
+				setFlag := func(c *LLMCall, value bool) {
+					if flag == "byok" {
+						c.BYOK = Ptr(value)
+					} else {
+						c.FallbackUsed = Ptr(value)
+					}
+				}
+				enrich := func() {
+					if armed {
+						c := call
+						setFlag(&c, true)
+						i.RecordCall(c)
+					}
+				}
+				r := setupAI(t, WithLLMCallEvents(true), WithCaptureContent(true),
+					WithOnError(func(_ error, info ErrorInfo) { notices = append(notices, info.Kind) }),
+					WithCredits(func(b CreditCall) (*float64, error) {
+						value := b.BYOK
+						if flag == "fallback_used" {
+							value = b.FallbackUsed
+						}
+						enabled := value != nil && *value
+						if armed && b.InputTokens == 100 {
+							attempts++
+							if attempts < 3 {
+								c := call
+								setFlag(&c, !enabled)
+								i.RecordCall(c)
+							}
+						}
+						credits := float64(b.InputTokens)
+						if enabled {
+							credits *= 2
+						}
+						return Ptr(credits), nil
+					}), WithRedactHook(func(text string) (string, error) {
+						if source == "redactor" && text == "late-change" {
+							enrich()
+						}
+						return text, nil
+					}))
+				_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+				c := call
+				setFlag(&c, false)
+				i.RecordCall(c)
+				armed = true
+				c = call
+				c.Integration = "openai"
+				c.InputTokens = 100
+				c.OutputText = "late-change"
+				if source == "marshaler" {
+					c.InputMessages = []GenAIMessage{{Role: "user", Parts: []GenAIPart{{"type": "text", "content": callbackContent{enrich}}}}}
+				}
+				i.RecordCall(c)
+				armed = false
+				i.End(EndOptions{})
+				p := r.named("ai_llm_response_received")[0].Properties
+				if attempts != 3 || len(notices) != 0 || p[flag] != true || p["credits"] != 200.0 {
+					t.Fatalf("attempts=%d notices=%v call=%v", attempts, notices, p)
+				}
+				if lastResponse(t, r)["total_credits"] != 200.0 {
+					t.Fatal(lastResponse(t, r))
+				}
+			})
+		}
+	}
+}
