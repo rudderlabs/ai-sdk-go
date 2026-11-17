@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 )
 
 type pauseSegmentsStep struct {
+	Refused     bool                `json:"refused"`
 	ResponseID  string              `json:"response_id"`
 	BYOK        *bool               `json:"byok"`
 	Text        string              `json:"text"`
@@ -35,11 +37,12 @@ type pauseSegmentsStep struct {
 	Steps       []pauseSegmentsStep `json:"steps"`
 	JSON        bool                `json:"json"`
 	Calls       []struct {
-		ID        string `json:"id"`
-		Name      string `json:"name"`
-		Result    any    `json:"result"`
-		Error     *bool  `json:"error"`
-		AgentName string `json:"agent_name"`
+		ID        string   `json:"id"`
+		Name      string   `json:"name"`
+		SDKs      []string `json:"sdks"`
+		Result    any      `json:"result"`
+		Error     *bool    `json:"error"`
+		AgentName string   `json:"agent_name"`
 	} `json:"calls"`
 }
 
@@ -111,14 +114,16 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				EventRules     *struct {
 					Tools map[string]string `json:"tools"`
 				} `json:"event_rules"`
+				PricingWaitMS int `json:"pricing_wait_ms"`
 			} `json:"config"`
 			Steps    []pauseSegmentsStep `json:"steps"`
 			Expected struct {
-				Segments    []map[string]any `json:"segments"`
-				Errors      []string         `json:"errors"`
-				CallCredits []*float64       `json:"call_credits"`
-				CallEvents  []float64        `json:"call_events"`
-				ToolEvents  []map[string]any `json:"tool_events"`
+				Segments     []map[string]any `json:"segments"`
+				Errors       []string         `json:"errors"`
+				ErrorReasons []string         `json:"error_reasons"`
+				CallCredits  []*float64       `json:"call_credits"`
+				CallEvents   []float64        `json:"call_events"`
+				ToolEvents   []map[string]any `json:"tool_events"`
 			} `json:"expected"`
 		} `json:"cases"`
 	}
@@ -141,10 +146,20 @@ func TestPauseSegmentsFixture(t *testing.T) {
 			var redactors []pauseSegmentsStep
 			var run func([]pauseSegmentsStep)
 			errors := []string{}
-			opts = append(opts, WithOnError(func(_ error, info ErrorInfo) { errors = append(errors, info.Kind) }))
+			errorReasons := []string{}
+			entered, release := make(chan struct{}), make(chan struct{})
+			var pricingBlock atomic.Bool
+			opts = append(opts, WithOnError(func(_ error, info ErrorInfo) {
+				errors = append(errors, info.Kind)
+				errorReasons = append(errorReasons, info.Reason)
+			}))
 			if pricing := tc.Config.Credits; pricing != nil {
 				attempts := 0
 				opts = append(opts, WithCredits(func(call CreditCall) (*float64, error) {
+					if pricingBlock.Load() {
+						close(entered)
+						<-release
+					}
 					invocation := attempts
 					attempts++
 					if invocation < len(pricing.OnHook) {
@@ -192,6 +207,21 @@ func TestPauseSegmentsFixture(t *testing.T) {
 							}
 						}
 						i.RecordCall(call)
+					case "pricing_wait":
+						i.pausePricingWait = time.Duration(tc.Config.PricingWaitMS) * time.Millisecond
+						pricingBlock.Store(true)
+						done := make(chan struct{})
+						go func() {
+							defer close(done)
+							i.RecordCall(LLMCall{Provider: step.Provider, Model: step.Model, InputTokens: derefInt(step.InputTokens)})
+						}()
+						<-entered
+						if _, ok := i.Pause(PauseOptions{}); ok || i.Paused() {
+							t.Fatal("pricing bound paused")
+						}
+						close(release)
+						<-done
+						pricingBlock.Store(false)
 					case "record_tool_call":
 						calls := make([]ToolCall, 0, len(step.Calls))
 						for _, c := range step.Calls {
@@ -206,10 +236,10 @@ func TestPauseSegmentsFixture(t *testing.T) {
 						redactors = append(redactors, step)
 					case "pause":
 						snapshot, ok := i.Pause(PauseOptions{})
-						if !ok {
-							t.Fatal("pause")
+						if ok == step.Refused {
+							t.Fatal("unexpected pause result")
 						}
-						if step.JSON {
+						if step.JSON && ok {
 							var stored PausedInteraction
 							if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
 								t.Fatal(err)
@@ -227,6 +257,9 @@ func TestPauseSegmentsFixture(t *testing.T) {
 			}
 			client.run = run
 			client.run(tc.Steps)
+			if tc.Expected.ErrorReasons != nil && !reflect.DeepEqual(errorReasons, tc.Expected.ErrorReasons) {
+				t.Fatal("error reasons", errorReasons)
+			}
 
 			segments := r.named("ai_response_received")
 			if len(segments) != len(tc.Expected.Segments) {

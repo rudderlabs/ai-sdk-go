@@ -318,6 +318,8 @@ func (i *Interaction) filterSpanCallsLocked() {
 // after each redaction and tool callback, keeping evidence until capture settles.
 // The caller holds mu; callbacks run unlocked and this returns with mu held.
 func (i *Interaction) captureResponseLocked(explicit string, freeze bool) (text string, ok bool) {
+	leave := i.enterCallback(false)
+	defer leave()
 	i.filterSpanCallsLocked()
 	selected := first(explicit, i.spanAnswer)
 	var source *recordedCall

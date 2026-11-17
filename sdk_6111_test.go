@@ -39,6 +39,7 @@ func TestSDK6111CreditsReentrySharesRetryBudget(t *testing.T) {
 		return Ptr(float64(c.InputTokens) * factor), nil
 	}))
 	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.pausePricingWait = 10 * time.Millisecond
 	i.RecordCall(span)
 	armed = true
 	w := span
@@ -325,17 +326,18 @@ func TestSDK6111WriteFromAnotherGoroutineDuringPauseIsDeliveredOrCarried(t *test
 
 // A credits hook priced with its twin's call count or usage, when a pause during the hook closes
 // the twin's segment: the report is then a new call and is priced alone.
-func TestSDK6111CreditsHookThatPausesPricesTheReportAlone(t *testing.T) {
+func TestSDK6111CreditsHookPauseRefusedKeepsMergedCallCount(t *testing.T) {
 	for _, order := range []string{"span first", "wrapper first"} {
 		for _, pauser := range []string{"hook", "another goroutine"} {
 			t.Run(order+"/"+pauser, func(t *testing.T) {
 				var i *Interaction
 				var hookCalls []int
+				var errors []ErrorInfo
 				pauseOn := 1
 				if order == "wrapper first" {
 					pauseOn = 2
 				}
-				r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+				r := setupAI(t, WithOnError(func(_ error, info ErrorInfo) { errors = append(errors, info) }), WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
 					hookCalls = append(hookCalls, c.CallCount)
 					// Only the report that follows its twin pauses.
 					if len(hookCalls) == pauseOn {
@@ -350,40 +352,36 @@ func TestSDK6111CreditsHookThatPausesPricesTheReportAlone(t *testing.T) {
 					return Ptr(float64(c.CallCount)), nil
 				}))
 				_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+				i.pausePricingWait = 10 * time.Millisecond
+				i.pausePricingWait = 10 * time.Millisecond
 				// One aggregate of three calls with unknown usage, and its twin for one call with usage.
 				aggregate := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o-2024-08-06", Integration: "tracing", UsageUnknown: true, CallCount: 3}, 100)
 				wrapper := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", Integration: "openai", InputTokens: 10}, 100)
-				reports, want := []LLMCall{aggregate, wrapper}, [][3]any{{3.0, nil, 0.0}, {1.0, 1.0, 10.0}}
+				reports := []LLMCall{aggregate, wrapper}
 				if order == "wrapper first" {
-					reports, want = []LLMCall{wrapper, aggregate}, [][3]any{{1.0, 1.0, 10.0}, {3.0, nil, 0.0}}
+					reports = []LLMCall{wrapper, aggregate}
 				}
 				for _, call := range reports {
-					if !i.RecordCall(call) {
-						t.Fatal("report was not recorded")
-					}
+					i.RecordCall(call)
 				}
 				i.End(EndOptions{})
-				segments, calls := r.named("ai_response_received"), r.named("ai_llm_response_received")
-				if len(segments) != 2 || len(calls) != 2 {
-					t.Fatalf("segments = %d, call events = %d, want 2 and 2", len(segments), len(calls))
+				p := lastResponse(t, r)
+				if len(r.named("ai_response_received")) != 1 || p["llm_call_count"] != 3 || p["total_credits"] != 3.0 || p["total_input_tokens"] != 10 {
+					t.Fatal(p)
 				}
-				for n, w := range want {
-					// The pause closed the twin's segment, so the later report is a call of its own count.
-					segment := pauseSegmentsJSON(t, segments[n].Properties).(map[string]any)
-					if segment["llm_call_count"] != w[0] || segment["total_credits"] != w[1] {
-						t.Errorf("segment %d: llm_call_count=%v total_credits=%v, want %v and %v", n, segment["llm_call_count"], segment["total_credits"], w[0], w[1])
-					}
-					event := pauseSegmentsJSON(t, calls[n].Properties).(map[string]any)
-					if event["input_tokens"] != w[2] || event["credits"] != w[1] {
-						t.Errorf("call event %d: input_tokens=%v credits=%v, want %v and %v", n, event["input_tokens"], event["credits"], w[2], w[1])
-					}
-				}
-				wantHook := []int{3, 1}
+				want := []int{3}
 				if order == "wrapper first" {
-					wantHook = []int{1, 3}
+					want = []int{1, 3}
 				}
-				if fmt.Sprint(hookCalls) != fmt.Sprint(wantHook) {
-					t.Errorf("hook call counts = %v, want %v", hookCalls, wantHook)
+				if fmt.Sprint(hookCalls) != fmt.Sprint(want) {
+					t.Fatal(hookCalls, want)
+				}
+				reason := "in_callback"
+				if pauser == "another goroutine" {
+					reason = "pricing_in_flight"
+				}
+				if len(errors) != 1 || errors[0].Kind != KindPauseRefused || errors[0].Reason != reason {
+					t.Fatal(errors)
 				}
 			})
 		}
@@ -413,6 +411,7 @@ func TestSDK6111SameSourceRepeatWhoseCreditsHookPausesIsDropped(t *testing.T) {
 					return nil, nil
 				}))
 				_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+				i.pausePricingWait = 10 * time.Millisecond
 				call := LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: source, ResponseID: "resp_1", InputTokens: 10}
 				if !i.RecordCall(call) {
 					t.Fatal("first report was not recorded")
@@ -963,7 +962,7 @@ func TestSDK6111GCRestoresPauseReasonFromSelectionMetadata(t *testing.T) {
 	}
 }
 
-func TestSDK6111GAEnrichingRepeatPricesLargerReportedCountWithoutReplacingUsage(t *testing.T) {
+func TestSDK6111GAEnrichingRepeatPricesRetainedCountAndUsage(t *testing.T) {
 	var priced [][2]int
 	r := setupAI(t, WithCredits(func(call CreditCall) (*float64, error) {
 		priced = append(priced, [2]int{call.InputTokens, call.CallCount})
@@ -975,11 +974,11 @@ func TestSDK6111GAEnrichingRepeatPricesLargerReportedCountWithoutReplacingUsage(
 	call.InputTokens, call.CallCount, call.BYOK = 999, 3, Ptr(false)
 	i.RecordCall(call)
 	i.End(EndOptions{})
-	if !reflect.DeepEqual(priced, [][2]int{{10, 1}, {10, 3}}) {
+	if !reflect.DeepEqual(priced, [][2]int{{10, 1}, {10, 1}}) {
 		t.Fatalf("priced = %v", priced)
 	}
 	resp := lastResponse(t, r)
-	if sdk6111Num(resp["llm_call_count"]) != 1 || sdk6111Num(resp["total_input_tokens"]) != 10 || sdk6111Num(resp["total_credits"]) != 3 {
+	if sdk6111Num(resp["llm_call_count"]) != 1 || sdk6111Num(resp["total_input_tokens"]) != 10 || sdk6111Num(resp["total_credits"]) != 1 {
 		t.Fatalf("response = %v", resp)
 	}
 }
@@ -1701,6 +1700,7 @@ func TestSDK6111FinalReentrantAuthoritativePricing(t *testing.T) {
 		return Ptr(float64(c.InputTokens) * factor), nil
 	}))
 	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.pausePricingWait = 10 * time.Millisecond
 	i.RecordCall(span)
 	inject = true
 	wrapper := span
@@ -1844,6 +1844,7 @@ func TestSDK6111FinalPricingRetriesBounded(t *testing.T) {
 		return Ptr(float64(c.InputTokens) * factor), nil
 	}))
 	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.pausePricingWait = 10 * time.Millisecond
 	i.RecordCall(span)
 	armed = true
 	w := span
@@ -1976,7 +1977,7 @@ func TestSDK6111AggregateTwinRetainsWrapperFlags(t *testing.T) {
 	}
 }
 
-func TestSDK6111DetachedCallPublishesOwnMetadata(t *testing.T) {
+func TestSDK6111RefusedPauseKeepsMergedMetadata(t *testing.T) {
 	for _, mode := range []string{"segment", "in-process", "json"} {
 		for _, shared := range []bool{true, false} {
 			for _, ownFlags := range []*bool{nil, Ptr(false)} {
@@ -2017,17 +2018,11 @@ func TestSDK6111DetachedCallPublishesOwnMetadata(t *testing.T) {
 					i.End(EndOptions{})
 					events := r.named("ai_llm_response_received")
 					p := events[len(events)-1].Properties
-					if sdk6111Num(p["input_tokens"]) != 100 || sdk6111Num(p["credits"]) != 7 || p["call_purpose"] != "new-purpose" {
+					if sdk6111Num(p["input_tokens"]) != 100 || sdk6111Num(p["credits"]) != 2 || p["call_purpose"] != "old-purpose" {
 						t.Fatal(p)
 					}
-					for _, key := range []string{"byok", "fallback_used"} {
-						if ownFlags == nil {
-							if _, ok := p[key]; ok {
-								t.Fatal(p)
-							}
-						} else if p[key] != *ownFlags {
-							t.Fatal(p)
-						}
+					if p["byok"] != true || p["fallback_used"] != true {
+						t.Fatal(p)
 					}
 					var total float64
 					for _, e := range r.named("ai_response_received") {

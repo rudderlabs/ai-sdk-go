@@ -3,11 +3,13 @@ package rudderstackai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 func pricingPendingRoundTrip(t *testing.T, snapshot PausedInteraction) PausedInteraction {
@@ -23,82 +25,193 @@ func pricingPendingRoundTrip(t *testing.T, snapshot PausedInteraction) PausedInt
 	return restored
 }
 
-func TestPricingPendingPause(t *testing.T) {
-	for _, origin := range []string{"segment", "in-process", "json"} {
-		for _, threaded := range []bool{false, true} {
-			for _, restore := range []bool{false, true} {
-				t.Run(fmt.Sprintf("%s/threaded=%t/restore=%t", origin, threaded, restore), func(t *testing.T) {
-					var i *Interaction
-					var snapshot PausedInteraction
-					var armed atomic.Bool
-					entered, release := make(chan struct{}), make(chan struct{})
-					r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(basis CreditCall) (*float64, error) {
-						if armed.Swap(false) {
-							if threaded {
-								close(entered)
-								select {
-								case <-release:
-								case <-time.After(5 * time.Second):
-									t.Error("hook remained blocked")
-								}
-							} else {
-								snapshot, _ = i.Pause(PauseOptions{})
-							}
+func TestPauseCallbackRefusal(t *testing.T) {
+	for _, kind := range []string{"credits", "retry", "redact", "capture_marshaler", "analytics", "event_when", "event_properties"} {
+		t.Run(kind, func(t *testing.T) {
+			var i *Interaction
+			var armed bool
+			var attempts int
+			var errors []ErrorInfo
+			invoke := func() {
+				if !armed {
+					return
+				}
+				armed = false
+				if _, ok := i.Pause(PauseOptions{}); ok || i.Paused() {
+					t.Error("callback pause was accepted")
+				}
+			}
+			opts := []ConfigOption{WithLLMCallEvents(true), WithCaptureContent(true),
+				WithOnError(func(_ error, info ErrorInfo) { errors = append(errors, info) }),
+				WithCredits(func(c CreditCall) (*float64, error) {
+					attempts++
+					if kind == "credits" {
+						invoke()
+					}
+					if kind == "retry" && armed {
+						if attempts == 2 {
+							call := pauseCall
+							call.ResponseID = "r"
+							call.Integration = "tracing"
+							call.BYOK = Ptr(true)
+							i.RecordCall(call)
+						} else {
+							invoke()
 						}
-						if basis.BYOK != nil && *basis.BYOK {
+					}
+					multiplier := 1.0
+					if c.BYOK != nil && *c.BYOK {
+						multiplier = 2
+					}
+					return Ptr(float64(c.InputTokens) * multiplier), nil
+				}),
+			}
+			if kind == "redact" {
+				opts = append(opts, WithRedactHook(func(s string) (string, error) { invoke(); return s, nil }))
+			}
+			rule := ToolEventRule{Event: "looked_up"}
+			if kind == "event_when" {
+				rule.When = func(map[string]any, any) bool { invoke(); return true }
+			}
+			if kind == "event_properties" {
+				rule.Properties = func(map[string]any, any) map[string]any { invoke(); return nil }
+			}
+			opts = append(opts, WithEventRules(EventRules{Tools: map[string]ToolEventRule{"lookup": rule}}))
+			r := setupAI(t, opts...)
+			_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+			if kind == "analytics" {
+				client := &review117Client{recorder: r}
+				client.setCallback(func(analytics.Track) { invoke() })
+				i.adapterAnalytics = client
+			}
+			call := pauseCall
+			call.ResponseID = "r"
+			call.OutputText = "answer"
+			if kind == "retry" {
+				call.Integration = "tracing"
+				call.BYOK = Ptr(false)
+				i.RecordCall(call)
+				call.AgentName = "enriched"
+			}
+			armed = true
+			if kind == "capture_marshaler" {
+				call.InputMessages = []GenAIMessage{{Role: "user", Parts: []GenAIPart{{"type": "text", "content": callbackContent{invoke}}}}}
+			}
+			i.RecordCall(call)
+			if kind == "event_when" || kind == "event_properties" {
+				i.RecordToolCalls(ToolCall{ID: "t", Name: "lookup"})
+				i.RecordToolResult("t", ToolResult{Result: "ok"})
+			}
+			i.End(EndOptions{})
+			if len(errors) != 1 || errors[0].Kind != KindPauseRefused || errors[0].Reason != "in_callback" {
+				t.Fatalf("refusal errors: %+v", errors)
+			}
+			p := lastResponse(t, r)
+			credits := 10.0
+			if kind == "retry" {
+				credits = 20
+			}
+			if len(r.named("ai_response_received")) != 1 || p["llm_call_count"] != 1 || p["total_credits"] != credits {
+				t.Fatal("refusal lost segment or credits", p)
+			}
+		})
+	}
+}
+
+func TestPausePricingWait(t *testing.T) {
+	for _, stage := range []string{"credits", "capture"} {
+		for _, releaseBeforeBound := range []bool{true, false} {
+			for _, repeat := range []bool{true, false} {
+				t.Run(fmt.Sprintf("%s/release=%t/repeat=%t", stage, releaseBeforeBound, repeat), func(t *testing.T) {
+					entered, release := make(chan struct{}), make(chan struct{})
+					var armed atomic.Bool
+					var captureParked atomic.Bool
+					errors := make(chan ErrorInfo, 1)
+					r := setupAI(t, WithLLMCallEvents(true), WithCaptureContent(true), WithRedactHook(func(text string) (string, error) {
+						if stage == "capture" && armed.Load() && text == "answer" && captureParked.CompareAndSwap(false, true) {
+							close(entered)
+							<-release
+						}
+						return text, nil
+					}), WithOnError(func(_ error, info ErrorInfo) { errors <- info }), WithCredits(func(CreditCall) (*float64, error) {
+						if armed.Load() {
+							if stage == "credits" {
+								close(entered)
+								<-release
+							}
 							return Ptr(20.0), nil
 						}
 						return Ptr(10.0), nil
 					}))
-					call := sdk6111TwinWindow(LLMCall{Provider: "openai", Model: "gpt-4o", InputTokens: 10, ResponseID: "pricing-pending", Integration: "tracing", BYOK: Ptr(false)})
-					i = sdk6111TwinPending(t, r, origin, call)
-					armed.Store(true)
-					call.BYOK = Ptr(true)
-					if threaded {
-						done := make(chan struct{})
-						go func() { defer close(done); i.RecordCall(call) }()
-						select {
-						case <-entered:
-						case <-time.After(5 * time.Second):
-							t.Fatal("hook never entered")
-						}
-						snapshot, _ = i.Pause(PauseOptions{})
-						if !restore {
-							i.Resume()
-						}
-						close(release)
-						select {
-						case <-done:
-						case <-time.After(5 * time.Second):
-							t.Fatal("report remained blocked")
-						}
-					} else {
+					_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+					i.pausePricingWait = 50 * time.Millisecond
+					call := pauseCall
+					call.ResponseID = "r"
+					call.Integration = "tracing"
+					call.BYOK = Ptr(false)
+					if repeat {
 						i.RecordCall(call)
 					}
-					if len(snapshot.PendingCalls) != 1 || snapshot.PendingCalls[0]["pricing_pending"] != true || snapshot.PendingCalls[0]["byok"] != true || snapshot.PendingCalls[0]["credits"] != nil {
-						t.Fatalf("bad pending snapshot: %+v", snapshot)
+					armed.Store(true)
+					call.OutputText = "answer"
+					call.BYOK = Ptr(true)
+					recorded := make(chan struct{})
+					go func() { defer close(recorded); i.RecordCall(call) }()
+					<-entered
+					type result struct {
+						snapshot PausedInteraction
+						ok       bool
 					}
-					responses := r.named("ai_response_received")
-					if responses[len(responses)-1].Properties["llm_call_count"] != 0 || len(r.named("ai_llm_response_received")) != 0 {
-						t.Fatalf("premature publication: %+v", r.all())
+					paused := make(chan result, 1)
+					go func() { snapshot, ok := i.Pause(PauseOptions{}); paused <- result{snapshot, ok} }()
+					select {
+					case <-paused:
+						t.Fatal("pause did not wait")
+					case <-time.After(5 * time.Millisecond):
 					}
-					if restore {
-						stored := pricingPendingRoundTrip(t, snapshot)
-						_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+					if releaseBeforeBound {
+						close(release)
+					}
+					var got result
+					select {
+					case got = <-paused:
+					case <-time.After(time.Second):
+						t.Fatal("pause exceeded bound")
+					}
+					if releaseBeforeBound {
+						if !got.ok {
+							t.Fatal("settled pricing was refused")
+						}
+						restored := pricingPendingRoundTrip(t, got.snapshot)
+						_, resumed := StartInteraction(context.Background(), InteractionOptions{Resume: &restored})
+						resumed.End(EndOptions{})
+						select {
+						case e := <-errors:
+							t.Fatal(e)
+						default:
+						}
 					} else {
-						i.Resume()
+						if got.ok || i.Paused() {
+							t.Fatal("bound paused interaction")
+						}
+						if e := <-errors; e.Kind != KindPauseRefused || e.Reason != "pricing_in_flight" {
+							t.Fatal(e)
+						}
+						close(release)
 					}
-					i.End(EndOptions{})
-					credits, calls := 0.0, 0
-					for _, response := range r.named("ai_response_received") {
-						if v, ok := response.Properties["total_credits"].(float64); ok {
+					<-recorded
+					if !releaseBeforeBound {
+						i.End(EndOptions{})
+					}
+					count, credits := 0, 0.0
+					for _, e := range r.named("ai_response_received") {
+						count += e.Properties["llm_call_count"].(int)
+						if v, ok := e.Properties["total_credits"].(float64); ok {
 							credits += v
 						}
-						calls += response.Properties["llm_call_count"].(int)
 					}
-					events := r.named("ai_llm_response_received")
-					if credits != 20 || calls != 1 || len(events) != 1 || events[0].Properties["byok"] != true || events[0].Properties["credits"] != 20.0 {
-						t.Fatalf("wrong final publication: %+v", r.all())
+					if count != 1 || credits != 20 {
+						t.Fatal(count, credits)
 					}
 				})
 			}
@@ -106,289 +219,209 @@ func TestPricingPendingPause(t *testing.T) {
 	}
 }
 
-func TestPricingPendingSecondPauseAfterRestore(t *testing.T) {
-	var i *Interaction
-	var snapshot PausedInteraction
-	armed := false
-	r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(basis CreditCall) (*float64, error) {
-		if armed {
-			armed = false
-			snapshot, _ = i.Pause(PauseOptions{})
+func TestPauseErrorHandlerAndOtherInteraction(t *testing.T) {
+	var i, other *Interaction
+	r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) {
+		if _, ok := other.Pause(PauseOptions{}); !ok {
+			t.Error("different interaction refused")
 		}
-		if basis.BYOK != nil && *basis.BYOK {
-			return Ptr(20.0), nil
+		if _, ok := i.Pause(PauseOptions{}); ok {
+			t.Error("same callback accepted")
 		}
 		return Ptr(10.0), nil
+	}), WithOnError(func(_ error, info ErrorInfo) {
+		if _, ok := i.Pause(PauseOptions{}); !ok {
+			t.Error("on_error refused", info)
+		}
 	}))
-	call := sdk6111TwinWindow(LLMCall{Provider: "openai", Model: "gpt-4o", InputTokens: 10, ResponseID: "pricing-pending", Integration: "tracing", BYOK: Ptr(false)})
-	i = sdk6111TwinPending(t, r, "segment", call)
-	armed = true
-	call.BYOK = Ptr(true)
-	i.RecordCall(call)
-	if err := Configure(WithCredits(func(basis CreditCall) (*float64, error) {
-		open.mu.Lock()
-		var restored *Interaction
-		for e := open.list.Front(); e != nil; e = e.Next() {
-			candidate := e.Value.(*Interaction)
-			if candidate.id == snapshot.InteractionID {
-				restored = candidate
-			}
-		}
-		open.mu.Unlock()
-		if restored == nil {
-			t.Fatal("restored run is not registered before pricing")
-		}
-		snapshot, _ = restored.Pause(PauseOptions{})
-		return Ptr(20.0), nil
-	})); err != nil {
-		t.Fatal(err)
-	}
-	stored := pricingPendingRoundTrip(t, snapshot)
-	StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
-	if len(snapshot.PendingCalls) != 1 || snapshot.PendingCalls[0]["pricing_pending"] != true {
-		t.Fatalf("lost pending marker: %+v", snapshot)
-	}
-	if err := Configure(WithCredits(func(CreditCall) (*float64, error) { return Ptr(20.0), nil })); err != nil {
-		t.Fatal(err)
-	}
-	stored = pricingPendingRoundTrip(t, snapshot)
-	_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	_, other = StartInteraction(context.Background(), InteractionOptions{UserID: "other"})
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.RecordCall(pauseCall)
 	i.End(EndOptions{})
-	credits := 0.0
-	for _, response := range r.named("ai_response_received") {
-		if v, ok := response.Properties["total_credits"].(float64); ok {
-			credits += v
-		}
-	}
-	if credits != 20 || len(r.named("ai_llm_response_received")) != 1 {
-		t.Fatalf("wrong restored totals: %+v", r.all())
+	other.End(EndOptions{})
+	if len(r.named("ai_response_received")) < 2 {
+		t.Fatal("missing pauses")
 	}
 }
 
-func TestPricingPendingEndWhileBlocked(t *testing.T) {
-	for _, resume := range []bool{false, true} {
-		t.Run(fmt.Sprintf("resume=%t", resume), func(t *testing.T) {
-			entered, release := make(chan struct{}), make(chan struct{})
-			r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(basis CreditCall) (*float64, error) {
-				if basis.BYOK != nil && *basis.BYOK {
-					close(entered)
-					select {
-					case <-release:
-					case <-time.After(5 * time.Second):
-						t.Error("hook remained blocked")
-					}
-					return Ptr(20.0), nil
-				}
-				return Ptr(10.0), nil
-			}))
-			call := sdk6111TwinWindow(LLMCall{Provider: "openai", Model: "gpt-4o", InputTokens: 10, ResponseID: "pricing-pending", Integration: "tracing", BYOK: Ptr(false)})
-			i := sdk6111TwinPending(t, r, "segment", call)
-			call.BYOK = Ptr(true)
-			done := make(chan struct{})
-			go func() { defer close(done); i.RecordCall(call) }()
-			select {
-			case <-entered:
-			case <-time.After(5 * time.Second):
-				t.Fatal("hook never entered")
-			}
-			i.Pause(PauseOptions{})
-			if resume {
-				i.Resume()
-			}
-			i.End(EndOptions{})
-			close(release)
-			select {
-			case <-done:
-			case <-time.After(5 * time.Second):
-				t.Fatal("report remained blocked")
-			}
-			responses := r.named("ai_response_received")
-			events := r.named("ai_llm_response_received")
-			if len(responses) != 2 || responses[0].Properties["llm_call_count"] != 0 || responses[1].Properties["llm_call_count"] != 1 || responses[1].Properties["total_credits"] != nil || len(events) != 1 || events[0].Properties["credits"] != nil || events[0].Properties["byok"] != true {
-				t.Fatalf("wrong End publication: %+v", r.all())
-			}
-		})
-	}
-}
-
-func TestPricingPendingRestoredRevisionRules(t *testing.T) {
-	for _, mode := range []string{"retry", "unstable", "throw"} {
-		t.Run(mode, func(t *testing.T) {
-			var i *Interaction
-			var snapshot PausedInteraction
-			armed := false
-			r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(basis CreditCall) (*float64, error) {
-				if armed {
-					armed = false
-					snapshot, _ = i.Pause(PauseOptions{})
-				}
-				if basis.BYOK != nil && *basis.BYOK {
-					return Ptr(20.0), nil
-				}
-				return Ptr(10.0), nil
-			}))
-			call := sdk6111TwinWindow(LLMCall{Provider: "openai", Model: "gpt-4o", InputTokens: 10, ResponseID: "pricing-pending", Integration: "tracing", BYOK: Ptr(false)})
-			i = sdk6111TwinPending(t, r, "segment", call)
-			armed = true
-			call.BYOK = Ptr(true)
-			i.RecordCall(call)
-			attempts := 0
-			var errors []string
-			if err := Configure(WithOnError(func(_ error, info ErrorInfo) { errors = append(errors, string(info.Kind)) }), WithCredits(func(basis CreditCall) (*float64, error) {
-				attempts++
-				if mode != "retry" || attempts == 1 {
-					open.mu.Lock()
-					var restored *Interaction
-					for e := open.list.Front(); e != nil; e = e.Next() {
-						candidate := e.Value.(*Interaction)
-						if candidate.id == snapshot.InteractionID {
-							restored = candidate
-						}
-					}
-					open.mu.Unlock()
-					if restored == nil {
-						t.Fatal("restored run missing")
-					}
-					call.BYOK = Ptr(!*basis.BYOK)
-					restored.RecordCall(call)
-				}
-				if mode == "throw" {
-					return nil, fmt.Errorf("credits callback failed")
-				}
-				if *basis.BYOK {
-					return Ptr(20.0), nil
-				}
-				return Ptr(10.0), nil
-			})); err != nil {
-				t.Fatal(err)
-			}
-			stored := pricingPendingRoundTrip(t, snapshot)
-			_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
-			i.End(EndOptions{})
-			wantAttempts := map[string]int{"retry": 2, "unstable": 3, "throw": 1}[mode]
-			if attempts != wantAttempts {
-				t.Fatalf("attempts=%d", attempts)
-			}
-			event := r.props(t, "ai_llm_response_received")
-			if event["byok"] != false {
-				t.Fatalf("stale metadata: %+v", event)
-			}
-			if mode == "retry" {
-				if len(errors) != 0 || event["credits"] != 10.0 {
-					t.Fatalf("bad retry result: errors=%v,event=%v", errors, event)
-				}
-			} else {
-				want := "credits_unstable"
-				if mode == "throw" {
-					want = "user_callback"
-				}
-				if len(errors) != 1 || errors[0] != want || event["credits"] != nil {
-					t.Fatalf("bad failure result: errors=%v,event=%v", errors, event)
-				}
-			}
-		})
-	}
-}
-
-func TestPricingPendingWritesUntimedSnapshot(t *testing.T) {
-	var snapshot PausedInteraction
+func TestEndWhilePricingDoesNotWait(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var armed atomic.Bool
 	r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(CreditCall) (*float64, error) {
-		open.mu.Lock()
-		restored := open.list.Back().Value.(*Interaction)
-		open.mu.Unlock()
-		snapshot, _ = restored.Pause(PauseOptions{})
-		return Ptr(20.0), nil
-	}))
-	// A legacy untimed held record: restoration must keep it held while repricing.
-	stored := PausedInteraction{InteractionID: "pricing-pending-untimed", ConversationID: "pricing-pending-conversation", Trigger: TriggerUser, UserID: "u", PauseCount: 1, PausedAt: time.Now().UnixMilli(), PendingCalls: []map[string]any{{"provider": "openai", "model": "gpt-4o", "raw_model": "gpt-4o", "input_tokens": 10, "call_count": 1, "byok": true, "pricing_pending": true, "call_event_pending": true, "call_index": 1, "response_id": "pricing-pending", "usage_known": true, "from_span": true, "matched": false}}}
-	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
-	if len(snapshot.PendingCalls) != 1 || snapshot.PendingCalls[0]["pricing_pending"] != true || snapshot.PendingCalls[0]["credits"] != nil || snapshot.PendingCalls[0]["started_at"] != nil {
-		t.Fatalf("wrong untimed snapshot: %+v", snapshot)
-	}
-	if path := os.Getenv("PRICING_PENDING_UNTIMED_SNAPSHOT"); path != "" {
-		data, err := json.MarshalIndent(snapshot, "", "  ")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err = os.WriteFile(path, data, 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	restored.Resume()
-	restored.End(EndOptions{})
-	events := r.named("ai_llm_response_received")
-	if len(events) != 1 || events[0].Properties["credits"] != 20.0 {
-		t.Fatalf("wrong untimed publication: %+v", r.all())
-	}
-}
-
-func TestPricingPendingAnotherGoroutinePausesRestore(t *testing.T) {
-	var i *Interaction
-	var snapshot PausedInteraction
-	armed := false
-	r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(basis CreditCall) (*float64, error) {
-		if armed {
-			armed = false
-			snapshot, _ = i.Pause(PauseOptions{})
-		}
-		if basis.BYOK != nil && *basis.BYOK {
-			return Ptr(20.0), nil
+		if armed.Load() {
+			close(entered)
+			<-release
 		}
 		return Ptr(10.0), nil
 	}))
-	call := sdk6111TwinWindow(LLMCall{Provider: "openai", Model: "gpt-4o", InputTokens: 10, ResponseID: "pricing-pending", Integration: "tracing", BYOK: Ptr(false)})
-	i = sdk6111TwinPending(t, r, "segment", call)
-	armed = true
-	call.BYOK = Ptr(true)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	call := pauseCall
+	call.ResponseID = "r"
+	call.Integration = "tracing"
+	call.BYOK = Ptr(false)
 	i.RecordCall(call)
-	entered, release := make(chan struct{}), make(chan struct{})
-	if err := Configure(WithCredits(func(CreditCall) (*float64, error) {
-		close(entered)
-		select {
-		case <-release:
-		case <-time.After(5 * time.Second):
-			t.Error("hook remained blocked")
-		}
-		return Ptr(20.0), nil
-	})); err != nil {
-		t.Fatal(err)
-	}
-	stored := pricingPendingRoundTrip(t, snapshot)
-	done := make(chan *Interaction, 1)
-	go func() {
-		_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
-		done <- restored
-	}()
-	select {
-	case <-entered:
-	case <-time.After(5 * time.Second):
-		t.Fatal("restore pricing never entered")
-	}
-	open.mu.Lock()
-	restored := open.list.Back().Value.(*Interaction)
-	open.mu.Unlock()
-	pending, ok := restored.Pause(PauseOptions{})
-	if !ok || len(pending.PendingCalls) != 1 || pending.PendingCalls[0]["pricing_pending"] != true {
-		t.Errorf("bad restored pause: %+v", pending)
-	}
-	if len(r.named("ai_llm_response_received")) != 0 {
-		t.Error("call emitted while pricing was blocked")
+	armed.Store(true)
+	call.BYOK = Ptr(true)
+	done := make(chan struct{})
+	go func() { defer close(done); i.RecordCall(call) }()
+	<-entered
+	i.End(EndOptions{})
+	p := lastResponse(t, r)
+	if p["llm_call_count"] != 1 || p["total_credits"] != nil {
+		t.Fatal(p)
 	}
 	close(release)
-	select {
-	case restored = <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("restore remained blocked")
+	<-done
+	if len(r.named("ai_llm_response_received")) != 1 {
+		t.Fatal("duplicate call event")
 	}
-	restored.Resume()
-	restored.End(EndOptions{})
-	credits := 0.0
-	for _, event := range r.named("ai_response_received") {
-		if value, ok := event.Properties["total_credits"].(float64); ok {
-			credits += value
+}
+
+func TestCallbackCallerParsing(t *testing.T) {
+	for _, tc := range []struct {
+		stack string
+		want  uint64
+	}{
+		{"goroutine 123 [running]:\nignored 456", 123},
+		{"goroutine 18446744073709551616 [running]:", 0},
+		{"thread 123 [running]:", 0}, {"goroutine invalid [running]:", 0}, {"", 0},
+	} {
+		if got := parseCallbackCaller(tc.stack); got != tc.want {
+			t.Fatalf("parse %q=%d want %d", tc.stack, got, tc.want)
 		}
 	}
-	if credits != 20 || r.props(t, "ai_llm_response_received")["credits"] != 20.0 {
-		t.Fatalf("wrong restored credits: %+v", r.all())
+}
+
+func TestPauseWaitsThroughEveryPricingRetry(t *testing.T) {
+	first, second, releaseFirst, releaseSecond := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var armed atomic.Bool
+	attempts := 0
+	errors := make(chan ErrorInfo, 1)
+	r := setupAI(t, WithOnError(func(_ error, info ErrorInfo) { errors <- info }), WithCredits(func(basis CreditCall) (*float64, error) {
+		if armed.Load() {
+			attempts++
+			if attempts == 1 {
+				close(first)
+				<-releaseFirst
+			} else {
+				close(second)
+				<-releaseSecond
+			}
+		}
+		amount := 10.0
+		if basis.BYOK != nil && *basis.BYOK {
+			amount = 20
+		}
+		return Ptr(amount), nil
+	}))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.pausePricingWait = 200 * time.Millisecond
+	call := pauseCall
+	call.ResponseID = "retry"
+	call.Integration = "tracing"
+	call.BYOK = Ptr(false)
+	i.RecordCall(call)
+	armed.Store(true)
+	call.BYOK = Ptr(true)
+	recorded := make(chan struct{})
+	go func() { defer close(recorded); i.RecordCall(call) }()
+	<-first
+	paused := make(chan bool, 1)
+	go func() { _, ok := i.Pause(PauseOptions{}); paused <- ok }()
+	select {
+	case <-paused:
+		t.Fatal("did not wait for first attempt")
+	case <-time.After(5 * time.Millisecond):
+	}
+	update := call
+	update.BYOK = Ptr(false)
+	i.RecordCall(update)
+	close(releaseFirst)
+	<-second
+	select {
+	case <-paused:
+		t.Fatal("did not wait for retry")
+	case <-time.After(5 * time.Millisecond):
+	}
+	close(releaseSecond)
+	if !<-paused {
+		t.Fatal("settled retry refused")
+	}
+	<-recorded
+	if attempts != 2 {
+		t.Fatal(attempts)
+	}
+	select {
+	case err := <-errors:
+		t.Fatal(err)
+	default:
+	}
+	p := lastResponse(t, r)
+	if p["llm_call_count"] != 1 || p["total_credits"] != 10.0 {
+		t.Fatal(p)
+	}
+	i.End(EndOptions{})
+}
+
+func TestLegacyPricingExtensionIsIgnored(t *testing.T) {
+	prices := 0
+	r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(CreditCall) (*float64, error) { prices++; return Ptr(10.0), nil }))
+	client := &review117Client{recorder: r}
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+	client.setCallback(func(event analytics.Track) {
+		if event.Event == "ai_response_received" {
+			call := pauseCall
+			call.Integration = "tracing"
+			i.RecordCall(call)
+		}
+	})
+	snapshot, ok := i.Pause(PauseOptions{})
+	client.setCallback(nil)
+	if !ok {
+		t.Fatal("pause")
+	}
+	snapshot.PendingCalls[0]["pricing_pending"] = "ignored extension"
+	before := prices
+	snapshot = pricingPendingRoundTrip(t, snapshot)
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshot, Analytics: client})
+	if restored.id != i.id || prices != before {
+		t.Fatal("extension rejected or repriced")
+	}
+	restored.End(EndOptions{})
+	p := lastResponse(t, r)
+	if p["llm_call_count"] != 1 || p["total_credits"] != 10.0 {
+		t.Fatal(p)
+	}
+}
+
+func TestErrorHandlerExemptionDoesNotCoverNewSDKCallbacks(t *testing.T) {
+	var i *Interaction
+	var reported []ErrorInfo
+	r := setupAI(t, WithCredits(func(basis CreditCall) (*float64, error) {
+		if basis.Model == "outer" {
+			return nil, errors.New("credits failed")
+		}
+		if _, ok := i.Pause(PauseOptions{}); ok {
+			t.Error("new SDK callback inherited on_error exemption")
+		}
+		return Ptr(10.0), nil
+	}), WithOnError(func(_ error, info ErrorInfo) {
+		reported = append(reported, info)
+		if info.Kind == KindUserCallback {
+			if _, ok := i.Pause(PauseOptions{}); !ok {
+				t.Error("on_error cannot pause")
+			}
+			i.RecordCall(LLMCall{Provider: "openai", Model: "nested", ResponseID: "nested", InputTokens: 10})
+		}
+	}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.RecordCall(LLMCall{Provider: "openai", Model: "outer", ResponseID: "outer", InputTokens: 10})
+	i.End(EndOptions{})
+	if len(reported) != 2 || reported[0].Kind != KindUserCallback || reported[1].Kind != KindPauseRefused || reported[1].Reason != "in_callback" {
+		t.Fatal(reported)
+	}
+	p := lastResponse(t, r)
+	if p["llm_call_count"] != 2 || p["total_credits"] != nil {
+		t.Fatal(p)
 	}
 }

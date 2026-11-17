@@ -31,7 +31,7 @@ func validSnapshotInteger(v any) bool {
 
 // The field lists and kinds match Node's validPending; unknown extensions are ignored.
 var pendingCallKinds = map[string]string{
-	"pricing_pending": "b", "call_event_pending": "b", "call_event_emitted": "b",
+	"call_event_pending": "b", "call_event_emitted": "b",
 	"provider": "s", "model": "s", "raw_model": "s", "requested_model": "s", "agent_name": "s", "span_id": "s",
 	"call_count": "i", "call_index": "i", "report_sequence": "i", "error_count": "i", "input_tokens": "i", "output_tokens": "i",
 	"reasoning_tokens": "i", "cached_input_tokens": "i", "cache_write_tokens": "i", "cache_write_1h_tokens": "i",

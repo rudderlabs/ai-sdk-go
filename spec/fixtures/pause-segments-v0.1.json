@@ -1747,77 +1747,7 @@
       }
     },
     {
-      "name": "pause during repeat pricing defers final credits in process",
-      "config": {
-        "emit_llm_calls": true,
-        "credits": {
-          "per_input_token": 1,
-          "byok_multiplier": 2,
-          "on_hook": [
-            [],
-            [
-              {
-                "op": "pause"
-              }
-            ]
-          ]
-        }
-      },
-      "steps": [
-        {
-          "op": "record_call",
-          "provider": "openai",
-          "model": "gpt-4.1",
-          "input_tokens": 10,
-          "source": "span",
-          "response_id": "pricing-pending",
-          "byok": false,
-          "started_ms": 100,
-          "ended_ms": 110
-        },
-        {
-          "op": "record_call",
-          "provider": "openai",
-          "model": "gpt-4.1",
-          "input_tokens": 10,
-          "source": "span",
-          "response_id": "pricing-pending",
-          "byok": true,
-          "started_ms": 100,
-          "ended_ms": 110
-        },
-        {
-          "op": "resume"
-        },
-        {
-          "op": "end"
-        }
-      ],
-      "expected": {
-        "segments": [
-          {
-            "response_status": "paused",
-            "llm_call_count": 0,
-            "total_input_tokens": 0
-          },
-          {
-            "response_status": "success",
-            "llm_call_count": 1,
-            "total_input_tokens": 10,
-            "total_credits": 20
-          }
-        ],
-        "call_events": [
-          10
-        ],
-        "call_credits": [
-          20
-        ],
-        "tool_events": []
-      }
-    },
-    {
-      "name": "pause during repeat pricing defers final credits through JSON restore",
+      "name": "pause during repeat pricing refuses callback pause and keeps credits in process",
       "config": {
         "emit_llm_calls": true,
         "credits": {
@@ -1828,7 +1758,8 @@
             [
               {
                 "op": "pause",
-                "json": true
+                "refused": true,
+                "reason": "in_callback"
               }
             ]
           ]
@@ -1866,11 +1797,6 @@
       ],
       "expected": {
         "segments": [
-          {
-            "response_status": "paused",
-            "llm_call_count": 0,
-            "total_input_tokens": 0
-          },
           {
             "response_status": "success",
             "llm_call_count": 1,
@@ -1884,11 +1810,17 @@
         "call_credits": [
           20
         ],
-        "tool_events": []
+        "tool_events": [],
+        "errors": [
+          "pause_refused"
+        ],
+        "error_reasons": [
+          "in_callback"
+        ]
       }
     },
     {
-      "name": "repeat pricing retries changed metadata after pause",
+      "name": "pause during repeat pricing refuses callback pause and keeps credits through JSON restore",
       "config": {
         "emit_llm_calls": true,
         "credits": {
@@ -1898,7 +1830,83 @@
             [],
             [
               {
-                "op": "pause"
+                "op": "pause",
+                "json": true,
+                "refused": true,
+                "reason": "in_callback"
+              }
+            ]
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": false,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "source": "span",
+          "response_id": "pricing-pending",
+          "byok": true,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "success",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 20
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          20
+        ],
+        "tool_events": [],
+        "errors": [
+          "pause_refused"
+        ],
+        "error_reasons": [
+          "in_callback"
+        ]
+      }
+    },
+    {
+      "name": "repeat pricing retries changed metadata after refused pause",
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "per_input_token": 1,
+          "byok_multiplier": 2,
+          "on_hook": [
+            [],
+            [
+              {
+                "op": "pause",
+                "refused": true,
+                "reason": "in_callback"
               },
               {
                 "op": "record_call",
@@ -1948,11 +1956,6 @@
       "expected": {
         "segments": [
           {
-            "response_status": "paused",
-            "llm_call_count": 0,
-            "total_input_tokens": 0
-          },
-          {
             "response_status": "success",
             "llm_call_count": 1,
             "total_input_tokens": 10,
@@ -1965,11 +1968,17 @@
         "call_credits": [
           10
         ],
-        "tool_events": []
+        "tool_events": [],
+        "errors": [
+          "pause_refused"
+        ],
+        "error_reasons": [
+          "in_callback"
+        ]
       }
     },
     {
-      "name": "pause after nested repeat keeps the outer pricing flight held",
+      "name": "pause after nested repeat refuses pause without detaching the pricing flight",
       "config": {
         "emit_llm_calls": true,
         "credits": {
@@ -1990,7 +1999,9 @@
                 "ended_ms": 110
               },
               {
-                "op": "pause"
+                "op": "pause",
+                "refused": true,
+                "reason": "in_callback"
               }
             ]
           ]
@@ -2029,10 +2040,58 @@
       "expected": {
         "segments": [
           {
-            "response_status": "paused",
-            "llm_call_count": 0,
-            "total_input_tokens": 0
-          },
+            "response_status": "success",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          10
+        ],
+        "tool_events": [],
+        "errors": [
+          "pause_refused"
+        ],
+        "error_reasons": [
+          "in_callback"
+        ]
+      }
+    },
+    {
+      "name": "credits callback pause is refused without changing the segment",
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "per_input_token": 1,
+          "byok_multiplier": 1,
+          "on_hook": [
+            [
+              {
+                "op": "pause",
+                "refused": true,
+                "reason": "in_callback"
+              }
+            ]
+          ]
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
           {
             "response_status": "success",
             "llm_call_count": 1,
@@ -2046,7 +2105,63 @@
         "call_credits": [
           10
         ],
-        "tool_events": []
+        "tool_events": [],
+        "errors": [
+          "pause_refused"
+        ],
+        "error_reasons": [
+          "in_callback"
+        ]
+      }
+    },
+    {
+      "name": "pricing wait bound refuses pause and late credits stay in the open segment",
+      "sdks": [
+        "python",
+        "go"
+      ],
+      "config": {
+        "emit_llm_calls": true,
+        "credits": {
+          "per_input_token": 1,
+          "byok_multiplier": 1,
+          "on_hook": []
+        },
+        "pricing_wait_ms": 20
+      },
+      "steps": [
+        {
+          "op": "pricing_wait",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "success",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          10
+        ],
+        "tool_events": [],
+        "errors": [
+          "pause_refused"
+        ],
+        "error_reasons": [
+          "pricing_in_flight"
+        ]
       }
     }
   ]

@@ -165,6 +165,8 @@ err := rudderstackai.RunTask(ctx, "alert-triage", rudderstackai.TaskOptions{Trig
 - Waiting for an approval or a person: `task.Pause(PauseOptions{Reason: PauseApproval})` sends a `paused` answer for the work so far and returns a JSON snapshot; pass it as `TaskOptions.Resume` in the run that continues, in any process. The final answer carries `pause_count` and `total_paused_ms` ([Pauses and resumes](docs/configuration.md#pauses-and-resumes)).
 - `WithTaskStartedEvents(true)` also sends `ai_task_started` when a run starts, so runs in flight or abandoned show up.
 
+`Pause` called from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError` (one warning without it). Credits/retries, analytics Enqueue, redactors, content serializers, and event rules are covered. It leaves the interaction unchanged and keeps credits; Pause never panics. Error handlers, application code, and callbacks for other interactions may pause normally. Another goroutine waits on a condition for pricing, including retries/capture, for an internal 5 s bound; expiry refuses with `Reason: pricing_in_flight`, and late credits stay in the open segment. Callback callers use the goroutine ID from the first runtime.Stack line; failed parsing falls back to waiting.
+
 ## MCP servers
 
 | MCP library | Import | Wrap with | Versions | Protocol revisions |
