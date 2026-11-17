@@ -394,6 +394,47 @@ func TestRestoreSharedIDCannotTakeForeignPausedSlot(t *testing.T) {
 	}
 }
 
+func TestRestoreDuplicateIdentityPreservesPausedSlots(t *testing.T) {
+	for _, limit := range []int{2, 3} {
+		for _, restoreIndex := range []int{0, 1} {
+			t.Run(fmt.Sprintf("limit=%d/restore=%d", limit, restoreIndex), func(t *testing.T) {
+				setupAI(t, WithLimits(Limits{MaxOpenInteractions: limit}))
+				var originals [2]*Interaction
+				var snapshots [2]PausedInteraction
+				var slots [2]pausedSlot
+				for n := range originals {
+					_, originals[n] = StartInteraction(context.Background(), InteractionOptions{
+						InteractionID: "shared", UserID: "user", AnonymousID: "anonymous", ConversationID: "conversation", Classify: Ptr(false),
+					})
+					defer originals[n].End(EndOptions{})
+					var ok bool
+					snapshots[n], ok = originals[n].Pause(PauseOptions{})
+					if !ok {
+						t.Fatal("pause failed")
+					}
+					slots[n] = slotFor(originals[n])
+				}
+				_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshots[restoreIndex], Classify: Ptr(false)})
+				defer restored.End(EndOptions{})
+				if restored.Ended() != (limit == 2) {
+					t.Errorf("ambiguous restore admission: ended=%v, limit=%d", restored.Ended(), limit)
+				}
+				restored.End(EndOptions{})
+				open.mu.Lock()
+				defer open.mu.Unlock()
+				if len(open.paused) != 2 || open.list.Len() != 0 {
+					t.Errorf("restore changed counted originals: paused=%d, open=%d", len(open.paused), open.list.Len())
+				}
+				for n, original := range originals {
+					if got, ok := open.paused[weak.Make(original)]; !ok || got != slots[n] {
+						t.Errorf("original %d lost or changed its paused slot: got=%+v, present=%v", n, got, ok)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestPausedSharedIDOwnersRemainWeakAndRestoreAfterGC(t *testing.T) {
 	setupAI(t, WithLimits(Limits{MaxOpenInteractions: 2}))
 	var snapshots [2]PausedInteraction

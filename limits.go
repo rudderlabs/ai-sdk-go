@@ -136,23 +136,33 @@ func holdPausedSlot(i *Interaction) {
 	open.paused[weak.Make(i)] = slotFor(i)
 }
 
-// takePausedSlot transfers only a matching restored run's counted slot. A shared
-// interaction ID alone cannot claim another tenant's paused run.
+// takePausedSlot transfers a counted slot only when the restored identity has a
+// unique match. Ambiguous matches leave every original registered and go through
+// ordinary admission, just like a snapshot from another process.
 func takePausedSlot(i *Interaction) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
+	var match weak.Pointer[Interaction]
+	var matchedSlot pausedSlot
+	found := false
 	for ref, slot := range open.paused {
 		if slot.id != i.id || slot.conversationID != i.conversationID ||
 			slot.userID != i.userID || slot.anonymousID != i.anonymousID {
 			continue
 		}
-		delete(open.paused, ref)
-		i.ownerOrder = slot.order
-		i.opened = time.Now()
-		i.elem = open.list.PushBack(i)
-		return true
+		if found {
+			return false
+		}
+		match, matchedSlot, found = ref, slot, true
 	}
-	return false
+	if !found {
+		return false
+	}
+	delete(open.paused, match)
+	i.ownerOrder = matchedSlot.order
+	i.opened = time.Now()
+	i.elem = open.list.PushBack(i)
+	return true
 }
 
 // reopen puts a resumed interaction back on the open list, whatever MaxOpenInteractions says: it
