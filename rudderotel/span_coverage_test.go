@@ -85,8 +85,8 @@ func TestSpanCoverageIsSharedAcrossProcessors(t *testing.T) {
 			if names := spanNames(events()); countName(names, "provider") != 0 || countName(names, "chat m") != 1 {
 				t.Errorf("spans %v, want the SDK span alone", names)
 			}
-			if n := coveredCalls.n.Load(); n > coveredRecent {
-				t.Errorf("%d covered entries retained", n)
+			if n := liveRegistrations(); n != 0 {
+				t.Errorf("%d entries open after the span ended", n)
 			}
 		})
 	}

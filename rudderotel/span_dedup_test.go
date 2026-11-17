@@ -841,11 +841,7 @@ func TestSpanDedupAdoptionRacingEndNeverLosesOrDuplicates(t *testing.T) {
 
 // The shared mark is bounded by the open spans: gone once every processor ended the span or shut down.
 func TestSpanDedupMarkIsRemovedAtTheSpansEnd(t *testing.T) {
-	size := func() int {
-		otelCalls.mu.Lock()
-		defer otelCalls.mu.Unlock()
-		return len(otelCalls.m)
-	}
+	size := liveRegistrations
 	_, p1, events := testProvider(t, Options{Simple: true})
 	configureSpans(t)
 	p2, err := NewSpanProcessor(Options{Simple: true, Analytics: p1.exporter.client})
@@ -897,9 +893,9 @@ func TestSpanDedupNoRegistrationAfterShutdown(t *testing.T) {
 	defer i.End(rudderstackai.EndOptions{})
 	defer s.End()
 	p.dedup(ctx, s.(sdktrace.ReadWriteSpan), i)
-	otelCalls.mu.Lock()
-	_, registered := otelCalls.m[key(s.SpanContext())]
-	otelCalls.mu.Unlock()
+	otelSpans.mu.Lock()
+	_, registered := otelSpans.open[key(s.SpanContext())]
+	otelSpans.mu.Unlock()
 	if registered {
 		t.Error("a shut-down processor registered a span")
 	}

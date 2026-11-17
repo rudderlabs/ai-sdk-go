@@ -135,9 +135,10 @@ and the SDK span follows its ordinary delivery path.
   trace, including pause snapshots. It is sent normally, through the SDK's own path;
   `ai_llm_response_received.span_id` carries the adopted ID. Later wrapper calls inside that span
   are ordinary children of that ID. Every `rudderotel` processor drops the replaced span when it
-  ends, synchronously, by a mark they share. Filters, sampling, batching, analytics-client
-  failures and processor shutdown do not decide whether the call's span is sent, and a stream
-  read after the OpenTelemetry span ended still sends the adopted span.
+  ends, synchronously, by a mark they share, including one registered after the span started.
+  Filters, sampling, batching, analytics-client failures and processor shutdown do not decide
+  whether the call's span is sent, and a stream read after the OpenTelemetry span ended still
+  sends the adopted span.
 - An outer model-call span with no wrapper call inside is exported normally. A newer SDK span in
   between prevents adoption: the most recently started active SDK span decides.
 - An SDK span that replaced or covered an OpenTelemetry span sheds optional fields in this order
@@ -172,6 +173,14 @@ Matching uses context nesting only, never times or model names. Limits:
 - A span that already ended, an ended interaction, and a span that started in another interaction
   never adopt.
 - Go has no framework integrations, so no integration model spans take part.
+- Go has no weak maps, so dedup tracks at most `Limits.MaxMapEntries` open model-call spans
+  (default 10,000). A model-call span that starts while that many are open, for example behind
+  spans that never end, is neither covered nor adopted and exports as without dedup
+  (`limit_reached`). An entry goes when its span ends or every processor that saw it shuts down;
+  descendants of an already covered span are tracked until they end, so its tree stays intact.
+- With two copies of the tracing module (for example a vendored fork under another import path),
+  replacement marks are not shared between copies, so an adopted span can be exported twice;
+  register processors from one copy.
 
 ## Framework trees with manual spans
 
