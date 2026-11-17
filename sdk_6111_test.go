@@ -1051,7 +1051,7 @@ func TestSDK6111R1CancelledRepeatsCannotAcquireExplicitCredits(t *testing.T) {
 	}
 }
 
-func TestSDK6111R2LegacyFailedPendingCallsKeepCredits(t *testing.T) {
+func TestSDK6111R2LegacyFailedPendingCallsKeepExplicitCredits(t *testing.T) {
 	raw, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
 	if err != nil {
 		t.Fatal(err)
@@ -1097,6 +1097,12 @@ func TestSDK6111R2LegacyFailedPendingCallsKeepCredits(t *testing.T) {
 					i.End(EndOptions{})
 					response := lastResponse(t, r)
 					for k, v := range fixture.Expected {
+						if k == "total_credits" && explicit == "false" {
+							if _, present := response[k]; present {
+								t.Fatal("non-explicit credits survived restore")
+							}
+							continue
+						}
 						if n, ok := v.(float64); ok {
 							if sdk6111Num(response[k]) != n {
 								t.Errorf("%s=%v want %v", k, response[k], v)
@@ -1105,7 +1111,12 @@ func TestSDK6111R2LegacyFailedPendingCallsKeepCredits(t *testing.T) {
 							t.Errorf("%s=%v want %v", k, response[k], v)
 						}
 					}
-					if sdk6111Num(r.named("ai_llm_response_received")[0].Properties["credits"]) != 7 {
+					credits, present := r.named("ai_llm_response_received")[0].Properties["credits"]
+					if explicit == "false" {
+						if present {
+							t.Fatal("non-explicit call credits survived restore")
+						}
+					} else if sdk6111Num(credits) != 7 {
 						t.Fatal("lost call credits")
 					}
 				})

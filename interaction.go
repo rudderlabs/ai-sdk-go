@@ -2829,6 +2829,9 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		if _, present := p["cost_explicit"]; !present {
 			c.costExplicit = c.costUSD != nil && c.errorType != ""
 		}
+		if c.errorType != "" && !c.creditsExplicit {
+			c.credits = nil
+		}
 		c.responseID = pendingText(p, "response_id")
 		c.serviceTier = pendingText(p, "service_tier")
 		c.serverToolCallCount = int(pendingNumber(p, "server_tool_call_count"))

@@ -6191,6 +6191,6342 @@
         ],
         "tool_events": []
       }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged end late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged none late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged none late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged call_purpose late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged call_purpose late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged agent_name late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged agent_name late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged byok late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged byok late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged fallback_used late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 0 unchanged fallback_used late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged end late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged none late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged none late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged call_purpose late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged call_purpose late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged agent_name late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged agent_name late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged byok late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged byok late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged fallback_used late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json span retained 3 unchanged fallback_used late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged end late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged none late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged none late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged call_purpose late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged call_purpose late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged agent_name late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged agent_name late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged byok late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged byok late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged fallback_used late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 0 unchanged fallback_used late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged end late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged none late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged none late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged call_purpose late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged call_purpose late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged agent_name late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged agent_name late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged byok late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged byok late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged fallback_used late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored non-explicit credits json wrapper retained 3 unchanged fallback_used late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3,
+            "credits_explicit": false
+          }
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged end late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged none late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged none late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged call_purpose late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged call_purpose late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged agent_name late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged agent_name late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged byok late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true,
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged byok late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true,
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged fallback_used late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true,
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 0 unchanged fallback_used late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true,
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged end late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged none late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged none late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged call_purpose late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged call_purpose late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged agent_name late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged agent_name late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged byok late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true,
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged byok late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true,
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged fallback_used late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true,
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json span retained 3 unchanged fallback_used late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true,
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged end late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged none late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged none late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged call_purpose late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged call_purpose late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged agent_name late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged agent_name late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer",
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged byok late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true,
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged byok late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true,
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged fallback_used late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true,
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 0 unchanged fallback_used late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true,
+              "credits": 0
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 0
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 0
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          0
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged end late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged none late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged none late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged call_purpose late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged call_purpose late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "call_purpose": "answer",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged agent_name late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged agent_name late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "agent_name": "answer",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "agent_name": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged byok late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true,
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged byok late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "byok": true,
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "byok": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged fallback_used late None",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true,
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled restored legacy credits json wrapper retained 3 unchanged fallback_used late 7",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "wrapper",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled",
+              "fallback_used": true,
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "credits": 3
+          },
+          "pending_call_omit": [
+            "credits_explicit"
+          ]
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "wrapper",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "fallback_used": true,
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
     }
   ]
 }
