@@ -1360,3 +1360,124 @@ func TestManagedAgentsReadsTheSourcesCurrentOncePerEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestManagedAgentsKeepsTheCapturePolicyATurnOpenedWithWhenTheCallerChangesIt(t *testing.T) {
+	_, sc := maFixtureScenario(t, "text_turn_capture")
+	_, rec := setup(t)
+	resetMA(t)
+	off := false
+	policy := &rudderstackai.ContentCapture{Default: &off, Spans: &rudderstackai.SpanCapture{Default: rudderstackai.Ptr(false)}}
+	on := rudderstackai.Ptr(false)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)},
+		rudderanthropic.WithSessionID("sesn_policy_frozen"),
+		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{CaptureContent: on, ContentCapture: policy}))
+	for range 2 { // the user.message opens the turn
+		if !events.Next() {
+			t.Fatal("stream ended early")
+		}
+	}
+	// Everything the caller passed by pointer, changed to capture all.
+	off, *on, *policy.Spans.Default = true, true, true
+	for events.Next() {
+	}
+	got := rec.events(t)
+	raw, _ := json.Marshal(got)
+	if len(got["ai_response_received"]) != 1 || strings.Contains(string(raw), "prompt_text") || strings.Contains(string(raw), "response_text") {
+		t.Fatalf("%s", raw)
+	}
+}
+
+func TestManagedAgentsCarriesAToolTheSessionWaitsOnAcrossThePauseBuiltInToolsToo(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
+	resetMA(t)
+	at := func(ms int) string {
+		return fmt.Sprintf(`"processed_at":%q`, time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC).Add(time.Duration(ms)*time.Millisecond).Format("2006-01-02T15:04:05.000Z"))
+	}
+	first := maEvents(t,
+		`{"id":"sevt_wait_u","type":"user.message","content":[],`+at(0)+`}`,
+		`{"id":"sevt_wait_t","type":"agent.tool_use","name":"bash","input":{},"evaluated_permission":"allow",`+at(100)+`}`,
+		`{"id":"sevt_wait_i","type":"session.status_idle","stop_reason":{"type":"requires_action","event_ids":["sevt_wait_t"]},`+at(200)+`}`,
+	)
+	second := maEvents(t,
+		`{"id":"sevt_wait_r","type":"user.tool_result","tool_use_id":"sevt_wait_t","is_error":true,`+at(2100)+`}`,
+		`{"id":"sevt_wait_e","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at(2200)+`}`,
+	)
+	for _, src := range []*sliceStream{first, second} {
+		events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSessionID("sesn_wait_builtin"))
+		for events.Next() {
+		}
+		_ = events.Close()
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 2 || got[0]["tool_call_count"] != float64(0) || got[1]["tool_call_count"] != float64(1) {
+		t.Fatalf("%v", got)
+	}
+	breakdown := got[1]["tool_breakdown"].([]any)
+	entry := breakdown[0].(map[string]any)
+	if len(breakdown) != 1 || entry["tool_name"] != "bash" || entry["call_count"] != float64(1) || entry["error_count"] != float64(1) || entry["duration_ms"] != float64(2000) {
+		t.Fatalf("%v", breakdown)
+	}
+}
+
+func TestManagedAgentsKeepsAResumedSegmentsLatencyWhenHistoryIsReadBackToBack(t *testing.T) {
+	f, sc := maFixtureScenario(t, "custom_tool_pause_resume")
+	_, rec := setup(t)
+	resetMA(t)
+	session := rudderanthropic.WithSession(withID(f.Session, "sesn_back_to_back"))
+	for _, s := range sc.Streams {
+		events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, s.Events)}, session)
+		for events.Next() {
+		}
+		_ = events.Close()
+	}
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 2 {
+		t.Fatalf("%v", got)
+	}
+	// The resumed segment ran 610 ms on the server; the pause between the reads was about zero.
+	latency, paused := got[1]["latency_ms"].(float64), got[1]["total_paused_ms"].(float64)
+	if latency < 605 || latency >= 1000 || paused < 0 {
+		t.Fatalf("latency %v, paused %v", latency, paused)
+	}
+}
+
+func TestManagedAgentsKeepsAToolsOutcomeAcrossTheCallersOwnPauseAndResume(t *testing.T) {
+	t.Skip("depends on the edge-cases D2 core change (pending tools across a caller's pause); remove this skip when D2 lands")
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
+	resetMA(t)
+	at := func(ms int) string {
+		return fmt.Sprintf(`"processed_at":%q`, time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC).Add(time.Duration(ms)*time.Millisecond).Format("2006-01-02T15:04:05.000Z"))
+	}
+	first := maEvents(t,
+		`{"id":"sevt_cp_u","type":"user.message","content":[],`+at(0)+`}`,
+		`{"id":"sevt_cp_t","type":"agent.custom_tool_use","name":"lookup","input":{},`+at(100)+`}`,
+		`{"id":"sevt_cp_i","type":"session.status_idle","stop_reason":{"type":"requires_action","event_ids":["sevt_cp_t"]},`+at(200)+`}`,
+	)
+	second := maEvents(t,
+		`{"id":"sevt_cp_r","type":"user.custom_tool_result","custom_tool_use_id":"sevt_cp_t","is_error":true,"content":[],`+at(2100)+`}`,
+		`{"id":"sevt_cp_e","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at(2200)+`}`,
+	)
+	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	session := rudderanthropic.WithSessionID("sesn_caller_pause")
+	events := rudderanthropic.TrackSessionEvents(ctx, first, session)
+	for events.Next() {
+	}
+	_ = events.Close()
+	i.Pause(rudderstackai.PauseOptions{})
+	i.Resume()
+	events = rudderanthropic.TrackSessionEvents(ctx, second, session)
+	for events.Next() {
+	}
+	_ = events.Close()
+	i.End(rudderstackai.EndOptions{Status: rudderstackai.StatusSuccess})
+	got := rec.events(t)["ai_response_received"]
+	final := got[len(got)-1]
+	breakdown, _ := final["tool_breakdown"].([]any)
+	if len(breakdown) != 1 {
+		t.Fatalf("%v", final)
+	}
+	entry := breakdown[0].(map[string]any)
+	if entry["tool_name"] != "lookup" || entry["call_count"] != float64(1) || entry["error_count"] != float64(1) || entry["duration_ms"] != float64(2000) {
+		t.Fatalf("%v", breakdown)
+	}
+}
