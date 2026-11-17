@@ -3,11 +3,12 @@ package rudderstackai
 import (
 	"context"
 	"encoding/json"
-	"github.com/rudderlabs/ai-sdk-go/internal/spanmodel"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/spanmodel"
 )
 
 type sdk6942Fields struct {

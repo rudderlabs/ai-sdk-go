@@ -215,7 +215,8 @@ func TestRound3LegacyPendingSnapshot(t *testing.T) {
 		PendingCalls: []map[string]any{{"provider": "openai", "model": "m", "call_count": 3, "last": true, "last_ok": true}},
 		PendingTools: []map[string]any{{"tool_name": "tool", "call_count": 1}}}
 	_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &s})
-	if i.ID() != "legacy" || i.callCount != 3 {
+	// One pending record is one report, as in Node.js and Python, whatever its aggregate call count.
+	if i.ID() != "legacy" || i.callCount != 1 {
 		t.Fatal("legacy restore changed")
 	}
 	i.End(EndOptions{})
