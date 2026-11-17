@@ -737,7 +737,7 @@ func (rc *reqCtx) ResourceName(uri string) string {
 		return true
 	})
 	if found != "" {
-		return found
+		return capID(found)
 	}
 	if name, _ := rc.st.resources.get(uri); name != "" {
 		return name
@@ -838,9 +838,8 @@ func (rc *reqCtx) Finished(method, name string, size int, errorType string) {
 	if method == "prompts/get" {
 		// The exact registered name, as for tools; resource names come off the wire.
 		event, nameKey = "mcp_prompt_used", "prompt_name"
-	} else {
-		name = capID(name)
 	}
+	// ResourceName already normalizes templates; cached static names were normalized on listing.
 	if name == "" {
 		return
 	}
