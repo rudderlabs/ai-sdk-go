@@ -292,12 +292,6 @@ clock are fixed driver inputs; `wrapperLibrary.version` becomes `<sdk-version>` 
 release changes do not invalidate recorded bytes. No span await is added when
 spans are off; the LangChain synchronous tracer protocol is disabled in that case.
 
-## Tool output failure fixture
-
-`tool-output-failure-v0.1.json` is shared byte for byte by Node.js and Python. It has `fixture_version: 1`, `spec_version: "0.4.0"` and `cases` with `name`, `output` (the tool's returned value) and `expected` (`error`, and `error_type: "api_error"` only for a vendor failure). A JSON string stays a string in the fixture; drivers must not pre-parse it.
-
-Inspect only a plain object with top-level boolean `successful: false`, or a string that parses to such an object. Before parsing strings, require the string after leading whitespace to start with `{` and contain `successful`. Arrays, nested failures (including inner results of `COMPOSIO_MULTI_EXECUTE_TOOL`), `successful: "false"`, true, missing keys, null and malformed or non-JSON strings do not signal a failure. Preserve framework failure signals and their categories; never count one call twice. Drivers should assert the helper's classification and run the cases through a framework adapter, checking declared tool events and `tool_breakdown`. Other outputs retain the adapter's original outcome and result content. Deferred declared tool events preserve the vendor category across pause/resume in optional `pending_tools[].rule_outcome.error_type: "api_error"`, after raw output is discarded.
-
 ## Pause segments fixture
 
 `pause-segments-v0.1.json` is shared byte for byte by Node.js, Python and Go, and all three run it. Each case starts a fresh interaction with `config` (`emit_llm_calls`, `capture_content`: boolean, `max_calls_per_interaction`: integer, `event_rules.tools`: tool name to declared event name), runs `steps` in order and checks `expected`.
