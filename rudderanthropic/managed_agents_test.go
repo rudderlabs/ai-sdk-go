@@ -2364,7 +2364,7 @@ func TestManagedAgentsWholeTurnStateStructure(t *testing.T) {
 	t.Run("covers every real opened turn field with state or the explicit stream-local list", func(t *testing.T) {
 		setup(t)
 		resetMA(t)
-		local := []string{"startAt", "lastAt", "waiting", "borrowed", "backdated", "resumed", "interaction", "abandoned"}
+		local := []string{"startAt", "lastAt", "borrowed", "backdated", "resumed", "interaction", "abandoned"}
 		typ := rudderanthropic.ManagedAgentsTurnType()
 		var carried []string
 		for n := 0; n < typ.NumField(); n++ {
@@ -2386,6 +2386,7 @@ func TestManagedAgentsWholeTurnStateStructure(t *testing.T) {
 		setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 2}))
 		resetMA(t)
 		rudderanthropic.CheckManagedAgentsBounds(t)
+		maCheckOutstandingBounds(t)
 	})
 	t.Run("flushes a full tool buffer before any unrecorded work is lost", func(t *testing.T) {
 		_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 2}))
@@ -3098,4 +3099,493 @@ func TestManagedAgentsNeverRecordsPreviewText(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Blocking regression cases mirror the Node reply kinds, owners, orders and stream endings.
+var maReplyKinds = []string{"confirmation", "custom", "tool"}
+
+func maBlockingReply(kind, id string, eventIDs ...string) string {
+	eventID := "reply-" + id
+	if len(eventIDs) != 0 {
+		eventID = eventIDs[0]
+	}
+	if kind == "confirmation" {
+		return fmt.Sprintf(`{"type":"user.tool_confirmation","id":%q,"tool_use_id":%q,"result":"allow"}`, eventID, id)
+	}
+	eventType, key := "user.custom_tool_result", "custom_tool_use_id"
+	if kind == "tool" {
+		eventType, key = "user.tool_result", "tool_use_id"
+	}
+	return fmt.Sprintf(`{"type":%q,"id":%q,%q:%q,"content":[{"type":"text","text":"done"}]}`, eventType, eventID, key, id)
+}
+
+func maBlockingOpening(kinds ...string) []string {
+	raw := []string{`{"type":"user.message","id":"prompt"}`, `{"type":"span.model_request_end","id":"model","model_usage":{"input_tokens":10,"output_tokens":2}}`}
+	var ids []string
+	for n, kind := range kinds {
+		typ, permission := "agent.tool_use", "allow"
+		if kind == "custom" {
+			typ = "agent.custom_tool_use"
+		}
+		if kind == "confirmation" {
+			permission = "ask"
+		}
+		id := fmt.Sprintf("tool-%d", n)
+		ids = append(ids, id)
+		raw = append(raw, fmt.Sprintf(`{"type":%q,"id":%q,"name":"tool_%d","evaluated_permission":%q}`, typ, id, n, permission))
+	}
+	return append(raw, maWholeIdle("requires_action", ids...))
+}
+
+func maBlockingReason(kind string) string {
+	if kind == "confirmation" {
+		return "approval"
+	}
+	return "deferred_tool"
+}
+
+func maBlockingStream(ctx context.Context, t *testing.T, raw []string) *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion] {
+	t.Helper()
+	events := rudderanthropic.TrackSessionEvents(ctx, maEvents(t, raw...),
+		rudderanthropic.WithSessionID("blocking-regression"), rudderanthropic.WithSessionModel("claude-haiku-5-5"),
+		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{UserID: "u"}))
+	t.Cleanup(func() { _ = events.Close() })
+	return events
+}
+
+func maBlockingRead(ctx context.Context, t *testing.T, raw []string, end string) (*rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion], reflect.Value) {
+	t.Helper()
+	src := maEvents(t, raw...)
+	failure := errors.New("stream disconnected")
+	if end == "failed" {
+		src.err = failure
+	}
+	events := rudderanthropic.TrackSessionEvents(ctx, src,
+		rudderanthropic.WithSessionID("blocking-regression"), rudderanthropic.WithSessionModel("claude-haiku-5-5"),
+		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{UserID: "u"}))
+	t.Cleanup(func() { _ = events.Close() })
+	for range raw {
+		if !events.Next() {
+			t.Fatal("stream ended before its events")
+		}
+	}
+	state := maPreviewState(t, events)
+	if end == "closed" {
+		_ = events.Close()
+	} else if events.Next() {
+		t.Fatal("stream did not end")
+	}
+	if end == "failed" && events.Err() != failure {
+		t.Fatal("stream error changed")
+	}
+	return events, state
+}
+
+func maBlockingWait(t *testing.T, state reflect.Value, reason string, keys ...string) {
+	t.Helper()
+	waiting, outstanding := state.FieldByName("waiting"), state.FieldByName("outstanding")
+	if !waiting.IsValid() || !outstanding.IsValid() {
+		t.Fatal("turn state must carry waiting and outstanding calls")
+	}
+	if waiting.String() != reason {
+		t.Errorf("waiting: got %q, want %q", waiting.String(), reason)
+	}
+	order := outstanding.Elem().FieldByName("order")
+	var got []string
+	for n := 0; n < order.Len(); n++ {
+		got = append(got, order.Index(n).String())
+	}
+	if !slices.Equal(got, keys) || outstanding.Elem().FieldByName("m").Len() != len(keys) {
+		t.Errorf("outstanding: got %v, want %v", got, keys)
+	}
+}
+
+func maBlockingCarried(t *testing.T, events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion], owner string) {
+	t.Helper()
+	_, paused, borrowed := rudderanthropic.InspectManagedAgents(events, "blocking-regression")
+	if (owner == "adapter" && !paused) || (owner == "interaction" && borrowed == nil) {
+		t.Fatal("remaining call did not keep the same turn carried")
+	}
+}
+
+func maBlockingOwned(t *testing.T, owner string, run func(context.Context)) {
+	t.Helper()
+	ctx := context.Background()
+	if owner == "interaction" {
+		var caller *rudderstackai.Interaction
+		ctx, caller = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: "u"})
+		defer caller.End(rudderstackai.EndOptions{})
+	}
+	run(ctx)
+}
+
+func maBlockingCountedOnce(t *testing.T, rec *recorder, count int) {
+	t.Helper()
+	all := rec.events(t)
+	responses := all["ai_response_received"]
+	ids := map[any]bool{}
+	for _, response := range responses {
+		ids[response["interaction_id"]] = true
+		if status := response["response_status"]; status != "paused" && status != "success" {
+			t.Errorf("response status: %v", status)
+		}
+	}
+	if len(ids) != 1 || len(responses) == 0 || responses[len(responses)-1]["response_status"] != "success" {
+		t.Fatalf("responses: %v", responses)
+	}
+	for key, expected := range map[string]float64{"tool_call_count": float64(count), "llm_call_count": 1, "total_input_tokens": 10, "total_output_tokens": 2} {
+		var total float64
+		for _, response := range responses {
+			value, _ := response[key].(float64)
+			total += value
+		}
+		if total != expected {
+			t.Errorf("%s: got %v, want %v", key, total, expected)
+		}
+	}
+	if len(all["ai_user_prompt_created"]) != 1 {
+		t.Errorf("prompts: %v", all["ai_user_prompt_created"])
+	}
+}
+
+func TestManagedAgentsBlockingSplitReplies(t *testing.T) {
+	for _, owner := range []string{"adapter", "interaction"} {
+		for _, a := range maReplyKinds {
+			for _, b := range maReplyKinds {
+				for _, order := range []string{"forward", "reverse"} {
+					for _, end := range []string{"clean", "closed", "failed"} {
+						t.Run(strings.Join([]string{owner, a + "+" + b, order, end}, "/"), func(t *testing.T) {
+							_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{}))
+							resetMA(t)
+							kinds, first, second := []string{a, b}, 0, 1
+							if order == "reverse" {
+								first, second = 1, 0
+							}
+							maBlockingOwned(t, owner, func(ctx context.Context) {
+								initial := append(maBlockingOpening(kinds...), maBlockingReply(kinds[first], fmt.Sprintf("tool-%d", first)))
+								events, state := maBlockingRead(ctx, t, initial, end)
+								maBlockingCarried(t, events, owner)
+								if owner == "adapter" && rec.events(t)["ai_response_received"][0]["response_status"] != "paused" {
+									t.Fatal("first answer must pause")
+								}
+								maBlockingWait(t, state, maBlockingReason(kinds[second]), fmt.Sprintf("tool-%d", second))
+								maDrain(maBlockingStream(ctx, t, append(initial, maBlockingReply(kinds[second], fmt.Sprintf("tool-%d", second)), maWholeEvent("session.status_running"), maWholeIdle("end_turn"))))
+							})
+							maBlockingCountedOnce(t, rec, 2)
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestManagedAgentsBlockingOutstandingReplies(t *testing.T) {
+	for _, owner := range []string{"adapter", "interaction"} {
+		for _, a := range maReplyKinds {
+			for _, b := range maReplyKinds {
+				for _, extra := range []string{"duplicate", "unrelated", "second idle", "empty reconnect"} {
+					t.Run(owner+"/"+a+"+"+b+"/"+extra, func(t *testing.T) {
+						_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{}))
+						resetMA(t)
+						maBlockingOwned(t, owner, func(ctx context.Context) {
+							initial := append(maBlockingOpening(a, b), maBlockingReply(a, "tool-0"))
+							switch extra {
+							case "duplicate":
+								initial = append(initial, maBlockingReply(a, "tool-0", "duplicate"))
+							case "unrelated":
+								initial = append(initial, maBlockingReply(a, "unknown"))
+							case "second idle":
+								initial = append(initial, maWholeIdle("requires_action", "tool-2"))
+							}
+							events, state := maBlockingRead(ctx, t, initial, "clean")
+							if extra == "empty reconnect" {
+								events, state = maBlockingRead(ctx, t, []string{maBlockingReply(a, "unknown")}, "clean")
+							}
+							maBlockingCarried(t, events, owner)
+							keys := []string{"tool-1"}
+							if extra == "second idle" {
+								keys = append(keys, "tool-2")
+							}
+							maBlockingWait(t, state, maBlockingReason(b), keys...)
+							last := "tool-1"
+							if extra == "second idle" {
+								events, state = maBlockingRead(ctx, t, []string{maBlockingReply(b, "tool-1")}, "clean")
+								maBlockingCarried(t, events, owner)
+								maBlockingWait(t, state, "other", "tool-2")
+								last = "tool-2"
+							}
+							maDrain(maBlockingStream(ctx, t, []string{maBlockingReply(b, last), maWholeIdle("end_turn")}))
+						})
+						maBlockingCountedOnce(t, rec, 2)
+					})
+				}
+			}
+		}
+	}
+}
+
+func maBlockingChild(raw []string) []string {
+	raw[2] = strings.TrimSuffix(raw[2], "}") + `,"session_thread_id":"child"}`
+	return raw
+}
+
+func TestManagedAgentsBlockingChildReplies(t *testing.T) {
+	for _, owner := range []string{"adapter", "interaction"} {
+		for _, a := range maReplyKinds {
+			for _, b := range maReplyKinds {
+				t.Run(owner+"/"+a+"+"+b, func(t *testing.T) {
+					_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{}))
+					resetMA(t)
+					maBlockingOwned(t, owner, func(ctx context.Context) {
+						events, state := maBlockingRead(ctx, t, append(maBlockingChild(maBlockingOpening(a, b)), maBlockingReply(a, "tool-0")), "clean")
+						maBlockingCarried(t, events, owner)
+						maBlockingWait(t, state, maBlockingReason(b), "tool-1")
+						maDrain(maBlockingStream(ctx, t, []string{maBlockingReply(b, "tool-1"), maWholeIdle("end_turn")}))
+					})
+					maBlockingCountedOnce(t, rec, 1)
+				})
+			}
+		}
+	}
+}
+
+func TestManagedAgentsBlockingAllRepliesClearWaiting(t *testing.T) {
+	for _, a := range maReplyKinds {
+		for _, b := range maReplyKinds {
+			t.Run(a+"+"+b, func(t *testing.T) {
+				_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+				resetMA(t)
+				raw := append(maBlockingOpening(a, b), maBlockingReply(b, "tool-1"), maBlockingReply(a, "tool-0"))
+				events := maBlockingStream(context.Background(), t, raw)
+				for range len(raw) - 1 {
+					if !events.Next() {
+						t.Fatal("early EOF")
+					}
+				}
+				maBlockingWait(t, maPreviewState(t, events), maBlockingReason(a), "tool-0")
+				if !events.Next() {
+					t.Fatal("missing final reply")
+				}
+				maBlockingWait(t, maPreviewState(t, events), "")
+				_ = events.Close()
+				if responses := rec.events(t)["ai_response_received"]; len(responses) != 1 || responses[0]["response_status"] != "cancelled" {
+					t.Fatalf("responses: %v", responses)
+				}
+				_, paused, _ := rudderanthropic.InspectManagedAgents(events, "blocking-regression")
+				if paused {
+					t.Fatal("fully answered turn paused")
+				}
+			})
+		}
+	}
+}
+
+func maBlockingStatuses(t *testing.T, rec *recorder, want ...string) {
+	t.Helper()
+	responses := rec.events(t)["ai_response_received"]
+	var got []string
+	ids := map[any]bool{}
+	for _, response := range responses {
+		got = append(got, fmt.Sprint(response["response_status"]))
+		ids[response["interaction_id"]] = true
+	}
+	if !slices.Equal(got, want) || len(ids) != 1 {
+		t.Fatalf("responses: %v", responses)
+	}
+}
+
+func TestManagedAgentsBlockingResumptionOnReconnect(t *testing.T) {
+	for _, kind := range []string{"session.status_running", "session.status_rescheduled", "agent.thinking", "span.model_request_start", "event_start"} {
+		t.Run(kind, func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+			resetMA(t)
+			maBlockingRead(context.Background(), t, append(maBlockingOpening("custom", "custom"), maBlockingReply("custom", "tool-0")), "clean")
+			responses := rec.events(t)["ai_response_received"]
+			if len(responses) != 1 || responses[0]["response_status"] != "paused" {
+				t.Fatalf("responses: %v", responses)
+			}
+			raw := []string{maWholeEvent(kind)}
+			if kind == "event_start" {
+				raw[0] = `{"type":"event_start","event":{"id":"preview","type":"agent.message"}}`
+			}
+			// Running may defer opening to the next event.
+			raw = append(raw, maBlockingReply("custom", "unknown"))
+			events := maBlockingStream(context.Background(), t, raw)
+			for range raw {
+				if !events.Next() {
+					t.Fatal("early EOF")
+				}
+			}
+			maBlockingWait(t, maPreviewState(t, events), "")
+			_ = events.Close()
+			maBlockingStatuses(t, rec, "paused", "cancelled")
+		})
+	}
+}
+
+func TestManagedAgentsBlockingChildReplyClock(t *testing.T) {
+	for _, kind := range maReplyKinds {
+		t.Run(kind, func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+			resetMA(t)
+			raw := maBlockingChild(maBlockingOpening(kind))
+			for n := range raw {
+				raw[n] = strings.TrimSuffix(raw[n], "}") + "," + maAt(0) + "}"
+			}
+			raw = append(raw, strings.TrimSuffix(maBlockingReply("custom", "unknown"), "}")+","+maAt(500)+"}", strings.TrimSuffix(maBlockingReply(kind, "tool-0"), "}")+","+maAt(2500)+"}")
+			events := maBlockingStream(context.Background(), t, raw)
+			for range raw {
+				if !events.Next() {
+					t.Fatal("early EOF")
+				}
+			}
+			tracker := reflect.ValueOf(events).Elem().FieldByName("tracker").Elem()
+			lastAt := tracker.FieldByName("turn").Elem().FieldByName("lastAt")
+			if !lastAt.FieldByName("ok").Bool() || lastAt.FieldByName("v").Int() != time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC).UnixMilli()+2500 {
+				t.Fatal("child reply did not advance turn clock")
+			}
+			_ = events.Close()
+			response := rec.events(t)["ai_response_received"][0]
+			if latency, _ := response["latency_ms"].(float64); latency < 2490 || latency > 2510 || response["tool_call_count"] != float64(0) {
+				t.Fatalf("response: %v", response)
+			}
+		})
+	}
+}
+
+func TestManagedAgentsBlockingNonResumptionPreservesCalls(t *testing.T) {
+	for _, kind := range []string{"user.interrupt", "system.message", "span.model_request_end", "span.outcome_evaluation_start", "span.outcome_evaluation_end", "span.outcome_evaluation_ongoing"} {
+		t.Run(kind, func(t *testing.T) {
+			setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+			resetMA(t)
+			raw := append(maBlockingOpening("custom", "custom"), maWholeEvent(kind))
+			events := maBlockingStream(context.Background(), t, raw)
+			for range raw {
+				if !events.Next() {
+					t.Fatal("early EOF")
+				}
+			}
+			maBlockingWait(t, maPreviewState(t, events), "deferred_tool", "tool-0", "tool-1")
+			_ = events.Close()
+		})
+	}
+}
+
+func TestManagedAgentsBlockingChildResumption(t *testing.T) {
+	for _, kind := range maReplyKinds {
+		for _, evidence := range []string{"agent.tool_use", "agent.thinking", "span.model_request_start", "event_start"} {
+			t.Run(kind+"/"+evidence, func(t *testing.T) {
+				_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+				resetMA(t)
+				maBlockingRead(context.Background(), t, maBlockingOpening("custom", "custom"), "clean")
+				childType, permission := "agent.tool_use", "allow"
+				if kind == "custom" {
+					childType = "agent.custom_tool_use"
+				}
+				if kind == "confirmation" {
+					permission = "ask"
+				}
+				resumption := fmt.Sprintf(`{"type":%q,"id":"child-evidence","session_thread_id":"child","name":"evidence_tool"}`, evidence)
+				if evidence == "event_start" {
+					resumption = `{"type":"event_start","event":{"type":"agent.message","id":"preview-child","session_thread_id":"child"}}`
+				}
+				raw := []string{maBlockingReply("custom", "tool-0"), `{"type":"session.thread_created","session_thread_id":"child"}`, resumption,
+					fmt.Sprintf(`{"type":%q,"id":"child-call","session_thread_id":"child","name":"child_tool","evaluated_permission":%q}`, childType, permission),
+					maWholeIdle("requires_action", "child-call"), maBlockingReply(kind, "child-call")}
+				events := maBlockingStream(context.Background(), t, raw)
+				for range 3 {
+					if !events.Next() {
+						t.Fatal("early EOF")
+					}
+				}
+				maBlockingWait(t, maPreviewState(t, events), "")
+				for range 3 {
+					if !events.Next() {
+						t.Fatal("early EOF")
+					}
+				}
+				maBlockingWait(t, maPreviewState(t, events), "")
+				_ = events.Close()
+				maBlockingStatuses(t, rec, "paused", "cancelled")
+				var tools float64
+				for _, response := range rec.events(t)["ai_response_received"] {
+					value, _ := response["tool_call_count"].(float64)
+					tools += value
+				}
+				if tools != 2 {
+					t.Fatalf("tool count: %v", tools)
+				}
+			})
+		}
+	}
+}
+
+func TestManagedAgentsBlockingOutstandingBounds(t *testing.T) {
+	setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 2}))
+	resetMA(t)
+	raw := append(maBlockingOpening("custom", "custom", "custom"), maBlockingReply("custom", "tool-0"), maBlockingReply("custom", "tool-1"), maBlockingReply("custom", "tool-2"))
+	events := maBlockingStream(context.Background(), t, raw)
+	for range len(raw) - 3 {
+		if !events.Next() {
+			t.Fatal("early EOF")
+		}
+	}
+	maBlockingWait(t, maPreviewState(t, events), "deferred_tool", "tool-1", "tool-2")
+	if !events.Next() {
+		t.Fatal("missing evicted reply")
+	}
+	maBlockingWait(t, maPreviewState(t, events), "deferred_tool", "tool-1", "tool-2")
+	for range 2 {
+		if !events.Next() {
+			t.Fatal("missing reply")
+		}
+	}
+	maBlockingWait(t, maPreviewState(t, events), "")
+	_ = events.Close()
+}
+
+func TestManagedAgentsBlockingFinalEndClearsCalls(t *testing.T) {
+	for _, kind := range []string{"session.deleted", "session.status_terminated", "session.status_idle"} {
+		t.Run(kind, func(t *testing.T) {
+			setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+			resetMA(t)
+			raw := append(maBlockingOpening("custom"), fmt.Sprintf(`{"type":%q,"stop_reason":{"type":"end_turn"}}`, kind))
+			events := maBlockingStream(context.Background(), t, raw)
+			for range len(raw) - 1 {
+				if !events.Next() {
+					t.Fatal("early EOF")
+				}
+			}
+			state := maPreviewState(t, events)
+			if !events.Next() {
+				t.Fatal("missing ending")
+			}
+			maBlockingWait(t, state, "")
+		})
+	}
+}
+
+// Extend the whole-state map test with the outstanding map's insertion, update and deletion order.
+func maCheckOutstandingBounds(t *testing.T) {
+	t.Helper()
+	raw := []string{maWholeEvent("user.message"), maWholeIdle("requires_action", "oldest", "middle", "newest"), maWholeIdle("requires_action", "middle"), maBlockingReply("custom", "middle"), maWholeIdle("requires_action", "middle"), maWholeIdle("requires_action", "last"), maWholeEvent("session.status_running")}
+	events := maBlockingStream(context.Background(), t, raw)
+	for range 2 {
+		if !events.Next() {
+			t.Fatal("early EOF")
+		}
+	}
+	maBlockingWait(t, maPreviewState(t, events), "other", "middle", "newest")
+	for range 4 {
+		if !events.Next() {
+			t.Fatal("early EOF")
+		}
+	}
+	maBlockingWait(t, maPreviewState(t, events), "other", "middle", "last")
+	if !events.Next() {
+		t.Fatal("missing resumption")
+	}
+	maBlockingWait(t, maPreviewState(t, events), "")
+	_ = events.Close()
 }

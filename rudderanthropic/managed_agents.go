@@ -362,6 +362,8 @@ type turnState struct {
 	tools        *boundedMap[*turnTool]
 	localTools   int // sequence for tools without vendor IDs; survives with their draft keys
 	recorded     *boundedMap[msTime]
+	waiting      rudderstackai.PauseReason              // requires_action persists across stream boundaries
+	outstanding  *boundedMap[rudderstackai.PauseReason] // call ID -> reason until its answer or resumption
 	blocking     *boundedMap[rudderstackai.PauseReason]
 	answer       string
 	interrupted  bool
@@ -373,11 +375,10 @@ type turnState struct {
 	requestSeen  bool
 }
 
-// turn holds only the stream segment's clock, waiting status and reporting handles outside state.
+// turn holds only the stream segment's clock and reporting handles outside state.
 type turn struct {
 	state           *turnState
 	startAt, lastAt msTime
-	waiting         rudderstackai.PauseReason
 	borrowed        *rudderstackai.Interaction
 	resumed         *rudderstackai.Interaction
 	interaction     *rudderstackai.Interaction
@@ -541,12 +542,21 @@ func (s *sessionTracker) observe(raw string) {
 	}
 	// The app's answer to a subagent's tool, by the tool's ID: the docs say to "answer with the
 	// tool_use_id or custom_tool_use_id alone", so answers need not name the thread.
-	answered := first(str(e["custom_tool_use_id"]), str(e["tool_use_id"]))
+	answered := answeredCall(e, kind)
 	child := thread != "" && childThreads.has(s.scope+thread)
 	if (thread != "" && (strings.HasPrefix(kind, "agent.") || (child && (strings.HasPrefix(kind, "user.") || strings.HasPrefix(kind, "span."))))) ||
 		(strings.HasPrefix(kind, "user.") && answered != "" && childTools.has(s.scope+answered)) {
 		// Cross-posted from a subagent thread (agent events, a known child's requests), or aimed at
 		// one: not this thread's work. An unknown thread's request counts here, once.
+		// Child work advances the primary session and its clock without recording its calls here.
+		var t *turn
+		if s.turn != nil || s.hasCarriedState() || s.isRunning() {
+			t = s.open(kind, at)
+		}
+		if answered != "" && t != nil {
+			s.answered(t, answered)
+			t.state.blocking.delete(answered)
+		}
 		if id != "" && strings.HasPrefix(kind, "agent.") && strings.HasSuffix(kind, "tool_use") {
 			childTools.add(s.scope + id)
 		}
@@ -572,7 +582,7 @@ func (s *sessionTracker) observe(raw string) {
 		}
 	case "session.status_running", "session.status_rescheduled":
 		if s.turn != nil {
-			s.turn.waiting = ""
+			s.resuming(s.turn)
 			// The turn runs at least until this event, also when it is the last one read.
 			if at.ok {
 				s.turn.lastAt = at
@@ -598,15 +608,19 @@ func (s *sessionTracker) observe(raw string) {
 			}
 			s.sendPrompt(t)
 		}
-	case "user.custom_tool_result":
-		s.settle(s.open(kind, at), str(e["custom_tool_use_id"]), e, at, "")
-	case "user.tool_result":
-		s.settle(s.open(kind, at), str(e["tool_use_id"]), e, at, "")
+	case "user.custom_tool_result", "user.tool_result":
+		t := s.open(kind, at)
+		toolID := answeredCall(e, kind)
+		s.answered(t, toolID)
+		s.settle(t, toolID, e, at, "")
 	case "user.tool_confirmation":
+		t := s.open(kind, at)
+		toolID := answeredCall(e, kind)
+		s.answered(t, toolID)
 		if e["result"] == "deny" {
-			s.settle(s.open(kind, at), str(e["tool_use_id"]), e, at, "denied")
+			s.settle(t, toolID, e, at, "denied")
 		} else {
-			s.open(kind, at).state.blocking.delete(str(e["tool_use_id"]))
+			t.state.blocking.delete(toolID)
 		}
 	case "user.interrupt":
 		s.open(kind, at).state.interrupted = true
@@ -692,6 +706,9 @@ func (s *sessionTracker) preview(e map[string]any, kind string) {
 		}
 		if thread := str(start["session_thread_id"]); thread != "" {
 			childThreads.add(s.scope + thread)
+			if s.turn != nil || s.hasCarriedState() || s.isRunning() {
+				s.open(typ, timeOf(start))
+			}
 			return
 		}
 		s.open(typ, timeOf(start))
@@ -717,9 +734,9 @@ func (s *sessionTracker) close(err error) {
 		return
 	}
 	switch {
-	case t.waiting != "":
+	case t.state.waiting != "":
 		// Waiting on the app survives every stream end, including failures.
-		s.finish(turnEnd{status: rudderstackai.StatusPaused, pauseReason: t.waiting}, msTime{}, true)
+		s.finish(turnEnd{status: rudderstackai.StatusPaused, pauseReason: t.state.waiting}, msTime{}, true)
 	case err != nil:
 		// Ends as an error ends an answer: the app's own is app_error, a deadline is timeout.
 		errorType := kit.AppErrorType(err)
@@ -768,6 +785,7 @@ func (s *sessionTracker) ending(kind string, at msTime) *turn {
 
 func (s *sessionTracker) open(kind string, at msTime) *turn {
 	t := s.turn
+	running := s.isRunning()
 	if t == nil {
 		start := at
 		if s.runningAt.ok && at.ok && s.runningAt.v < at.v {
@@ -798,6 +816,7 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 				tools:        newBoundedMap[*turnTool]("claude-managed-agents tool drafts"),
 				recorded:     newBoundedMap[msTime]("claude-managed-agents tools"),
 				blocking:     newBoundedMap[rudderstackai.PauseReason]("claude-managed-agents blocking"),
+				outstanding:  newBoundedMap[rudderstackai.PauseReason]("claude-managed-agents outstanding"),
 			},
 		}
 		s.turn = t
@@ -826,12 +845,56 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 			s.sendPrompt(t)
 		}
 	}
-	// Any event after a requires_action idle means the app answered.
-	t.waiting = ""
+	// App replies settle only their own ID; agent work shows the session resumed.
+	if running || kind == "session.status_running" || kind == "session.status_rescheduled" ||
+		strings.HasPrefix(kind, "agent.") || kind == "span.model_request_start" {
+		s.resuming(t)
+	}
 	if at.ok {
 		t.lastAt = at
 	}
 	return t
+}
+
+// answeredCall recognizes only app replies and the call ID each reply answers.
+func answeredCall(e map[string]any, kind string) string {
+	switch kind {
+	case "user.custom_tool_result":
+		return str(e["custom_tool_use_id"])
+	case "user.tool_confirmation", "user.tool_result":
+		return str(e["tool_use_id"])
+	default:
+		return ""
+	}
+}
+
+// answered releases only the call named by this reply.
+func (s *sessionTracker) answered(t *turn, id string) {
+	if _, ok := t.state.outstanding.get(id); id != "" && ok {
+		t.state.outstanding.delete(id)
+		s.waitingReason(t)
+	}
+}
+
+// waitingReason gives approval precedence only while an approval is outstanding.
+func (s *sessionTracker) waitingReason(t *turn) {
+	t.state.waiting = ""
+	for _, entry := range t.state.outstanding.entries() {
+		reason := entry.value
+		if reason == rudderstackai.PauseApproval {
+			t.state.waiting = reason
+			return
+		}
+		if reason == rudderstackai.PauseDeferredTool || t.state.waiting == "" {
+			t.state.waiting = reason
+		}
+	}
+}
+
+// resuming clears app requests superseded by evidence of resumed session work.
+func (s *sessionTracker) resuming(t *turn) {
+	t.state.waiting = ""
+	t.state.outstanding.clear()
 }
 
 // isRunning reports a running event read outside a turn.
@@ -931,7 +994,12 @@ func (s *sessionTracker) endPaused() {
 	delete(pausedTurns.m, s.cfg.sessionID)
 	pausedTurns.order = slices.DeleteFunc(pausedTurns.order, func(id string) bool { return id == s.cfg.sessionID })
 	pausedTurns.Unlock()
-	if paused == nil || paused.i.Ended() {
+	if paused == nil {
+		return
+	}
+	paused.state.waiting = ""
+	paused.state.outstanding.clear()
+	if paused.i.Ended() {
 		return
 	}
 	contain(func() {
@@ -1127,6 +1195,8 @@ func (s *sessionTracker) sessionError(t *turn, e map[string]any) {
 	}
 	s.lastError = errorType
 	if t != nil {
+		// A terminal session error ends the turn even when the app still owes replies.
+		s.resuming(t)
 		t.state.errorType = errorType
 	}
 }
@@ -1146,30 +1216,25 @@ func (s *sessionTracker) idle(e map[string]any, at msTime) {
 	switch str(stop["type"]) {
 	case "requires_action":
 		ids, _ := stop["event_ids"].([]any)
-		t.waiting = rudderstackai.PauseOther
-		// Mark every named tool first, so one named after an approval is carried across too.
+		// Mark every named tool and retain earlier outstanding calls across later idles.
 		for _, id := range ids {
-			// A tool the session waits on is the app's to run or answer (a sandbox tool too).
-			_, open := t.state.tools.get(str(id))
-			if _, recorded := t.state.recorded.get(str(id)); open || recorded {
-				if _, blocked := t.state.blocking.get(str(id)); !blocked {
-					t.state.blocking.set(str(id), rudderstackai.PauseDeferredTool)
+			key := str(id)
+			_, open := t.state.tools.get(key)
+			if _, recorded := t.state.recorded.get(key); open || recorded {
+				if _, blocked := t.state.blocking.get(key); !blocked {
+					t.state.blocking.set(key, rudderstackai.PauseDeferredTool)
 				}
 			}
-		}
-		found := false
-		for _, id := range ids {
-			reason, ok := t.state.blocking.get(str(id))
+			reason, ok := t.state.blocking.get(key)
 			if !ok {
-				continue
+				reason = rudderstackai.PauseOther
 			}
-			if reason == rudderstackai.PauseApproval {
-				t.waiting = reason
-				break
-			}
-			if !found {
-				t.waiting, found = reason, true
-			}
+			t.state.outstanding.set(key, reason)
+		}
+		s.waitingReason(t)
+		// An idle without listed calls still waits on the app until resumption evidence.
+		if t.state.waiting == "" {
+			t.state.waiting = rudderstackai.PauseOther
 		}
 		if at.ok {
 			t.lastAt = at
@@ -1300,6 +1365,9 @@ func (s *sessionTracker) flush(t *turn, local func(msTime) time.Time, final bool
 
 // end records the turn's calls and tools and ends (or pauses) its answer.
 func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime, unfinished bool) {
+	if end.status != rudderstackai.StatusPaused {
+		s.resuming(t)
+	}
 	// Tools still waiting on the app carry over to the segment that resumes the pause.
 	keep := map[string]bool{}
 	if end.status == rudderstackai.StatusPaused && t.borrowed == nil {
