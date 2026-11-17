@@ -1186,6 +1186,16 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	// Retained credits apply only when the new report keeps the retained usage.
 	replacesTwin := pricingTwin != nil && !call.UsageUnknown && call.ErrorType == "" &&
 		(call.Integration != "tracing" || pricingTwin.usageUnknown)
+	// A successful wrapper may supersede a failure already reported by its span.
+	// A failure learned while the hook runs still invalidates that hook result.
+	pricingTwinRevision := 0
+	if pricingTwin != nil {
+		pricingTwinRevision = pricingTwin.pricingRevision
+	}
+	twinBlocksCredits := func(twin *recordedCall) bool {
+		return twin != nil && twin.errorType != "" &&
+			(twin != pricingTwin || call.Integration == "tracing" || !replacesTwin || twin.twinMatched || twin.pricingRevision != pricingTwinRevision)
+	}
 	if call.Credits == nil && call.ResponseID != "" && !replacesTwin {
 		if earlier := i.seen[call.Provider+"\x00"+call.ResponseID]; earlier != nil {
 			credits = earlier.credits
@@ -1225,7 +1235,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			creditCall.CacheWriteTokens, creditCall.ServiceTier, creditCall.CostUSD = pricingTwin.cacheWriteTokens, pricingTwin.serviceTier, pricingTwin.costUSD
 		}
 		for attempt := 0; attempt < 3; attempt++ {
-			if pricingTwin != nil && pricingTwin.errorType != "" {
+			if twinBlocksCredits(pricingTwin) {
 				credits = nil
 				break
 			}
@@ -1259,7 +1269,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 				pricingTwin.pricingActive = false
 				// A concurrent report may have failed the retained call while pricing
 				// ran outside the lock. Neither this result nor a retry may bill it.
-				if pricingTwin.errorType != "" {
+				if twinBlocksCredits(pricingTwin) {
 					credits = nil
 					break
 				}
@@ -1398,7 +1408,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	if twin := i.callTwinLocked(r); twin != nil {
 		// A twin may have first appeared while the hook ran, so re-read its
 		// outcome at publication even when there was no pre-hook pricing twin.
-		if hookPriced && twin.errorType != "" {
+		if hookPriced && twinBlocksCredits(twin) {
 			r.credits = nil
 		}
 		// A twin that stands for more calls takes more places in call_index.
@@ -1610,12 +1620,11 @@ func mergeCallTwin(kept, later *recordedCall) {
 		kept.reasoningTokens = later.reasoningTokens
 		kept.cachedInputTokens, kept.cacheWriteTokens, kept.cacheWrite1 = later.cachedInputTokens, later.cacheWriteTokens, later.cacheWrite1
 		kept.serverToolCallCount, kept.serverToolCostUSD = later.serverToolCallCount, later.serverToolCostUSD
-		if later.costUSD != nil || kept.usageUnknown {
-			kept.costUSD = later.costUSD
-		}
+		// Amounts belong to the authoritative usage, including an unknown price.
+		kept.costUSD = later.costUSD
 		kept.credits, kept.usageUnknown, kept.creditsExplicit = later.credits, false, later.creditsExplicit
 	}
-	if kept.costUSD == nil && kept.errorType == "" {
+	if kept.costUSD == nil && kept.usageUnknown && kept.errorType == "" {
 		kept.costUSD = later.costUSD
 	}
 	// An unset or successful span cannot erase a wrapper's failure (native
