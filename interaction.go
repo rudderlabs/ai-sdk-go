@@ -1439,13 +1439,18 @@ func (i *Interaction) emitPendingCallLocked(r *recordedCall) {
 	props := i.callEventLocked(r)
 	r.content = nil
 	i.sendLocked("ai_llm_response_received", func() map[string]any { return props })
+	// Deliver each claimed call before selecting the next: a callback may drain later
+	// ready calls, whose pending flags the outer pass must then observe.
+	i.unlock()
+	i.mu.Lock()
 }
 
 func (i *Interaction) emitPendingOverflowLocked() {
-	for _, r := range i.pendingOverflowCalls {
+	pending := i.pendingOverflowCalls
+	i.pendingOverflowCalls = nil
+	for _, r := range pending {
 		i.emitPendingCallLocked(r)
 	}
-	i.pendingOverflowCalls = nil
 }
 
 func (i *Interaction) emitPendingCallsLocked() {
@@ -2185,7 +2190,8 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		}
 		i.filterSpanCallsLocked()
 		i.emitPendingCallsLocked()
-		if len(i.outbox) == 0 {
+		if len(i.outbox) == 0 && len(i.tools) <= fired && len(i.pendingOverflowCalls) == 0 &&
+			!slices.ContainsFunc(i.calls, func(call *recordedCall) bool { return call.callEventPending }) {
 			break
 		}
 		i.unlock()
