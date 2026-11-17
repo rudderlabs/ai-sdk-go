@@ -6731,6 +6731,70 @@
       }
     },
     {
+      "name": "awaited tool resolved by record_tool_result after in-process resume",
+      "description": "The caller pauses its own interaction while a tool waits, resumes it in process, then reports the outcome: counted once in the resumed segment with its real outcome.",
+      "config": {
+        "event_rules": {
+          "tools": {
+            "approve": "Approved"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "call_1",
+              "name": "approve"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_tool_result",
+          "id": "call_1",
+          "result": "ok",
+          "error": false
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "tool_call_count": 0
+          },
+          {
+            "llm_call_count": 0,
+            "tool_call_count": 1
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Approved",
+            "tool_call_id": "call_1",
+            "tool_status": "success"
+          }
+        ]
+      }
+    },
+    {
       "name": "awaited tool re-evaluated at later pauses",
       "description": "A carried tool starts the next segment before every new call and is evaluated again at each pause. Another agent's call leaves it waiting; its own agent's later call (the researcher's, taken from the call that preceded it and kept through the JSON restore) makes that pause count it as unknown.",
       "config": {
