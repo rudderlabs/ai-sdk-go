@@ -114,6 +114,8 @@ for events.Next() {
 }
 ```
 
+Preview events are recorded as part of the turn; provisional message text is replaced by the buffered event with the same ID.
+
 It also takes `Beta.Sessions.Events.ListAutoPaging`, or history followed by the stream when reconnecting: an event ID already read for the same session in this process counts once (the process keeps the latest `Limits.MaxMapEntries` event IDs across all sessions); read a session through one tracked stream at a time. Next returns false after Close; Close may be called from another goroutine. Options: `WithSession(session)` (its ID and agent model), `WithSessionID`, `WithSessionModel`, `WithAgentName`, `WithInteractionOptions` (identity and fields of the interactions the turns open) and `WithSessionAnalytics(client)`. An interaction in `ctx` receives the turns instead. [Example](../examples/managed-agents).
 
 The adapter does not accept `InteractionOptions.Resume` and ignores it when supplied: each turn is its own answer. It records each event's JSON as received from the API (`RawJSON()`), as the SDK's own `As*` accessors read it, so edits to a delivered event's fields are not seen; to change or mask captured text, use `WithRedactHook`.
