@@ -1884,3 +1884,56 @@ func TestSDK6111RepeatPricingAfterConcurrentReplacement(t *testing.T) {
 		}
 	}
 }
+
+func TestSDK6111AggregateTwinRetainsWrapperFlags(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, field := range []string{"byok", "fallback"} {
+			for _, shared := range []bool{true, false} {
+				t.Run(fmt.Sprintf("%s/%s/%t", mode, field, shared), func(t *testing.T) {
+					r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+						flag := c.BYOK
+						if field == "fallback" {
+							flag = c.FallbackUsed
+						}
+						factor := 1.0
+						if flag != nil && *flag {
+							factor = 2
+						}
+						return Ptr(float64(c.InputTokens*c.CallCount) * factor), nil
+					}))
+					call := sdk6942Call()
+					if !shared {
+						call.ResponseID = ""
+					}
+					call.Integration = "openai"
+					call.InputTokens = 100
+					if field == "byok" {
+						call.BYOK = Ptr(true)
+					} else {
+						call.FallbackUsed = Ptr(true)
+					}
+					i := sdk6111ReviewPending(t, r, mode, func(target *Interaction) { target.RecordCall(call) })
+					call.Integration = "tracing"
+					call.InputTokens = 10
+					call.CallCount = 2
+					key := "byok"
+					if field == "byok" {
+						call.BYOK = Ptr(false)
+					} else {
+						call.FallbackUsed = Ptr(false)
+						key = "fallback_used"
+					}
+					i.RecordCall(call)
+					i.End(EndOptions{})
+					if sdk6111Num(lastResponse(t, r)["total_credits"]) != 400 {
+						t.Fatal(lastResponse(t, r))
+					}
+					events := r.named("ai_llm_response_received")
+					if events[len(events)-1].Properties[key] != true {
+						t.Fatal(events)
+					}
+				})
+			}
+		}
+	}
+}
