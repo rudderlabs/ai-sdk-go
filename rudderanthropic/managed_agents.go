@@ -97,10 +97,11 @@ func WithSessionAnalytics(client analytics.Client) SessionOption {
 // the stream it wraps; Close also closes that stream when it can be closed.
 type SessionEvents[T SessionEvent] struct {
 	src       SessionEventStream[T]
-	tracker   *sessionTracker // nil: untracked
-	mu        sync.Mutex      // guards tracker and finished; never held while reading src or by Close
-	closed    atomic.Bool     // Close was called: whoever releases mu last finishes the tracker
-	srcClosed atomic.Bool     // the source was closed: it is closed at most once
+	tracker   *sessionTracker   // nil: untracked
+	mu        sync.Mutex        // guards tracker and finished; never held while reading src or by Close
+	closed    atomic.Bool       // Close was called: whoever releases mu last finishes the tracker
+	srcClosed atomic.Bool       // the source was closed: it is closed at most once
+	current   atomic.Pointer[T] // the event Next read from src, kept so the app sees the one tracked
 	finished  bool
 }
 
@@ -160,8 +161,10 @@ func (s *SessionEvents[T]) Next() bool {
 	var event T
 	if !more {
 		err = s.src.Err()
-	} else if s.tracker != nil {
+	} else {
+		// Once per event, tracked or not: a source's Current may have side effects.
 		event = s.src.Current()
+		s.current.Store(&event)
 	}
 	s.mu.Lock()
 	if s.finished {
@@ -191,8 +194,14 @@ func (s *SessionEvents[T]) finishIfClosed() {
 	}
 }
 
-// Current is the current event, unchanged.
-func (s *SessionEvents[T]) Current() T { return s.src.Current() }
+// Current is the event the last Next read, unchanged (the zero value before the first Next).
+func (s *SessionEvents[T]) Current() T {
+	if event := s.current.Load(); event != nil {
+		return *event
+	}
+	var zero T
+	return zero
+}
 
 // Err is the stream's error, unchanged.
 func (s *SessionEvents[T]) Err() error { return s.src.Err() }
