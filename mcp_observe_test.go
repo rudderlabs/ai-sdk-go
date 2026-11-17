@@ -161,6 +161,105 @@ func TestObserveMCPTransportReusedResponseSnapshot(t *testing.T) {
 	}
 }
 
+// The function field cannot be serialized without MarshalJSON, like Node's toJSON case.
+type snapshotErrorData struct{ Unserializable func() }
+
+func (snapshotErrorData) MarshalJSON() ([]byte, error) {
+	return []byte(`{"detail":"custom data"}`), nil
+}
+
+type snapshotResponseWriter struct {
+	reusedResponseWriter
+	fail bool
+}
+
+func (w snapshotResponseWriter) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), "first failure") && w.fail {
+		close(w.started)
+		<-w.release
+		return 0, errors.New("write failed")
+	}
+	return w.reusedResponseWriter.Write(p)
+}
+
+func TestObserveMCPTransportCustomMarshalerSnapshot(t *testing.T) {
+	for _, source := range []string{"rpc", "result"} {
+		for _, fail := range []bool{false, true} {
+			t.Run(source+map[bool]string{false: "/written", true: "/write-failed"}[fail], func(t *testing.T) {
+				setupAI(t)
+				// go-sdk requires RawMessage for error data, so applications marshal it first.
+				data, err := json.Marshal(snapshotErrorData{Unserializable: func() {}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				s := mcp.NewServer(&mcp.Implementation{Name: "custom-data", Version: "1"}, nil)
+				s.AddTool(&mcp.Tool{Name: "lookup", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+					if source == "rpc" {
+						return nil, &jsonrpc.Error{Code: -32602, Message: "first failure", Data: data}
+					}
+					return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{
+						&mcp.ImageContent{Data: []byte("image"), MIMEType: "image/png"},
+						&mcp.TextContent{Text: "first failure"},
+					}}, nil
+				})
+				r := wrap(t, s, Options{CaptureContent: true})
+				c1, c2 := net.Pipe()
+				w := snapshotResponseWriter{reusedResponseWriter: reusedResponseWriter{Conn: c2, started: make(chan struct{}), release: make(chan struct{})}, fail: fail}
+				cs := connectOver(t, s, &mcp.IOTransport{Reader: c2, Writer: w}, &mcp.IOTransport{Reader: c1, Writer: c1}, true)
+				release := sync.OnceFunc(func() { close(w.release) })
+				defer release()
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				done := make(chan error, 1)
+				go func() {
+					result, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "lookup"})
+					if err == nil && (result == nil || !result.IsError) {
+						err = errors.New("expected isError result")
+					}
+					done <- err
+				}()
+				select {
+				case <-w.started:
+				case <-ctx.Done():
+					t.Fatal("response write never started")
+				}
+				if len(r.named("mcp_tool_called")) != 0 {
+					t.Fatal("event before write completed")
+				}
+				release()
+				callErr := <-done
+				if fail || source == "rpc" {
+					if callErr == nil {
+						t.Fatal("expected call error")
+					}
+				} else if callErr != nil {
+					t.Fatal(callErr)
+				}
+				if !fail && source == "rpc" {
+					var rpc *jsonrpc.Error
+					if !errors.As(callErr, &rpc) || string(rpc.Data) != string(data) {
+						t.Fatalf("custom data missing from wire error: %v", callErr)
+					}
+				}
+				r.wait(t, "mcp_tool_called", 1)
+				_ = cs.Close() // Closing observation must not emit the held event again.
+				events := r.named("mcp_tool_called")
+				if len(events) != 1 {
+					t.Fatalf("got %d tool events, want exactly one", len(events))
+				}
+				p := events[0].Properties
+				if p["tool_status"] != "error" {
+					t.Fatalf("status: %v", p)
+				}
+				message, present := p["error_message"]
+				if fail && present || !fail && (!present || message != "first failure") {
+					t.Fatalf("error_message after write (failed=%v): %v", fail, p)
+				}
+			})
+		}
+	}
+}
+
 func TestObserveMCPTransportDeclaredEventFollows(t *testing.T) {
 	setupAI(t)
 	s := failingServer("declared-errors-mcp")

@@ -351,6 +351,127 @@ func TestMCPGoReusedResponseSnapshot(t *testing.T) {
 	}
 }
 
+// A function is not JSON-serializable by itself; MarshalJSON makes this data writable.
+type snapshotErrorData struct {
+	Unserializable func()
+	fail           bool
+}
+
+func (d snapshotErrorData) MarshalJSON() ([]byte, error) {
+	if d.fail {
+		return nil, errors.New("data marshal failed")
+	}
+	return []byte(`{"detail":"custom data"}`), nil
+}
+
+type snapshotResponseWriter struct {
+	*httptest.ResponseRecorder
+	fail    bool
+	writes  int
+	onWrite func()
+}
+
+func (w *snapshotResponseWriter) Write(p []byte) (int, error) {
+	w.writes++
+	w.onWrite()
+	if w.fail {
+		return 0, errors.New("write failed")
+	}
+	return w.ResponseRecorder.Write(p)
+}
+
+func TestMCPGoCustomMarshalerSnapshot(t *testing.T) {
+	for _, transport := range []string{"stdio", "http-json", "http-sse"} {
+		for _, source := range []string{"rpc", "rpc-marshal-failed", "result"} {
+			for _, fail := range []bool{false, true} {
+				if source == "rpc-marshal-failed" && fail {
+					continue // Encoding fails before the writer is reached.
+				}
+				t.Run(transport+"/"+source+map[bool]string{false: "/written", true: "/write-failed"}[fail], func(t *testing.T) {
+					s := server.NewMCPServer("custom-data", "1", server.WithToolCapabilities(true))
+					s.AddTool(mcp.NewTool("lookup"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+						if source != "result" {
+							return nil, errors.New("first failure")
+						}
+						return &mcp.CallToolResult{IsError: true, Content: []mcp.Content{
+							mcp.ImageContent{Type: "image", Data: "aW1hZ2U=", MIMEType: "image/png"},
+							mcp.TextContent{Type: "text", Text: "first failure"},
+						}}, nil
+					})
+					r := wrap(t, s, Options{CaptureContent: true})
+					w := &snapshotResponseWriter{ResponseRecorder: httptest.NewRecorder(), fail: fail, onWrite: func() {
+						if len(r.named("mcp_tool_called")) != 0 {
+							t.Error("event before successful write")
+						}
+					}}
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					var writeErr error
+					handle := func(ctx context.Context, out io.Writer) {
+						response := s.HandleMessage(ctx, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"lookup","arguments":{}}}`))
+						if source != "result" {
+							rpc, ok := response.(mcp.JSONRPCError)
+							if !ok {
+								t.Fatalf("expected JSON-RPC error, got %T", response)
+							}
+							// Model a final transport response whose error includes application data.
+							rpc.Error.Data = snapshotErrorData{Unserializable: func() {}, fail: source == "rpc-marshal-failed"}
+							response = rpc
+						}
+						if len(r.named("mcp_tool_called")) != 0 {
+							t.Fatal("event before serialization")
+						}
+						if transport == "http-sse" {
+							data, err := json.Marshal(response)
+							writeErr = err
+							if err == nil {
+								_, writeErr = out.Write(append(append([]byte("data: "), data...), '\n', '\n'))
+							}
+						} else {
+							writeErr = json.NewEncoder(out).Encode(response)
+						}
+					}
+					if transport == "stdio" {
+						observed, _, out := ObserveStdio(ctx, strings.NewReader(""), w)
+						handle(observed, out)
+						mcpbridge.ResponsesFrom(observed).Close()
+					} else {
+						h := ObserveHTTP(http.HandlerFunc(func(out http.ResponseWriter, req *http.Request) {
+							if transport == "http-sse" {
+								out.Header().Set("Content-Type", "text/event-stream")
+							}
+							handle(req.Context(), out)
+						}))
+						h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/mcp", nil).WithContext(ctx))
+					}
+					failed := fail || source == "rpc-marshal-failed"
+					if (writeErr != nil) != failed {
+						t.Fatalf("write error: %v (want failure=%v)", writeErr, failed)
+					}
+					if source == "rpc-marshal-failed" && w.writes != 0 {
+						t.Fatal("transport wrote despite serialization failure")
+					}
+					if !failed && source == "rpc" && !strings.Contains(w.Body.String(), `"data":{"detail":"custom data"}`) {
+						t.Fatalf("custom data missing from wire response: %s", w.Body.String())
+					}
+					events := r.named("mcp_tool_called")
+					if len(events) != 1 {
+						t.Fatalf("got %d tool events, want exactly one", len(events))
+					}
+					p := events[0].Properties
+					if p["tool_status"] != "error" {
+						t.Fatalf("status: %v", p)
+					}
+					message, present := p["error_message"]
+					if failed && present || !failed && (!present || message != "first failure") {
+						t.Fatalf("error_message after write (failed=%v): %v", failed, p)
+					}
+				})
+			}
+		}
+	}
+}
+
 func (w *capoffWriter) Header() http.Header { return w.header }
 func (*capoffWriter) WriteHeader(int)       {}
 func (w *capoffWriter) Write(p []byte) (int, error) {
