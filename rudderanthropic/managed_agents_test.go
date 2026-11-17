@@ -875,14 +875,17 @@ func TestManagedAgentsKeepsTheOptionsNestedObjectsAsTheyWereWhenTheStreamWasWrap
 	policy := &rudderstackai.ContentCapture{Default: rudderstackai.Ptr(false)}
 	cookies := map[string]string{"rl_anonymous_id": "%22original%22"}
 	attachmentTypes := []string{"image"}
+	app := map[string]any{"build": "original"}
 	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)},
 		rudderanthropic.WithSession(withID(f.Session, "sesn_nested_options")),
 		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{
 			ContentCapture: policy, CookieValues: cookies, AttachmentCount: rudderstackai.Ptr(1), AttachmentTypes: attachmentTypes,
+			Context: map[string]any{"app": app},
 		}))
 	*policy.Default = true
 	cookies["rl_anonymous_id"] = "%22later%22"
 	attachmentTypes[0] = "audio"
+	app["build"] = "later"
 	for events.Next() {
 	}
 	_ = events.Close()
@@ -891,6 +894,9 @@ func TestManagedAgentsKeepsTheOptionsNestedObjectsAsTheyWereWhenTheStreamWasWrap
 	for _, m := range rec.msgs {
 		if m.AnonymousId != "original" {
 			t.Errorf("%s anonymousId %q", m.Event, m.AnonymousId)
+		}
+		if build := fmt.Sprint(m.Context.Extra["app"]); build != "map[build:original]" {
+			t.Errorf("%s context app %s", m.Event, build)
 		}
 	}
 	rec.mu.Unlock()

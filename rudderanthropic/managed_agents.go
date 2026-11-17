@@ -455,8 +455,31 @@ func snapshotOptions(o rudderstackai.InteractionOptions) rudderstackai.Interacti
 	if o.Request != nil {
 		o.Request = o.Request.Clone(o.Request.Context()) // deep-copies the headers that carry cookies
 	}
-	o.AttachmentTypes, o.Context, o.CookieValues = slices.Clone(o.AttachmentTypes), maps.Clone(o.Context), maps.Clone(o.CookieValues)
+	o.AttachmentTypes, o.CookieValues = slices.Clone(o.AttachmentTypes), maps.Clone(o.CookieValues)
+	if o.Context != nil {
+		o.Context = plainCopy(o.Context).(map[string]any)
+	}
 	return o
+}
+
+// plainCopy copies plain data (maps and slices of any) all the way down; anything else is kept.
+func plainCopy(v any) any {
+	switch v := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(v))
+		for k, item := range v {
+			out[k] = plainCopy(item)
+		}
+		return out
+	case []any:
+		out := make([]any, len(v))
+		for i, item := range v {
+			out[i] = plainCopy(item)
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 func str(v any) string { s, _ := v.(string); return s }
