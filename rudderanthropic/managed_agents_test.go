@@ -2399,3 +2399,297 @@ func TestManagedAgentsWholeTurnStateStructure(t *testing.T) {
 		}
 	})
 }
+
+func maPreviewStart(id, kind string) string {
+	return `{"type":"event_start","event":{"type":` + strconv.Quote(kind) + `,"id":` + strconv.Quote(id) + `}}`
+}
+
+func maPreviewDelta(text, id string) string {
+	return `{"type":"event_delta","event_id":` + strconv.Quote(id) + `,"delta":{"type":"content_delta","index":0,"content":{"type":"text","text":` + strconv.Quote(text) + `}}}`
+}
+
+func maPreviewMessage(text, id string) string {
+	return `{"type":"agent.message","id":` + strconv.Quote(id) + `,"content":[{"type":"text","text":` + strconv.Quote(text) + `}]}`
+}
+
+// maPreviewStream exercises the installed client's SSE parser and event_deltas option.
+func maPreviewStream(t *testing.T, raw []string, each func(*rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]), stopAfter int) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query()["event_deltas[]"]; !slices.Equal(got, []string{"agent.message", "agent.thinking"}) {
+			t.Errorf("event_deltas: %v", got)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		for _, event := range raw {
+			var e struct{ Type string }
+			if err := json.Unmarshal([]byte(event), &e); err != nil {
+				t.Error(err)
+				return
+			}
+			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Type, event)
+		}
+	}))
+	defer server.Close()
+	client := anthropic.NewClient(option.WithAPIKey("test"), option.WithBaseURL(server.URL))
+	source := client.Beta.Sessions.Events.StreamEvents(context.Background(), "previews", anthropic.BetaSessionEventStreamParams{
+		EventDeltas: []anthropic.BetaManagedAgentsDeltaType{anthropic.BetaManagedAgentsDeltaTypeAgentMessage, anthropic.BetaManagedAgentsDeltaTypeAgentThinking},
+	})
+	events := rudderanthropic.TrackSessionEvents(context.Background(), source,
+		rudderanthropic.WithSessionID("previews"), rudderanthropic.WithSessionModel("claude-haiku-5-5"),
+		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{UserID: "u"}))
+	defer events.Close()
+	read := 0
+	for events.Next() {
+		if each != nil {
+			each(events)
+		}
+		read++
+		if read == stopAfter {
+			break
+		}
+	}
+	if err := events.Err(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Reflection keeps the regression tests compilable with the pre-port source, where the map
+// does not exist. The pointer also lets tests inspect the same state after a pause and resume.
+func maPreviewState(t *testing.T, events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) reflect.Value {
+	t.Helper()
+	tracker := reflect.ValueOf(events).Elem().FieldByName("tracker")
+	turn := tracker.Elem().FieldByName("turn")
+	if turn.IsNil() {
+		t.Fatal("preview did not open a turn")
+	}
+	state := turn.Elem().FieldByName("state").Elem()
+	if !state.FieldByName("provisional").IsValid() {
+		t.Fatal("turn state has no provisional map")
+	}
+	return state
+}
+
+func maPreviewText(t *testing.T, state reflect.Value, id string) string {
+	t.Helper()
+	entry := state.FieldByName("provisional").Elem().FieldByName("m").MapIndex(reflect.ValueOf(id))
+	if !entry.IsValid() {
+		t.Fatalf("missing provisional event %s", id)
+	}
+	return entry.Elem().FieldByName("text").String()
+}
+
+func maPreviewResponse(t *testing.T, events map[string][]map[string]any, status string, text any) {
+	t.Helper()
+	responses := events["ai_response_received"]
+	if len(responses) == 0 {
+		t.Fatal("missing response")
+	}
+	response := responses[len(responses)-1]
+	if response["response_status"] != status || response["response_text"] != text {
+		t.Fatalf("response: %v", response)
+	}
+}
+
+func maPreviewCallText(t *testing.T, events map[string][]map[string]any, text string) {
+	t.Helper()
+	calls := events["ai_llm_response_received"]
+	if len(calls) != 1 || calls[0]["output_text"] != text {
+		t.Fatalf("calls: %v", calls)
+	}
+}
+
+func TestManagedAgentsPreviewEvents(t *testing.T) {
+	start := maPreviewStart("message", "agent.message")
+	delta := func(text string) string { return maPreviewDelta(text, "message") }
+	message := func(text string) string { return maPreviewMessage(text, "message") }
+	call := maWholeCall("")
+	// Each Node case retains its exact name and runs the buffered control before previews.
+	controls := func(t *testing.T, options []rudderstackai.ConfigOption, run func(*testing.T, bool, func() map[string][]map[string]any)) {
+		t.Helper()
+		for _, preview := range []bool{false, true} {
+			t.Run(map[bool]string{false: "buffered", true: "preview"}[preview], func(t *testing.T) {
+				_, rec := setup(t, options...)
+				resetMA(t)
+				run(t, preview, func() map[string][]map[string]any { return rec.events(t) })
+			})
+		}
+	}
+	output := func(preview bool, text string) []string {
+		if preview {
+			return []string{start, delta(text)}
+		}
+		return []string{message(text)}
+	}
+	for _, capture := range []bool{false, true} {
+		t.Run(fmt.Sprintf("preview-only fresh turn (capture %t), buffered control", capture), func(t *testing.T) {
+			controls(t, []rudderstackai.ConfigOption{rudderstackai.WithCaptureContent(capture)}, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
+				raw := []string{message("partial answer")}
+				if preview {
+					raw = []string{start, delta("partial"), delta(" answer")}
+				}
+				maPreviewStream(t, raw, nil, 0)
+				events := recorded()
+				if len(events["ai_user_prompt_created"]) != 1 || len(events["ai_response_received"]) != 1 {
+					t.Fatalf("events: %v", events)
+				}
+				var text any
+				if capture {
+					text = "partial answer"
+				}
+				maPreviewResponse(t, events, "cancelled", text)
+			})
+		})
+	}
+	capture := []rudderstackai.ConfigOption{rudderstackai.WithCaptureContent(true)}
+	calls := append(slices.Clone(capture), rudderstackai.WithLLMCallEvents(true))
+	t.Run("previews after a pause resume the answer, buffered control", func(t *testing.T) {
+		controls(t, capture, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
+			maPreviewStream(t, []string{maWholeEvent("user.message"), maWholeIdle("requires_action")}, nil, 0)
+			raw := output(preview, "resumed")
+			maPreviewStream(t, raw, nil, len(raw))
+			events := recorded()
+			answers := events["ai_response_received"]
+			if len(answers) != 2 || answers[0]["response_status"] != "paused" || answers[1]["response_status"] != "cancelled" || answers[1]["interaction_id"] != answers[0]["interaction_id"] || len(events["ai_user_prompt_created"]) != 1 {
+				t.Fatalf("events: %v", events)
+			}
+			maPreviewResponse(t, events, "cancelled", "resumed")
+		})
+	})
+	t.Run("interrupt after previews retains partial answer and call text, buffered control", func(t *testing.T) {
+		controls(t, calls, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
+			raw := []string{maWholeEvent("user.message"), `{"type":"span.model_request_start","id":"request"}`}
+			raw = append(raw, output(preview, "partial")...)
+			raw = append(raw, maWholeEvent("user.interrupt"), maWholeCall(`,"is_error":true,"model_request_start_id":"request"`), maWholeIdle("end_turn"))
+			maPreviewStream(t, raw, nil, 0)
+			maPreviewResponse(t, recorded(), "cancelled", "partial")
+			maPreviewCallText(t, recorded(), "partial")
+		})
+	})
+	t.Run("previews then buffered message replace provisional text without double counting, buffered control", func(t *testing.T) {
+		controls(t, calls, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
+			raw := []string{message("complete")}
+			var carried reflect.Value
+			if preview {
+				raw = []string{start, delta("different provisional")}
+			}
+			maPreviewStream(t, append(raw, maWholeIdle("requires_action")), func(events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) {
+				if preview {
+					carried = maPreviewState(t, events)
+				}
+			}, 0)
+			if len(recorded()["ai_response_received"]) != 1 {
+				t.Fatal("missing paused response")
+			}
+			if preview && maPreviewText(t, carried, "message") != "different provisional" {
+				t.Fatal("lost carried provisional text")
+			}
+			maPreviewStream(t, []string{message("complete"), call, maWholeIdle("end_turn")}, nil, 0)
+			maPreviewResponse(t, recorded(), "success", "complete")
+			maPreviewCallText(t, recorded(), "complete")
+		})
+	})
+	t.Run("previews and buffered message in one stream replace provisional output, buffered control", func(t *testing.T) {
+		controls(t, calls, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
+			var raw []string
+			if preview {
+				raw = []string{start, delta("different provisional")}
+			}
+			raw = append(raw, message("complete"), call, maWholeIdle("end_turn"))
+			read := 0
+			maPreviewStream(t, raw, func(events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) {
+				read++
+				if preview && read == 2 && maPreviewText(t, maPreviewState(t, events), "message") != "different provisional" {
+					t.Fatal("lost provisional text")
+				}
+			}, 0)
+			maPreviewResponse(t, recorded(), "success", "complete")
+			maPreviewCallText(t, recorded(), "complete")
+		})
+	})
+	for _, ending := range []string{"end", "error", "close"} {
+		t.Run("preview-only output survives "+ending+", buffered control", func(t *testing.T) {
+			controls(t, capture, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
+				raw := output(preview, "partial")
+				status := "cancelled"
+				switch ending {
+				case "end":
+					raw = append(raw, maWholeIdle("end_turn"))
+					status = "success"
+				case "error":
+					raw = append(raw, `{"type":"session.error","error":{"type":"mcp_authentication_failed_error","retry_status":{"type":"terminal"}}}`)
+					status = "error"
+				}
+				maPreviewStream(t, raw, nil, 0)
+				maPreviewResponse(t, recorded(), status, "partial")
+			})
+		})
+	}
+	t.Run("thinking previews open a turn without answer text, buffered control", func(t *testing.T) {
+		controls(t, capture, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
+			raw := `{"type":"agent.thinking","id":"thinking"}`
+			if preview {
+				raw = maPreviewStart("thinking", "agent.thinking")
+			}
+			maPreviewStream(t, []string{raw}, nil, 0)
+			events := recorded()
+			if len(events["ai_user_prompt_created"]) != 1 || len(events["ai_response_received"]) != 1 {
+				t.Fatalf("events: %v", events)
+			}
+			maPreviewResponse(t, events, "cancelled", nil)
+		})
+	})
+	t.Run("preview IDs do not mark buffered events as read, buffered control", func(t *testing.T) {
+		controls(t, calls, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
+			var raw []string
+			if preview {
+				raw = []string{strings.Replace(start, `{`, `{"id":"message",`, 1), strings.Replace(delta("partial"), `{`, `{"id":"message",`, 1)}
+			}
+			raw = append(raw, message("complete"), message("complete"), call, maWholeIdle("end_turn"))
+			maPreviewStream(t, raw, nil, 0)
+			maPreviewResponse(t, recorded(), "success", "complete")
+			maPreviewCallText(t, recorded(), "complete")
+		})
+	})
+	t.Run("carries bounded provisional text through pause and replaces it on resume", func(t *testing.T) {
+		_, rec := setup(t, rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 2}))
+		resetMA(t)
+		var carried reflect.Value
+		maPreviewStream(t, []string{start, delta("partial"), maWholeIdle("requires_action")}, func(events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) {
+			carried = maPreviewState(t, events)
+		}, 0)
+		if maPreviewText(t, carried, "message") != "partial" {
+			t.Fatal("lost carried text")
+		}
+		maPreviewStream(t, []string{message("complete"), call, maWholeIdle("end_turn")}, nil, 0)
+		maPreviewResponse(t, rec.events(t), "success", "complete")
+		maPreviewCallText(t, rec.events(t), "complete")
+		if carried.FieldByName("provisional").Elem().FieldByName("m").Len() != 0 {
+			t.Fatal("replacement left provisional entries")
+		}
+		var raw []string
+		for _, id := range []string{"oldest", "middle", "newest"} {
+			raw = append(raw, maPreviewStart(id, "agent.message"), maPreviewDelta(strings.Repeat("x", 40_000), id))
+		}
+		var state reflect.Value
+		maPreviewStream(t, raw, func(events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) {
+			state = maPreviewState(t, events)
+		}, 0)
+		order := state.FieldByName("provisional").Elem().FieldByName("order")
+		if order.Len() != 2 || order.Index(0).String() != "middle" || order.Index(1).String() != "newest" || len(maPreviewText(t, state, "newest")) != 32_001 {
+			t.Fatal("provisional bounds or eviction differ")
+		}
+	})
+	t.Run("preview text uses the same capture and redaction rules as buffered text", func(t *testing.T) {
+		options := append(slices.Clone(calls), rudderstackai.WithRedactHook(func(string) (string, error) { return "masked", nil }))
+		controls(t, options, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
+			raw := append(output(preview, "private"), call, maWholeIdle("end_turn"))
+			maPreviewStream(t, raw, nil, 0)
+			maPreviewResponse(t, recorded(), "success", "masked")
+			maPreviewCallText(t, recorded(), "masked")
+			encoded, err := json.Marshal(recorded())
+			if err != nil || strings.Contains(string(encoded), "private") {
+				t.Fatal("unredacted preview text in events")
+			}
+		})
+	})
+}

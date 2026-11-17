@@ -350,27 +350,34 @@ type requestStart struct {
 	model, agent string
 }
 
+type provisionalMessage struct {
+	text    string
+	request bool
+}
+
 // turnState is all work and decisions that survive a stream boundary. New fields belong here by default.
 type turnState struct {
-	continuation bool
-	prompted     bool
-	promptText   string
-	starts       *boundedMap[requestStart]
-	modelError   string
-	requestText  string
-	calls        []turnCall
-	tools        *boundedMap[*turnTool]
-	localTools   int // sequence for tools without vendor IDs; survives with their draft keys
-	recorded     *boundedMap[msTime]
-	blocking     *boundedMap[rudderstackai.PauseReason]
-	answer       string
-	interrupted  bool
-	errorType    string
-	compactions  int
-	promptSent   bool
-	lastModel    string
-	hasGrader    bool
-	requestSeen  bool
+	continuation  bool
+	prompted      bool
+	promptText    string
+	starts        *boundedMap[requestStart]
+	modelError    string
+	requestText   string
+	provisional   *boundedMap[*provisionalMessage] // preview IDs not yet replaced by buffered messages
+	answerEventID string                           // latest output event, when its answer is still provisional
+	calls         []turnCall
+	tools         *boundedMap[*turnTool]
+	localTools    int // sequence for tools without vendor IDs; survives with their draft keys
+	recorded      *boundedMap[msTime]
+	blocking      *boundedMap[rudderstackai.PauseReason]
+	answer        string
+	interrupted   bool
+	errorType     string
+	compactions   int
+	promptSent    bool
+	lastModel     string
+	hasGrader     bool
+	requestSeen   bool
 }
 
 // turn holds only the stream segment's clock, waiting status and reporting handles outside state.
@@ -520,6 +527,11 @@ func (s *sessionTracker) observe(raw string) {
 	if kind == "" {
 		return
 	}
+	// Previews share the buffered event's ID; they must not mark it as read.
+	if kind == "event_start" || kind == "event_delta" {
+		s.preview(e, kind)
+		return
+	}
 	id := str(e["id"])
 	if id != "" {
 		// The consolidation pattern (stream + history) repeats events.
@@ -615,6 +627,9 @@ func (s *sessionTracker) observe(raw string) {
 		}
 		t.state.requestSeen = true
 		t.state.modelError, t.state.requestText = "", ""
+		for _, entry := range t.state.provisional.entries() {
+			entry.value.request = false
+		}
 	case "span.model_request_end":
 		s.call(s.open(kind, at), e, at)
 	case "span.outcome_evaluation_end":
@@ -629,9 +644,15 @@ func (s *sessionTracker) observe(raw string) {
 		s.push(t, c)
 	case "agent.message":
 		t := s.open(kind, at)
-		if text := textOf(e["content"]); text != "" {
-			t.state.answer = text
-			t.state.requestText += text
+		preview, _ := t.state.provisional.get(id)
+		if id != "" {
+			t.state.provisional.delete(id)
+		}
+		if text := textOf(e["content"]); text != "" || preview != nil {
+			t.state.answer, t.state.answerEventID = text, ""
+			if text != "" && (preview == nil || preview.request) {
+				t.state.requestText += text
+			}
 		}
 	case "agent.tool_use", "agent.mcp_tool_use", "agent.custom_tool_use":
 		s.tool(s.open(kind, at), kind, e, id, at)
@@ -671,6 +692,58 @@ func (s *sessionTracker) observe(raw string) {
 			s.finish(turnEnd{status: rudderstackai.StatusCancelled, errorType: "cancelled"}, at)
 		}
 	}
+}
+
+// preview opens primary-thread work and retains text until its buffered event arrives.
+func (s *sessionTracker) preview(e map[string]any, kind string) {
+	start := obj(e["event"])
+	id := str(e["event_id"])
+	if kind == "event_start" {
+		id = str(start["id"])
+	}
+	if id == "" || seenEvents.has(s.scope+id) {
+		return
+	}
+	if kind == "event_start" {
+		typ := str(start["type"])
+		if typ != "agent.message" && typ != "agent.thinking" {
+			return
+		}
+		if thread := str(start["session_thread_id"]); thread != "" {
+			childThreads.add(s.scope + thread)
+			return
+		}
+		t := s.open(typ, timeOf(start))
+		if _, exists := t.state.provisional.get(id); typ == "agent.message" && !exists {
+			t.state.provisional.set(id, &provisionalMessage{request: true})
+		}
+		return
+	}
+	delta := obj(e["delta"])
+	content := obj(delta["content"])
+	text, ok := content["text"].(string)
+	if delta["type"] != "content_delta" || content["type"] != "text" || !ok {
+		return
+	}
+	t := s.open("agent.message", timeOf(e))
+	preview, exists := t.state.provisional.get(id)
+	if !exists {
+		preview = &provisionalMessage{request: true}
+	}
+	t.state.provisional.set(id, preview)
+	// Keep one extra code point so the core's normal 32,000-rune size rule drops oversized text.
+	runes := []rune(preview.text + text)
+	preview.text = string(runes[:min(len(runes), 32_001)])
+	t.state.answerEventID = id
+}
+
+func (s *sessionTracker) answer(t *turn) string {
+	if t.state.answerEventID != "" {
+		if preview, ok := t.state.provisional.get(t.state.answerEventID); ok {
+			return preview.text
+		}
+	}
+	return t.state.answer
 }
 
 // close: the stream ended or failed; a turn still open is paused, failed or cancelled.
@@ -760,6 +833,7 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 			startAt: start, borrowed: borrowed,
 			state: &turnState{
 				continuation: continuation,
+				provisional:  newBoundedMap[*provisionalMessage]("claude-managed-agents provisional"),
 				starts:       newBoundedMap[requestStart]("claude-managed-agents starts"),
 				tools:        newBoundedMap[*turnTool]("claude-managed-agents tool drafts"),
 				recorded:     newBoundedMap[msTime]("claude-managed-agents tools"),
@@ -946,7 +1020,13 @@ func (s *sessionTracker) call(t *turn, e map[string]any, at msTime) {
 	if !failed && model != "" {
 		t.state.lastModel = model
 	}
-	c := turnCall{model: model, agent: agent, outputText: t.state.requestText, startAt: start.at, endAt: at}.withUsage(usage)
+	outputText := t.state.requestText
+	for _, entry := range t.state.provisional.entries() {
+		if entry.value.request {
+			outputText += entry.value.text
+		}
+	}
+	c := turnCall{model: model, agent: agent, outputText: outputText, startAt: start.at, endAt: at}.withUsage(usage)
 	if speed := str(usage["speed"]); speed == "fast" || speed == "standard" {
 		c.serviceTier = speed
 	}
@@ -960,6 +1040,9 @@ func (s *sessionTracker) call(t *turn, e map[string]any, at msTime) {
 		t.state.starts.delete(startID)
 	}
 	s.push(t, c)
+	for _, entry := range t.state.provisional.entries() {
+		entry.value.request = false
+	}
 	t.state.modelError, t.state.requestText = "", ""
 }
 
@@ -1290,7 +1373,7 @@ func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime) {
 	}
 	t.state.compactions = 0
 	if t.borrowed != nil && i == t.borrowed {
-		kit.KeepAnswer(i, t.state.answer)
+		kit.KeepAnswer(i, s.answer(t))
 		kit.HintStatus(i, end.status, end.errorType, end.pauseReason)
 		// Every unfinished turn carries whole state, even when only an interrupt or blocking remains.
 		if s.cfg.sessionID != "" {
@@ -1317,10 +1400,10 @@ func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime) {
 		return
 	}
 	if end.status != rudderstackai.StatusPaused {
-		i.End(rudderstackai.EndOptions{Status: end.status, ErrorType: end.errorType, ResponseText: t.state.answer})
+		i.End(rudderstackai.EndOptions{Status: end.status, ErrorType: end.errorType, ResponseText: s.answer(t)})
 		return
 	}
-	i.Pause(rudderstackai.PauseOptions{Reason: end.pauseReason, ResponseText: t.state.answer})
+	i.Pause(rudderstackai.PauseOptions{Reason: end.pauseReason, ResponseText: s.answer(t)})
 	if s.cfg.sessionID == "" {
 		return
 	}
