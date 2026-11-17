@@ -81,6 +81,86 @@ func TestObserveMCPTransportConcurrentIDs(t *testing.T) {
 	}
 }
 
+type reusedResponseWriter struct {
+	net.Conn
+	started chan struct{}
+	release chan struct{}
+}
+
+func (w reusedResponseWriter) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), "first failure") {
+		close(w.started)
+		<-w.release
+	}
+	return w.Conn.Write(p)
+}
+
+func TestObserveMCPTransportReusedResponseSnapshot(t *testing.T) {
+	for _, source := range []string{"rpc", "result"} {
+		t.Run(source, func(t *testing.T) {
+			setupAI(t)
+			text := &mcp.TextContent{Text: "first failure"}
+			result := &mcp.CallToolResult{IsError: true, Content: []mcp.Content{text}}
+			rpc := &jsonrpc.Error{Code: -32602, Message: "first failure"}
+			handled := make(chan string, 2)
+			s := mcp.NewServer(&mcp.Implementation{Name: "reuse", Version: "1"}, nil)
+			s.AddTool(&mcp.Tool{Name: "lookup", InputSchema: map[string]any{"type": "object"}}, func(ctx context.Context, _ *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				handled <- ctx.Value(reqCtxKey{}).(*reqCtx).requestID
+				if source == "rpc" {
+					return nil, rpc
+				}
+				return result, nil
+			})
+			r := wrap(t, s, Options{CaptureContent: true})
+			c1, c2 := net.Pipe()
+			w := reusedResponseWriter{Conn: c2, started: make(chan struct{}), release: make(chan struct{})}
+			cs := connectOver(t, s, &mcp.IOTransport{Reader: c2, Writer: w}, &mcp.IOTransport{Reader: c1, Writer: c1}, true)
+			release := sync.OnceFunc(func() { close(w.release) })
+			defer release()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, _ = cs.CallTool(ctx, &mcp.CallToolParams{Name: "lookup"})
+			}()
+			select {
+			case <-w.started:
+			case <-ctx.Done():
+				t.Fatal("first write never started")
+			}
+			if len(r.named("mcp_tool_called")) != 0 {
+				t.Fatal("event before successful write")
+			}
+			// The first response is serialized; reuse its source while that write is held.
+			firstID := <-handled
+			text.Text, rpc.Message = "second failure", "second failure"
+			second := make(chan struct{})
+			go func() {
+				defer close(second)
+				_, _ = cs.CallTool(ctx, &mcp.CallToolParams{Name: "lookup"})
+			}()
+			var secondID string
+			select {
+			case secondID = <-handled:
+			case <-ctx.Done():
+				t.Fatal("second request never handled")
+			}
+			release()
+			<-done
+			<-second
+			events := r.wait(t, "mcp_tool_called", 2)
+			seen := map[any]any{}
+			for _, e := range events {
+				seen[e.Properties["request_id"]] = e.Properties["error_message"]
+			}
+			if len(seen) != 2 || seen[firstID] != "first failure" || seen[secondID] != "second failure" {
+				t.Fatalf("request messages: %v", seen)
+			}
+		})
+	}
+}
+
 func TestObserveMCPTransportDeclaredEventFollows(t *testing.T) {
 	setupAI(t)
 	s := failingServer("declared-errors-mcp")

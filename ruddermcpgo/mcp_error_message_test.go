@@ -222,6 +222,135 @@ type capoffWriter struct {
 	header  http.Header
 }
 
+type reusedResponseWriter struct {
+	started chan struct{}
+	release chan struct{}
+	header  http.Header
+}
+
+func (w *reusedResponseWriter) Header() http.Header { return w.header }
+func (*reusedResponseWriter) WriteHeader(int)       {}
+func (*reusedResponseWriter) Flush()                {}
+func (w *reusedResponseWriter) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), "first failure") {
+		close(w.started)
+		<-w.release
+	}
+	return len(p), nil
+}
+
+func TestMCPGoReusedResponseSnapshot(t *testing.T) {
+	for _, transport := range []string{"stdio", "http-json", "http-sse"} {
+		for _, source := range []string{"rpc", "result"} {
+			t.Run(transport+"/"+source, func(t *testing.T) {
+				s := server.NewMCPServer("reuse", "1", server.WithToolCapabilities(true))
+				s.AddTool(mcp.NewTool("lookup"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+					if source == "rpc" {
+						return nil, errors.New("handler failure")
+					}
+					return &mcp.CallToolResult{IsError: true}, nil
+				})
+				r := wrap(t, s, Options{CaptureContent: true})
+				response := map[string]any{"jsonrpc": "2.0", "id": 1}
+				block := map[string]any{"type": "text", "text": "first failure"}
+				rpc := map[string]any{"code": -32603, "message": "first failure"}
+				if source == "rpc" {
+					response["error"] = rpc
+				} else {
+					response["result"] = map[string]any{"isError": true, "content": []any{block}}
+				}
+				w := &reusedResponseWriter{started: make(chan struct{}), release: make(chan struct{}), header: make(http.Header)}
+				release := sync.OnceFunc(func() { close(w.release) })
+				defer release()
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				handled := make(chan struct{}, 2)
+				handle := func(ctx context.Context, out io.Writer, id int) {
+					request := map[string]any{"jsonrpc": "2.0", "id": id, "method": "tools/call", "params": map[string]any{"name": "lookup", "arguments": map[string]any{}}}
+					data, err := json.Marshal(request)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					s.HandleMessage(ctx, data)
+					data, err = json.Marshal(response)
+					if err != nil {
+						t.Error(err)
+						return
+					}
+					handled <- struct{}{}
+					if transport == "http-sse" {
+						data = append(append([]byte("data: "), data...), '\n', '\n')
+					} else {
+						data = append(data, '\n')
+					}
+					if _, err := out.Write(data); err != nil {
+						t.Error(err)
+					}
+					if transport == "http-sse" {
+						out.(http.Flusher).Flush()
+					}
+				}
+				var send func(int)
+				if transport == "stdio" {
+					observed, _, out := ObserveStdio(ctx, strings.NewReader(""), w)
+					send = func(id int) { handle(observed, out, id) }
+				} else {
+					h := ObserveHTTP(http.HandlerFunc(func(out http.ResponseWriter, req *http.Request) {
+						id := 1
+						if req.URL.Path == "/2" {
+							id = 2
+						}
+						if transport == "http-sse" {
+							out.Header().Set("Content-Type", "text/event-stream")
+						}
+						handle(req.Context(), out, id)
+					}))
+					send = func(id int) {
+						out := w
+						path := "/1"
+						if id == 2 {
+							path = "/2"
+							out = &reusedResponseWriter{header: make(http.Header)}
+						}
+						h.ServeHTTP(out, httptest.NewRequest(http.MethodPost, path, nil).WithContext(ctx))
+					}
+				}
+				first := make(chan struct{})
+				go func() { defer close(first); send(1) }()
+				select {
+				case <-w.started:
+				case <-ctx.Done():
+					t.Fatal("first write never started")
+				}
+				<-handled
+				if len(r.named("mcp_tool_called")) != 0 {
+					t.Fatal("event before successful write")
+				}
+				response["id"] = 2
+				block["text"], rpc["message"] = "second failure", "second failure"
+				second := make(chan struct{})
+				go func() { defer close(second); send(2) }()
+				select {
+				case <-handled:
+				case <-ctx.Done():
+					t.Fatal("second response never serialized")
+				}
+				release()
+				<-first
+				<-second
+				seen := map[any]any{}
+				for _, e := range r.named("mcp_tool_called") {
+					seen[e.Properties["request_id"]] = e.Properties["error_message"]
+				}
+				if len(seen) != 2 || seen["1"] != "first failure" || seen["2"] != "second failure" {
+					t.Fatalf("request messages: %v", seen)
+				}
+			})
+		}
+	}
+}
+
 func (w *capoffWriter) Header() http.Header { return w.header }
 func (*capoffWriter) WriteHeader(int)       {}
 func (w *capoffWriter) Write(p []byte) (int, error) {
