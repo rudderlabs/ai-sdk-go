@@ -341,12 +341,15 @@ type PauseOptions struct {
 
 // PausedInteraction is a paused run, as JSON: store it with the run's own state and pass it as
 // [InteractionOptions.Resume] or [TaskOptions.Resume] to continue the same interaction later, in
-// any process. Keys match the event properties.
+// any process. Except for PauseToken, keys match the event properties.
 type PausedInteraction struct {
 	invalidSnapshot bool
-	InteractionID   string  `json:"interaction_id"`
-	ConversationID  string  `json:"conversation_id"`
-	Trigger         Trigger `json:"trigger"`
+	// PauseToken identifies this specific pause for saved-context routing in the same process.
+	// Older snapshots without it still restore, without linking a saved context or paused slot.
+	PauseToken     string  `json:"pause_token,omitempty"`
+	InteractionID  string  `json:"interaction_id"`
+	ConversationID string  `json:"conversation_id"`
+	Trigger        Trigger `json:"trigger"`
 	// PauseCount is the pauses so far, this one included.
 	PauseCount int `json:"pause_count"`
 	// TotalPausedMS is the time spent paused before this pause.
@@ -490,8 +493,15 @@ type Interaction struct {
 	explicitAnalytics analytics.Client
 	msgContext        map[string]any
 	sessionID         int64
+	// scope is the context values in effect when it started, restored by JoinInteraction.
+	scope *contextValues
 	// resumed: continued from a Resume snapshot.
 	resumed bool
+	// pauseToken names the snapshot's paused slot; a fresh token is minted for each pause.
+	// Guarded by open.mu; snapshot reads also hold mu, as does holdPausedSlot when writing it.
+	pauseToken string
+	// cont, once a snapshot of this run is restored in this process, names its newest segment.
+	cont atomic.Pointer[continuation]
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
 	untracked bool
 	// opened and elem place it among the open interactions (guarded by open.mu).
@@ -596,6 +606,39 @@ func (i *Interaction) answerErrorType(err error) string {
 	return appErrorType(err)
 }
 
+// continuation is shared by the segments of one run restored from its snapshots in this process,
+// so a context saved before a restore follows the run without keeping every segment alive.
+type continuation struct{ current atomic.Pointer[Interaction] }
+
+// continueAs makes next, restored from i's snapshot, the segment that contexts carrying i or an
+// earlier segment report into, as in Node.js. Called under open.mu.
+func (i *Interaction) continueAs(next *Interaction) {
+	if i == nil || i == next {
+		return
+	}
+	c := i.cont.Load()
+	if c == nil {
+		c = &continuation{}
+		i.cont.Store(c)
+	}
+	c.current.Store(next)
+	next.cont.Store(c)
+}
+
+// latest is the newest segment of i's run in this process: i, unless its snapshot was restored
+// here. A restored segment that ended stays the newest, so later calls are separate answers.
+func (i *Interaction) latest() *Interaction {
+	if i == nil {
+		return nil
+	}
+	if c := i.cont.Load(); c != nil {
+		if next := c.current.Load(); next != nil {
+			return next
+		}
+	}
+	return i
+}
+
 // ID is the interaction ID (interaction_id): return it to your client for feedback events.
 func (i *Interaction) ID() string { return i.id }
 
@@ -686,6 +729,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		}
 	}
 	i := &Interaction{
+		scope:             valuesFrom(ctx),
 		id:                interactionID,
 		conversationID:    conversationID,
 		userID:            id.userID,
@@ -718,6 +762,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		resumed:           resumed,
 	}
 	if resumed {
+		i.pauseToken = snapshot.PauseToken
 		i.userID, i.anonymousID = snapshot.UserID, snapshot.AnonymousID
 		i.feature, i.surface = snapshot.Feature, surfaceOf(snapshot.Surface)
 		i.accountID, i.onBehalfOf = snapshot.AccountID, snapshot.OnBehalfOf
@@ -2084,6 +2129,7 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		return PausedInteraction{}, false
 	}
 	snapshot := PausedInteraction{
+		PauseToken:    i.pauseToken,
 		InteractionID: i.id, ConversationID: i.conversationID, Trigger: i.trigger,
 		PauseCount: i.pauseCount, TotalPausedMS: roundMS(i.pausedTotal), PausedAt: i.pausedAt.UnixMilli(),
 		UserID: i.userID, AnonymousID: i.anonymousID, Feature: i.feature, Surface: i.surface,

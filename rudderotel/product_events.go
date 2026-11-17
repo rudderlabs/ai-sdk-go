@@ -247,6 +247,15 @@ func toolValue(a map[string]attribute.Value, keys ...string) any {
 	return nil
 }
 
+// resolveProductOwner is used at start and, only for unknown owners, at end.
+func resolveProductOwner(id string, ambient *rudderstackai.Interaction) *rudderstackai.Interaction {
+	if id == "" || (ambient != nil && ambient.ID() == id) {
+		return ambient
+	}
+	owner, _ := hook.Tracing.Open(id).(*rudderstackai.Interaction)
+	return owner
+}
+
 func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudderstackai.Interaction) {
 	role := spanRole(s)
 	if role == "" {
@@ -258,14 +267,11 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 		return
 	}
 	i := owner
-	if i == nil || i.ID() != id {
-		found := hook.Tracing.Open(id)
-		if found == nil {
-			return
-		}
-		i = found.(*rudderstackai.Interaction)
+	if i == nil {
+		i = resolveProductOwner(id, nil)
 	}
-	if i.Ended() {
+	// A late or changed ID cannot reroute an already-owned span.
+	if i == nil || i.ID() != id || i.Ended() {
 		return
 	}
 	hook.Tracing.AdoptAnalytics(i, client)

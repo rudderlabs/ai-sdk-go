@@ -699,6 +699,10 @@ func TestPauseReturnsASnapshot(t *testing.T) {
 		t.Fatalf("no paused_at: %s", b)
 	}
 	delete(got, "paused_at")
+	if token, ok := got["pause_token"].(string); !ok || token == "" {
+		t.Fatalf("no pause token: %s", b)
+	}
+	delete(got, "pause_token")
 	want := map[string]any{
 		"interaction_id": in.ID(), "conversation_id": "c", "user_id": "u", "feature": "f", "trigger": "user",
 		"account_id": "acme", "intent": "refund", "trace_id": "t", "pause_count": float64(1), "total_paused_ms": float64(0), "report_count": float64(1), "successful_call_sequence": float64(1),

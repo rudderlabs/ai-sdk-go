@@ -1,0 +1,429 @@
+{
+  "fixture_version": 1,
+  "span_schema_version": "0.1",
+  "event_spec_version": "0.4.0",
+  "description": "Joining an open interaction, and optionally an SDK parent span, by ID where the SDK's context is lost (joinInteraction / join_interaction / JoinInteraction). Steps run in order; see FIXTURE-FORMAT.md.",
+  "scenarios": [
+    {
+      "name": "lost-context-without-join-opens-its-own-interaction",
+      "emit_spans": false,
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "A",
+          "children": [
+            {
+              "kind": "lost",
+              "children": [
+                {
+                  "kind": "wrapper",
+                  "label": "w"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 0
+        },
+        "other_answers": 1,
+        "warnings": 0,
+        "spans": []
+      }
+    },
+    {
+      "name": "lost-context-joins-by-id",
+      "emit_spans": false,
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "A",
+          "children": [
+            {
+              "kind": "lost",
+              "children": [
+                {
+                  "kind": "join",
+                  "interaction": "A",
+                  "children": [
+                    {
+                      "kind": "wrapper",
+                      "label": "w"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 1
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": []
+      }
+    },
+    {
+      "name": "joined-interaction-wins-over-the-current-one",
+      "emit_spans": false,
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "A",
+          "children": [
+            {
+              "kind": "interaction",
+              "label": "B",
+              "children": [
+                {
+                  "kind": "join",
+                  "interaction": "A",
+                  "children": [
+                    {
+                      "kind": "wrapper",
+                      "label": "w"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 1,
+          "B": 0
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": []
+      }
+    },
+    {
+      "name": "unknown-id-warns-and-keeps-the-current-context",
+      "emit_spans": false,
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "B",
+          "children": [
+            {
+              "kind": "join",
+              "interaction": "unknown",
+              "children": [
+                {
+                  "kind": "wrapper",
+                  "label": "w"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "B": 1
+        },
+        "other_answers": 0,
+        "warnings": 1,
+        "spans": []
+      }
+    },
+    {
+      "name": "ended-interaction-warns",
+      "emit_spans": false,
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "A",
+          "children": []
+        },
+        {
+          "kind": "lost",
+          "children": [
+            {
+              "kind": "join",
+              "interaction": "A",
+              "children": [
+                {
+                  "kind": "wrapper",
+                  "label": "w"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 0
+        },
+        "other_answers": 1,
+        "warnings": 1,
+        "spans": []
+      }
+    },
+    {
+      "name": "parent-span-from-lost-context",
+      "emit_spans": true,
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "A",
+          "children": [
+            {
+              "kind": "manual",
+              "label": "p",
+              "children": [
+                {
+                  "kind": "lost",
+                  "children": [
+                    {
+                      "kind": "join",
+                      "interaction": "A",
+                      "parent": "p",
+                      "children": [
+                        {
+                          "kind": "manual",
+                          "label": "t",
+                          "children": [
+                            {
+                              "kind": "wrapper",
+                              "label": "w"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 1
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": [
+          {
+            "label": "p",
+            "parent": null
+          },
+          {
+            "label": "t",
+            "parent": "p"
+          },
+          {
+            "label": "w",
+            "parent": "t"
+          }
+        ]
+      }
+    },
+    {
+      "name": "parent-span-wins-over-the-current-span-and-may-have-ended",
+      "emit_spans": true,
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "A",
+          "children": [
+            {
+              "kind": "manual",
+              "label": "p",
+              "children": []
+            },
+            {
+              "kind": "manual",
+              "label": "q",
+              "children": [
+                {
+                  "kind": "join",
+                  "interaction": "A",
+                  "parent": "p",
+                  "children": [
+                    {
+                      "kind": "wrapper",
+                      "label": "w"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 1
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": [
+          {
+            "label": "p",
+            "parent": null
+          },
+          {
+            "label": "q",
+            "parent": null
+          },
+          {
+            "label": "w",
+            "parent": "p"
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid-parent-warns-and-is-ignored",
+      "emit_spans": true,
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "A",
+          "children": [
+            {
+              "kind": "lost",
+              "children": [
+                {
+                  "kind": "join",
+                  "interaction": "A",
+                  "parent": "invalid",
+                  "children": [
+                    {
+                      "kind": "wrapper",
+                      "label": "w"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 1
+        },
+        "other_answers": 0,
+        "warnings": 1,
+        "spans": [
+          {
+            "label": "w",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "spans-off-ignores-the-parent",
+      "emit_spans": false,
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "A",
+          "children": [
+            {
+              "kind": "manual",
+              "label": "p",
+              "children": [
+                {
+                  "kind": "lost",
+                  "children": [
+                    {
+                      "kind": "join",
+                      "interaction": "A",
+                      "parent": "p",
+                      "children": [
+                        {
+                          "kind": "wrapper",
+                          "label": "w"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 1
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": []
+      }
+    },
+    {
+      "name": "framework-child-run-inside-a-join-counts-for-the-joined-interaction",
+      "emit_spans": true,
+      "requires": "integration",
+      "steps": [
+        {
+          "kind": "interaction",
+          "label": "B",
+          "children": [
+            {
+              "kind": "interaction",
+              "label": "A",
+              "children": [
+                {
+                  "kind": "framework_run",
+                  "label": "r",
+                  "children": [
+                    {
+                      "kind": "join",
+                      "interaction": "B",
+                      "children": [
+                        {
+                          "kind": "framework_run",
+                          "label": "c",
+                          "parent": "r",
+                          "model": true
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "answers": {
+          "A": 0,
+          "B": 1
+        },
+        "other_answers": 0,
+        "warnings": 0,
+        "spans": [
+          {
+            "label": "r",
+            "parent": null,
+            "interaction": "A"
+          },
+          {
+            "label": "c",
+            "parent": "r",
+            "interaction": "B"
+          }
+        ]
+      }
+    }
+  ]
+}

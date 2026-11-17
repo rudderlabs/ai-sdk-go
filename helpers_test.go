@@ -109,12 +109,17 @@ type recorder struct {
 	mu       sync.Mutex
 	messages []analytics.Track
 	invalid  []string
+	// onEnqueue, when set, runs on each message before it is kept, as a client callback would.
+	onEnqueue func(analytics.Message)
 }
 
 func (r *recorder) Enqueue(m analytics.Message) error {
 	t, ok := m.(analytics.Track)
 	if !ok {
 		return fmt.Errorf("unexpected message %T", m)
+	}
+	if r.onEnqueue != nil {
+		r.onEnqueue(m)
 	}
 	props := map[string]any(t.Properties)
 	err := validateEvent(t.Event, props)

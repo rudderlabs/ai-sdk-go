@@ -116,6 +116,16 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 
 `StartInteraction` returns the context and the `*Interaction` for code that cannot use a callback; call `End(rudderstackai.EndOptions{})` when the answer is out. Every `LLMCall` and `ToolCall` field: [docs/integrations.md](docs/integrations.md#manual).
 
+Work that runs on a context that lost the interaction (a goroutine started from `context.Background()`, a callback library, an in-process job queue) can pass the interaction's ID, and with `WithEmitSpans(true)` a parent span's ID, and join it there:
+
+```go
+// inside the interaction: id, parentSpanID := interaction.ID(), span.SpanID
+ctx := rudderstackai.JoinInteraction(context.Background(), id, rudderstackai.JoinOptions{ParentSpanID: parentSpanID})
+_, err := llm.Chat.Completions.New(ctx, params)
+```
+
+The joined interaction, its identity, session and scope, and the parent win over whatever the context carries; an unknown, paused or ended ID logs a warning and returns the context unchanged. See [docs/integrations.md](docs/integrations.md#how-integrations-work).
+
 ### Gateways and pricing labels
 
 - OpenAI-compatible endpoints: `rudderopenai.WithTracking(rudderopenai.WithProvider("openrouter"))` (or `litellm`, `gateway`, `azure.ai.openai`, `vllm`, ...). A cost the gateway reports (`usage.cost`, LiteLLM's `x-litellm-response-cost`) wins over registered prices ([Gateways](docs/integrations.md#gateways-and-openai-compatible-endpoints)).

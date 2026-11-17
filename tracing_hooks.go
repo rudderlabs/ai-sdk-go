@@ -29,13 +29,8 @@ func init() {
 
 	hook.Tracing.Identity = tracingIdentity
 	hook.Tracing.Open = func(id string) any {
-		open.mu.Lock()
-		defer open.mu.Unlock()
-		for e := open.list.Front(); e != nil; e = e.Next() {
-			i := e.Value.(*Interaction)
-			if i.id == id {
-				return i
-			}
+		if i := openByID(id); i != nil {
+			return i
 		}
 		return nil
 	}

@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"weak"
+
+	"github.com/google/uuid"
 )
 
 // Limits caps the memory the SDK holds. A zero field keeps its default. Identical defaults in
@@ -66,13 +69,19 @@ func limitReached(name string) {
 	report(KindLimitReached, name, fmt.Errorf("rudderstackai: %s reached", name))
 }
 
+// pausedSlot keeps admission and restore identity without keeping the paused object alive.
+type pausedSlot struct {
+	id          string
+	interaction weak.Pointer[Interaction]
+}
+
 // open holds the open interactions, oldest first, for MaxOpenInteractions and the TTL sweep.
 var open = struct {
 	mu        sync.Mutex
 	list      *list.List
-	paused    map[string]struct{} // IDs of paused runs, which hold a slot until they end
+	paused    map[string]pausedSlot // per-pause slots survive collection of their interaction
 	lastSweep time.Time
-}{list: list.New(), paused: map[string]struct{}{}}
+}{list: list.New(), paused: map[string]pausedSlot{}}
 
 // register opens i; false when MaxOpenInteractions is reached. A restore of a run that holds a
 // slot here (paused in this process) takes it over; any other restore is admitted like a new run.
@@ -106,7 +115,14 @@ func unregister(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	delete(open.paused, i.id)
+	releasePausedSlotLocked(i)
+}
+
+// releasePausedSlotLocked frees the paused slot i holds, not one another run under its ID holds.
+func releasePausedSlotLocked(i *Interaction) {
+	if slot, held := open.paused[i.pauseToken]; held && slot.interaction.Value() == i {
+		delete(open.paused, i.pauseToken)
+	}
 }
 
 // holdPausedSlot keeps a paused run counted toward MaxOpenInteractions, off the TTL list. The
@@ -118,17 +134,23 @@ func holdPausedSlot(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	open.paused[i.id] = struct{}{}
+	i.pauseToken = uuid.NewString()
+	open.paused[i.pauseToken] = pausedSlot{id: i.id, interaction: weak.Make(i)}
 }
 
-// takePausedSlot moves a paused run's slot to i; false when this process holds none for its ID.
+// takePausedSlot moves a paused run's slot to i, which continues it: contexts carrying the paused
+// run then report into i. Only the exact pause named by the snapshot can supply the slot.
 func takePausedSlot(i *Interaction) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	if _, held := open.paused[i.id]; !held {
+	slot, held := open.paused[i.pauseToken]
+	if !held || slot.id != i.id {
 		return false
 	}
-	delete(open.paused, i.id)
+	delete(open.paused, i.pauseToken)
+	// The slot survives even if only the snapshot remains. Link saved contexts only when
+	// their original interaction is still reachable.
+	slot.interaction.Value().continueAs(i)
 	if i.elem == nil {
 		i.opened = time.Now()
 		i.elem = open.list.PushBack(i)
@@ -141,7 +163,7 @@ func takePausedSlot(i *Interaction) bool {
 func reopen(i *Interaction) {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	delete(open.paused, i.id)
+	releasePausedSlotLocked(i)
 	if i.elem == nil {
 		i.opened = time.Now()
 		i.elem = open.list.PushBack(i)
@@ -210,7 +232,7 @@ func resetOpenForTest() {
 	defer open.mu.Unlock()
 	// A new list: interactions of earlier tests that end later are not on it.
 	open.list = list.New()
-	open.paused = map[string]struct{}{}
+	open.paused = map[string]pausedSlot{}
 	open.lastSweep = time.Time{}
 }
 
