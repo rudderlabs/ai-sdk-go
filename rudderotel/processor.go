@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"weak"
 
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -26,9 +25,9 @@ func key(s trace.SpanContext) spanKey { return spanKey{s.TraceID(), s.SpanID()} 
 
 type spanState struct {
 	tags map[string]string
-	// Identity survives its request; an open span must not keep a dropped paused run alive.
-	owner      weak.Pointer[rudderstackai.Interaction]
-	ownerID    string
+	// Product spans pin their resolved owner until End, even if the request pauses
+	// and drops its context. finish never copies this reference into the parent cache.
+	owner      *rudderstackai.Interaction
 	suppressed bool
 }
 
@@ -179,6 +178,12 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 		if owner != nil {
 			interaction = owner.(*rudderstackai.Interaction)
 		}
+		var productOwner *rudderstackai.Interaction
+		if p.options.ProductEvents {
+			// Pin explicit routing before dedup filters can run app code, including
+			// spans that are not AI yet. The ambient owner cannot override a named one.
+			productOwner = resolveProductOwner(firstString(own, InteractionIDAttribute), interaction)
+		}
 		if p.options.ProductEvents && interaction != nil && (firstString(own, InteractionIDAttribute) == "" || firstString(own, InteractionIDAttribute) == interaction.ID()) && spanRole(s) != "" && !interaction.Ended() {
 			interaction.Resume()
 		}
@@ -204,14 +209,10 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 				p.dedup(ctx, s, routed)
 			}
 		}
-		ownerID := ""
-		if interaction != nil {
-			ownerID = interaction.ID()
-		}
-		p.remember(key(s.SpanContext()), spanState{tags: held, owner: weak.Make(interaction), ownerID: ownerID})
 		if p.options.ProductEvents {
-			p.recordAncestry(s, interaction)
+			p.recordAncestry(s, productOwner)
 		}
+		p.remember(key(s.SpanContext()), spanState{tags: held, owner: productOwner})
 		p.inner.OnStart(ctx, s)
 	})
 }
@@ -250,13 +251,13 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 			s = taggedSpan{ReadOnlySpan: s, attrs: attrs}
 		}
 		if p.options.ProductEvents {
-			owner := state.owner.Value()
-			// An expired owner is not an unknown owner: looking up its reused ID would
-			// deliver this span's calls and content into another tenant's interaction.
-			id := firstString(attributes(s.Attributes()), InteractionIDAttribute)
-			if owner != nil || state.ownerID == "" || id != state.ownerID {
-				safe("tracing.productEvents", func() { p.recordAncestry(s, owner); recordSpan(s, p.exporter.client, owner) })
+			owner := state.owner
+			// Only a genuinely unknown owner may be resolved at end. A known
+			// owner's pause, end, or ID reuse never changes this span's routing.
+			if owner == nil {
+				owner = resolveProductOwner(firstString(attributes(s.Attributes()), InteractionIDAttribute), nil)
 			}
+			safe("tracing.productEvents", func() { p.recordAncestry(s, owner); recordSpan(s, p.exporter.client, owner) })
 		}
 		if !drop {
 			if own != nil || parent != nil {
@@ -309,13 +310,7 @@ func (p *SpanProcessor) Shutdown(ctx context.Context) error {
 
 func (p *SpanProcessor) recordAncestry(s sdktrace.ReadOnlySpan, owner *rudderstackai.Interaction) {
 	id := firstString(attributes(s.Attributes()), InteractionIDAttribute)
-	if id != "" && (owner == nil || owner.ID() != id) {
-		owner = nil
-		if found := hook.Tracing.Open(id); found != nil {
-			owner = found.(*rudderstackai.Interaction)
-		}
-	}
-	if owner == nil {
+	if owner == nil || (id != "" && owner.ID() != id) {
 		return
 	}
 	parent := ""

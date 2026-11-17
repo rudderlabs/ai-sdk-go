@@ -14,11 +14,12 @@ import (
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
 
+// Without product recording, even an in-flight span must not retain its owner.
 func TestPausedSnapshotDoesNotRetainSpanOwner(t *testing.T) {
 	for _, mode := range []string{"identity", "dedup", "finished-wrapper"} {
 		for _, simple := range []bool{true, false} {
 			t.Run(fmt.Sprintf("%s/simple=%v", mode, simple), func(t *testing.T) {
-				provider, p, events := testProvider(t, Options{Simple: simple, ProductEvents: true})
+				provider, p, events := testProvider(t, Options{Simple: simple})
 				configureSpans(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxOpenInteractions: 2}), rudderstackai.WithEmitSpans(mode != "identity"))
 				snapshot, ownerRef, span := func() (rudderstackai.PausedInteraction, weak.Pointer[rudderstackai.Interaction], trace.Span) {
 					ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: "shared", UserID: "tenant-a", Classify: rudderstackai.Ptr(false)})
