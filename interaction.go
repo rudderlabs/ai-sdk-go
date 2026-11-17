@@ -425,6 +425,7 @@ type recordedCall struct {
 	spanSource                                       *hook.SpanSource
 	callEventEmitted                                 bool
 	answerText                                       string
+	answerFiltered                                   bool
 	spanID                                           string
 	startedAt, endedAt                               time.Time
 	fromSpan, twinMatched, usageUnknown              bool

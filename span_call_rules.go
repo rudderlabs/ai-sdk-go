@@ -306,6 +306,7 @@ func (i *Interaction) filterSpanCallsLocked() {
 	}
 	for _, c := range before {
 		if skipped[c] {
+			c.answerFiltered = true
 			c.answerText = ""
 			c.content = nil
 			c.callEventPending = false
@@ -319,6 +320,10 @@ func (i *Interaction) filterSpanCallsLocked() {
 func (i *Interaction) captureResponseLocked(explicit string, freeze bool) (text string, ok bool) {
 	i.filterSpanCallsLocked()
 	selected := first(explicit, i.spanAnswer)
+	var source *recordedCall
+	if explicit == "" {
+		source = i.spanAnswerSource
+	}
 	drained := 0
 	for {
 		captured := selected
@@ -337,8 +342,11 @@ func (i *Interaction) captureResponseLocked(explicit string, freeze bool) (text 
 		}
 		i.filterSpanCallsLocked()
 		selected = first(explicit, i.spanAnswer)
-		if freeze {
+		// Only filtering the frozen answer's own call permits pause-time replacement.
+		if freeze && (source == nil || !source.answerFiltered) {
 			selected = captured
+		} else {
+			source = i.spanAnswerSource
 		}
 		if selected == captured {
 			break
