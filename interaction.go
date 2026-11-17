@@ -541,7 +541,9 @@ type Interaction struct {
 	untracked bool
 	// opened and elem place it among the open interactions (guarded by open.mu).
 	opened time.Time
-	elem   *list.Element
+	// ownerOrder preserves lookup precedence across pause and resume (guarded by open.mu).
+	ownerOrder uint64
+	elem       *list.Element
 
 	mu sync.Mutex
 	// started is the start of the current segment: the run, or its latest resume.

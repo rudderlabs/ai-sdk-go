@@ -2,10 +2,14 @@ package rudderstackai
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+	"weak"
 
 	"github.com/dlclark/regexp2"
 	analytics "github.com/rudderlabs/analytics-go/v4"
@@ -334,4 +338,98 @@ func TestRestoreOfForeignPausedRunGoesThroughAdmission(t *testing.T) {
 		t.Fatal("uncounted restore refused with room")
 	}
 	ok.End(EndOptions{})
+}
+
+func TestPausedSlotsCountOwnersWithSharedID(t *testing.T) {
+	setupAI(t, WithLimits(Limits{MaxOpenInteractions: 2}))
+	start := func(user string) *Interaction {
+		_, i := StartInteraction(context.Background(), InteractionOptions{InteractionID: "shared", UserID: user, NoPromptEvent: true})
+		return i
+	}
+	a, b := start("a"), start("b")
+	defer a.End(EndOptions{})
+	defer b.End(EndOptions{})
+	a.Pause(PauseOptions{})
+	b.Pause(PauseOptions{})
+	if c := start("c"); !c.Ended() {
+		c.End(EndOptions{})
+		t.Fatal("shared-ID paused owners must each hold a slot")
+	}
+	a.Resume()
+	if c := start("c"); !c.Ended() {
+		c.End(EndOptions{})
+		t.Fatal("resuming A freed B's slot")
+	}
+	a.End(EndOptions{})
+	c := start("c")
+	defer c.End(EndOptions{})
+	if c.Ended() {
+		t.Fatal("ending A did not free exactly its slot")
+	}
+	if d := start("d"); !d.Ended() {
+		d.End(EndOptions{})
+		t.Fatal("ending A freed paused B's slot")
+	}
+}
+
+func TestRestoreSharedIDCannotTakeForeignPausedSlot(t *testing.T) {
+	for _, field := range []string{"conversation", "user", "anonymous"} {
+		t.Run(field, func(t *testing.T) {
+			a, snapshot := pausedSlotsFixture(t)
+			defer a.End(EndOptions{})
+			switch field {
+			case "conversation":
+				snapshot.ConversationID = "another-conversation"
+			case "user":
+				snapshot.UserID = "another-user"
+			case "anonymous":
+				snapshot.AnonymousID = "another-anonymous-user"
+			}
+			_, foreign := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshot})
+			defer foreign.End(EndOptions{})
+			if !foreign.Ended() {
+				t.Fatal("shared ID let a foreign restore take A's slot")
+			}
+		})
+	}
+}
+
+func TestPausedSharedIDOwnersRemainWeakAndRestoreAfterGC(t *testing.T) {
+	setupAI(t, WithLimits(Limits{MaxOpenInteractions: 2}))
+	var snapshots [2]PausedInteraction
+	var refs [2]weak.Pointer[Interaction]
+	for n := range snapshots {
+		snapshots[n], refs[n] = func() (PausedInteraction, weak.Pointer[Interaction]) {
+			_, i := StartInteraction(context.Background(), InteractionOptions{InteractionID: "shared", UserID: fmt.Sprintf("tenant-%d", n), Classify: Ptr(false)})
+			snapshot, ok := i.Pause(PauseOptions{})
+			if !ok {
+				t.Fatal("pause failed")
+			}
+			return snapshot, weak.Make(i)
+		}()
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for refs[0].Value() != nil || refs[1].Value() != nil {
+		if time.Now().After(deadline) {
+			t.Fatal("paused registry retained an owner")
+		}
+		runtime.GC()
+		time.Sleep(time.Millisecond)
+	}
+	for n, snapshot := range snapshots {
+		var stored PausedInteraction
+		if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+			t.Fatal(err)
+		}
+		_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+		defer restored.End(EndOptions{})
+		if restored.Ended() || restored.userID != fmt.Sprintf("tenant-%d", n) {
+			t.Fatal("restore did not take its own collected owner's slot")
+		}
+	}
+	_, extra := StartInteraction(context.Background(), InteractionOptions{UserID: "extra"})
+	defer extra.End(EndOptions{})
+	if !extra.Ended() {
+		t.Fatal("restores changed the total number of counted slots")
+	}
 }

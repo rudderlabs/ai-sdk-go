@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 func privateOwnerAttrs() []attribute.KeyValue {
@@ -238,6 +239,199 @@ func TestPausedInFlightSpanOwnerDelivery(t *testing.T) {
 					}
 					runtime.KeepAlive(snapshot)
 					runtime.KeepAlive(span)
+				})
+			}
+		}
+	}
+}
+
+// An unrelated tenant's completed run must not remove the still-live paused owner.
+func TestReviewPausedOwnerSurvivesForeignEnd(t *testing.T) {
+	for _, simple := range []bool{true, false} {
+		for _, emit := range []bool{false, true} {
+			for _, ambient := range []bool{false, true} {
+				t.Run(fmt.Sprintf("simple=%v/emit=%v/ambient=%v", simple, emit, ambient), func(t *testing.T) {
+					provider, p, _ := testProvider(t, Options{Simple: simple, ProductEvents: true, CaptureContent: rudderstackai.Ptr(true)})
+					configureSpans(t, rudderstackai.WithEmitSpans(emit), rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true))
+					clientA, eventsA := recorder(t)
+					clientB, _ := recorder(t)
+					clientC, eventsC := recorder(t)
+					_, a := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: "shared", UserID: "tenant-a", Analytics: clientA, Classify: rudderstackai.Ptr(false)})
+					defer a.End(rudderstackai.EndOptions{})
+					if _, ok := a.Pause(rudderstackai.PauseOptions{}); !ok {
+						t.Fatal("pause failed")
+					}
+					_, b := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: "shared", UserID: "tenant-b", Analytics: clientB, Classify: rudderstackai.Ptr(false)})
+					b.End(rudderstackai.EndOptions{})
+					ctx := context.Background()
+					if ambient {
+						var foreign *rudderstackai.Interaction
+						ctx, foreign = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{InteractionID: "foreign", UserID: "foreign", Classify: rudderstackai.Ptr(false)})
+						defer foreign.End(rudderstackai.EndOptions{})
+					}
+					_, span := provider.Tracer("review").Start(ctx, "a-private", trace.WithAttributes(append(privateOwnerAttrs(), attribute.String(InteractionIDAttribute, "shared"))...))
+					_, c := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: "shared", UserID: "tenant-c", Analytics: clientC, Classify: rudderstackai.Ptr(false)})
+					span.End()
+					a.End(rudderstackai.EndOptions{})
+					c.End(rudderstackai.EndOptions{})
+					if err := p.ForceFlush(context.Background()); err != nil {
+						t.Fatal(err)
+					}
+					for _, e := range eventsC() {
+						if e["event"] == "ai_llm_response_received" || strings.Contains(render(e), "tenant-a-secret") {
+							t.Errorf("C received A private output: %s", render(e))
+						}
+					}
+					calls := 0
+					for _, e := range eventsA() {
+						if e["event"] == "ai_llm_response_received" {
+							calls++
+						}
+					}
+					if calls != 1 {
+						t.Errorf("A calls=%d, want 1", calls)
+					}
+				})
+			}
+		}
+	}
+}
+
+// Completing A's in-flight call must not reclaim B's reused ID before B's next call.
+func TestReviewPinnedResumePreservesReplacementSpan(t *testing.T) {
+	for _, simple := range []bool{true, false} {
+		for _, emit := range []bool{false, true} {
+			for _, replacementPaused := range []bool{false, true} {
+				for _, ambient := range []string{"none", "foreign", "matching"} {
+					t.Run(fmt.Sprintf("simple=%v/emit=%v/replacement-paused=%v/ambient=%v", simple, emit, replacementPaused, ambient), func(t *testing.T) {
+						provider, p, _ := testProvider(t, Options{Simple: simple, ProductEvents: true, CaptureContent: rudderstackai.Ptr(true)})
+						configureSpans(t, rudderstackai.WithEmitSpans(emit), rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true))
+						clientA, eventsA := recorder(t)
+						clientB, eventsB := recorder(t)
+						_, a := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: "shared", UserID: "tenant-a", Analytics: clientA, Classify: rudderstackai.Ptr(false)})
+						_, first := provider.Tracer("review").Start(context.Background(), "a-private", trace.WithAttributes(append(privateOwnerAttrs(), attribute.String(InteractionIDAttribute, "shared"))...))
+						a.Pause(rudderstackai.PauseOptions{})
+						bctx, b := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: "shared", UserID: "tenant-b", Analytics: clientB, Classify: rudderstackai.Ptr(false)})
+						if replacementPaused {
+							b.Pause(rudderstackai.PauseOptions{})
+						}
+						first.End()
+						ctx := context.Background()
+						if ambient == "matching" {
+							ctx = bctx
+						} else if ambient == "foreign" {
+							var foreign *rudderstackai.Interaction
+							ctx, foreign = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{InteractionID: "foreign", UserID: "foreign", Classify: rudderstackai.Ptr(false)})
+							defer foreign.End(rudderstackai.EndOptions{})
+						}
+						_, second := provider.Tracer("review").Start(ctx, "b-private", trace.WithAttributes(append(privateOwnerAttrs(), attribute.String(InteractionIDAttribute, "shared"), attribute.String("gen_ai.output.messages", `[{"role":"assistant","parts":[{"type":"text","content":"tenant-b-secret"}]}]`))...))
+						second.End()
+						a.End(rudderstackai.EndOptions{})
+						b.End(rudderstackai.EndOptions{})
+						if err := p.ForceFlush(context.Background()); err != nil {
+							t.Fatal(err)
+						}
+						for _, e := range eventsA() {
+							if strings.Contains(render(e), "tenant-b-secret") {
+								t.Errorf("A received B private output: %s", render(e))
+							}
+						}
+						for _, e := range eventsB() {
+							if strings.Contains(render(e), "tenant-a-secret") {
+								t.Errorf("B received A private output: %s", render(e))
+							}
+						}
+						for _, events := range []func() []object{eventsA, eventsB} {
+							calls := 0
+							for _, e := range events() {
+								if e["event"] == "ai_llm_response_received" {
+									calls++
+								}
+							}
+							if calls != 1 {
+								t.Errorf("tenant calls=%d, want 1", calls)
+							}
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func TestSequentialIDsAcrossThreeTenants(t *testing.T) {
+	for _, simple := range []bool{true, false} {
+		for _, emit := range []bool{false, true} {
+			for _, ambient := range []bool{false, true} {
+				t.Run(fmt.Sprintf("simple=%v/emit=%v/foreign-ambient=%v", simple, emit, ambient), func(t *testing.T) {
+					provider, p, _ := testProvider(t, Options{Simple: simple, ProductEvents: true, CaptureContent: rudderstackai.Ptr(true)})
+					configureSpans(t, rudderstackai.WithEmitSpans(emit), rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true))
+					clients := make([]analytics.Client, 3)
+					events := make([]func() []object, 3)
+					for tenant := range clients {
+						clients[tenant], events[tenant] = recorder(t)
+					}
+					ctx := context.Background()
+					if ambient {
+						var foreign *rudderstackai.Interaction
+						ctx, foreign = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{InteractionID: "ambient", UserID: "foreign", Classify: rudderstackai.Ptr(false)})
+						defer foreign.End(rudderstackai.EndOptions{})
+					}
+					for _, id := range []string{"1", "2"} {
+						start := func(tenant int) *rudderstackai.Interaction {
+							_, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: id, UserID: fmt.Sprintf("tenant-%d", tenant), Analytics: clients[tenant], Classify: rudderstackai.Ptr(false)})
+							t.Cleanup(func() { i.End(rudderstackai.EndOptions{}) })
+							return i
+						}
+						pause := func(i *rudderstackai.Interaction) {
+							if _, ok := i.Pause(rudderstackai.PauseOptions{}); !ok {
+								t.Fatal("pause failed")
+							}
+						}
+						span := func(tenant int) trace.Span {
+							attrs := append(privateOwnerAttrs(), attribute.String(InteractionIDAttribute, id), attribute.String("gen_ai.output.messages", fmt.Sprintf(`[{"role":"assistant","parts":[{"type":"text","content":"tenant-%d-secret"}]}]`, tenant)))
+							_, s := provider.Tracer("async").Start(ctx, "private", trace.WithAttributes(attrs...))
+							return s
+						}
+						a := start(0)
+						first := span(0)
+						pause(a)
+						b := start(1)
+						pause(b)
+						first.End() // Resumes A without reclaiming B's lookup.
+						second := span(1)
+						c := start(2)
+						pause(c)
+						second.End()                      // Resumes B without reclaiming paused C.
+						b.End(rudderstackai.EndOptions{}) // Must preserve paused C.
+						third := span(2)
+						a.End(rudderstackai.EndOptions{})
+						third.End()
+						c.End(rudderstackai.EndOptions{})
+					}
+					if err := p.ForceFlush(context.Background()); err != nil {
+						t.Fatal(err)
+					}
+					for tenant, recorded := range events {
+						calls := 0
+						for _, e := range recorded() {
+							for foreign := range events {
+								if foreign != tenant && strings.Contains(render(e), fmt.Sprintf("tenant-%d-secret", foreign)) {
+									t.Errorf("tenant %d received tenant %d output: %s", tenant, foreign, render(e))
+								}
+							}
+							if e["event"] == "ai_llm_response_received" {
+								calls++
+								if !strings.Contains(render(e), fmt.Sprintf("tenant-%d-secret", tenant)) {
+									t.Errorf("owner lost private output: %s", render(e))
+								}
+							}
+						}
+						want := 2
+						if calls != want {
+							t.Errorf("tenant %d calls=%d, want %d", tenant, calls, want)
+						}
+					}
 				})
 			}
 		}
