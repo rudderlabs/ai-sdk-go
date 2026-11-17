@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 	"strconv"
 	"strings"
@@ -307,5 +308,57 @@ func TestJoinInteractionNeverJoinsAPausingInteraction(t *testing.T) {
 	}
 	if FromContext(JoinInteraction(context.Background(), i.ID(), JoinOptions{})) == i {
 		t.Error("a paused interaction was joinable")
+	}
+}
+
+// gateHandler blocks the JoinInteraction parent warning until release closes, as a slow
+// slog.Handler would.
+type gateHandler struct{ entered, release chan struct{} }
+
+func (h *gateHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *gateHandler) Handle(_ context.Context, r slog.Record) error {
+	if strings.Contains(r.Message, "JoinInteraction: ParentSpanID") {
+		close(h.entered)
+		<-h.release
+	}
+	return nil
+}
+func (h *gateHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *gateHandler) WithGroup(string) slog.Handler      { return h }
+
+// The warning logger is app code: a target paused, ended or replaced under its ID while it runs
+// is not joined, and the caller's context comes back.
+func TestJoinInteractionRechecksTheTargetAfterTheWarning(t *testing.T) {
+	for _, change := range []string{"pause", "end", "replace"} {
+		t.Run(change, func(t *testing.T) {
+			setupAI(t, WithEmitSpans(true))
+			rearmJoinWarnings()
+			gate := &gateHandler{entered: make(chan struct{}), release: make(chan struct{})}
+			prev := slog.Default()
+			slog.SetDefault(slog.New(gate))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+			caller, original := StartInteraction(context.Background(), InteractionOptions{UserID: "original", Classify: Ptr(false)})
+			defer original.End(EndOptions{})
+			_, target := StartInteraction(context.Background(), InteractionOptions{UserID: "joined", Classify: Ptr(false)})
+			defer target.End(EndOptions{})
+			out := make(chan context.Context, 1)
+			go func() { out <- JoinInteraction(caller, target.ID(), JoinOptions{ParentSpanID: "invalid"}) }()
+			<-gate.entered
+			switch change {
+			case "pause":
+				if _, ok := target.Pause(PauseOptions{}); !ok {
+					t.Fatal("pause failed")
+				}
+			case "end":
+				target.End(EndOptions{})
+			case "replace":
+				_, newer := StartInteraction(context.Background(), InteractionOptions{InteractionID: target.ID(), UserID: "newer", Classify: Ptr(false)})
+				defer newer.End(EndOptions{})
+			}
+			close(gate.release)
+			if got := FromContext(<-out); got != original {
+				t.Errorf("joined %p after the target changed, want the caller's %p", got, original)
+			}
+		})
 	}
 }

@@ -47,6 +47,10 @@ func JoinInteraction(ctx context.Context, interactionID string, o JoinOptions) (
 	}
 	if !validSDKSpanID(o.ParentSpanID) {
 		warnOnce("join:parent", "JoinInteraction: ParentSpanID must be 16 lowercase hex characters, not all zero; ignored", joinWarnEvery)
+		// The logger is app code: the target may have paused, ended or been replaced meanwhile.
+		if openByID(interactionID) != i || !i.joinable() {
+			return ctx
+		}
 		return joined
 	}
 	return context.WithValue(joined, sdkSpanKey{}, joinedParent(i, o.ParentSpanID))
@@ -61,6 +65,13 @@ func joinedParent(i *Interaction, spanID string) *Span {
 	traceID := i.sdkTraceID
 	i.mu.Unlock()
 	return &Span{TraceID: traceID, SpanID: spanID, interaction: i, seq: spanSeq.Add(1)}
+}
+
+// joinable reports, under its lock, that it is neither pausing, paused nor ended.
+func (i *Interaction) joinable() bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return !i.ended && !i.pausing && i.pausedAt.IsZero()
 }
 
 // joinScope is the context values a join restores: the scope the interaction started in, with
