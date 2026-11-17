@@ -4631,6 +4631,767 @@
           }
         }
       ]
+    },
+    {
+      "name": "interrupt_names_primary_thread",
+      "description": "A user.interrupt naming a thread the stream never named as a subagent's: the Managed Agents docs let it name the primary thread, so it interrupts this turn.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_primint_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_primint_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            },
+            {
+              "id": "sevt_primint_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_primint_04",
+              "processed_at": "2026-11-16T10:00:00.560000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Partial"
+                }
+              ]
+            },
+            {
+              "id": "sevt_primint_05",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_primint_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_primint_06",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "user.interrupt",
+              "session_thread_id": "sthr_primary"
+            },
+            {
+              "id": "sevt_primint_07",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000002,
+            "error_type": "cancelled",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000002
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "unknown_thread_usage",
+      "description": "A model request naming a thread never named as a subagent's counts once in this turn, also when its event is read twice.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_unkuse_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_unkuse_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            },
+            {
+              "id": "sevt_unkuse_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_unkuse_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_unkuse_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_unkuse_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "span.model_request_start",
+              "session_thread_id": "sthr_unknown"
+            },
+            {
+              "id": "sevt_unkuse_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_unkuse_05",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 20,
+                "output_tokens": 4,
+                "speed": "standard"
+              },
+              "session_thread_id": "sthr_unknown"
+            },
+            {
+              "id": "sevt_unkuse_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_unkuse_05",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 20,
+                "output_tokens": 4,
+                "speed": "standard"
+              },
+              "session_thread_id": "sthr_unknown"
+            },
+            {
+              "id": "sevt_unkuse_07",
+              "processed_at": "2026-11-16T10:00:00.910000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 2,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 6,
+            "total_tokens": 36,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000006,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 2,
+                "input_tokens": 30,
+                "output_tokens": 6,
+                "total_tokens": 36,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000006
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "child_known_from_status",
+      "description": "A subagent thread known only from a thread status event naming it: its model request and an interrupt aimed at it are not this turn's.",
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_kidstat_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_kidstat_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            },
+            {
+              "id": "sevt_kidstat_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "session.thread_status_running",
+              "session_thread_id": "sthr_kid",
+              "agent_name": "researcher"
+            },
+            {
+              "id": "sevt_kidstat_04",
+              "processed_at": "2026-11-16T10:00:00.310000Z",
+              "type": "span.model_request_start",
+              "session_thread_id": "sthr_kid"
+            },
+            {
+              "id": "sevt_kidstat_05",
+              "processed_at": "2026-11-16T10:00:00.410000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_kidstat_04",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 50,
+                "output_tokens": 9,
+                "speed": "standard"
+              },
+              "session_thread_id": "sthr_kid"
+            },
+            {
+              "id": "sevt_kidstat_06",
+              "processed_at": "2026-11-16T10:00:00.510000Z",
+              "type": "user.interrupt",
+              "session_thread_id": "sthr_kid"
+            },
+            {
+              "id": "sevt_kidstat_07",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_kidstat_08",
+              "processed_at": "2026-11-16T10:00:00.960000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Done"
+                }
+              ]
+            },
+            {
+              "id": "sevt_kidstat_09",
+              "processed_at": "2026-11-16T10:00:01.010000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_kidstat_07",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_kidstat_10",
+              "processed_at": "2026-11-16T10:00:01.110000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000002,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000002
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "evicted_child_interrupt",
+      "description": "With limits.max_map_entries 3, three newer subagent threads evict the first one: an interrupt naming it is then an unknown thread's, so it interrupts this turn (the documented bound).",
+      "options": {
+        "max_map_entries": 3
+      },
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_evict_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_evict_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello"
+                }
+              ]
+            },
+            {
+              "id": "sevt_evict_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "session.thread_created",
+              "session_thread_id": "sthr_old",
+              "agent_name": "a",
+              "workflow_run_id": null
+            },
+            {
+              "id": "sevt_evict_04",
+              "processed_at": "2026-11-16T10:00:00.310000Z",
+              "type": "session.thread_created",
+              "session_thread_id": "sthr_new0",
+              "agent_name": "b",
+              "workflow_run_id": null
+            },
+            {
+              "id": "sevt_evict_05",
+              "processed_at": "2026-11-16T10:00:00.410000Z",
+              "type": "session.thread_created",
+              "session_thread_id": "sthr_new1",
+              "agent_name": "b",
+              "workflow_run_id": null
+            },
+            {
+              "id": "sevt_evict_06",
+              "processed_at": "2026-11-16T10:00:00.510000Z",
+              "type": "session.thread_created",
+              "session_thread_id": "sthr_new2",
+              "agent_name": "b",
+              "workflow_run_id": null
+            },
+            {
+              "id": "sevt_evict_07",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_evict_08",
+              "processed_at": "2026-11-16T10:00:01.010000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_evict_07",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_evict_09",
+              "processed_at": "2026-11-16T10:00:01.110000Z",
+              "type": "user.interrupt",
+              "session_thread_id": "sthr_old"
+            },
+            {
+              "id": "sevt_evict_10",
+              "processed_at": "2026-11-16T10:00:01.210000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 10,
+            "total_output_tokens": 2,
+            "total_tokens": 12,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000002,
+            "error_type": "cancelled",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 2,
+                "total_tokens": 12,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000002
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "prompt_after_pause",
+      "description": "A paused session's next stream starts with a new prompt. The API rejects a user.message while the session waits on the app, so the paused turn ended off this stream: its answer ends cancelled (the core's rule decides the tool it waited on) and the prompt opens a new answer.",
+      "options": {
+        "tool_breakdown": true
+      },
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_promptpause_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_promptpause_02",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Weather?"
+                }
+              ]
+            },
+            {
+              "id": "sevt_promptpause_03",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_promptpause_04",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_promptpause_03",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_promptpause_05",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "agent.custom_tool_use",
+              "name": "get_weather",
+              "input": {
+                "city": "Paris"
+              }
+            },
+            {
+              "id": "sevt_promptpause_06",
+              "processed_at": "2026-11-16T10:00:00.810000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_promptpause_05"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "events": [
+            {
+              "id": "sevt_promptpause_07",
+              "processed_at": "2026-11-16T10:00:00.910000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Next question"
+                }
+              ]
+            },
+            {
+              "id": "sevt_promptpause_08",
+              "processed_at": "2026-11-16T10:00:00.920000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_promptpause_09",
+              "processed_at": "2026-11-16T10:00:01.020000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_promptpause_10",
+              "processed_at": "2026-11-16T10:00:01.370000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Answer"
+                }
+              ]
+            },
+            {
+              "id": "sevt_promptpause_11",
+              "processed_at": "2026-11-16T10:00:01.420000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_promptpause_09",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_promptpause_12",
+              "processed_at": "2026-11-16T10:00:01.520000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "paused",
+            "pause_reason": "deferred_tool",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ]
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "llm_call_count": 0,
+            "tool_call_count": 1,
+            "error_type": "cancelled",
+            "tool_breakdown": [
+              {
+                "tool_name": "get_weather",
+                "call_count": 1
+              }
+            ],
+            "pause_count": 1
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "B",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "B",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 12,
+            "total_output_tokens": 3,
+            "total_tokens": 15,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0000027,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "total_tokens": 15,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.0000027
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

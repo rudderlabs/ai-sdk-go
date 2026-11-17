@@ -243,6 +243,9 @@ var sessionErrors = map[string]string{
 	"repository_clone_error":            "invalid_request",
 }
 
+// promptEvents start a new user turn.
+var promptEvents = map[string]bool{"user.message": true, "user.define_outcome": true}
+
 // settleEvents settle work already in progress: a turn they open continues an earlier one.
 var settleEvents = map[string]bool{
 	"user.custom_tool_result": true, "user.tool_confirmation": true, "user.tool_result": true, "user.interrupt": true,
@@ -454,15 +457,21 @@ func (s *sessionTracker) observe(raw string) {
 	at := timeOf(e)
 	thread := str(e["session_thread_id"])
 	// Agent and thread status events naming a thread are cross-posted from a subagent thread, so
-	// it is a child even when its session.thread_created was not read.
+	// it is a child even when its session.thread_created was not read. A thread no event named so
+	// is unknown, not a child: per the Managed Agents docs (multiagent sessions, "Interrupting with
+	// runs open"), "a user.interrupt with no session_thread_id, or naming the primary thread, stops
+	// the agent's turn", and the primary thread's own events name no thread.
 	if thread != "" && (strings.HasPrefix(kind, "agent.") || strings.HasPrefix(kind, "session.thread_")) {
 		childThreads.add(s.scope + thread)
 	}
-	// The app's answer to a subagent's tool, by the tool's ID (answers need not name the thread).
+	// The app's answer to a subagent's tool, by the tool's ID: the docs say to "answer with the
+	// tool_use_id or custom_tool_use_id alone", so answers need not name the thread.
 	answered := first(str(e["custom_tool_use_id"]), str(e["tool_use_id"]))
-	if (thread != "" && (strings.HasPrefix(kind, "agent.") || (strings.HasPrefix(kind, "user.") && childThreads.has(s.scope+thread)))) ||
+	child := thread != "" && childThreads.has(s.scope+thread)
+	if (thread != "" && (strings.HasPrefix(kind, "agent.") || (child && (strings.HasPrefix(kind, "user.") || strings.HasPrefix(kind, "span."))))) ||
 		(strings.HasPrefix(kind, "user.") && answered != "" && childTools.has(s.scope+answered)) {
-		// Cross-posted from a subagent thread (agent events), or aimed at one: not this thread's work.
+		// Cross-posted from a subagent thread (agent events, a known child's requests), or aimed at
+		// one: not this thread's work. An unknown thread's request counts here, once.
 		if id != "" && strings.HasPrefix(kind, "agent.") && strings.HasSuffix(kind, "tool_use") {
 			childTools.add(s.scope + id)
 		}
@@ -611,8 +620,13 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 		}
 		// A turn that settles earlier work continues it, also when the settling event was sent
 		// before this stream opened (the paused turn is then the only trace of it).
-		// A paused session's next stream continues its turn even when it starts with a prompt echo.
-		continuation := settleEvents[kind] || s.hasPausedTurn()
+		// Per the Managed Agents docs, "while the session is idle with requires_action, a
+		// user.message returns 400, so answer the calls first": a prompt after a pause means the
+		// paused turn was answered and ended off this stream. Its answer ends; the prompt's is new.
+		if promptEvents[kind] {
+			s.endPaused()
+		}
+		continuation := settleEvents[kind] || (!promptEvents[kind] && s.hasPausedTurn())
 		t = &turn{
 			startAt: start, continuation: continuation, tools: map[string]*turnTool{},
 			starts:   newBoundedMap[msTime]("claude-managed-agents starts"),
@@ -662,6 +676,34 @@ func (s *sessionTracker) adoptBorrowed(t *turn) {
 	if open != nil {
 		t.recorded, t.blocking = open.recorded, open.blocking
 	}
+}
+
+// endPaused ends this session's paused answer, which can no longer continue, through the core's
+// end path: the core decides how a tool the pause left waiting counts.
+func (s *sessionTracker) endPaused() {
+	if s.cfg.sessionID == "" {
+		return
+	}
+	pausedTurns.Lock()
+	paused := pausedTurns.m[s.cfg.sessionID]
+	delete(pausedTurns.m, s.cfg.sessionID)
+	pausedTurns.order = slices.DeleteFunc(pausedTurns.order, func(id string) bool { return id == s.cfg.sessionID })
+	pausedTurns.Unlock()
+	if paused == nil || paused.i.Ended() {
+		return
+	}
+	contain(func() {
+		calls := make([]rudderstackai.ToolCall, 0, len(paused.tools))
+		for _, tool := range paused.tools {
+			calls = append(calls, rudderstackai.ToolCall{
+				ID: tool.id, Name: tool.name, MCPServer: tool.mcpServer, AgentName: s.cfg.agentName, Args: tool.args,
+			})
+		}
+		if len(calls) > 0 {
+			paused.i.RecordToolCalls(calls...)
+		}
+		paused.i.End(rudderstackai.EndOptions{Status: rudderstackai.StatusCancelled, ErrorType: "cancelled"})
+	})
 }
 
 // resume resumes this session's paused answer now, with the tools it was waiting on.
