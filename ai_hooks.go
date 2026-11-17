@@ -37,6 +37,7 @@ func init() {
 		i.adopt(integration, nil)
 		return ctx, i
 	}
+	hook.StartPrompt = func(i any, opts any) { i.(*Interaction).startPrompt(opts.(InteractionOptions)) }
 	hook.Adopt = func(i any, integration string, client analytics.Client) { i.(*Interaction).adopt(integration, client) }
 	hook.PrimaryModel = func(i any, model, provider string) { i.(*Interaction).setPrimaryModel(model, provider) }
 	hook.KeepAnswer = func(i any, text string) { i.(*Interaction).keepAnswer(text) }

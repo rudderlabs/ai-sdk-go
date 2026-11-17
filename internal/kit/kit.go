@@ -55,6 +55,12 @@ func StartInteraction(ctx context.Context, o rudderstackai.InteractionOptions, i
 	return ctx, i.(*rudderstackai.Interaction)
 }
 
+// StartPrompt keeps o.PromptText for the classifier and sends the prompt event as StartInteraction
+// does, for an integration that learns the prompt after it started the interaction.
+func StartPrompt(i *rudderstackai.Interaction, o rudderstackai.InteractionOptions) {
+	hook.StartPrompt(i, o)
+}
+
 // Adopt tags an interaction with the integration and offers its client; the first of each wins.
 func Adopt(i *rudderstackai.Interaction, integration string, client analytics.Client) {
 	hook.Adopt(i, integration, client)

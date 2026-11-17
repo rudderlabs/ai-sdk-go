@@ -35,6 +35,10 @@ var (
 	// StartInteraction starts an interaction an integration opens after the fact (opts is an
 	// InteractionOptions): tagged with integration, offered client, started at startedAt.
 	StartInteraction func(ctx context.Context, opts any, integration string, client analytics.Client, startedAt time.Time) (context.Context, any)
+	// StartPrompt keeps the prompt text (opts.PromptText) and sends the prompt event as
+	// StartInteraction does, for an integration that learns the prompt after it started the
+	// interaction (opts is an InteractionOptions).
+	StartPrompt func(interaction any, opts any)
 	// Adopt tags an interaction with an integration and offers its client; the first of each wins.
 	Adopt func(interaction any, integration string, client analytics.Client)
 	// PrimaryModel sets primary_model and primary_provider unless a later call succeeds.

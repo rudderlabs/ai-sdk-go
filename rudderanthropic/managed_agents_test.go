@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1555,5 +1556,194 @@ func TestManagedAgentsCarriesABuiltInToolAPauseNamesAfterTheCallCap(t *testing.T
 				t.Fatalf("%v", breakdown)
 			}
 		})
+	}
+}
+
+// maAt is a server time ms after a fixed start.
+func maAt(ms int) string {
+	return fmt.Sprintf(`"processed_at":%q`, time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC).Add(time.Duration(ms)*time.Millisecond).Format("2006-01-02T15:04:05.000Z"))
+}
+
+func maDrain(events interface{ Next() bool }) {
+	for events.Next() {
+	}
+}
+
+func TestManagedAgentsSendsTheSameEventsAsAnInteractionRun(t *testing.T) {
+	shape := func(rec *recorder) [][2]string {
+		rudderstackai.Flush(context.Background())
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		var out [][2]string
+		for _, m := range rec.msgs {
+			keys := make([]string, 0, len(m.Properties))
+			for k := range m.Properties {
+				keys = append(keys, k)
+			}
+			slices.Sort(keys)
+			out = append(out, [2]string{m.Event, strings.Join(keys, ",")})
+		}
+		return out
+	}
+	_, rec := setup(t, rudderstackai.WithCaptureContent(true))
+	resetMA(t)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+		`{"id":"sevt_par_r","type":"session.status_running",`+maAt(0)+`}`,
+		`{"id":"sevt_par_u","type":"user.message","content":[{"type":"text","text":"Hi"}],`+maAt(1000)+`}`,
+		`{"id":"sevt_par_s","type":"span.model_request_start",`+maAt(2000)+`}`,
+		`{"id":"sevt_par_a","type":"agent.message","content":[{"type":"text","text":"Hello"}],`+maAt(3000)+`}`,
+		`{"id":"sevt_par_e","type":"span.model_request_end","is_error":false,"model_request_start_id":"sevt_par_s","model_usage":{"input_tokens":10,"output_tokens":2},`+maAt(4000)+`}`,
+		`{"id":"sevt_par_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+maAt(5000)+`}`,
+	), rudderanthropic.WithSession(rawJSON(`{"id":"sesn_parity","agent":{"model":"claude-haiku-5-5"}}`)),
+		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{UserID: "u"}))
+	maDrain(events)
+	viaAdapter := shape(rec)
+	_, rec = setup(t, rudderstackai.WithCaptureContent(true))
+	_, in := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u", ConversationID: "sesn_parity", PromptText: "Hi"})
+	in.RecordCall(rudderstackai.LLMCall{Provider: "anthropic", Model: "claude-haiku-5-5", InputTokens: 10, OutputTokens: 2, OutputText: "Hello"})
+	in.End(rudderstackai.EndOptions{Status: rudderstackai.StatusSuccess, ResponseText: "Hello"})
+	if viaInteraction := shape(rec); !reflect.DeepEqual(viaAdapter, viaInteraction) || len(viaAdapter) == 0 {
+		t.Fatalf("adapter     %v\ninteraction %v", viaAdapter, viaInteraction)
+	}
+}
+
+func TestManagedAgentsResolvesEverySettingWhenTheTurnStartsAtItsRunningEvent(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithIdentityFromCookies(false))
+	resetMA(t)
+	turn := func(prefix, first string) []string {
+		return []string{
+			`{"id":"` + prefix + `_f","type":"` + first + `",` + maAt(0) + `}`,
+			`{"id":"` + prefix + `_u","type":"user.message","content":[{"type":"text","text":"customer-secret"}],` + maAt(1000) + `}`,
+			`{"id":"` + prefix + `_a","type":"agent.message","content":[{"type":"text","text":"answer-secret"}],` + maAt(2000) + `}`,
+			`{"id":"` + prefix + `_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},` + maAt(3000) + `}`,
+		}
+	}
+	configure := func(on bool) {
+		if err := rudderstackai.Configure(rudderstackai.WithAnalytics(rec), rudderstackai.WithCaptureContent(on), rudderstackai.WithIdentityFromCookies(on)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Capture and cookie identity turned on after the turn's first event: neither applies to it.
+	for _, first := range []string{"session.status_running", "agent.thinking"} {
+		tracked := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t, turn("sevt_start_"+first, first)...),
+			rudderanthropic.WithSessionID("sesn_start_"+first),
+			rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{Cookies: "rl_anonymous_id=%22cookie-secret%22"}))
+		tracked.Next()
+		configure(true)
+		maDrain(tracked)
+		configure(false)
+	}
+	// The options as given: what the caller changes through a pointer after the call has no effect.
+	capture := rudderstackai.Ptr(false)
+	tracked := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t, turn("sevt_start_emit", "session.status_running")...),
+		rudderanthropic.WithSessionID("sesn_start_emit"),
+		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{NoPromptEvent: true, CaptureContent: capture}))
+	*capture = true
+	maDrain(tracked)
+	got := rec.events(t)
+	// The messages too: identity is on the message, not in the properties.
+	raw, _ := json.Marshal([]any{got, rec.msgs})
+	if len(got["ai_response_received"]) != 3 || len(got["ai_user_prompt_created"]) != 2 ||
+		strings.Contains(string(raw), "customer-secret") || strings.Contains(string(raw), "answer-secret") || strings.Contains(string(raw), "cookie-secret") {
+		t.Fatalf("%d answers, %d prompts: %s", len(got["ai_response_received"]), len(got["ai_user_prompt_created"]), raw)
+	}
+}
+
+func TestManagedAgentsKeepsARequestsStateAcrossAReconnectInTheCallersInteraction(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLLMCallEvents(true))
+	resetMA(t)
+	first := maEvents(t,
+		`{"id":"sevt_rq_u","type":"user.message","content":[],`+maAt(0)+`}`,
+		`{"id":"sevt_rq_s","type":"span.model_request_start",`+maAt(100)+`}`,
+		`{"id":"sevt_rq_x","type":"session.error","error":{"type":"model_rate_limited_error","message":"slow down","retry_status":{"type":"retrying"}},`+maAt(200)+`}`,
+	)
+	second := maEvents(t,
+		`{"id":"sevt_rq_e","type":"span.model_request_end","is_error":true,"model_request_start_id":"sevt_rq_s","model_usage":{"input_tokens":0,"output_tokens":0},`+maAt(2100)+`}`,
+		`{"id":"sevt_rq_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+maAt(2200)+`}`,
+	)
+	ctx, caller := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	for _, src := range []*sliceStream{first, second} {
+		events := rudderanthropic.TrackSessionEvents(ctx, src, rudderanthropic.WithSessionID("sesn_request_state"), rudderanthropic.WithSessionModel("claude-haiku-5-5"))
+		maDrain(events)
+		_ = events.Close()
+	}
+	caller.End(rudderstackai.EndOptions{Status: rudderstackai.StatusSuccess})
+	got := rec.events(t)["ai_llm_response_received"]
+	if len(got) != 1 || got[0]["error_type"] != "rate_limit" || got[0]["latency_ms"] != float64(2000) {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestManagedAgentsTimesAnOutcomeGraderCycleFromItsStartEvent(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLLMCallEvents(true))
+	resetMA(t)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+		`{"id":"sevt_gr_u","type":"user.message","content":[],`+maAt(0)+`}`,
+		`{"id":"sevt_gr_s","type":"span.outcome_evaluation_start","outcome_id":"o1","iteration":0,`+maAt(100)+`}`,
+		`{"id":"sevt_gr_e","type":"span.outcome_evaluation_end","outcome_evaluation_start_id":"sevt_gr_s","outcome_id":"o1","iteration":0,"result":"satisfied","usage":{"input_tokens":5,"output_tokens":1},`+maAt(2100)+`}`,
+		`{"id":"sevt_gr_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+maAt(2200)+`}`,
+	), rudderanthropic.WithSessionID("sesn_grader_time"))
+	maDrain(events)
+	got := rec.events(t)["ai_llm_response_received"]
+	if len(got) != 1 || got[0]["latency_ms"] != float64(2000) {
+		t.Fatalf("%v", got)
+	}
+}
+
+// The tool is in the core before the pause: its outcome after the pause needs the edge-cases D2
+// core change (pending tools across a pause). It passes, and this marker goes, when D2 lands.
+func TestManagedAgentsCarriesAToolAlreadyRecordedAtTheCallCapWhenAPauseNamesIt(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 2, MaxMapEntries: 1}))
+	resetMA(t)
+	first := maEvents(t,
+		`{"id":"sevt_rec_u","type":"user.message","content":[],`+maAt(0)+`}`,
+		`{"id":"sevt_rec_h","type":"agent.tool_use","name":"held","input":{},`+maAt(50)+`}`,
+		`{"id":"sevt_rec_t","type":"agent.tool_use","name":"bash","input":{},`+maAt(100)+`}`,
+		`{"id":"sevt_rec_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},`+maAt(150)+`}`,
+		`{"id":"sevt_rec_i","type":"session.status_idle","stop_reason":{"type":"requires_action","event_ids":["sevt_rec_t"]},`+maAt(200)+`}`,
+	)
+	second := maEvents(t,
+		`{"id":"sevt_rec_r","type":"user.tool_result","tool_use_id":"sevt_rec_t","is_error":true,`+maAt(2000)+`}`,
+		`{"id":"sevt_rec_e","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+maAt(2100)+`}`,
+	)
+	for _, src := range []*sliceStream{first, second} {
+		events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSessionID("sesn_recorded_pause"))
+		maDrain(events)
+		_ = events.Close()
+	}
+	var calls, errors float64
+	for _, response := range rec.events(t)["ai_response_received"] {
+		breakdown, _ := response["tool_breakdown"].([]any)
+		for _, e := range breakdown {
+			if entry := e.(map[string]any); entry["tool_name"] == "bash" {
+				c, _ := entry["call_count"].(float64)
+				n, _ := entry["error_count"].(float64)
+				calls, errors = calls+c, errors+n
+			}
+		}
+	}
+	// Counted once across the segments, with its outcome.
+	if calls == 1 && errors == 1 {
+		t.Fatal("passes now: remove the expected-failure marker")
+	}
+	t.Logf("expected to fail until D2: bash call_count %v, error_count %v", calls, errors)
+}
+
+func TestManagedAgentsCountsTheDenialOfAToolWithoutAnID(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
+	resetMA(t)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+		`{"id":"sevt_idless_u","type":"user.message","content":[],`+maAt(0)+`}`,
+		`{"type":"agent.tool_use","name":"bash","input":{},"evaluated_permission":"deny",`+maAt(100)+`}`,
+		`{"id":"sevt_idless_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+maAt(200)+`}`,
+	), rudderanthropic.WithSessionID("sesn_idless_denied"))
+	maDrain(events)
+	got := rec.events(t)["ai_response_received"]
+	if len(got) != 1 {
+		t.Fatalf("%v", got)
+	}
+	entry := got[0]["tool_breakdown"].([]any)[0].(map[string]any)
+	if entry["call_count"] != float64(1) || entry["error_count"] != float64(1) || entry["error_types"].(map[string]any)["denied"] != float64(1) {
+		t.Fatalf("%v", entry)
 	}
 }
