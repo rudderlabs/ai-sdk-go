@@ -1,6 +1,6 @@
 {
   "fixture_version": 1,
-  "description": "Built-in MCP client fallback on HTTP transports. It runs only when initialize, per-call metadata, connection or session state, resolveClient, remembered clients and the app's clientInfoFallback give no client name or version. Take the request's User-Agent header; without one (or blank after trimming), the fallback does nothing (`expected: null`). Otherwise take its first product token: trim leading and trailing spaces and tabs, cut at the first space or tab, split at the first `/` into product and version. Compare the product, ASCII-lowercased, with the keys of `products`; a match sets `client_name` to the client's own initialize clientInfo name, so both paths group together. Any other product gives `client_name` `other` and no version. A matched client keeps the version only when it matches `version_pattern` (no flags); otherwise the version is omitted. The raw header is never sent.",
+  "description": "Built-in MCP client fallback on HTTP transports. It runs only when initialize, per-call metadata, connection or session state, resolveClient, remembered clients and the app's clientInfoFallback give no client name or version. Take the request's User-Agent header; without one (or blank after trimming), the fallback does nothing (`expected: null`). Otherwise take its first product token: trim leading and trailing spaces and tabs, cut at the first space or tab, split at the first `/` into product and version. Compare the product, ASCII-lowercased, with the keys of `products`; a match sets `client_name` to the client's own initialize clientInfo name, so both paths group together. Any other product gives `client_name` `other` and no version. A matched client keeps the version only when it matches `version_pattern` (no flags) and the product is not in `versionless_products`; otherwise the version is omitted. A versionless product's User-Agent version is its own, not the clientInfo version of the name it maps to. The raw header is never sent.",
   "version_pattern": "^[0-9][0-9A-Za-z.+-]{0,31}$",
   "products": {
     "claude-code": "claude-code",
@@ -8,8 +8,13 @@
     "cursor": "Cursor",
     "openai-mcp": "openai-mcp",
     "codex_cli_rs": "codex-mcp-client",
-    "opencode": "opencode"
+    "opencode": "opencode",
+    "claude-user": "Anthropic/ClaudeAI",
+    "codex-mcp-client": "codex-mcp-client",
+    "copilot-cli": "copilot-cli",
+    "devin-mcp-client": "rmcp"
   },
+  "versionless_products": ["devin-mcp-client"],
   "cases": [
     { "name": "claude_code_cli", "user_agent": "claude-code/2.1.322 (cli)", "expected": { "client_name": "claude-code", "client_version": "2.1.322" } },
     { "name": "claude_code_sdk_surface", "user_agent": "claude-code/2.1.0 (sdk-ts)", "expected": { "client_name": "claude-code", "client_version": "2.1.0" } },
@@ -19,6 +24,12 @@
     { "name": "chatgpt_connector", "user_agent": "openai-mcp/1.0.0", "expected": { "client_name": "openai-mcp", "client_version": "1.0.0" } },
     { "name": "codex_cli", "user_agent": "codex_cli_rs/0.167.0 (Mac OS 26.1.0; arm64) iTerm.app/3.6.6", "expected": { "client_name": "codex-mcp-client", "client_version": "0.167.0" } },
     { "name": "opencode", "user_agent": "opencode/2.2.5", "expected": { "client_name": "opencode", "client_version": "2.2.5" } },
+    { "name": "claude_connector_fetcher", "user_agent": "Claude-User", "expected": { "client_name": "Anthropic/ClaudeAI" } },
+    { "name": "codex_mcp_client", "user_agent": "codex-mcp-client/0.169.0-alpha.11.1", "expected": { "client_name": "codex-mcp-client", "client_version": "0.169.0-alpha.11.1" } },
+    { "name": "copilot_cli", "user_agent": "copilot-cli/1.0.108-0", "expected": { "client_name": "copilot-cli", "client_version": "1.0.108-0" } },
+    { "name": "copilot_cli_unstable_version_too_long", "user_agent": "copilot-cli/1.0.103-unstable.r41379698026.g3219c66", "expected": { "client_name": "copilot-cli" } },
+    { "name": "devin_named_as_its_initialize_client", "user_agent": "Devin-MCP-Client/0.1.0", "expected": { "client_name": "rmcp" } },
+    { "name": "devin_cli_is_not_the_mcp_client", "user_agent": "Devin-CLI/3000.12.59 (windsurf)", "expected": { "client_name": "other" } },
     { "name": "no_version", "user_agent": "claude-code", "expected": { "client_name": "claude-code" } },
     { "name": "empty_version", "user_agent": "claude-code/ (cli)", "expected": { "client_name": "claude-code" } },
     { "name": "version_not_a_version", "user_agent": "claude-code/latest", "expected": { "client_name": "claude-code" } },

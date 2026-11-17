@@ -97,6 +97,7 @@ func TestClientFromUserAgent(t *testing.T) {
 	var fixture struct {
 		Products       map[string]string `json:"products"`
 		VersionPattern string            `json:"version_pattern"`
+		Versionless    []string          `json:"versionless_products"`
 		Cases          []struct {
 			Name      string            `json:"name"`
 			UserAgent *string           `json:"user_agent"`
@@ -115,6 +116,13 @@ func TestClientFromUserAgent(t *testing.T) {
 	}
 	if userAgentVersion.String() != fixture.VersionPattern {
 		t.Fatal("version pattern differs from shared fixture")
+	}
+	versionless := map[string]bool{}
+	for _, product := range fixture.Versionless {
+		versionless[product] = true
+	}
+	if !reflect.DeepEqual(userAgentVersionless, versionless) {
+		t.Fatal("versionless products differ from shared fixture")
 	}
 	for _, tc := range fixture.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
