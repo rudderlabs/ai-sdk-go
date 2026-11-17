@@ -13,74 +13,76 @@ func sdk6942Call() LLMCall {
 	return sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", ResponseID: "r", Integration: "tracing", InputTokens: 10}, 100)
 }
 func TestSDK6942BlockedRepeatPreservesAuthoritativeTwin(t *testing.T) {
-	for _, threaded := range []bool{false, true} {
-		for _, same := range []bool{false, true} {
-			t.Run(map[bool]string{false: "reentrant", true: "blocked"}[threaded]+map[bool]string{false: "different", true: "same"}[same], func(t *testing.T) {
-				var i *Interaction
-				entered, release := make(chan struct{}), make(chan struct{})
-				var once sync.Once
-				wrapper := func() {
-					c := sdk6942Call()
-					c.Integration = "openai"
-					c.InputTokens = 100
-					c.CallPurpose = "answer"
-					i.RecordCall(c)
-				}
-				r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
-					if c.AgentName == "planner" && c.InputTokens == 10 {
-						once.Do(func() {
-							if threaded {
-								close(entered)
-								<-release
-							} else {
-								wrapper()
-							}
-						})
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, threaded := range []bool{false, true} {
+			for _, same := range []bool{false, true} {
+				t.Run(mode+map[bool]string{false: "reentrant", true: "blocked"}[threaded]+map[bool]string{false: "different", true: "same"}[same], func(t *testing.T) {
+					var i *Interaction
+					entered, release := make(chan struct{}), make(chan struct{})
+					var once sync.Once
+					wrapper := func() {
+						c := sdk6942Call()
+						c.Integration = "openai"
+						c.InputTokens = 100
+						c.CallPurpose = "answer"
+						i.RecordCall(c)
 					}
-					if same && c.InputTokens == 100 {
-						return Ptr(10.0), nil
+					r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+						if c.AgentName == "planner" && c.InputTokens == 10 {
+							once.Do(func() {
+								if threaded {
+									close(entered)
+									<-release
+								} else {
+									wrapper()
+								}
+							})
+						}
+						if same && c.InputTokens == 100 {
+							return Ptr(10.0), nil
+						}
+						return Ptr(float64(c.InputTokens)), nil
+					}))
+					i = sdk6111ReviewPending(t, r, mode, func(target *Interaction) { target.RecordCall(sdk6942Call()) })
+					repeat := sdk6942Call()
+					repeat.AgentName = "planner"
+					if threaded {
+						done := make(chan struct{})
+						go func() { defer close(done); i.RecordCall(repeat) }()
+						select {
+						case <-entered:
+						case <-time.After(3 * time.Second):
+							t.Fatal("hook not entered")
+						}
+						wrapper()
+						close(release)
+						select {
+						case <-done:
+						case <-time.After(3 * time.Second):
+							t.Fatal("blocked hook")
+						}
+					} else {
+						i.RecordCall(repeat)
 					}
-					return Ptr(float64(c.InputTokens)), nil
-				}))
-				_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
-				i.RecordCall(sdk6942Call())
-				repeat := sdk6942Call()
-				repeat.AgentName = "planner"
-				if threaded {
-					done := make(chan struct{})
-					go func() { defer close(done); i.RecordCall(repeat) }()
-					select {
-					case <-entered:
-					case <-time.After(3 * time.Second):
-						t.Fatal("hook not entered")
+					i.End(EndOptions{})
+					p := lastResponse(t, r)
+					want := 100.0
+					if same {
+						want = 10
 					}
-					wrapper()
-					close(release)
-					select {
-					case <-done:
-					case <-time.After(3 * time.Second):
-						t.Fatal("blocked hook")
+					if p["total_credits"] != want || p["total_input_tokens"] != 100 {
+						t.Fatal(p)
 					}
-				} else {
-					i.RecordCall(repeat)
-				}
-				i.End(EndOptions{})
-				p := lastResponse(t, r)
-				want := 100.0
-				if same {
-					want = 10
-				}
-				if p["total_credits"] != want || p["total_input_tokens"] != 100 {
-					t.Fatal(p)
-				}
-				b := p["usage_breakdown"].([]map[string]any)[0]
-				if b["call_purpose"] != "answer" || b["agent_name"] != "planner" {
-					t.Fatal(b)
-				}
-			})
+					b := p["usage_breakdown"].([]map[string]any)[0]
+					if b["call_purpose"] != "answer" || b["agent_name"] != "planner" {
+						t.Fatal(b)
+					}
+				})
+			}
 		}
 	}
 }
+
 func TestSDK6942RepeatFlagsUpdateHeldEvents(t *testing.T) {
 	for _, mode := range []string{"segment", "in-process", "json"} {
 		for _, matched := range []bool{false, true} {
@@ -265,27 +267,30 @@ func TestSDK6942AggregatePendingSnapshotsRankReports(t *testing.T) {
 }
 
 func TestSDK6942PricingRevisionRejectsStaleEqualCredits(t *testing.T) {
-	var i *Interaction
-	nested := false
-	r := setupAI(t, WithCredits(func(c CreditCall) (*float64, error) {
-		if c.InputTokens == 10 && c.AgentName == "planner" && !nested {
-			nested = true
-			w := sdk6942Call()
-			w.Integration = "openai"
-			w.InputTokens = 100
-			i.RecordCall(w)
-			return Ptr(10.0), nil
-		}
-		return Ptr(5.0), nil
-	}))
-	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
-	i.RecordCall(sdk6942Call())
-	c := sdk6942Call()
-	c.AgentName = "planner"
-	i.RecordCall(c)
-	i.End(EndOptions{})
-	p := lastResponse(t, r)
-	if p["total_input_tokens"] != 100 || p["total_credits"] != 5.0 {
-		t.Fatal(p)
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		t.Run(mode, func(t *testing.T) {
+			var i *Interaction
+			nested := false
+			r := setupAI(t, WithCredits(func(c CreditCall) (*float64, error) {
+				if c.InputTokens == 10 && c.AgentName == "planner" && !nested {
+					nested = true
+					w := sdk6942Call()
+					w.Integration = "openai"
+					w.InputTokens = 100
+					i.RecordCall(w)
+					return Ptr(10.0), nil
+				}
+				return Ptr(5.0), nil
+			}))
+			i = sdk6111ReviewPending(t, r, mode, func(target *Interaction) { target.RecordCall(sdk6942Call()) })
+			c := sdk6942Call()
+			c.AgentName = "planner"
+			i.RecordCall(c)
+			i.End(EndOptions{})
+			p := lastResponse(t, r)
+			if p["total_input_tokens"] != 100 || p["total_credits"] != 5.0 {
+				t.Fatal(p)
+			}
+		})
 	}
 }
