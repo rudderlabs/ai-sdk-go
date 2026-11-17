@@ -2061,3 +2061,198 @@ func TestManagedAgentsKeepsARequestsOutputAcrossAReconnectWhenItsStartWasNotRead
 		t.Fatalf("%v", got)
 	}
 }
+
+// maAcrossWholeState compares an uninterrupted control with a split turn. Reconnect reports
+// into the caller's interaction; pause resumes an answer owned by the adapter.
+func maAcrossWholeState(t *testing.T, path string, first, second, controlFirst []string, changed []rudderanthropic.SessionOption, assert func(*testing.T, map[string][]map[string]any)) {
+	t.Helper()
+	for _, split := range []bool{false, true} {
+		t.Run(map[bool]string{false: "control", true: "split"}[split], func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithLLMCallEvents(true), rudderstackai.WithCaptureContent(true), rudderstackai.WithToolBreakdown(true))
+			resetMA(t)
+			for model, price := range map[string]rudderstackai.TokenPrice{
+				"claude-haiku-5-5": {InputPerMtok: 1, OutputPerMtok: 2},
+				"different-model":  {InputPerMtok: 100, OutputPerMtok: 200},
+			} {
+				if err := rudderstackai.RegisterPrice(model, rudderstackai.ModelPrice{Provider: "anthropic", TokenPrice: price}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			options := []rudderanthropic.SessionOption{rudderanthropic.WithSessionID("whole-state"), rudderanthropic.WithSessionModel("claude-haiku-5-5"), rudderanthropic.WithAgentName("original")}
+			ctx := context.Background()
+			var caller *rudderstackai.Interaction
+			if path == "reconnect" {
+				ctx, caller = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: "u"})
+			}
+			consume := func(raw []string, opts []rudderanthropic.SessionOption) {
+				events := rudderanthropic.TrackSessionEvents(ctx, maEvents(t, raw...), opts...)
+				maDrain(events)
+				if err := events.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if split {
+				segment := slices.Clone(first)
+				if path == "pause" {
+					segment = append(segment, maWholeIdle("requires_action"))
+				}
+				consume(segment, options)
+				consume(second, append(slices.Clone(options), changed...))
+			} else {
+				if controlFirst == nil {
+					controlFirst = first
+				}
+				consume(append(slices.Clone(controlFirst), second...), options)
+			}
+			if caller != nil {
+				caller.End(rudderstackai.EndOptions{})
+			}
+			assert(t, rec.events(t))
+		})
+	}
+}
+
+func maWholeEvent(kind string) string { return `{"type":` + strconv.Quote(kind) + `}` }
+func maWholeCall(extra string) string {
+	return `{"type":"span.model_request_end","model_usage":{"input_tokens":10,"output_tokens":2}` + extra + `}`
+}
+func maWholeIdle(kind string, ids ...string) string {
+	if ids == nil {
+		ids = []string{}
+	}
+	raw, _ := json.Marshal(ids)
+	return `{"type":"session.status_idle","stop_reason":{"type":` + strconv.Quote(kind) + `,"event_ids":` + string(raw) + `}}`
+}
+
+func TestManagedAgentsWholeTurnState(t *testing.T) {
+	for _, path := range []string{"reconnect", "pause"} {
+		t.Run("request keeps starting model and agent across "+path, func(t *testing.T) {
+			maAcrossWholeState(t, path,
+				[]string{maWholeEvent("user.message"), `{"type":"span.model_request_start","id":"request"}`},
+				[]string{maWholeCall(`,"model_request_start_id":"request"`), maWholeIdle("end_turn")}, nil,
+				[]rudderanthropic.SessionOption{rudderanthropic.WithSessionModel("different-model"), rudderanthropic.WithAgentName("replacement")},
+				func(t *testing.T, events map[string][]map[string]any) {
+					calls := events["ai_llm_response_received"]
+					if len(calls) != 1 || calls[0]["model"] != "claude-haiku-5-5" || calls[0]["agent_name"] != "original" || calls[0]["cost_usd"] != 0.000014 {
+						t.Fatalf("%v", calls)
+					}
+				})
+		})
+		t.Run("interrupt survives "+path, func(t *testing.T) {
+			maAcrossWholeState(t, path, []string{maWholeEvent("user.message"), maWholeEvent("user.interrupt")},
+				[]string{maWholeCall(""), maWholeIdle("end_turn")}, nil, nil,
+				func(t *testing.T, events map[string][]map[string]any) {
+					responses := events["ai_response_received"]
+					if len(responses) == 0 || responses[len(responses)-1]["response_status"] != "cancelled" {
+						t.Fatalf("%v", responses)
+					}
+				})
+		})
+		t.Run("grader keeps primary model across "+path, func(t *testing.T) {
+			maAcrossWholeState(t, path,
+				[]string{maWholeEvent("user.message"), maWholeCall(""), maWholeEvent("agent.thread_context_compacted"), `{"type":"span.outcome_evaluation_start","id":"grader"}`},
+				[]string{`{"type":"span.outcome_evaluation_end","outcome_evaluation_start_id":"grader","usage":{"input_tokens":100}}`, maWholeIdle("end_turn")}, nil, nil,
+				func(t *testing.T, events map[string][]map[string]any) {
+					responses := events["ai_response_received"]
+					var compactions, calls float64
+					for _, response := range responses {
+						if n, ok := response["compaction_count"].(float64); ok {
+							compactions += n
+						}
+						if n, ok := response["llm_call_count"].(float64); ok {
+							calls += n
+						}
+					}
+					if len(responses) == 0 || responses[len(responses)-1]["primary_model"] != "claude-haiku-5-5" || compactions != 1 || calls != 2 {
+						t.Fatalf("%v", responses)
+					}
+				})
+		})
+		t.Run("retry error without request start survives "+path, func(t *testing.T) {
+			first := []string{maWholeEvent("user.message"), `{"type":"agent.message","content":[{"type":"text","text":"partial"}]}`, `{"type":"session.error","error":{"type":"model_rate_limited_error","retry_status":{"type":"retrying"}}}`}
+			control := append([]string{first[0], `{"type":"span.model_request_start","id":"uninterrupted-start"}`}, first[1:]...)
+			maAcrossWholeState(t, path, first, []string{maWholeCall(`,"is_error":true`), maWholeIdle("end_turn")}, control, nil,
+				func(t *testing.T, events map[string][]map[string]any) {
+					calls := events["ai_llm_response_received"]
+					if len(calls) != 1 || calls[0]["error_type"] != "rate_limit" {
+						t.Fatalf("%v", calls)
+					}
+				})
+		})
+		t.Run("subagent approval alone survives "+path, func(t *testing.T) {
+			maAcrossWholeState(t, path,
+				[]string{maWholeEvent("user.message"), `{"type":"agent.tool_use","id":"child-tool","session_thread_id":"child","evaluated_permission":"ask","name":"approval"}`},
+				[]string{maWholeEvent("agent.thinking"), maWholeIdle("requires_action", "child-tool")}, nil, nil,
+				func(t *testing.T, events map[string][]map[string]any) {
+					responses := events["ai_response_received"]
+					if len(responses) == 0 || responses[len(responses)-1]["pause_reason"] != "approval" {
+						t.Fatalf("%v", responses)
+					}
+				})
+		})
+	}
+	t.Run("tool keeps starting agent across pause", func(t *testing.T) {
+		first := []string{maWholeEvent("user.message"), `{"type":"agent.custom_tool_use","id":"tool","name":"lookup"}`}
+		// The first pause names the buffered custom tool, so it remains an adapter-held draft.
+		first = append(first, maWholeIdle("requires_action", "tool"))
+		maAcrossWholeState(t, "pause", first,
+			[]string{`{"type":"user.custom_tool_result","custom_tool_use_id":"tool","content":[]}`, maWholeIdle("end_turn")}, nil,
+			[]rudderanthropic.SessionOption{rudderanthropic.WithAgentName("replacement")},
+			func(t *testing.T, events map[string][]map[string]any) {
+				responses := events["ai_response_received"]
+				var tools []any
+				for _, response := range responses {
+					if entries, ok := response["tool_breakdown"].([]any); ok {
+						tools = append(tools, entries...)
+					}
+				}
+				if len(tools) != 1 || tools[0].(map[string]any)["agent_name"] != "original" {
+					t.Fatalf("%v", responses)
+				}
+			})
+	})
+}
+
+func TestManagedAgentsWholeTurnStateStructure(t *testing.T) {
+	t.Run("covers every real opened turn field with state or the explicit stream-local list", func(t *testing.T) {
+		setup(t)
+		resetMA(t)
+		local := []string{"startAt", "lastAt", "waiting", "borrowed", "backdated", "resumed", "interaction", "abandoned"}
+		typ := rudderanthropic.ManagedAgentsTurnType()
+		var carried []string
+		for n := 0; n < typ.NumField(); n++ {
+			field := typ.Field(n).Name
+			if !slices.Contains(local, field) {
+				carried = append(carried, field)
+			}
+		}
+		if !slices.Equal(carried, []string{"state"}) {
+			t.Fatalf("turn fields outside stream-local set: %v", carried)
+		}
+		for _, field := range local {
+			if _, ok := typ.FieldByName(field); !ok {
+				t.Errorf("stale stream-local field: %s", field)
+			}
+		}
+	})
+	t.Run("bounds carried entries and every TurnState map and evicts the oldest", func(t *testing.T) {
+		setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 2}))
+		resetMA(t)
+		rudderanthropic.CheckManagedAgentsBounds(t)
+	})
+	t.Run("flushes a full tool buffer before any unrecorded work is lost", func(t *testing.T) {
+		_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 2}))
+		resetMA(t)
+		var raw = []string{maWholeEvent("user.message")}
+		for _, id := range []string{"oldest", "middle", "newest"} {
+			raw = append(raw, `{"type":"agent.tool_use","id":`+strconv.Quote(id)+`,"name":`+strconv.Quote(id)+`}`)
+		}
+		raw = append(raw, maWholeIdle("end_turn"))
+		events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t, raw...), rudderanthropic.WithSessionID("full-buffer"))
+		maDrain(events)
+		responses := rec.events(t)["ai_response_received"]
+		if len(responses) != 1 || responses[0]["tool_call_count"] != float64(3) {
+			t.Fatalf("%v", responses)
+		}
+	})
+}
