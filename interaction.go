@@ -1121,7 +1121,9 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		provider: call.Provider, model: canonicalModel(call.Model), responseID: call.ResponseID, agentName: call.AgentName,
 		fromSpan: call.Integration == "tracing", startedAt: call.StartedAt, endedAt: call.EndedAt,
 	})
+	pricingRevision := 0
 	if pricingTwin != nil {
+		pricingRevision = pricingTwin.pricingRevision
 		pricingCallCount = max(callCount, pricingTwin.callCount)
 	}
 	useTwinUsage := pricingCallCount > 1 && pricingTwin != nil && !pricingTwin.fromSpan &&
@@ -1293,6 +1295,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		}
 		if i.spanAnswerSource == r {
 			i.spanAnswerSource = twin
+		}
+		// A repeat published and priced newer metadata during the unlocked twin hook.
+		if twin == pricingTwin && twin.pricingRevision != pricingRevision && !r.creditsExplicit {
+			r.credits, r.creditsExplicit = twin.credits, twin.creditsExplicit
 		}
 		mergeCallTwin(twin, r)
 		// A merge does not advance callCount, so discard a generic app hint that

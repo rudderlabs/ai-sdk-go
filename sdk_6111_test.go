@@ -1445,3 +1445,95 @@ func TestSDK6111Review137FilteredReportsKeepPrimaryOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestSDK6111Review137TwinPricingRetainsNewerEnrichment(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, spanFirst := range []bool{true, false} {
+			for field := 0; field < 4; field++ {
+				for _, threaded := range []bool{false, true} {
+					t.Run(fmt.Sprintf("%s/spanFirst=%t/field=%d/thread=%t", mode, spanFirst, field, threaded), func(t *testing.T) {
+						var i *Interaction
+						inject := false
+						first := sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", ResponseID: "review137", InputTokens: 10, Integration: "tracing"}, 100)
+						if !spanFirst {
+							first.Integration = "openai"
+							first.InputTokens = 100
+						}
+						later := first
+						later.Integration = "openai"
+						later.InputTokens = 100
+						if !spanFirst {
+							later.Integration = "tracing"
+							later.InputTokens = 10
+							later.CallCount = 2
+						}
+						enriched := first
+						switch field {
+						case 0:
+							enriched.AgentName = "answer"
+						case 1:
+							enriched.CallPurpose = "answer"
+						case 2:
+							enriched.FallbackUsed = Ptr(true)
+						case 3:
+							enriched.BYOK = Ptr(true)
+						}
+						r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+							if inject {
+								inject = false
+								if threaded {
+									done := make(chan struct{})
+									go func() { i.RecordCall(enriched); close(done) }()
+									select {
+									case <-done:
+									case <-time.After(5 * time.Second):
+										t.Error("repeat blocked")
+									}
+								} else {
+									i.RecordCall(enriched)
+								}
+							}
+							newer := (field == 0 && c.AgentName == "answer") || (field == 1 && c.CallPurpose == "answer") || (field == 2 && c.FallbackUsed != nil && *c.FallbackUsed) || (field == 3 && c.BYOK != nil && *c.BYOK)
+							if newer {
+								return Ptr(20.0), nil
+							}
+							return Ptr(10.0), nil
+						}))
+						i = sdk6111ReviewPending(t, r, mode, func(i *Interaction) { i.RecordCall(first) })
+						inject = true
+						i.RecordCall(later)
+						if inject {
+							t.Fatal("twin hook did not run")
+						}
+						i.End(EndOptions{})
+						p := lastResponse(t, r)
+						count := 1
+						if !spanFirst {
+							count = 2
+						}
+						if sdk6111Num(p["total_input_tokens"]) != 100 || sdk6111Num(p["llm_call_count"]) != float64(count) || sdk6111Num(p["total_credits"]) != 20 {
+							t.Fatal(p)
+						}
+						events := r.named("ai_llm_response_received")
+						e := events[len(events)-1].Properties
+						key := []string{"agent_name", "call_purpose", "fallback_used", "byok"}[field]
+						want := any("answer")
+						if field >= 2 {
+							want = true
+						}
+						if spanFirst && (sdk6111Num(e["credits"]) != 20 || e[key] != want) {
+							t.Fatal(e)
+						}
+						var total float64
+						for _, e := range r.named("ai_response_received") {
+							total += sdk6111Num(e.Properties["total_credits"])
+						}
+						if total != 20 {
+							t.Fatal(total)
+						}
+					})
+				}
+			}
+		}
+	}
+}
