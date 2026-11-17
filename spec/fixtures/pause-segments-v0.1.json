@@ -25823,6 +25823,184 @@
         ],
         "tool_events": []
       }
+    },
+    {
+      "name": "tool-past-cap-inline-outcome-no-declared-event",
+      "description": "An outcome reported with a past-cap call is dropped: the call counts once and sends no declared event. Python maps the inline outcome to record_tool_call followed immediately by record_tool_result, since its call API has no inline outcome.",
+      "config": {
+        "max_calls_per_interaction": 1,
+        "tool_breakdown": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "m",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "done",
+              "name": "lookup",
+              "result": "ok",
+              "error": false
+            }
+          ]
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "overflow",
+              "name": "lookup",
+              "result": "failed",
+              "error": true
+            }
+          ]
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "success",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "tool_call_count": 2,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "m",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 0,
+                "total_tokens": 10,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "tool_breakdown": [
+              {
+                "tool_name": "lookup",
+                "call_count": 2,
+                "error_count": 0
+              }
+            ]
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": "done",
+            "tool_status": "success"
+          }
+        ],
+        "errors": [
+          "limit_reached"
+        ]
+      }
+    },
+    {
+      "name": "retained-tool-past-cap-later-outcome-same-segment-no-declared-event",
+      "description": "A past-cap call retained by its unresolved ID receives an outcome later in the same segment, without a pause. It counts once, drops the outcome and sends no declared event.",
+      "config": {
+        "max_calls_per_interaction": 1,
+        "tool_breakdown": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "m",
+          "input_tokens": 10
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "done",
+              "name": "lookup",
+              "result": "ok",
+              "error": false
+            }
+          ]
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "id": "overflow",
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "op": "record_tool_result",
+          "id": "overflow",
+          "result": "failed",
+          "error": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "success",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "tool_call_count": 2,
+            "usage_breakdown": [
+              {
+                "provider": "openai",
+                "model": "m",
+                "call_count": 1,
+                "input_tokens": 10,
+                "output_tokens": 0,
+                "total_tokens": 10,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "error_count": 0
+              }
+            ],
+            "tool_breakdown": [
+              {
+                "tool_name": "lookup",
+                "call_count": 2,
+                "error_count": 0
+              }
+            ]
+          }
+        ],
+        "call_events": [],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": "done",
+            "tool_status": "success"
+          }
+        ],
+        "errors": [
+          "limit_reached"
+        ]
+      }
     }
   ]
 }
