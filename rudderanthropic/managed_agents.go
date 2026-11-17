@@ -730,7 +730,7 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 }
 
 // isRunning reports a running event read outside a turn.
-func (s *sessionTracker) isRunning() bool { return s.runningAt.ok || s.runningAnswer != nil }
+func (s *sessionTracker) isRunning() bool { return s.runningSet }
 
 // owner is the caller's interaction the turn starting now reports into, if it is still open.
 func (s *sessionTracker) owner() *rudderstackai.Interaction {
