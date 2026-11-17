@@ -874,6 +874,28 @@ func TestManagedAgentsGivesAToolRefusedUpFrontNoDuration(t *testing.T) {
 	}
 }
 
+func TestManagedAgentsReadsAToolResultAsTheAnthropicWrapperDoes(t *testing.T) {
+	var seen any
+	rules := rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{"weather": {
+		Event: "weather_read",
+		When:  func(_ map[string]any, result any) bool { seen = result; return true },
+	}}}
+	setup(t, rudderstackai.WithEventRules(rules))
+	resetMA(t)
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+		`{"id":"sevt_decode_1","type":"session.status_running","processed_at":"2026-11-16T10:00:00.000Z"}`,
+		`{"id":"sevt_decode_2","type":"user.message","content":[],"processed_at":"2026-11-16T10:00:00.100Z"}`,
+		`{"id":"sevt_decode_3","type":"agent.tool_use","name":"weather","input":{},"processed_at":"2026-11-16T10:00:00.200Z"}`,
+		`{"id":"sevt_decode_4","type":"agent.tool_result","tool_use_id":"sevt_decode_3","is_error":false,"content":[{"type":"text","text":"{\"temperature\":21}"}],"processed_at":"2026-11-16T10:00:00.300Z"}`,
+		`{"id":"sevt_decode_5","type":"session.status_idle","stop_reason":{"type":"end_turn"},"processed_at":"2026-11-16T10:00:00.900Z"}`,
+	), rudderanthropic.WithSessionID("sesn_decode"))
+	for events.Next() {
+	}
+	if got, ok := seen.(map[string]any); !ok || got["temperature"] != float64(21) {
+		t.Fatalf("rule saw %#v, want the parsed object", seen)
+	}
+}
+
 // enteringStream is an SDK stream that reports when a Next starts waiting for its second event.
 type enteringStream struct {
 	*ssestream.Stream[anthropic.BetaManagedAgentsStreamSessionEventsUnion]
