@@ -75,8 +75,9 @@ func (i *Interaction) joinable() bool {
 }
 
 // joinScope is the context values a join restores: the scope the interaction started in, with
-// its own identity, conversation and run labels. Not ok once it is pausing, paused or ended,
-// checked under its lock.
+// its own resolved identity, conversation, run labels, message context (with its session) and
+// client, whether its options or the context supplied them. Not ok once it is pausing, paused or
+// ended, checked under its lock.
 func (i *Interaction) joinScope() (*contextValues, bool) {
 	if i == nil {
 		return nil, false
@@ -94,10 +95,17 @@ func (i *Interaction) joinScope() (*contextValues, bool) {
 	cv.feature, cv.surface = i.feature, i.surface
 	cv.accountID, cv.onBehalfOf = i.accountID, i.onBehalfOf
 	cv.agentVersion, cv.variant = i.agentVersion, i.variant
+	cv.context = i.msgContext
+	// Nil falls back to the global client when an event is sent, as the interaction's own do.
+	cv.analytics = i.explicitAnalytics
+	if cv.analytics == nil {
+		cv.analytics = i.adapterAnalytics
+	}
+	// Identity and session are resolved above: cookies are not read again, as in Node.js.
+	cv.cookies, cv.identityFromCookies = nil, Ptr(false)
 	if i.resumed {
-		// As RunInteraction scopes a resumed run: the snapshot's identity, not this request's.
-		cv.cookies, cv.disconnected = nil, nil
-		cv.identityFromCookies = Ptr(false)
+		// As RunInteraction scopes a resumed run: not this request's.
+		cv.disconnected = nil
 	}
 	return &cv, true
 }
