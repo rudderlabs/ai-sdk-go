@@ -175,11 +175,11 @@ Matching uses context nesting only, never times or model names. Limits:
 - A span that already ended, an ended interaction, and a span that started in another interaction
   never adopt.
 - Go has no framework integrations, so no integration model spans take part.
-- Go has no weak maps, so dedup tracks at most `Limits.MaxMapEntries` open model-call spans
-  (default 10,000). A model-call span that starts while that many are open, for example behind
-  spans that never end, is neither covered nor adopted and exports as without dedup
-  (`limit_reached`). An entry goes when its span ends or every processor that saw it shuts down;
-  descendants of an already covered span are tracked until they end, so its tree stays intact.
+- Dedup tracks at most `Limits.MaxMapEntries` open model-call spans (default 10,000). A
+  model-call span that starts while that many are open, for example behind spans that never end,
+  is neither covered nor adopted and exports as without dedup (`limit_reached`). An entry goes
+  when its span ends or every processor that saw it shuts down; descendants of an already covered
+  span are tracked until they end, so its tree stays intact.
 - With two copies of the tracing module (for example a vendored fork under another import path),
   replacement marks are not shared between copies, so an adopted span can be exported twice;
   register processors from one copy.
