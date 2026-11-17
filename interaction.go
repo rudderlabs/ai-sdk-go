@@ -2506,6 +2506,9 @@ func pendingTime(p map[string]any, edge string) time.Time {
 		t, _ := time.Parse(time.RFC3339Nano, at)
 		return t
 	case nil:
+		if _, present := p[edge+"_at"]; present {
+			return time.Time{}
+		}
 		// Nanoseconds exceed pendingNumber's safe-integer range.
 		switch ns := p[edge+"_ns"].(type) {
 		case float64:
@@ -2619,9 +2622,16 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		c.callIndex = int(pendingNumber(p, "call_index"))
 		c.spanID = pendingText(p, "span_id")
 		// Go wrote twin_matched and usage_unknown before SDK-6111.
-		c.fromSpan, c.twinMatched, c.usageUnknown = pendingBool(p, "from_span"), pendingBool(p, "matched") || pendingBool(p, "twin_matched"), pendingBool(p, "usage_unknown")
-		if known, ok := p["usage_known"].(bool); ok {
-			c.usageUnknown = !known
+		c.fromSpan = pendingBool(p, "from_span")
+		if _, present := p["matched"]; present {
+			c.twinMatched = pendingBool(p, "matched")
+		} else {
+			c.twinMatched = pendingBool(p, "twin_matched")
+		}
+		if _, present := p["usage_known"]; present {
+			c.usageUnknown = !pendingBool(p, "usage_known")
+		} else {
+			c.usageUnknown = pendingBool(p, "usage_unknown")
 		}
 		c.creditsExplicit = pendingBool(p, "credits_explicit")
 		if _, present := p["credits_explicit"]; !present {

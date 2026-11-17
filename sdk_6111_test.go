@@ -2003,3 +2003,39 @@ func TestSDK6111DetachedCallPublishesOwnMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestSDK6111CanonicalFieldsSupersedeLegacyAliases(t *testing.T) {
+	for _, alias := range []string{"twin_matched", "usage_unknown", "started_ns", "ended_ns"} {
+		t.Run(alias, func(t *testing.T) {
+			r := setupAI(t, WithLLMCallEvents(true))
+			client := &sdk6111ReenterClient{recorder: r, event: "ai_response_received"}
+			_, original := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+			span := sdk6942Call()
+			client.reenter = func() { original.RecordCall(span) }
+			snapshot, ok := original.Pause(PauseOptions{})
+			if !ok || len(snapshot.PendingCalls) != 1 {
+				t.Fatal(snapshot)
+			}
+			p := snapshot.PendingCalls[0]
+			switch alias {
+			case "twin_matched", "usage_unknown":
+				p[alias] = true
+			case "started_ns", "ended_ns":
+				p[alias] = int64(999_000_000)
+			}
+			_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshot})
+			if restored.id != original.id {
+				t.Fatal("identity changed")
+			}
+			w := span
+			w.Integration = "openai"
+			w.InputTokens = 100
+			restored.RecordCall(w)
+			restored.End(EndOptions{})
+			props := lastResponse(t, r)
+			if sdk6111Num(props["total_input_tokens"]) != 100 || sdk6111Num(props["llm_call_count"]) != 1 {
+				t.Fatal(props)
+			}
+		})
+	}
+}
