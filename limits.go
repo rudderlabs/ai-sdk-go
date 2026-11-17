@@ -153,6 +153,7 @@ func takePausedSlot(i *Interaction) bool {
 		return false
 	}
 	delete(open.paused, match)
+	match.Value().continueAs(i)
 	i.ownerOrder = matchedSlot.order
 	i.opened = time.Now()
 	i.elem = open.list.PushBack(i)

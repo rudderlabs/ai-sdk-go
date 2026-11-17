@@ -157,7 +157,7 @@ func activeSDKSpan(ctx context.Context) *Span {
 		s.mu.Lock()
 		ended := s.ended
 		s.mu.Unlock()
-		if !ended && (s.interaction == nil || !s.interaction.Ended()) {
+		if !ended && (s.interaction == nil || !s.interaction.latest().Ended()) {
 			return s
 		}
 		s = s.parent
@@ -188,7 +188,8 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time, captured
 	c := cfg()
 	s := &Span{started: started, interaction: i, attributes: map[string]any{}, capture: capture.Resolve(c.captureLevel()).Spans, client: c.analytics}
 	parent := activeSDKSpan(ctx)
-	if parent != nil && parent.interaction != i {
+	// A span of a run restored since nests the restored segment's spans: they share its trace.
+	if parent != nil && parent.interaction.latest() != i {
 		parent = nil
 	}
 	var msgContext map[string]any
@@ -262,7 +263,7 @@ func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time,
 		return nil
 	}
 	active := activeSDKSpan(ctx)
-	if active != nil && active.interaction != i {
+	if active != nil && active.interaction.latest() != i {
 		active = nil
 	}
 	var activeSeq uint64

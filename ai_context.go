@@ -113,13 +113,14 @@ func inherit(dst *string, v string) {
 }
 
 // FromContext returns the interaction a context carries (from [StartInteraction],
-// [RunInteraction] or [RunTask]), or nil.
+// [RunInteraction] or [RunTask]), or nil. Once that interaction paused and its snapshot was
+// restored in this process, it returns the restored interaction, as model calls with ctx do.
 func FromContext(ctx context.Context) *Interaction {
 	if ctx == nil {
 		return nil
 	}
 	i, _ := ctx.Value(keyInteraction).(*Interaction)
-	return i
+	return i.latest()
 }
 
 // withUntracked marks a context whose model calls (the SDK's own: the classifier, an evaluator)

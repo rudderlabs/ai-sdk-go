@@ -578,3 +578,70 @@ func TestJoinInteractionChildKeepsItsCapturePolicy(t *testing.T) {
 		}
 	}
 }
+
+// A context saved before the interaction was restored from JSON in this process follows the run,
+// as in Node.js: its call counts in the restored interaction, or once that ended, as a separate
+// answer, never in the superseded segment.
+func TestInteractionSavedContextFollowsAJSONRestore(t *testing.T) {
+	for _, spans := range []bool{false, true} {
+		for _, phase := range []string{"ended", "restored", "restored twice", "restored and ended"} {
+			t.Run(fmt.Sprintf("%s spans=%v", phase, spans), func(t *testing.T) {
+				r := setupAI(t, WithEmitSpans(spans))
+				saved, target := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
+				var outer *Span
+				if spans {
+					saved, outer = StartSpan(saved, SpanOptions{Name: "outer", Operation: "invoke_agent"})
+				}
+				id := target.ID()
+				restores := map[string]int{"restored": 1, "restored twice": 3, "restored and ended": 1}[phase]
+				for range restores {
+					target = restoreFromJSON(context.Background(), t, target, InteractionOptions{Classify: Ptr(false)})
+				}
+				if restores > 0 && FromContext(saved) != target {
+					t.Error("FromContext of the saved context is not the restored interaction")
+				}
+				separate := phase == "ended" || phase == "restored and ended"
+				if separate {
+					target.End(EndOptions{})
+				}
+				wrapperCall(saved, "late")
+				target.End(EndOptions{})
+				if outer != nil {
+					outer.End(nil)
+				}
+				waitBackgroundWork(10 * time.Second)
+				total, final := 0, -1
+				for _, e := range r.named("ai_response_received") {
+					n := e.Properties["llm_call_count"].(int)
+					total += n
+					if e.Properties["interaction_id"] == id && e.Properties["response_status"] != "paused" {
+						final = n
+					}
+					if e.Properties["interaction_id"] != id && (!separate || e.Properties["parent_interaction_id"] != id) {
+						t.Errorf("unexpected answer %v", e.Properties)
+					}
+				}
+				if total != 1 {
+					t.Errorf("the late call counted %d times, want once", total)
+				}
+				if want := map[bool]int{true: 0, false: 1}[separate]; final != want {
+					t.Errorf("the run's final answer counted %d calls, want %d", final, want)
+				}
+				if n := openCount(); n != 0 {
+					t.Errorf("%d interactions left open", n)
+				}
+				if !spans || separate {
+					return
+				}
+				for _, e := range r.named("ai_otel_span") {
+					if e.Properties["span_name"] != "chat late" {
+						continue
+					}
+					if e.Properties["interaction_id"] != id || e.Properties["trace_id"] != outer.TraceID || e.Properties["parent_span_id"] != outer.SpanID {
+						t.Errorf("late call span %v, want the run's, under %s", e.Properties, outer.SpanID)
+					}
+				}
+			})
+		}
+	}
+}

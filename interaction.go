@@ -577,6 +577,8 @@ type Interaction struct {
 	scope *contextValues
 	// resumed: continued from a Resume snapshot.
 	resumed bool
+	// cont, once a snapshot of this run is restored in this process, names its newest segment.
+	cont atomic.Pointer[continuation]
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
 	untracked bool
 	// opened and elem place it among the open interactions (guarded by open.mu).
@@ -690,6 +692,39 @@ func (i *Interaction) answerErrorType(err error) string {
 		}
 	}
 	return appErrorType(err)
+}
+
+// continuation is shared by the segments of one run restored from its snapshots in this process,
+// so a context saved before a restore follows the run without keeping every segment alive.
+type continuation struct{ current atomic.Pointer[Interaction] }
+
+// continueAs makes next, restored from i's snapshot, the segment that contexts carrying i or an
+// earlier segment report into, as in Node.js. Called under open.mu.
+func (i *Interaction) continueAs(next *Interaction) {
+	if i == nil || i == next {
+		return
+	}
+	c := i.cont.Load()
+	if c == nil {
+		c = &continuation{}
+		i.cont.Store(c)
+	}
+	c.current.Store(next)
+	next.cont.Store(c)
+}
+
+// latest is the newest segment of i's run in this process: i, unless its snapshot was restored
+// here. A restored segment that ended stays the newest, so later calls are separate answers.
+func (i *Interaction) latest() *Interaction {
+	if i == nil {
+		return nil
+	}
+	if c := i.cont.Load(); c != nil {
+		if next := c.current.Load(); next != nil {
+			return next
+		}
+	}
+	return i
 }
 
 // ID is the interaction ID (interaction_id): return it to your client for feedback events.
