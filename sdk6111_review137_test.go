@@ -93,3 +93,47 @@ func TestReview137CanonicalOutcome(t *testing.T) {
 		}
 	}
 }
+
+func TestReview137CaptureEnrichment(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		t.Run(mode, func(t *testing.T) {
+			var i *Interaction
+			armed := false
+			r := setupAI(t, WithLLMCallEvents(true), WithCaptureContent(true), WithCredits(func(c CreditCall) (*float64, error) {
+				value := float64(c.InputTokens)
+				if c.BYOK != nil && *c.BYOK {
+					value *= 2
+				}
+				return Ptr(value), nil
+			}), WithRedactHook(func(text string) (string, error) {
+				if armed && text == "older" {
+					armed = false
+					c := review137Call()
+					c.BYOK = Ptr(true)
+					c.FallbackUsed = Ptr(true)
+					i.RecordCall(c)
+				}
+				return text, nil
+			}))
+			c := review137Call()
+			c.BYOK = Ptr(false)
+			c.FallbackUsed = Ptr(false)
+			i = sdk6111ReviewPending(t, r, mode, func(target *Interaction) { target.RecordCall(c) })
+			armed = true
+			c.Integration = "openai"
+			c.InputTokens = 1000
+			c.OutputText = "older"
+			c.BYOK = nil
+			c.FallbackUsed = nil
+			i.RecordCall(c)
+			i.End(EndOptions{})
+			p := r.named("ai_llm_response_received")[0].Properties
+			if p["input_tokens"] != 1000 || p["byok"] != true || p["fallback_used"] != true || p["credits"] != 2000.0 {
+				t.Fatal(p)
+			}
+			if p := lastResponse(t, r); p["total_credits"] != 2000.0 {
+				t.Fatal(p)
+			}
+		})
+	}
+}
