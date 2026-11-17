@@ -150,18 +150,18 @@ func init() {
 
 // dedup registers an OTel model-call span an SDK call may replace. A span starting inside an
 // SDK call span is covered: it is recorded, never exported. Spans off, it is never called.
-// spanInteraction is the open interaction a span's rudderstack.interaction_id names, else the
-// ambient one, as product events route it: dedup never gives one interaction's span to another
-// interaction's call.
-func spanInteraction(s sdktrace.ReadWriteSpan, ambient *rudderstackai.Interaction) *rudderstackai.Interaction {
-	named := firstString(attributes(s.Attributes()), InteractionIDAttribute)
+// dedupInteraction is the interaction whose SDK calls may cover or adopt a span that carried
+// rudderstack.interaction_id named before tagging. No ID, or the ambient interaction's own: the
+// ambient one. Another ID: only the open, unpaused interaction it names; otherwise none, and the
+// span exports as without dedup. A span routed elsewhere is never given to the ambient call.
+func dedupInteraction(named string, ambient *rudderstackai.Interaction) *rudderstackai.Interaction {
 	if named == "" || (ambient != nil && named == ambient.ID()) {
 		return ambient
 	}
-	if found, ok := hook.Tracing.Open(named).(*rudderstackai.Interaction); ok && found != nil && !found.Ended() {
+	if found, ok := hook.Tracing.Open(named).(*rudderstackai.Interaction); ok && found != nil && !found.Ended() && !found.Paused() {
 		return found
 	}
-	return ambient
+	return nil
 }
 
 func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, interaction *rudderstackai.Interaction) (covered bool) {
@@ -384,7 +384,8 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 		}
 		// After tagging, so a filter that reads user.id sees the tagged span.
 		if hook.Tracing.EmitSpans() {
-			if routed := spanInteraction(s, interaction); routed != nil {
+			// The span's own interaction ID, as set before tagging.
+			if routed := dedupInteraction(firstString(own, InteractionIDAttribute), interaction); routed != nil {
 				p.dedup(ctx, s, routed)
 			}
 		}
