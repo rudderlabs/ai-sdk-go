@@ -702,3 +702,56 @@ func TestHeldFieldSnapshot(t *testing.T) {
 		})
 	}
 }
+
+func TestObserveMCPTransportNonToolIsError(t *testing.T) {
+	for _, method := range []string{"resources/read", "prompts/get"} {
+		for _, held := range []bool{false, true} {
+			t.Run(method+map[bool]string{false: "/immediate", true: "/held"}[held], func(t *testing.T) {
+				setupAI(t)
+				s := workspaceServer("non-tool-is-error", nil)
+				r := wrap(t, s, Options{CaptureContent: true})
+				w, _ := instances.get(s)
+				responses := mcpbridge.NewResponses()
+				defer responses.Close()
+				rc := w.begin(mcpbridge.Request{Ctx: context.Background(), RequestID: 1, Responses: responses})
+				result := map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "delivered failure"}}}
+				body, err := json.Marshal(result)
+				if err != nil {
+					t.Fatal(err)
+				}
+				event := "mcp_resource_read"
+				if method == "prompts/get" {
+					event = "mcp_prompt_used"
+				}
+				if held {
+					rc.Finished(method, "lookup", 0, "api_error")
+				}
+				rc.Finished(method, "lookup", len(body), "")
+				if held && len(r.named(event)) != 0 {
+					t.Fatal("event before response write")
+				}
+				message, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "result": result})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := mcpbridge.NewWriter(io.Discard, responses).Write(append(message, '\n')); err != nil {
+					t.Fatal(err)
+				}
+				count := 1
+				if held {
+					count = 2
+				}
+				events := r.wait(t, event, count)
+				for _, e := range events {
+					if _, ok := e.Properties["error_message"]; ok {
+						t.Fatalf("non-tool error_message: %v", e.Properties)
+					}
+				}
+				p := events[len(events)-1].Properties
+				if p["tool_status"] != "success" || p["result_size_bytes"] != len(body) {
+					t.Fatalf("success properties: %v", p)
+				}
+			})
+		}
+	}
+}

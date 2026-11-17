@@ -815,3 +815,47 @@ func TestMCPGoHTTPHeaderSnapshot(t *testing.T) {
 		})
 	}
 }
+
+func TestNonToolIsErrorOmitsErrorMessage(t *testing.T) {
+	for _, method := range []string{"resources/read", "prompts/get"} {
+		t.Run(method, func(t *testing.T) {
+			s := server.NewMCPServer("non-tool-is-error-mcpgo", "1")
+			r := wrap(t, s, Options{CaptureContent: true})
+			tracked := lookup(s)
+			responses := mcpbridge.NewResponses()
+			defer responses.Close()
+			ctx := context.Background()
+			c := tracked.srv.Begin(mcpbridge.Request{Ctx: ctx, RequestID: 1, Responses: responses})
+			c.Finished(method, "lookup", 0, "api_error")
+			result := map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "delivered failure"}}}
+			tracked.succeeded(ctx, &call{c: c, method: method, name: "lookup"}, result)
+			event := "mcp_resource_read"
+			if method == "prompts/get" {
+				event = "mcp_prompt_used"
+			}
+			if len(r.named(event)) != 0 {
+				t.Fatal("event before response write")
+			}
+			body, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "result": result})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := mcpbridge.NewWriter(io.Discard, responses).Write(append(body, '\n')); err != nil {
+				t.Fatal(err)
+			}
+			events := r.named(event)
+			if len(events) != 2 {
+				t.Fatalf("events: %v", events)
+			}
+			for _, e := range events {
+				if _, ok := e.Properties["error_message"]; ok {
+					t.Fatalf("non-tool error_message: %v", e.Properties)
+				}
+			}
+			p := events[1].Properties
+			if p["tool_status"] != "success" || p["result_size_bytes"] != len(mustJSON(result)) {
+				t.Fatalf("success properties: %v", p)
+			}
+		})
+	}
+}
