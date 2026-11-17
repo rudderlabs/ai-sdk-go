@@ -63,9 +63,10 @@ type otelSpan struct {
 	decided bool
 	// candidate: an outer model-call span the first SDK call of interaction starting inside it
 	// adopts, until a processor ends it, unless that call's active SDK span started after seq.
-	candidate   bool
-	seq         uint64
-	interaction *rudderstackai.Interaction
+	candidate bool
+	seq       uint64
+	// Candidates match a live owner without retaining its paused interaction or context.
+	interaction weak.Pointer[rudderstackai.Interaction]
 	parentID    string
 	// replaced: an SDK call adopted the span's IDs; every processor drops it at its end.
 	replaced bool
@@ -190,7 +191,7 @@ func release(k spanKey, e *otelSpan, snapshot sdktrace.ReadOnlySpan) {
 		e.unseen = nil
 		otelSpans.unseen--
 	}
-	e.interaction, e.processors = nil, nil
+	e.interaction, e.processors = weak.Pointer[rudderstackai.Interaction]{}, nil
 	if e.covered || e.replaced || e.tree {
 		anchor(k, e, span)
 		anchor(k, e, objectOf(snapshot))
@@ -321,7 +322,7 @@ func (p *SpanProcessor) dedupLocked(s trace.Span, parentID string, owner *hook.S
 	e.join(p)
 	e.decided = true
 	if owner == nil {
-		e.candidate, e.seq, e.interaction, e.parentID = true, hook.Tracing.NextSpanSeq(), interaction, parentID
+		e.candidate, e.seq, e.interaction, e.parentID = true, hook.Tracing.NextSpanSeq(), weak.Make(interaction), parentID
 		return true
 	}
 	ownerTrace, traceErr := trace.TraceIDFromHex(owner.TraceID)
@@ -370,7 +371,7 @@ func adoptable(s trace.Span, interaction any, activeSeq uint64) (*otelSpan, hook
 	}
 	sc := s.SpanContext()
 	e := otelSpans.open[key(sc)]
-	if e == nil || !e.candidate || any(e.interaction) != interaction || activeSeq > e.seq {
+	if e == nil || !e.candidate || any(e.interaction.Value()) != interaction || activeSeq > e.seq {
 		return nil, hook.OTelCall{}, false
 	}
 	return e, hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: e.parentID, Adopted: !e.replaced}, true
