@@ -19,27 +19,31 @@ import (
 )
 
 type pauseSegmentsStep struct {
-	ErrorType   string              `json:"error_type"`
-	CallPurpose string              `json:"call_purpose"`
-	Credits     *float64            `json:"credits"`
-	Refused     bool                `json:"refused"`
-	ResponseID  string              `json:"response_id"`
-	BYOK        *bool               `json:"byok"`
-	Text        string              `json:"text"`
-	Op          string              `json:"op"`
-	Source      string              `json:"source"`
-	Provider    string              `json:"provider"`
-	Model       string              `json:"model"`
-	InputTokens *int                `json:"input_tokens"`
-	StartedMS   *int64              `json:"started_ms"`
-	EndedMS     *int64              `json:"ended_ms"`
-	OutputText  string              `json:"output_text"`
-	SpanID      string              `json:"span_id"`
-	ParentSpan  string              `json:"parent_span_id"`
-	Event       string              `json:"event"`
-	Steps       []pauseSegmentsStep `json:"steps"`
-	JSON        bool                `json:"json"`
-	Calls       []struct {
+	AgentName            string              `json:"agent_name"`
+	FallbackUsed         *bool               `json:"fallback_used"`
+	PendingCallOverrides map[string]any      `json:"pending_call_overrides"`
+	PendingCallOmit      []string            `json:"pending_call_omit"`
+	ErrorType            string              `json:"error_type"`
+	CallPurpose          string              `json:"call_purpose"`
+	Credits              *float64            `json:"credits"`
+	Refused              bool                `json:"refused"`
+	ResponseID           string              `json:"response_id"`
+	BYOK                 *bool               `json:"byok"`
+	Text                 string              `json:"text"`
+	Op                   string              `json:"op"`
+	Source               string              `json:"source"`
+	Provider             string              `json:"provider"`
+	Model                string              `json:"model"`
+	InputTokens          *int                `json:"input_tokens"`
+	StartedMS            *int64              `json:"started_ms"`
+	EndedMS              *int64              `json:"ended_ms"`
+	OutputText           string              `json:"output_text"`
+	SpanID               string              `json:"span_id"`
+	ParentSpan           string              `json:"parent_span_id"`
+	Event                string              `json:"event"`
+	Steps                []pauseSegmentsStep `json:"steps"`
+	JSON                 bool                `json:"json"`
+	Calls                []struct {
 		ID        string   `json:"id"`
 		Name      string   `json:"name"`
 		SDKs      []string `json:"sdks"`
@@ -192,7 +196,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				for _, step := range steps {
 					switch step.Op {
 					case "record_call":
-						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: derefInt(step.InputTokens), OutputText: step.OutputText, ResponseID: step.ResponseID, BYOK: step.BYOK, ErrorType: step.ErrorType, CallPurpose: step.CallPurpose, Credits: step.Credits}
+						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: derefInt(step.InputTokens), OutputText: step.OutputText, ResponseID: step.ResponseID, BYOK: step.BYOK, ErrorType: step.ErrorType, CallPurpose: step.CallPurpose, Credits: step.Credits, AgentName: step.AgentName, FallbackUsed: step.FallbackUsed}
 						if step.Source == "span" {
 							call.Integration = "tracing"
 						}
@@ -246,6 +250,17 @@ func TestPauseSegmentsFixture(t *testing.T) {
 							var stored PausedInteraction
 							if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
 								t.Fatal(err)
+							}
+							if step.PendingCallOverrides != nil || step.PendingCallOmit != nil {
+								if len(stored.PendingCalls) != 1 {
+									t.Fatal("expected one pending call")
+								}
+								for key, value := range step.PendingCallOverrides {
+									stored.PendingCalls[0][key] = value
+								}
+								for _, key := range step.PendingCallOmit {
+									delete(stored.PendingCalls[0], key)
+								}
 							}
 							_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored, Analytics: client})
 						}

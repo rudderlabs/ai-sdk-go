@@ -982,11 +982,11 @@ func nonNegative(n int) int { return max(n, 0) }
 
 // enrichRepeatLocked prices new metadata against the retained response's usage. Lock held.
 func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, hook CreditsFunc) {
-	// Same-source repeats can supply answer text and explicit credits without new metadata.
+	// Same-source repeats can supply answer text; successful calls can also accept late credits.
 	if call.ErrorType == "" && call.Integration != "tracing" {
 		i.keepAnswerLocked(call.OutputText, false)
 	}
-	if call.Credits != nil && earlier.errorType != "cancelled" && (earlier.errorType == "" || !earlier.creditsExplicit) {
+	if call.Credits != nil && earlier.errorType == "" {
 		earlier.credits = creditsOf(call.Credits)
 		earlier.creditsExplicit = true
 	}
@@ -1011,7 +1011,7 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	}
 	explicit := credits != nil
 	priced := false
-	if credits == nil && earlier.errorType != "" {
+	if credits == nil && earlier.errorType != "" && (earlier.errorType != "cancelled" || earlier.creditsExplicit) {
 		credits = earlier.credits
 	}
 	earlier.pricingRevision++
