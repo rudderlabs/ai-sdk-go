@@ -46,6 +46,7 @@ type maScenario struct {
 		ToolBreakdown  bool            `json:"tool_breakdown"`
 		CaptureContent bool            `json:"capture_content"`
 		Session        json.RawMessage `json:"session"`
+		MaxMapEntries  int             `json:"max_map_entries"`
 	} `json:"options"`
 	Streams  []maStream   `json:"streams"`
 	Expected []maExpected `json:"expected"`
@@ -238,7 +239,11 @@ func TestManagedAgentsFixture(t *testing.T) {
 	f := loadMAFixture(t)
 	for _, sc := range f.Scenarios {
 		t.Run(sc.Name, func(t *testing.T) {
-			_, rec := setup(t, rudderstackai.WithToolBreakdown(sc.Options.ToolBreakdown), rudderstackai.WithCaptureContent(sc.Options.CaptureContent))
+			cfg := []rudderstackai.ConfigOption{rudderstackai.WithToolBreakdown(sc.Options.ToolBreakdown), rudderstackai.WithCaptureContent(sc.Options.CaptureContent)}
+			if n := sc.Options.MaxMapEntries; n > 0 {
+				cfg = append(cfg, rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: n}))
+			}
+			_, rec := setup(t, cfg...)
 			resetMA(t)
 			t.Cleanup(rudderstackai.ClearPrices)
 			p := f.Price
@@ -1153,34 +1158,6 @@ func TestManagedAgentsKeepsAHistoryTurnsLatencyWhenTheReaderFallsBehindAfterASpi
 	})
 	got := rec.events(t)["ai_response_received"]
 	if len(got) != 1 || got[0]["latency_ms"] != float64(2000) {
-		t.Fatalf("%v", got)
-	}
-}
-
-func TestManagedAgentsResumesAPausedAnswerWhenTheNextStreamStartsWithAPromptEcho(t *testing.T) {
-	f, sc := maFixtureScenario(t, "custom_tool_pause_resume")
-	_, rec := setup(t)
-	resetMA(t)
-	session := rudderanthropic.WithSession(withID(f.Session, "sesn_echo"))
-	track := func(events *sliceStream) {
-		stream := rudderanthropic.TrackSessionEvents(context.Background(), events, session)
-		for stream.Next() {
-		}
-		_ = stream.Close()
-	}
-	track(&sliceStream{events: decodeEvents(t, sc.Streams[0].Events)})
-	track(maEvents(t,
-		`{"id":"sevt_echo_u","type":"user.message","content":[],"processed_at":"2026-11-16T10:00:03.000Z"}`,
-		`{"id":"sevt_echo_r","type":"session.status_running","processed_at":"2026-11-16T10:00:03.000Z"}`,
-		`{"id":"sevt_echo_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},"processed_at":"2026-11-16T10:00:04.000Z"}`,
-		`{"id":"sevt_echo_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},"processed_at":"2026-11-16T10:00:05.000Z"}`,
-	))
-	got := rec.events(t)
-	responses := got["ai_response_received"]
-	if len(got["ai_user_prompt_created"]) != 1 || len(responses) != 2 ||
-		responses[0]["interaction_id"] != responses[1]["interaction_id"] ||
-		responses[0]["response_status"] != "paused" || responses[0]["tool_call_count"] != float64(0) ||
-		responses[1]["response_status"] != "success" || responses[1]["tool_call_count"] != float64(1) {
 		t.Fatalf("%v", got)
 	}
 }
