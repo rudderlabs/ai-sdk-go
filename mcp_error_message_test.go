@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -24,6 +25,7 @@ func TestMCPErrorMessageFixtures(t *testing.T) {
 			Name          string
 			Result, Error map[string]any
 			Expected      *string
+			Write         string
 		}
 	}
 	if err := json.Unmarshal(data, &fixture); err != nil {
@@ -39,7 +41,19 @@ func TestMCPErrorMessageFixtures(t *testing.T) {
 			if tc.Expected != nil {
 				want = *tc.Expected
 			}
-			if got := errorMessage(source, MaskText); got != want {
+			got := errorMessage(source, MaskText)
+			if tc.Write != "" {
+				responses := mcpbridge.NewResponses()
+				source["jsonrpc"], source["id"] = "2.0", "fixture"
+				responses.Await("fixture", func(message map[string]any) { got = errorMessage(message, MaskText) })
+				b, _ := json.Marshal(source)
+				var out io.Writer = io.Discard
+				if tc.Write == "fails" {
+					out = fixtureFailingWriter{}
+				}
+				_, _ = mcpbridge.NewWriter(out, responses).Write(append(b, '\n'))
+			}
+			if got != want {
 				t.Errorf("got %q, want %q", got, want)
 			}
 		})
@@ -294,4 +308,10 @@ func TestMCPErrorMessageSuccessfulReadsAndPrompts(t *testing.T) {
 			t.Errorf("error_message on success: %v", p)
 		}
 	}
+}
+
+type fixtureFailingWriter struct{}
+
+func (fixtureFailingWriter) Write(p []byte) (int, error) {
+	return len(p), errors.New("fixture write failed")
 }

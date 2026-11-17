@@ -1,6 +1,6 @@
 {
   "fixture_version": 1,
-  "description": "Opt-in `error_message` on failed mcp_tool_called, mcp_resource_read and mcp_prompt_used, sent only with content capture on. Source: for a tool result with `isError: true`, the `text` of its `content` items whose `type` is `text` and whose `text` is a string, joined with a newline; for a JSON-RPC error response, `error.message` when it is a string (never `error.data`). Trim surrounding whitespace, mask with the SDK's opt-in text masking (built-in patterns from redaction-v0.1.json, then the customer redact hook), withhold the field when masking fails or the masked text still matches a built-in pattern, then cap at 200 code points. Empty text after trimming is withheld. `expected: null` means no `error_message`. Cases use the default masking configuration.",
+  "description": "Opt-in `error_message` on failed mcp_tool_called, mcp_resource_read and mcp_prompt_used, sent only with content capture on. Source: for a tool result with `isError: true`, the `text` of its `content` items whose `type` is `text` and whose `text` is a string, joined with a newline; for a JSON-RPC error response, `error.message` when it is a string (never `error.data`). Trim surrounding whitespace, mask with the SDK's opt-in text masking (built-in patterns from redaction-v0.1.json, then the customer redact hook), withhold the field when masking fails or the masked text still matches a built-in pattern, then cap at 200 code points. Empty text after trimming is withheld. `expected: null` means no `error_message`. Cases use the default masking configuration. Events wait for the final response write to succeed. Optional `write: \"fails\"` simulates a failed final write and withholds error_message; omitted or `write: \"succeeds\"` means a successful write. Close or no completion within 10 seconds also withholds it.",
   "max_code_points": 200,
   "cases": [
     {
@@ -210,6 +210,52 @@
         "message": ""
       },
       "expected": null
+    },
+    {
+      "name": "result_write_fails",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "Warehouse query timed out after 30s"
+          }
+        ]
+      },
+      "write": "fails",
+      "expected": null
+    },
+    {
+      "name": "result_write_succeeds",
+      "result": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "Warehouse query timed out after 30s"
+          }
+        ]
+      },
+      "write": "succeeds",
+      "expected": "Warehouse query timed out after 30s"
+    },
+    {
+      "name": "error_write_fails",
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: workspace_id is required"
+      },
+      "write": "fails",
+      "expected": null
+    },
+    {
+      "name": "error_write_succeeds",
+      "error": {
+        "code": -32602,
+        "message": "Invalid params: workspace_id is required"
+      },
+      "write": "succeeds",
+      "expected": "Invalid params: workspace_id is required"
     }
   ]
 }

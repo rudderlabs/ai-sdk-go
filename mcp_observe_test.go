@@ -200,6 +200,7 @@ func TestObserveMCPTransportFixtureParity(t *testing.T) {
 			Name          string
 			Result, Error map[string]any
 			Expected      *string
+			Write         string
 		}
 	}
 	if err := json.Unmarshal(data, &fixture); err != nil {
@@ -222,7 +223,11 @@ func TestObserveMCPTransportFixtureParity(t *testing.T) {
 				msg["result"] = tc.Result
 			}
 			b, _ := json.Marshal(msg)
-			responses.DeliverJSON(b)
+			var out io.Writer = io.Discard
+			if tc.Write == "fails" {
+				out = fixtureFailingWriter{}
+			}
+			_, _ = mcpbridge.NewWriter(out, responses).Write(append(b, '\n'))
 			want := ""
 			if tc.Expected != nil {
 				want = *tc.Expected
@@ -286,5 +291,35 @@ func TestHeldEventsKeepOrderDuringFlush(t *testing.T) {
 	defer mu.Unlock()
 	if len(order) != 2 || order[0] != "mcp_tool_called" {
 		t.Errorf("order: %v", order)
+	}
+}
+
+func TestObserveMCPStdioFailedWriteSendsWithoutMessage(t *testing.T) {
+	setupAI(t)
+	s := workspaceServer("stdio-write-mcp", nil)
+	r := wrap(t, s, Options{CaptureContent: true})
+	w, _ := instances.get(s)
+	closed, err := os.CreateTemp(t.TempDir(), "closed-output")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = closed.Close()
+	saved := os.Stdout
+	os.Stdout = closed
+	ctx, transport := ObserveMCPTransport(context.Background(), &mcp.StdioTransport{})
+	os.Stdout = saved
+	responses := mcpbridge.ResponsesFrom(ctx)
+	rc := w.begin(mcpbridge.Request{Ctx: ctx, RequestID: int64(1), Responses: responses})
+	rc.ToolCall("list_destinations", nil, false, nil, "")
+	rc.ToolDone(mcpbridge.Outcome{ErrorType: "api_error"})
+	if len(r.named("mcp_tool_called")) != 0 {
+		t.Fatal("sent before write")
+	}
+	_, err = transport.(*mcp.IOTransport).Writer.Write([]byte(`{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"never written"}}` + "\n"))
+	if err == nil {
+		t.Fatal("expected closed-file write error")
+	}
+	if _, ok := r.props(t, "mcp_tool_called")["error_message"]; ok {
+		t.Fatal("text from failed stdio write")
 	}
 }
