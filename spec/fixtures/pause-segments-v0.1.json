@@ -1,6 +1,6 @@
 {
   "fixture_version": 1,
-  "description": "Which segment counts a call or tool recorded while a pause or the final end delivers events. Usage recorded during pause delivery belongs to the paused segment, counted once, with its own call and tool events; the final end refuses it, as any write after end.",
+  "description": "Which segment counts a call or tool recorded while a pause or the final end delivers events. Usage recorded during pause delivery belongs to the paused segment, counted once, with its own call and tool events; the final end refuses it, as any write after end. A tool with an ID and no outcome whose agent made no later call is what a pause waits on: the segment that runs it counts it, once, and sends its declared event.",
   "cases": [
     {
       "name": "wrapper call recorded during paused call delivery",
@@ -7491,6 +7491,9 @@
             "tool_call_id": "wait",
             "tool_status": "success"
           }
+        ],
+        "errors": [
+          "limit_reached"
         ]
       }
     },
@@ -7571,6 +7574,9 @@
             "tool_call_id": "wait",
             "tool_status": "success"
           }
+        ],
+        "errors": [
+          "limit_reached"
         ]
       }
     },
