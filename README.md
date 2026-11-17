@@ -479,3 +479,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [RELEASING.md](RELEASING.md). Report 
 Wrapper and manual spans are opt-in with `rudderstackai.WithEmitSpans(true)`, independently of
 `WithLLMCallEvents`. See [tracing](docs/tracing.md) for `StartSpan`, call `span_id` joins, privacy,
 and Go platform limits.
+
+Credits retries preserve the newest retained call usage and metadata when a hook re-enters and matches a twin. The published credits belong to that same usage and metadata. Snapshot outcome hints prefer canonical keys even when their value is null; legacy aliases are read only if the canonical key is absent.

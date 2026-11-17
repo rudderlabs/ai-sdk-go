@@ -1273,13 +1273,18 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			}
 			fillString(&earlier.agentName, call.AgentName)
 			fillString(&earlier.callPurpose, call.CallPurpose)
-			if call.BYOK != nil {
-				earlier.byok = call.BYOK
+			if call.BYOK != nil && !(earlier == pricingTwin && earlier.twinMatched) {
+				earlier.byok = copyCreditPointer(call.BYOK)
 			}
-			if call.FallbackUsed != nil {
-				earlier.fallbackUsed = call.FallbackUsed
+			if call.FallbackUsed != nil && !(earlier == pricingTwin && earlier.twinMatched) {
+				earlier.fallbackUsed = copyCreditPointer(call.FallbackUsed)
 			}
-			// Hook-derived credits priced the duplicate's discarded usage, so only explicit ones merge.
+			// A nested authoritative twin can become matched while this hook is pricing it.
+			// The retry used its current basis; publish that amount with the retained metadata.
+			if earlier == pricingTwin && earlier.twinMatched && !earlier.creditsExplicit && c.credits != nil {
+				earlier.credits = credits
+			}
+			// Hook-derived credits on a different basis cannot merge.
 			if call.Credits != nil && call.ErrorType != "cancelled" && earlier.errorType != "cancelled" {
 				earlier.credits = creditsOf(call.Credits)
 			}
@@ -2745,7 +2750,14 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 	if h := selectionObject(snapshot.OutcomeHint, false); h != nil {
 		status := ResponseStatus(pendingText(h, "status"))
 		if calls, ok := selectionCalls(h); ok && responseStatuses[status] {
-			i.hint = &outcomeHint{status: status, errorType: first(pendingText(h, "errorType"), pendingText(h, "error_type")), calls: calls, pauseReason: PauseReason(first(pendingText(h, "pauseReason"), pendingText(h, "pause_reason")))}
+			errorKey, reasonKey := "errorType", "pauseReason"
+			if _, present := h[errorKey]; !present {
+				errorKey = "error_type"
+			}
+			if _, present := h[reasonKey]; !present {
+				reasonKey = "pause_reason"
+			}
+			i.hint = &outcomeHint{status: status, errorType: pendingText(h, errorKey), calls: calls, pauseReason: PauseReason(pendingText(h, reasonKey))}
 		}
 	}
 	for _, p := range snapshot.PendingTools {
