@@ -9,11 +9,11 @@ import (
 	"time"
 	"weak"
 
+	analytics "github.com/rudderlabs/analytics-go/v4"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
-	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 func privateOwnerAttrs() []attribute.KeyValue {
