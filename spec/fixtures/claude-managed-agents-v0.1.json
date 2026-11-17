@@ -4881,8 +4881,8 @@
       ]
     },
     {
-      "name": "child_known_from_status",
-      "description": "A subagent thread known only from a thread status event naming it: its model request and an interrupt aimed at it are not this turn's.",
+      "name": "thread_unknown_from_status",
+      "description": "Thread status alone does not identify a child: its replayed model request counts once and an interrupt naming it cancels this turn.",
       "streams": [
         {
           "events": [
@@ -4908,6 +4908,27 @@
               "type": "session.thread_status_running",
               "session_thread_id": "sthr_kid",
               "agent_name": "researcher"
+            },
+            {
+              "id": "sevt_kidstat_04",
+              "processed_at": "2026-11-16T10:00:00.310000Z",
+              "type": "span.model_request_start",
+              "session_thread_id": "sthr_kid"
+            },
+            {
+              "id": "sevt_kidstat_05",
+              "processed_at": "2026-11-16T10:00:00.410000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_kidstat_04",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 50,
+                "output_tokens": 9,
+                "speed": "standard"
+              },
+              "session_thread_id": "sthr_kid"
             },
             {
               "id": "sevt_kidstat_04",
@@ -4991,31 +5012,32 @@
           "interaction": "A",
           "properties": {
             "conversation_id": "sesn_fixture",
-            "response_status": "success",
+            "response_status": "cancelled",
             "trigger": "user",
             "primary_model": "claude-haiku-5-5",
             "primary_provider": "anthropic",
-            "llm_call_count": 1,
+            "llm_call_count": 2,
             "tool_call_count": 0,
-            "total_input_tokens": 10,
-            "total_output_tokens": 2,
-            "total_tokens": 12,
+            "total_input_tokens": 60,
+            "total_output_tokens": 11,
+            "total_tokens": 71,
             "total_cached_input_tokens": 0,
             "total_cache_write_tokens": 0,
-            "total_cost_usd": 0.000002,
+            "total_cost_usd": 0.0000115,
+            "error_type": "cancelled",
             "usage_breakdown": [
               {
                 "provider": "anthropic",
                 "model": "claude-haiku-5-5",
-                "call_count": 1,
-                "input_tokens": 10,
-                "output_tokens": 2,
-                "total_tokens": 12,
+                "call_count": 2,
+                "input_tokens": 60,
+                "output_tokens": 11,
+                "total_tokens": 71,
                 "cached_input_tokens": 0,
                 "cache_write_tokens": 0,
                 "service_tier": "standard",
                 "error_count": 0,
-                "cost_usd": 0.000002
+                "cost_usd": 0.0000115
               }
             ]
           }

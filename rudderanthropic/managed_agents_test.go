@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"reflect"
@@ -27,6 +29,8 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/internal/kit"
 	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 	"github.com/rudderlabs/ai-sdk-go/rudderanthropic"
 )
@@ -1277,7 +1281,7 @@ func TestManagedAgentsKnowsASubagentThreadFromItsCrossPostedEventsAlone(t *testi
 	}
 	track(maEvents(t,
 		`{"id":"sevt_kid_u","type":"user.message","content":[],`+at+`}`,
-		`{"id":"sevt_kid_s","type":"session.thread_status_running","session_thread_id":"sthr_kid",`+at+`}`,
+		`{"id":"sevt_kid_s","type":"agent.thinking","session_thread_id":"sthr_kid",`+at+`}`,
 		`{"id":"sevt_kid_x","type":"user.interrupt","session_thread_id":"sthr_kid",`+at+`}`,
 		`{"id":"sevt_kid_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at+`}`,
 	))
@@ -2414,6 +2418,10 @@ func maPreviewMessage(text, id string) string {
 
 // maPreviewStream exercises the installed client's SSE parser and event_deltas option.
 func maPreviewStream(t *testing.T, raw []string, each func(*rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]), stopAfter int) {
+	maPreviewStreamContext(context.Background(), t, raw, each, stopAfter)
+}
+
+func maPreviewStreamContext(ctx context.Context, t *testing.T, raw []string, each func(*rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]), stopAfter int) {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.URL.Query()["event_deltas[]"]; !slices.Equal(got, []string{"agent.message", "agent.thinking"}) {
@@ -2431,10 +2439,10 @@ func maPreviewStream(t *testing.T, raw []string, each func(*rudderanthropic.Sess
 	}))
 	defer server.Close()
 	client := anthropic.NewClient(option.WithAPIKey("test"), option.WithBaseURL(server.URL))
-	source := client.Beta.Sessions.Events.StreamEvents(context.Background(), "previews", anthropic.BetaSessionEventStreamParams{
+	source := client.Beta.Sessions.Events.StreamEvents(ctx, "previews", anthropic.BetaSessionEventStreamParams{
 		EventDeltas: []anthropic.BetaManagedAgentsDeltaType{anthropic.BetaManagedAgentsDeltaTypeAgentMessage, anthropic.BetaManagedAgentsDeltaTypeAgentThinking},
 	})
-	events := rudderanthropic.TrackSessionEvents(context.Background(), source,
+	events := rudderanthropic.TrackSessionEvents(ctx, source,
 		rudderanthropic.WithSessionID("previews"), rudderanthropic.WithSessionModel("claude-haiku-5-5"),
 		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{UserID: "u"}))
 	defer events.Close()
@@ -2453,8 +2461,7 @@ func maPreviewStream(t *testing.T, raw []string, each func(*rudderanthropic.Sess
 	}
 }
 
-// Reflection keeps the regression tests compilable with the pre-port source, where the map
-// does not exist. The pointer also lets tests inspect the same state after a pause and resume.
+// Reflection keeps the tests compilable when the old adapter source is restored.
 func maPreviewState(t *testing.T, events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) reflect.Value {
 	t.Helper()
 	tracker := reflect.ValueOf(events).Elem().FieldByName("tracker")
@@ -2462,20 +2469,24 @@ func maPreviewState(t *testing.T, events *rudderanthropic.SessionEvents[anthropi
 	if turn.IsNil() {
 		t.Fatal("preview did not open a turn")
 	}
-	state := turn.Elem().FieldByName("state").Elem()
-	if !state.FieldByName("provisional").IsValid() {
-		t.Fatal("turn state has no provisional map")
-	}
-	return state
+	return turn.Elem().FieldByName("state").Elem()
 }
 
-func maPreviewText(t *testing.T, state reflect.Value, id string) string {
+func maNoPreviewText(t *testing.T, state reflect.Value) {
 	t.Helper()
-	entry := state.FieldByName("provisional").Elem().FieldByName("m").MapIndex(reflect.ValueOf(id))
-	if !entry.IsValid() {
-		t.Fatalf("missing provisional event %s", id)
+	if state.FieldByName("answer").String() != "" || state.FieldByName("requestText").String() != "" {
+		t.Fatal("preview text stored in turn state")
 	}
-	return entry.Elem().FieldByName("text").String()
+	if state.FieldByName("provisional").IsValid() {
+		t.Fatal("turn state still has a provisional map")
+	}
+}
+
+func maBufferedText(preview bool, text string) any {
+	if preview {
+		return nil
+	}
+	return text
 }
 
 func maPreviewResponse(t *testing.T, events map[string][]map[string]any, status string, text any) {
@@ -2490,7 +2501,7 @@ func maPreviewResponse(t *testing.T, events map[string][]map[string]any, status 
 	}
 }
 
-func maPreviewCallText(t *testing.T, events map[string][]map[string]any, text string) {
+func maPreviewCallText(t *testing.T, events map[string][]map[string]any, text any) {
 	t.Helper()
 	calls := events["ai_llm_response_received"]
 	if len(calls) != 1 || calls[0]["output_text"] != text {
@@ -2533,7 +2544,7 @@ func TestManagedAgentsPreviewEvents(t *testing.T) {
 					t.Fatalf("events: %v", events)
 				}
 				var text any
-				if capture {
+				if capture && !preview {
 					text = "partial answer"
 				}
 				maPreviewResponse(t, events, "cancelled", text)
@@ -2552,25 +2563,25 @@ func TestManagedAgentsPreviewEvents(t *testing.T) {
 			if len(answers) != 2 || answers[0]["response_status"] != "paused" || answers[1]["response_status"] != "cancelled" || answers[1]["interaction_id"] != answers[0]["interaction_id"] || len(events["ai_user_prompt_created"]) != 1 {
 				t.Fatalf("events: %v", events)
 			}
-			maPreviewResponse(t, events, "cancelled", "resumed")
+			maPreviewResponse(t, events, "cancelled", maBufferedText(preview, "resumed"))
 		})
 	})
-	t.Run("interrupt after previews retains partial answer and call text, buffered control", func(t *testing.T) {
+	t.Run("interrupt before the buffered message has no answer or call text", func(t *testing.T) {
 		controls(t, calls, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
 			raw := []string{maWholeEvent("user.message"), `{"type":"span.model_request_start","id":"request"}`}
 			raw = append(raw, output(preview, "partial")...)
 			raw = append(raw, maWholeEvent("user.interrupt"), maWholeCall(`,"is_error":true,"model_request_start_id":"request"`), maWholeIdle("end_turn"))
 			maPreviewStream(t, raw, nil, 0)
-			maPreviewResponse(t, recorded(), "cancelled", "partial")
-			maPreviewCallText(t, recorded(), "partial")
+			maPreviewResponse(t, recorded(), "cancelled", maBufferedText(preview, "partial"))
+			maPreviewCallText(t, recorded(), maBufferedText(preview, "partial"))
 		})
 	})
-	t.Run("previews then buffered message replace provisional text without double counting, buffered control", func(t *testing.T) {
+	t.Run("previews then buffered message record only buffered text without double counting", func(t *testing.T) {
 		controls(t, calls, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
 			raw := []string{message("complete")}
 			var carried reflect.Value
 			if preview {
-				raw = []string{start, delta("different provisional")}
+				raw = []string{start, delta("preview-only text")}
 			}
 			maPreviewStream(t, append(raw, maWholeIdle("requires_action")), func(events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) {
 				if preview {
@@ -2580,26 +2591,26 @@ func TestManagedAgentsPreviewEvents(t *testing.T) {
 			if len(recorded()["ai_response_received"]) != 1 {
 				t.Fatal("missing paused response")
 			}
-			if preview && maPreviewText(t, carried, "message") != "different provisional" {
-				t.Fatal("lost carried provisional text")
+			if preview {
+				maNoPreviewText(t, carried)
 			}
 			maPreviewStream(t, []string{message("complete"), call, maWholeIdle("end_turn")}, nil, 0)
 			maPreviewResponse(t, recorded(), "success", "complete")
 			maPreviewCallText(t, recorded(), "complete")
 		})
 	})
-	t.Run("previews and buffered message in one stream replace provisional output, buffered control", func(t *testing.T) {
+	t.Run("previews and buffered message in one stream record only buffered output", func(t *testing.T) {
 		controls(t, calls, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
 			var raw []string
 			if preview {
-				raw = []string{start, delta("different provisional")}
+				raw = []string{start, delta("preview-only text")}
 			}
 			raw = append(raw, message("complete"), call, maWholeIdle("end_turn"))
 			read := 0
 			maPreviewStream(t, raw, func(events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) {
 				read++
-				if preview && read == 2 && maPreviewText(t, maPreviewState(t, events), "message") != "different provisional" {
-					t.Fatal("lost provisional text")
+				if preview && read == 2 {
+					maNoPreviewText(t, maPreviewState(t, events))
 				}
 			}, 0)
 			maPreviewResponse(t, recorded(), "success", "complete")
@@ -2607,7 +2618,7 @@ func TestManagedAgentsPreviewEvents(t *testing.T) {
 		})
 	})
 	for _, ending := range []string{"end", "error", "close"} {
-		t.Run("preview-only output survives "+ending+", buffered control", func(t *testing.T) {
+		t.Run("preview-only output is absent on "+ending+", buffered control", func(t *testing.T) {
 			controls(t, capture, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
 				raw := output(preview, "partial")
 				status := "cancelled"
@@ -2620,7 +2631,7 @@ func TestManagedAgentsPreviewEvents(t *testing.T) {
 					status = "error"
 				}
 				maPreviewStream(t, raw, nil, 0)
-				maPreviewResponse(t, recorded(), status, "partial")
+				maPreviewResponse(t, recorded(), status, maBufferedText(preview, "partial"))
 			})
 		})
 	}
@@ -2650,22 +2661,17 @@ func TestManagedAgentsPreviewEvents(t *testing.T) {
 			maPreviewCallText(t, recorded(), "complete")
 		})
 	})
-	t.Run("carries bounded provisional text through pause and replaces it on resume", func(t *testing.T) {
+	t.Run("carries preview-opened state through pause without storing preview text", func(t *testing.T) {
 		_, rec := setup(t, rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 2}))
 		resetMA(t)
 		var carried reflect.Value
 		maPreviewStream(t, []string{start, delta("partial"), maWholeIdle("requires_action")}, func(events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) {
 			carried = maPreviewState(t, events)
 		}, 0)
-		if maPreviewText(t, carried, "message") != "partial" {
-			t.Fatal("lost carried text")
-		}
+		maNoPreviewText(t, carried)
 		maPreviewStream(t, []string{message("complete"), call, maWholeIdle("end_turn")}, nil, 0)
 		maPreviewResponse(t, rec.events(t), "success", "complete")
 		maPreviewCallText(t, rec.events(t), "complete")
-		if carried.FieldByName("provisional").Elem().FieldByName("m").Len() != 0 {
-			t.Fatal("replacement left provisional entries")
-		}
 		var raw []string
 		for _, id := range []string{"oldest", "middle", "newest"} {
 			raw = append(raw, maPreviewStart(id, "agent.message"), maPreviewDelta(strings.Repeat("x", 40_000), id))
@@ -2674,22 +2680,422 @@ func TestManagedAgentsPreviewEvents(t *testing.T) {
 		maPreviewStream(t, raw, func(events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]) {
 			state = maPreviewState(t, events)
 		}, 0)
-		order := state.FieldByName("provisional").Elem().FieldByName("order")
-		if order.Len() != 2 || order.Index(0).String() != "middle" || order.Index(1).String() != "newest" || len(maPreviewText(t, state, "newest")) != 32_001 {
-			t.Fatal("provisional bounds or eviction differ")
-		}
+		maNoPreviewText(t, state)
 	})
-	t.Run("preview text uses the same capture and redaction rules as buffered text", func(t *testing.T) {
+	t.Run("only buffered text uses capture and redaction rules", func(t *testing.T) {
 		options := append(slices.Clone(calls), rudderstackai.WithRedactHook(func(string) (string, error) { return "masked", nil }))
 		controls(t, options, func(t *testing.T, preview bool, recorded func() map[string][]map[string]any) {
 			raw := append(output(preview, "private"), call, maWholeIdle("end_turn"))
 			maPreviewStream(t, raw, nil, 0)
-			maPreviewResponse(t, recorded(), "success", "masked")
-			maPreviewCallText(t, recorded(), "masked")
+			maPreviewResponse(t, recorded(), "success", maBufferedText(preview, "masked"))
+			maPreviewCallText(t, recorded(), maBufferedText(preview, "masked"))
 			encoded, err := json.Marshal(recorded())
 			if err != nil || strings.Contains(string(encoded), "private") {
 				t.Fatal("unredacted preview text in events")
 			}
 		})
 	})
+}
+
+// Go streams expose errors through Err rather than throwing named JavaScript errors.
+func maStreamEndings() []struct {
+	name string
+	err  error
+} {
+	return []struct {
+		name string
+		err  error
+	}{
+		{"clean EOF", nil},
+		{"context.Canceled", context.Canceled},
+		{"context.DeadlineExceeded", context.DeadlineExceeded},
+		{"net.OpError", &net.OpError{Op: "read", Net: "tcp", Err: errors.New("stream failed")}},
+		{"url.Error", &url.Error{Op: "Get", URL: "https://example.invalid", Err: errors.New("stream failed")}},
+		{"json.SyntaxError", &json.SyntaxError{Offset: 1}},
+		{"json.UnmarshalTypeError", &json.UnmarshalTypeError{Value: "number", Type: reflect.TypeFor[string]()}},
+		{"io.ErrUnexpectedEOF", io.ErrUnexpectedEOF},
+		{"anthropic.Error", &anthropic.Error{StatusCode: http.StatusInternalServerError}},
+		{"Error", errors.New("stream failed")},
+	}
+}
+
+func TestManagedAgentsPausesAWaitingAnswerAcrossStreamEndings(t *testing.T) {
+	for _, ending := range maStreamEndings() {
+		for _, borrowed := range []bool{false, true} {
+			t.Run(fmt.Sprintf("pauses a waiting answer across %s (borrowed %t)", ending.name, borrowed), func(t *testing.T) {
+				_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
+				resetMA(t)
+				ctx := context.Background()
+				var caller *rudderstackai.Interaction
+				if borrowed {
+					ctx, caller = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: "u"})
+				}
+				sessionID := "sesn_wait_" + ending.name + strconv.FormatBool(borrowed)
+				var hintedStatus, hintedError, hintedReason string
+				original := hook.HintOutcome
+				hook.HintOutcome = func(i any, status, errorType, reason string) {
+					if i == caller {
+						hintedStatus, hintedError, hintedReason = status, errorType, reason
+					}
+					original(i, status, errorType, reason)
+				}
+				defer func() { hook.HintOutcome = original }()
+				source := maEvents(t,
+					`{"id":"wait_running","type":"session.status_running"}`,
+					`{"id":"wait_prompt","type":"user.message","content":[]}`,
+					`{"id":"wait_call","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":10,"output_tokens":2}}`,
+					`{"id":"wait_tool","type":"agent.custom_tool_use","name":"lookup","input":{}}`,
+					`{"id":"wait_idle","type":"session.status_idle","stop_reason":{"type":"requires_action","event_ids":["wait_tool"]}}`)
+				source.err = ending.err
+				events := rudderanthropic.TrackSessionEvents(ctx, source, rudderanthropic.WithSessionID(sessionID))
+				maDrain(events)
+				if events.Err() != ending.err {
+					t.Fatal("stream error changed")
+				}
+				_ = events.Close()
+				if borrowed {
+					if hintedStatus != "paused" || hintedError != "" || hintedReason != "deferred_tool" {
+						t.Fatalf("hint: %s %s %s", hintedStatus, hintedError, hintedReason)
+					}
+					if len(rec.events(t)["ai_response_received"]) != 0 {
+						t.Fatal("ended caller interaction")
+					}
+				} else {
+					first := rec.events(t)["ai_response_received"]
+					if len(first) != 1 || first[0]["response_status"] != "paused" || first[0]["tool_call_count"] != float64(0) {
+						t.Fatalf("first: %v", first)
+					}
+				}
+				resumed := rudderanthropic.TrackSessionEvents(ctx, maEvents(t,
+					`{"id":"wait_result","type":"user.custom_tool_result","custom_tool_use_id":"wait_tool","is_error":true}`,
+					`{"id":"wait_end","type":"session.status_idle","stop_reason":{"type":"end_turn"}}`), rudderanthropic.WithSessionID(sessionID))
+				maDrain(resumed)
+				if caller != nil {
+					caller.End(rudderstackai.EndOptions{})
+				}
+				responses := rec.events(t)["ai_response_received"]
+				count := 2
+				if borrowed {
+					count = 1
+				}
+				if len(responses) != count {
+					t.Fatalf("responses: %v", responses)
+				}
+				var tools float64
+				for _, response := range responses {
+					if response["interaction_id"] != responses[0]["interaction_id"] {
+						t.Fatal("interaction changed")
+					}
+					tools += response["tool_call_count"].(float64)
+				}
+				last := responses[len(responses)-1]
+				if last["response_status"] != "success" || tools != 1 {
+					t.Fatalf("responses: %v", responses)
+				}
+				breakdown := last["tool_breakdown"].([]any)
+				if len(breakdown) != 1 || breakdown[0].(map[string]any)["tool_name"] != "lookup" || breakdown[0].(map[string]any)["error_count"] != float64(1) {
+					t.Fatalf("tools: %v", breakdown)
+				}
+			})
+		}
+	}
+}
+
+func TestManagedAgentsCarriesAnUnfinishedCallerTurnAcrossStreamEndingsAndReplay(t *testing.T) {
+	for _, ending := range maStreamEndings() {
+		t.Run("carries an unfinished caller turn across "+ending.name+" and replay", func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true))
+			resetMA(t)
+			ctx, caller := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+			first := []string{
+				`{"id":"carry_prompt","type":"user.message","content":[]}`,
+				`{"id":"carry_call","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":10,"output_tokens":2}}`,
+				`{"id":"carry_tool","type":"agent.tool_use","name":"bash","input":{}}`,
+				`{"id":"carry_start","type":"span.model_request_start"}`,
+				`{"id":"carry_text","type":"agent.message","content":[{"type":"text","text":"carried output"}]}`,
+			}
+			source := maEvents(t, first...)
+			source.err = ending.err
+			events := rudderanthropic.TrackSessionEvents(ctx, source, rudderanthropic.WithSessionID("sesn_carry"))
+			maDrain(events)
+			if events.Err() != ending.err {
+				t.Fatal("stream error changed")
+			}
+			_, _, carried := rudderanthropic.InspectManagedAgents(events, "sesn_carry")
+			if carried != caller {
+				t.Fatal("unfinished caller state was discarded")
+			}
+			second := append(slices.Clone(first),
+				`{"id":"carry_result","type":"agent.tool_result","tool_use_id":"carry_tool","is_error":true}`,
+				`{"id":"carry_call_end","type":"span.model_request_end","is_error":false,"model_request_start_id":"carry_start","model_usage":{"input_tokens":5,"output_tokens":1}}`,
+				`{"id":"carry_end","type":"session.status_idle","stop_reason":{"type":"end_turn"}}`)
+			resumed := rudderanthropic.TrackSessionEvents(ctx, maEvents(t, second...), rudderanthropic.WithSessionID("sesn_carry"))
+			maDrain(resumed)
+			_, _, carried = rudderanthropic.InspectManagedAgents(resumed, "sesn_carry")
+			if carried != nil {
+				t.Fatal("finished caller state retained")
+			}
+			caller.End(rudderstackai.EndOptions{})
+			responses := rec.events(t)["ai_response_received"]
+			if len(responses) != 1 || responses[0]["response_status"] != "success" || responses[0]["llm_call_count"] != float64(2) || responses[0]["tool_call_count"] != float64(1) {
+				t.Fatalf("responses: %v", responses)
+			}
+			breakdown := responses[0]["tool_breakdown"].([]any)
+			if len(breakdown) != 1 || breakdown[0].(map[string]any)["tool_name"] != "bash" || breakdown[0].(map[string]any)["error_count"] != float64(1) {
+				t.Fatalf("tools: %v", breakdown)
+			}
+			calls := rec.events(t)["ai_llm_response_received"]
+			if len(calls) != 2 || calls[1]["output_text"] != "carried output" {
+				t.Fatalf("calls: %v", calls)
+			}
+		})
+	}
+}
+
+func TestManagedAgentsCancelsAPrimaryThreadInterruptAfterTheCassetteThreadStatuses(t *testing.T) {
+	t.Run("cancels a primary-thread interrupt after the cassette thread statuses", func(t *testing.T) {
+		_, rec := setup(t)
+		resetMA(t)
+		raw, err := os.ReadFile("../spec/fixtures/cassettes/claude-managed-agents-tools.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cassette cassetteTransport
+		var data struct{ Interactions json.RawMessage }
+		if err := json.Unmarshal(raw, &data); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(data.Interactions, &cassette.queue); err != nil {
+			t.Fatal(err)
+		}
+		var events []json.RawMessage
+		for _, interaction := range cassette.queue {
+			for _, event := range interaction.Response.Events {
+				events = append(events, event.Payload)
+			}
+		}
+		idle := -1
+		primary := ""
+		for n, raw := range events {
+			var event struct {
+				Type   string
+				Thread string `json:"session_thread_id"`
+			}
+			if err := json.Unmarshal(raw, &event); err != nil {
+				t.Fatal(err)
+			}
+			if event.Type == "session.thread_status_idle" {
+				idle, primary = n, event.Thread
+				break
+			}
+		}
+		if idle < 0 || primary == "" {
+			t.Fatal("cassette has no primary thread idle")
+		}
+		var second struct {
+			Type   string
+			Thread string `json:"session_thread_id"`
+		}
+		if err := json.Unmarshal(events[1], &second); err != nil {
+			t.Fatal(err)
+		}
+		if second.Type != "session.thread_status_running" || second.Thread != primary {
+			t.Fatal("cassette event order changed")
+		}
+		events = append(events[:idle+1], json.RawMessage(`{"id":"primary_interrupt","type":"user.interrupt","session_thread_id":`+strconv.Quote(primary)+`}`), json.RawMessage(`{"id":"primary_end","type":"session.status_idle","stop_reason":{"type":"end_turn"}}`))
+		tracked := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, events)}, rudderanthropic.WithSessionID("sesn_fixture"))
+		maDrain(tracked)
+		responses := rec.events(t)["ai_response_received"]
+		if len(responses) != 1 || responses[0]["response_status"] != "cancelled" || responses[0]["error_type"] != "cancelled" {
+			t.Fatalf("responses: %v", responses)
+		}
+	})
+}
+
+func TestManagedAgentsResolvesConversationIDsInOrder(t *testing.T) {
+	for _, row := range []struct{ option, context, session, expected string }{
+		{"option", "context", "session", "option"}, {"", "context", "session", "context"}, {"", "", "session", "session"}, {},
+	} {
+		t.Run(fmt.Sprintf("resolves conversation IDs in order (%s, %s, %s)", row.option, row.context, row.session), func(t *testing.T) {
+			_, rec := setup(t)
+			resetMA(t)
+			_, scenario := maFixtureScenario(t, "two_turns")
+			ctx := rudderstackai.WithValues(context.Background(), rudderstackai.ContextValues{ConversationID: row.context})
+			read := func(ctx context.Context) {
+				consumeMA(ctx, t, scenario.Streams[0], []rudderanthropic.SessionOption{rudderanthropic.WithSessionID(row.session), rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{ConversationID: row.option}), rudderanthropic.WithSessionModel("claude-haiku-5-5")})
+			}
+			read(ctx)
+			responses := rec.events(t)["ai_response_received"]
+			if len(responses) != 2 || responses[0]["conversation_id"] == "" || responses[1]["conversation_id"] != responses[0]["conversation_id"] || (row.expected != "" && responses[0]["conversation_id"] != row.expected) {
+				t.Fatalf("responses: %v", responses)
+			}
+			if row.expected == "" {
+				read(context.Background())
+				next := rec.events(t)["ai_response_received"][2:]
+				if len(next) != 2 || next[0]["conversation_id"] == responses[0]["conversation_id"] || next[1]["conversation_id"] != next[0]["conversation_id"] {
+					t.Fatalf("next: %v", next)
+				}
+			}
+		})
+	}
+}
+
+func TestManagedAgentsMapsSessionErrors(t *testing.T) {
+	for _, row := range []struct{ kind, errorType string }{{"billing_error", "rate_limit"}, {"credential_host_unreachable_error", "connection_error"}, {"repository_forbidden_error", "auth_error"}} {
+		t.Run("maps session "+row.kind+" to "+row.errorType, func(t *testing.T) {
+			_, rec := setup(t)
+			resetMA(t)
+			events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+				`{"id":"mapping_prompt","type":"user.message","content":[]}`,
+				`{"id":"mapping_error","type":"session.error","error":{"type":`+strconv.Quote(row.kind)+`}}`,
+				`{"id":"mapping_idle","type":"session.status_idle","stop_reason":{"type":"retries_exhausted"}}`), rudderanthropic.WithSessionID("sesn_fixture"))
+			maDrain(events)
+			responses := rec.events(t)["ai_response_received"]
+			if len(responses) != 1 || responses[0]["response_status"] != "error" || responses[0]["error_type"] != row.errorType {
+				t.Fatalf("responses: %v", responses)
+			}
+		})
+	}
+}
+
+func TestManagedAgentsKeepsConversationIDWhenMaxOpenInteractionsIsReached(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{MaxOpenInteractions: 1}))
+	resetMA(t)
+	_, caller := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	source := maEvents(t, maWholeEvent("user.message"), maWholeIdle("end_turn"), maWholeEvent("user.message"), maWholeIdle("end_turn"))
+	events := rudderanthropic.TrackSessionEvents(context.Background(), source, rudderanthropic.WithSessionID("sesn_limit"), rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{UserID: "u"}))
+	for events.Next() {
+		if source.n == 2 {
+			caller.End(rudderstackai.EndOptions{})
+		}
+	}
+	responses := rec.events(t)["ai_response_received"]
+	if len(responses) != 2 || responses[1]["conversation_id"] != "sesn_limit" {
+		t.Fatalf("responses: %v", responses)
+	}
+}
+
+func TestManagedAgentsEventsStayUntrackedInsideTheSDKsOwnUntrackedContext(t *testing.T) {
+	_, rec := setup(t)
+	resetMA(t)
+	done := make(chan error, 1)
+	source := maEvents(t, maWholeEvent("user.message"), maWholeCall(""), maWholeIdle("end_turn"))
+	if err := rudderstackai.Configure(rudderstackai.WithEvaluator(func(ctx context.Context, _ rudderstackai.EvaluationTurn) ([]rudderstackai.Score, error) {
+		if !kit.Untracked(ctx) {
+			done <- errors.New("evaluator context is tracked")
+			return nil, nil
+		}
+		events := rudderanthropic.TrackSessionEvents(ctx, source, rudderanthropic.WithSessionID("untracked"))
+		n := 0
+		for events.Next() {
+			n++
+			if events.Current().RawJSON() != source.Current().RawJSON() {
+				done <- errors.New("event changed")
+				return nil, nil
+			}
+		}
+		_ = events.Close()
+		if n != 3 || events.Err() != nil || !source.closed {
+			done <- errors.New("untracked events not passed through")
+			return nil, nil
+		}
+		done <- nil
+		return nil, nil
+	})); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = rudderstackai.Configure(rudderstackai.WithEvaluator(nil)) })
+	_, caller := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+	caller.End(rudderstackai.EndOptions{})
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("evaluator did not run")
+	}
+	events := rec.events(t)
+	if len(events["ai_user_prompt_created"]) != 1 || len(events["ai_response_received"]) != 1 || len(events["ai_llm_response_received"]) != 0 {
+		t.Fatalf("events: %v", events)
+	}
+}
+
+func TestManagedAgentsNeverRecordsPreviewText(t *testing.T) {
+	for _, path := range []string{"fresh", "interrupted", "ended", "errored", "closed", "paused-then-resumed", "caller-interaction", "spill"} {
+		t.Run("never records preview text ("+path+")", func(t *testing.T) {
+			cfg := []rudderstackai.ConfigOption{rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true)}
+			if path == "spill" {
+				cfg = append(cfg, rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 1}))
+			}
+			_, rec := setup(t, cfg...)
+			resetMA(t)
+			previews := func(suffix string) []string {
+				id := "message-" + suffix
+				return []string{
+					`{"type":"event_start","event":{"type":"agent.message","id":` + strconv.Quote(id) + `,"content":[{"type":"text","text":` + strconv.Quote("preview-start-"+suffix) + `}]}}`,
+					maPreviewDelta("preview-message-"+suffix, id),
+					`{"type":"event_delta","event_id":` + strconv.Quote(id) + `,"delta":{"type":"content_delta","content":{"type":"text","text":` + strconv.Quote("preview-unindexed-"+suffix) + `}}}`,
+					maPreviewStart("thinking-"+suffix, "agent.thinking"),
+					maPreviewDelta("preview-thinking-"+suffix, "thinking-"+suffix),
+				}
+			}
+			ctx := context.Background()
+			var caller *rudderstackai.Interaction
+			if path == "caller-interaction" {
+				ctx, caller = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: "u"})
+			}
+			if path == "paused-then-resumed" {
+				maPreviewStreamContext(ctx, t, append(previews("paused"), maWholeCall(""), maWholeIdle("requires_action")), nil, 0)
+				maPreviewStreamContext(ctx, t, append(previews("resumed"), maWholeCall(""), maWholeIdle("end_turn")), nil, 0)
+				responses := rec.events(t)["ai_response_received"]
+				if len(responses) != 2 || responses[0]["response_status"] != "paused" || responses[1]["response_status"] != "success" || responses[1]["interaction_id"] != responses[0]["interaction_id"] {
+					t.Fatalf("responses: %v", responses)
+				}
+			} else {
+				raw := previews(path)
+				extra := ""
+				if path == "interrupted" {
+					raw = append(raw, maWholeEvent("user.interrupt"))
+					extra = `,"is_error":true`
+				}
+				raw = append(raw, maWholeCall(extra))
+				if path == "ended" || path == "interrupted" || path == "spill" {
+					raw = append(raw, maWholeIdle("end_turn"))
+				}
+				if path == "errored" {
+					raw = append(raw, `{"type":"session.error","error":{"type":"model_request_failed_error","retry_status":{"type":"terminal"}}}`)
+				}
+				stopAfter := 0
+				if path == "closed" {
+					stopAfter = len(raw)
+				}
+				maPreviewStreamContext(ctx, t, raw, nil, stopAfter)
+			}
+			if caller != nil {
+				caller.End(rudderstackai.EndOptions{})
+			}
+			events := rec.events(t)
+			if len(events["ai_user_prompt_created"]) != 1 || len(events["ai_response_received"]) == 0 || len(events["ai_llm_response_received"]) == 0 {
+				t.Fatalf("events: %v", events)
+			}
+			encoded, err := json.Marshal(events)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(encoded), "preview-") {
+				t.Fatal("preview text captured")
+			}
+			for _, named := range events {
+				for _, event := range named {
+					if _, ok := event["response_text"]; ok {
+						t.Fatal("preview response_text captured")
+					}
+					if _, ok := event["output_text"]; ok {
+						t.Fatal("preview output_text captured")
+					}
+				}
+			}
+		})
+	}
 }
