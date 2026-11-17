@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"reflect"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -1875,5 +1877,232 @@ func TestManagedAgentsKeepsTheOptionsRequestCookiesAsTheyWereWhenTheStreamWasWra
 		if m.AnonymousId != "original" {
 			t.Errorf("%s anonymousId %q", m.Event, m.AnonymousId)
 		}
+	}
+}
+
+// concreteMAStream models middleware delivering concrete SDK events after changing decoded fields.
+type concreteMAStream struct {
+	events []rudderanthropic.SessionEvent
+	n      int
+}
+
+func (s *concreteMAStream) Next() bool {
+	if s.n == len(s.events) {
+		return false
+	}
+	s.n++
+	return true
+}
+func (s *concreteMAStream) Current() rudderanthropic.SessionEvent { return s.events[s.n-1] }
+func (s *concreteMAStream) Err() error                            { return nil }
+
+func TestManagedAgentsModifiedSDKFields(t *testing.T) {
+	for _, concrete := range []bool{true, false} {
+		t.Run(fmt.Sprintf("concrete=%v", concrete), func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true), rudderstackai.WithToolBreakdown(true), rudderstackai.WithEventRules(rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
+				"weather": {Event: "weather_done", Properties: func(args map[string]any, result any) map[string]any {
+					return map[string]any{"location": args["location"], "result": result}
+				}},
+			}}))
+			resetMA(t)
+			src := maEvents(t,
+				`{"id":"u","type":"user.message","content":[{"type":"text","text":"customer-secret"}]}`,
+				`{"id":"a","type":"agent.message","content":[{"type":"text","text":"answer-secret"}]}`,
+				`{"id":"t","type":"agent.custom_tool_use","name":"weather","input":{"location":"secret"}}`,
+				`{"id":"r","type":"user.custom_tool_result","custom_tool_use_id":"t","content":[{"type":"text","text":"result-secret"}],"is_error":false}`,
+				`{"id":"m","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":10,"output_tokens":20}}`,
+				`{"id":"i","type":"session.status_idle","stop_reason":{"type":"end_turn"}}`,
+				`{"id":"o","type":"user.define_outcome","description":"description-secret"}`,
+				`{"id":"i2","type":"session.status_idle","stop_reason":{"type":"end_turn"}}`,
+			)
+			changed := &concreteMAStream{}
+			for _, raw := range src.events {
+				if concrete {
+					e := raw.AsAny()
+					switch v := e.(type) {
+					case anthropic.BetaManagedAgentsUserMessageEvent:
+						v.Content[0].Text = "[filtered]"
+						e = v
+					case anthropic.BetaManagedAgentsAgentMessageEvent:
+						v.Content[0].Text = "[filtered]"
+						e = v
+					case anthropic.BetaManagedAgentsAgentCustomToolUseEvent:
+						v.Input = map[string]any{"location": "[filtered]"}
+						e = v
+					case anthropic.BetaManagedAgentsUserCustomToolResultEvent:
+						v.Content[0].Text, v.IsError = "[filtered]", true
+						e = v
+					case anthropic.BetaManagedAgentsSpanModelRequestEndEvent:
+						v.ModelUsage.InputTokens, v.ModelUsage.OutputTokens, v.IsError = 3, 4, true
+						e = v
+					case anthropic.BetaManagedAgentsUserDefineOutcomeEvent:
+						v.Description = "[filtered]"
+						e = v
+					}
+					changed.events = append(changed.events, e.(rudderanthropic.SessionEvent))
+				} else {
+					switch raw.Type {
+					case "user.message":
+						raw.Content.OfBetaManagedAgentsUserMessageEventContentArray[0].Text = "[filtered]"
+					case "agent.message":
+						raw.Content.OfBetaManagedAgentsAgentMessageEventContentArray[0].Text = "[filtered]"
+					case "agent.custom_tool_use":
+						raw.Input = map[string]any{"location": "[filtered]"}
+					case "user.custom_tool_result":
+						raw.Content.OfBetaManagedAgentsUserCustomToolResultEventContentArray[0].Text, raw.IsError = "[filtered]", true
+					case "span.model_request_end":
+						raw.ModelUsage.InputTokens, raw.ModelUsage.OutputTokens, raw.IsError = 3, 4, true
+					case "user.define_outcome":
+						raw.Description = "[filtered]"
+					}
+					changed.events = append(changed.events, raw)
+				}
+			}
+			events := rudderanthropic.TrackSessionEvents(context.Background(), changed, rudderanthropic.WithSessionID("modified"))
+			for events.Next() {
+				if !reflect.DeepEqual(events.Current(), changed.Current()) {
+					t.Fatal("delivered event changed")
+				}
+			}
+			_ = events.Close()
+			got := rec.events(t)
+			prompts, answers := got["ai_user_prompt_created"], got["ai_response_received"]
+			if len(prompts) != 2 || len(answers) != 2 || prompts[0]["prompt_text"] != "[filtered]" || prompts[1]["prompt_text"] != "[filtered]" || answers[0]["response_text"] != "[filtered]" {
+				t.Fatalf("prompts=%v answers=%v", prompts, answers)
+			}
+			calls, tools := got["ai_llm_response_received"], got["weather_done"]
+			if len(calls) != 1 || calls[0]["input_tokens"] != float64(3) || calls[0]["output_tokens"] != float64(4) || calls[0]["error_type"] == nil {
+				t.Fatalf("model calls=%v", calls)
+			}
+			if len(tools) != 1 {
+				t.Fatalf("tools=%v", tools)
+			}
+			raw, _ := json.Marshal(tools)
+			if strings.Contains(string(raw), "secret") || tools[0]["tool_status"] != "error" || !strings.Contains(string(raw), "[filtered]") {
+				t.Fatalf("tools=%s", raw)
+			}
+		})
+	}
+}
+
+func TestManagedAgentsCyclicContextSnapshot(t *testing.T) {
+	// Stack overflow is fatal, so the regression runs in a subprocess with a small stack.
+	if os.Getenv("MANAGED_AGENTS_CYCLE_CHILD") != "1" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestManagedAgentsCyclicContextSnapshot$")
+		cmd.Env = append(os.Environ(), "MANAGED_AGENTS_CYCLE_CHILD=1")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			if len(output) > 4000 {
+				output = output[:4000]
+			}
+			t.Fatalf("cyclic context subprocess: %v\n%s", err, output)
+		}
+		return
+	}
+	debug.SetMaxStack(1 << 20)
+	setup(t)
+	resetMA(t)
+	m := map[string]any{}
+	m["self"] = m
+	s := make([]any, 1)
+	s[0] = s
+	m["slice"] = s
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t), rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{Context: m}))
+	maDrain(events)
+	_ = events.Close()
+}
+
+func TestManagedAgentsTypedContextSnapshot(t *testing.T) {
+	_, rec := setup(t)
+	resetMA(t)
+	type namedMap map[string]string
+	type namedSlice []string
+	m := map[string]string{"build": "original"}
+	s := []string{"original"}
+	ms := []map[string]any{{"build": "original"}}
+	b := []byte("original")
+	im := map[int]string{1: "original"}
+	nm, ns := namedMap{"build": "original"}, namedSlice{"original"}
+	array := [1]map[string]any{{"build": "original"}}
+	ctx := map[string]any{"map": m, "slice": s, "map_slice": ms, "bytes": b, "int_map": im, "named_map": nm, "named_slice": ns, "array": array}
+	want := map[string]any{}
+	for key, value := range ctx {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want[key] = string(raw)
+	}
+	events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+		`{"id":"u","type":"user.message","content":[]}`,
+		`{"id":"i","type":"session.status_idle","stop_reason":{"type":"end_turn"}}`,
+	), rudderanthropic.WithSessionID("typed"), rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{Context: ctx}))
+	m["build"], s[0], ms[0]["build"], im[1], nm["build"], ns[0], array[0]["build"] = "later", "later", "later", "later", "later", "later", "later"
+	copy(b, "modified")
+	maDrain(events)
+	_ = events.Close()
+	rudderstackai.Flush(context.Background())
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.msgs) != 2 {
+		t.Fatalf("got %d events", len(rec.msgs))
+	}
+	for _, message := range rec.msgs {
+		for key, expected := range want {
+			raw, err := json.Marshal(message.Context.Extra[key])
+			if err != nil || string(raw) != expected {
+				t.Errorf("%s context[%s]=%s, want %s (error %v)", message.Event, key, raw, expected, err)
+			}
+		}
+	}
+}
+
+func TestManagedAgentsPausesAfterRunningRequiresAction(t *testing.T) {
+	for _, kind := range []string{"session.status_running", "session.status_rescheduled"} {
+		t.Run(kind, func(t *testing.T) {
+			_, rec := setup(t)
+			resetMA(t)
+			for segment := range 2 {
+				events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+					`{"id":"r`+strconv.Itoa(segment)+`","type":"`+kind+`",`+maAt(segment*1000)+`}`,
+					`{"id":"i`+strconv.Itoa(segment)+`","type":"session.status_idle","stop_reason":{"type":"requires_action","event_ids":["sevt_child_tool"]},`+maAt(segment*1000+200)+`}`,
+				), rudderanthropic.WithSessionID("running_pause_"+kind))
+				maDrain(events)
+				_ = events.Close()
+			}
+			got := rec.events(t)["ai_response_received"]
+			if len(got) != 2 || got[0]["response_status"] != "paused" || got[1]["response_status"] != "paused" || got[0]["interaction_id"] != got[1]["interaction_id"] {
+				t.Fatalf("responses=%v", got)
+			}
+			if latency, _ := got[0]["latency_ms"].(float64); latency < 190 || latency > 250 {
+				t.Fatalf("latency_ms=%v", latency)
+			}
+		})
+	}
+}
+
+func TestManagedAgentsIgnoresResume(t *testing.T) {
+	_, rec := setup(t)
+	resetMA(t)
+	_, original := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u", NoPromptEvent: true})
+	snapshot, ok := original.Pause(rudderstackai.PauseOptions{})
+	if !ok {
+		t.Fatal("failed to pause")
+	}
+	for _, session := range []string{"resume_a", "resume_b"} {
+		events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+			`{"id":"u","type":"user.message","content":[]}`,
+			`{"id":"i","type":"session.status_idle","stop_reason":{"type":"end_turn"}}`,
+		), rudderanthropic.WithSessionID(session), rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{Resume: &snapshot}))
+		maDrain(events)
+		_ = events.Close()
+	}
+	var ids []any
+	for _, response := range rec.events(t)["ai_response_received"] {
+		if response["response_status"] == "success" {
+			ids = append(ids, response["interaction_id"])
+		}
+	}
+	if len(ids) != 2 || ids[0] == ids[1] || ids[0] == snapshot.InteractionID || ids[1] == snapshot.InteractionID {
+		t.Fatalf("interaction IDs=%v, snapshot=%s", ids, snapshot.InteractionID)
 	}
 }
