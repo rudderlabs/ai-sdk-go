@@ -33,6 +33,22 @@ func ManagedAgentsTurnType() reflect.Type {
 	return reflect.TypeOf(*tracker.turn)
 }
 
+// InspectManagedAgents exposes open and carried turn ownership for stream regression tests.
+func InspectManagedAgents[T SessionEvent](events *SessionEvents[T], sessionID string) (open, paused bool, borrowed *rudderstackai.Interaction) {
+	events.mu.Lock()
+	open = events.tracker != nil && events.tracker.turn != nil
+	events.mu.Unlock()
+	pausedTurns.Lock()
+	paused = pausedTurns.m[sessionID] != nil
+	pausedTurns.Unlock()
+	borrowedTurns.Lock()
+	if entry := borrowedTurns.m[sessionID]; entry != nil {
+		borrowed = entry.i
+	}
+	borrowedTurns.Unlock()
+	return
+}
+
 func checkManagedAgentsMap[V any](t *testing.T, b *boundedMap[V], value V) {
 	t.Helper()
 	keys := func() []string {

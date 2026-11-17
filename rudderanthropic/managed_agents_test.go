@@ -2124,6 +2124,149 @@ func maWholeIdle(kind string, ids ...string) string {
 	return `{"type":"session.status_idle","stop_reason":{"type":` + strconv.Quote(kind) + `,"event_ids":` + string(raw) + `}}`
 }
 
+func TestManagedAgentsCarriedEvents(t *testing.T) {
+	for _, ending := range []struct {
+		name, event, status, errorType string
+	}{
+		{"end_turn", maWholeIdle("end_turn"), "success", ""},
+		{"terminated", maWholeEvent("session.status_terminated"), "success", ""},
+		{"terminal error", `{"type":"session.error","error":{"type":"mcp_authentication_failed_error","retry_status":{"type":"terminal"}}}`, "error", "auth_error"},
+		{"refusal", maWholeIdle("refusal"), "error", "content_filter"},
+		{"budget_reached", maWholeIdle("budget_reached"), "incomplete", "max_budget_usd"},
+		{"retries_exhausted", maWholeIdle("retries_exhausted"), "error", "api_error"},
+	} {
+		t.Run("carried event: borrowed ending-only "+ending.name, func(t *testing.T) {
+			maAcrossWholeState(t, "reconnect",
+				[]string{maWholeEvent("user.message"), maWholeCall("")}, []string{ending.event}, nil, nil,
+				func(t *testing.T, events map[string][]map[string]any) {
+					responses := events["ai_response_received"]
+					if len(responses) != 1 || responses[0]["response_status"] != ending.status || responses[0]["llm_call_count"] != float64(1) {
+						t.Fatalf("%v", responses)
+					}
+					if ending.errorType != "" && responses[0]["error_type"] != ending.errorType {
+						t.Fatalf("%v", responses)
+					}
+				})
+		})
+	}
+	for _, path := range []string{"reconnect", "pause"} {
+		t.Run("carried event: requires_action-only preserves approval across "+path, func(t *testing.T) {
+			maAcrossWholeState(t, path,
+				[]string{maWholeEvent("user.message"), maWholeCall(""), `{"type":"agent.tool_use","id":"approval","name":"tool","evaluated_permission":"ask"}`},
+				[]string{maWholeIdle("requires_action", "approval")}, nil, nil,
+				func(t *testing.T, events map[string][]map[string]any) {
+					maAssertLastResponse(t, events, "paused", "approval")
+				})
+		})
+		for _, kind := range []string{"agent.tool_use", "agent.custom_tool_use"} {
+			for _, running := range []bool{false, true} {
+				t.Run(fmt.Sprintf("carried event: child blocking before primary events across %s (%s, running %t)", path, kind, running), func(t *testing.T) {
+					var second []string
+					if running {
+						second = append(second, maWholeEvent("session.status_running"))
+					}
+					second = append(second,
+						`{"type":`+strconv.Quote(kind)+`,"id":"child-blocking","session_thread_id":"child","evaluated_permission":"ask","name":"child tool"}`,
+						maWholeEvent("agent.thinking"), maWholeIdle("requires_action", "child-blocking"))
+					maAcrossWholeState(t, path, []string{maWholeEvent("user.message"), maWholeCall("")}, second, nil, nil,
+						func(t *testing.T, events map[string][]map[string]any) {
+							reason := "approval"
+							if kind == "agent.custom_tool_use" {
+								reason = "deferred_tool"
+							}
+							maAssertLastResponse(t, events, "paused", reason)
+						})
+				})
+			}
+		}
+		for _, start := range []string{"user.message", "session.status_running", "session.status_rescheduled"} {
+			t.Run(fmt.Sprintf("carried event: retry before request start or output across %s (%s)", path, start), func(t *testing.T) {
+				errEvent := `{"type":"session.error","error":{"type":"model_rate_limited_error","retry_status":{"type":"retrying"}}}`
+				maAcrossWholeState(t, path,
+					[]string{maWholeEvent(start), errEvent}, []string{maWholeCall(`,"is_error":true`), maWholeIdle("end_turn")},
+					[]string{maWholeEvent(start), `{"type":"span.model_request_start","id":"control-start"}`, errEvent}, nil,
+					maAssertLastRateLimit)
+			})
+		}
+	}
+	t.Run("carried event: retry-only opening restores borrowed state", func(t *testing.T) {
+		maAcrossWholeState(t, "reconnect",
+			[]string{maWholeEvent("user.message"), `{"type":"span.model_request_start","id":"request"}`},
+			[]string{`{"type":"session.error","error":{"type":"model_rate_limited_error","retry_status":{"type":"retrying"}}}`,
+				maWholeCall(`,"is_error":true,"model_request_start_id":"request"`), maWholeIdle("end_turn")}, nil, nil,
+			maAssertLastRateLimit)
+	})
+}
+
+func maAssertLastResponse(t *testing.T, events map[string][]map[string]any, status, reason string) {
+	t.Helper()
+	responses := events["ai_response_received"]
+	if len(responses) == 0 || responses[len(responses)-1]["response_status"] != status || responses[len(responses)-1]["pause_reason"] != reason {
+		t.Fatalf("%v", responses)
+	}
+}
+
+func maAssertLastRateLimit(t *testing.T, events map[string][]map[string]any) {
+	t.Helper()
+	calls := events["ai_llm_response_received"]
+	if len(calls) == 0 || calls[len(calls)-1]["error_type"] != "rate_limit" {
+		t.Fatalf("%v", calls)
+	}
+}
+
+func TestManagedAgentsCarriedEventGuards(t *testing.T) {
+	for _, borrowed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("metadata leaves carried state unopened (borrowed %t)", borrowed), func(t *testing.T) {
+			setup(t)
+			resetMA(t)
+			ctx := context.Background()
+			var owner *rudderstackai.Interaction
+			if borrowed {
+				ctx, owner = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{NoPromptEvent: true})
+				defer owner.End(rudderstackai.EndOptions{})
+			}
+			first := rudderanthropic.TrackSessionEvents(ctx, maEvents(t, maWholeEvent("user.message"), maWholeIdle("requires_action")), rudderanthropic.WithSessionID("metadata"))
+			maDrain(first)
+			_ = first.Close()
+			var raw []string
+			for _, kind := range []string{"session.updated", "session.usage", "session.thread_created"} {
+				raw = append(raw, `{"type":`+strconv.Quote(kind)+`,"session_thread_id":"child"}`)
+			}
+			second := rudderanthropic.TrackSessionEvents(ctx, maEvents(t, raw...), rudderanthropic.WithSessionID("metadata"))
+			for second.Next() {
+				if open, _, _ := rudderanthropic.InspectManagedAgents(second, "metadata"); open {
+					t.Fatal("metadata opened a turn")
+				}
+			}
+			_ = second.Close()
+			_, paused, carriedOwner := rudderanthropic.InspectManagedAgents(second, "metadata")
+			if (borrowed && carriedOwner != owner) || (!borrowed && !paused) {
+				t.Fatal("metadata lost carried state")
+			}
+		})
+	}
+	t.Run("an ending in another interaction cannot adopt borrowed state", func(t *testing.T) {
+		setup(t)
+		resetMA(t)
+		ctx, owner := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{NoPromptEvent: true})
+		defer owner.End(rudderstackai.EndOptions{})
+		first := rudderanthropic.TrackSessionEvents(ctx, maEvents(t, maWholeEvent("user.message"), maWholeCall("")), rudderanthropic.WithSessionID("different-owner"))
+		maDrain(first)
+		_ = first.Close()
+		otherCtx, other := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{NoPromptEvent: true})
+		defer other.End(rudderstackai.EndOptions{})
+		second := rudderanthropic.TrackSessionEvents(otherCtx, maEvents(t, maWholeIdle("end_turn")), rudderanthropic.WithSessionID("different-owner"))
+		if !second.Next() {
+			t.Fatal("missing ending event")
+		}
+		open, _, carriedOwner := rudderanthropic.InspectManagedAgents(second, "different-owner")
+		if open || carriedOwner != owner {
+			t.Fatal("another interaction adopted borrowed state")
+		}
+		_ = second.Close()
+	})
+}
+
 func TestManagedAgentsWholeTurnState(t *testing.T) {
 	for _, path := range []string{"reconnect", "pause"} {
 		t.Run("request keeps starting model and agent across "+path, func(t *testing.T) {

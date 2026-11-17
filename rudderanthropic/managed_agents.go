@@ -548,7 +548,13 @@ func (s *sessionTracker) observe(raw string) {
 		if id != "" && strings.HasPrefix(kind, "agent.") && strings.HasSuffix(kind, "tool_use") {
 			childTools.add(s.scope + id)
 		}
-		if s.turn != nil && id != "" {
+		if id != "" && (kind == "agent.custom_tool_use" || e["evaluated_permission"] == "ask") {
+			if s.turn == nil && (s.hasCarriedState() || s.isRunning()) {
+				s.open(kind, at)
+			}
+			if s.turn == nil {
+				return
+			}
 			if kind == "agent.custom_tool_use" {
 				s.turn.state.blocking.set(id, rudderstackai.PauseDeferredTool)
 			} else if e["evaluated_permission"] == "ask" {
@@ -637,14 +643,11 @@ func (s *sessionTracker) observe(raw string) {
 		s.open(kind, at).state.compactions++
 	case "session.error":
 		// An error while the session runs (a repository that cannot be cloned), or that ends a
-		// paused session, belongs to a turn.
-		if s.turn == nil && s.isRunning() {
+		// carried session, belongs to a turn.
+		if s.turn == nil && (s.hasCarriedState() || s.isRunning()) {
 			s.open(kind, at)
 		}
 		t := s.turn
-		if t == nil {
-			t = s.ending(kind, at)
-		}
 		// A last error still counts in the turn's latency.
 		if t != nil && at.ok {
 			t.lastAt = at
@@ -695,7 +698,25 @@ func (s *sessionTracker) close(err error) {
 	}
 }
 
-// ending is the turn an ending event ends: the open one, else this session's paused one (resumed).
+// hasCarriedState reports whether this stream can continue this session's paused or caller-owned turn.
+func (s *sessionTracker) hasCarriedState() bool {
+	if s.cfg.sessionID == "" {
+		return false
+	}
+	if s.hasPausedTurn() {
+		return true
+	}
+	owner := s.runningBorrowed
+	if !s.runningSet {
+		owner = s.owner()
+	}
+	borrowedTurns.Lock()
+	defer borrowedTurns.Unlock()
+	borrowed := borrowedTurns.m[s.cfg.sessionID]
+	return borrowed != nil && borrowed.i == owner
+}
+
+// ending is the turn an ending event ends: the open one, else this session's carried one.
 func (s *sessionTracker) ending(kind string, at msTime) *turn {
 	if s.turn != nil {
 		return s.turn
@@ -703,7 +724,7 @@ func (s *sessionTracker) ending(kind string, at msTime) *turn {
 	paused := s.hasPausedTurn()
 	// A running session that ends before any other event (an agent stopped before its first
 	// request) still has a turn.
-	if !paused && !s.isRunning() {
+	if !s.hasCarriedState() && !s.isRunning() {
 		return nil
 	}
 	t := s.open(kind, at)
@@ -1061,7 +1082,7 @@ func (s *sessionTracker) sessionError(t *turn, e map[string]any) {
 	if !ok {
 		errorType = "api_error"
 	}
-	if t != nil && (t.state.starts.len() > 0 || t.state.requestText != "" || t.state.requestSeen) {
+	if t != nil {
 		t.state.modelError = errorType
 	}
 	// A retried error is not the turn's outcome unless it recurs as exhausted or terminal.
@@ -1076,12 +1097,11 @@ func (s *sessionTracker) sessionError(t *turn, e map[string]any) {
 
 func (s *sessionTracker) idle(e map[string]any, at msTime) {
 	stop := obj(e["stop_reason"])
-	// Still waiting on the app: nothing to resume yet.
+	// A carried turn or pending running event can pause before any other primary event.
 	t := s.turn
 	if str(stop["type"]) != "requires_action" {
 		t = s.ending("session.status_idle", at)
-	} else if t == nil && s.isRunning() {
-		// A subagent tool can require action immediately after running.
+	} else if t == nil && (s.hasCarriedState() || s.isRunning()) {
 		t = s.open("session.status_idle", at)
 	}
 	if t == nil {
