@@ -183,6 +183,9 @@ Matching uses context nesting only, never times or model names. Limits:
 - With two copies of the tracing module (for example a vendored fork under another import path),
   replacement marks are not shared between copies, so an adopted span can be exported twice;
   register processors from one copy.
+- With the simple processor (`Simple: true`), filter, identity, extra-properties and redact callbacks
+  must not end spans: OpenTelemetry's simple processor holds its own lock while exporting, so a span
+  ended there deadlocks.
 
 ## Framework trees with manual spans
 
