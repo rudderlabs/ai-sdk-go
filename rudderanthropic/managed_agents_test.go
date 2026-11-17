@@ -1481,3 +1481,79 @@ func TestManagedAgentsKeepsAToolsOutcomeAcrossTheCallersOwnPauseAndResume(t *tes
 		t.Fatalf("%v", breakdown)
 	}
 }
+
+func TestManagedAgentsKeepsTheCapturePolicyInForceWhenTheTurnStartedAlsoGlobalDefaults(t *testing.T) {
+	turn := func(prefix string) []string {
+		return []string{
+			`{"id":"` + prefix + `_r","type":"session.status_running","processed_at":"2026-11-16T10:00:00.000Z"}`,
+			`{"id":"` + prefix + `_u","type":"user.message","content":[{"type":"text","text":"customer-secret"}],"processed_at":"2026-11-16T10:00:01.000Z"}`,
+			`{"id":"` + prefix + `_a","type":"agent.message","content":[{"type":"text","text":"answer-secret"}],"processed_at":"2026-11-16T10:00:02.000Z"}`,
+			`{"id":"` + prefix + `_i","type":"session.status_idle","stop_reason":{"type":"end_turn"},"processed_at":"2026-11-16T10:00:03.000Z"}`,
+		}
+	}
+	drain := func(events interface{ Next() bool }) {
+		for events.Next() {
+		}
+	}
+	_, rec := setup(t)
+	resetMA(t)
+	// The caller's policy changes after the running event started the turn, before the prompt.
+	on := rudderstackai.Ptr(false)
+	byOption := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t, turn("sevt_pol")...),
+		rudderanthropic.WithSessionID("sesn_policy_running"),
+		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{CaptureContent: on}))
+	byOption.Next()
+	*on = true
+	drain(byOption)
+	// The global setting changes after the prompt, before the answer is created.
+	byConfig := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t, turn("sevt_cfg")...),
+		rudderanthropic.WithSessionID("sesn_policy_global"))
+	byConfig.Next()
+	byConfig.Next()
+	if err := rudderstackai.Configure(rudderstackai.WithAnalytics(rec), rudderstackai.WithCaptureContent(true)); err != nil {
+		t.Fatal(err)
+	}
+	drain(byConfig)
+	got := rec.events(t)
+	raw, _ := json.Marshal(got)
+	if len(got["ai_response_received"]) != 2 || strings.Contains(string(raw), "customer-secret") || strings.Contains(string(raw), "answer-secret") {
+		t.Fatalf("%s", raw)
+	}
+}
+
+func TestManagedAgentsCarriesABuiltInToolAPauseNamesAfterTheCallCap(t *testing.T) {
+	for _, limit := range []int{1, 2} {
+		t.Run(fmt.Sprintf("cap=%d", limit), func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: limit}))
+			resetMA(t)
+			at := func(ms int) string {
+				return fmt.Sprintf(`"processed_at":%q`, time.Date(2026, 11, 16, 10, 0, 0, 0, time.UTC).Add(time.Duration(ms)*time.Millisecond).Format("2006-01-02T15:04:05.000Z"))
+			}
+			first := maEvents(t,
+				`{"id":"sevt_cap_u","type":"user.message","content":[],`+at(0)+`}`,
+				`{"id":"sevt_cap_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},`+at(50)+`}`,
+				`{"id":"sevt_cap_t","type":"agent.tool_use","name":"bash","input":{},"evaluated_permission":"allow",`+at(100)+`}`,
+				`{"id":"sevt_cap_i","type":"session.status_idle","stop_reason":{"type":"requires_action","event_ids":["sevt_cap_t"]},`+at(200)+`}`,
+			)
+			second := maEvents(t,
+				`{"id":"sevt_cap_r","type":"user.tool_result","tool_use_id":"sevt_cap_t","is_error":true,`+at(2100)+`}`,
+				`{"id":"sevt_cap_e","type":"session.status_idle","stop_reason":{"type":"end_turn"},`+at(2200)+`}`,
+			)
+			for _, src := range []*sliceStream{first, second} {
+				events := rudderanthropic.TrackSessionEvents(context.Background(), src, rudderanthropic.WithSessionID(fmt.Sprintf("sesn_cap_builtin_%d", limit)))
+				for events.Next() {
+				}
+				_ = events.Close()
+			}
+			got := rec.events(t)["ai_response_received"]
+			if len(got) != 2 || got[0]["tool_call_count"] != float64(0) || got[1]["tool_call_count"] != float64(1) {
+				t.Fatalf("%v", got)
+			}
+			breakdown := got[1]["tool_breakdown"].([]any)
+			entry := breakdown[0].(map[string]any)
+			if len(breakdown) != 1 || entry["tool_name"] != "bash" || entry["call_count"] != float64(1) || entry["error_count"] != float64(1) || entry["duration_ms"] != float64(2000) {
+				t.Fatalf("%v", breakdown)
+			}
+		})
+	}
+}
