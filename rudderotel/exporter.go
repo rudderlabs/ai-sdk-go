@@ -61,23 +61,30 @@ func (e *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 			return errors.Join(append(failures, err)...)
 		}
 		safe("tracing.export", func() {
-			if d, ok := s.(*deliveredSpan); ok {
-				d.resolve()
+			// User callbacks get the app's span; the IDs RudderStack exports under are resolved
+			// after the filter, right before mapping.
+			app := s
+			d, delivered := s.(*deliveredSpan)
+			if delivered {
+				app = d.ReadOnlySpan
 			}
-			keep := IsAISpan(s)
+			keep := IsAISpan(app)
 			if e.options.Filter != nil {
-				keep = filterSpan(e.options.Filter, s)
+				keep = filterSpan(e.options.Filter, app)
 			} else if e.options.ExportAllSpans {
 				keep = true
 			}
 			if !keep {
 				return
 			}
-			sent, err := e.send(s)
+			if delivered {
+				d.resolve()
+			}
+			sent, err := e.send(app, s)
 			if err != nil {
 				failures = append(failures, err)
-			} else if sent && hook.Tracing.EmitSpans() {
-				sentRaw(s)
+			} else if sent && delivered {
+				sentRaw(d)
 			}
 		})
 	}
@@ -95,10 +102,11 @@ func filterSpan(filter func(sdktrace.ReadOnlySpan) bool, s sdktrace.ReadOnlySpan
 	return filter(s)
 }
 
-// send maps one span and enqueues it, reporting whether it was enqueued; a transport panic is
-// an export failure, like an Enqueue error.
-func (e *Exporter) send(s sdktrace.ReadOnlySpan) (bool, error) {
-	m, err := SpanToTrack(s, e.options)
+// send maps one span, delivered as RudderStack exports it with app's callbacks, and enqueues it,
+// reporting whether it was enqueued; a transport panic is an export failure, like an Enqueue
+// error.
+func (e *Exporter) send(app, delivered sdktrace.ReadOnlySpan) (bool, error) {
+	m, err := spanToTrack(app, delivered, e.options)
 	if err != nil {
 		hook.Report(rudderstackai.KindInternal, "tracing.map", err)
 		return false, nil

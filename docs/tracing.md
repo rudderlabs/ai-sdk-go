@@ -124,8 +124,10 @@ and the SDK span follows its ordinary delivery path.
   not hide the call; the ancestry stops at the interaction boundary. Other processors and
   exporters receive it unchanged. Exported descendants of a covered OpenTelemetry model span keep
   their span IDs in the SDK owner's trace; direct children use the SDK owner as parent, and deeper
-  parent links stay intact. Your APM spans keep the original OpenTelemetry data. Span-built product
-  events still count the call once.
+  parent links stay intact. `Filter`, `ResolveIdentity` and `ExtraPropertiesFrom` get your
+  original span, with its own trace, span and parent IDs; the exported IDs are applied after them.
+  Your APM spans keep the original OpenTelemetry data. Span-built product events still count the
+  call once.
 - If an earlier processor already sent a child under an OpenTelemetry model span's original IDs
   before RudderStack observed that parent, the original parent is kept as well as the SDK span.
   Buffered children still resolve to the SDK owner at export.

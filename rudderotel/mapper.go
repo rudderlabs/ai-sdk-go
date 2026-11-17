@@ -53,13 +53,19 @@ func iso(t time.Time) string {
 // SpanToTrack maps one ended span; nil means it could not fit the event budget.
 // It does not apply the export filter. The original span is never mutated.
 func SpanToTrack(s sdktrace.ReadOnlySpan, options Options) (*analytics.Track, error) {
+	return spanToTrack(s, s, options)
+}
+
+// spanToTrack maps delivered, the span as RudderStack exports it; ExtraPropertiesFrom and
+// ResolveIdentity get app, the app's span.
+func spanToTrack(app, delivered sdktrace.ReadOnlySpan, options Options) (*analytics.Track, error) {
 	extra := options.ExtraProperties
 	if options.ExtraPropertiesFrom != nil {
-		safe("tracing.extraProperties", func() { extra = options.ExtraPropertiesFrom(s) })
+		safe("tracing.extraProperties", func() { extra = options.ExtraPropertiesFrom(app) })
 	}
 	id := Identity{}
 	if options.ResolveIdentity != nil {
-		safe("tracing.resolveIdentity", func() { id = options.ResolveIdentity(s) })
+		safe("tracing.resolveIdentity", func() { id = options.ResolveIdentity(app) })
 	}
-	return spanmodel.ToTrack(normalizedSpan(s), spanmodel.Options{CaptureLevel: capture.Level(options.CaptureContent, options.ContentCapture), MaxEventBytes: options.MaxEventBytes, EventName: options.EventName, ExtraProperties: extra, UserID: id.UserID, AnonymousID: id.AnonymousID, LibraryName: rudderstackai.LibraryName, LibraryVersion: rudderstackai.Version})
+	return spanmodel.ToTrack(normalizedSpan(delivered), spanmodel.Options{CaptureLevel: capture.Level(options.CaptureContent, options.ContentCapture), MaxEventBytes: options.MaxEventBytes, EventName: options.EventName, ExtraProperties: extra, UserID: id.UserID, AnonymousID: id.AnonymousID, LibraryName: rudderstackai.LibraryName, LibraryVersion: rudderstackai.Version})
 }
