@@ -120,6 +120,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 					BYOKMultiplier float64               `json:"byok_multiplier"`
 					OnHook         [][]pauseSegmentsStep `json:"on_hook"`
 				} `json:"credits"`
+				EmitSpans      bool `json:"emit_spans"`
 				EmitLLMCalls   bool `json:"emit_llm_calls"`
 				CaptureContent bool `json:"capture_content"`
 				MaxCalls       int  `json:"max_calls_per_interaction"`
@@ -144,7 +145,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 	}
 	for _, tc := range fixture.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			opts := []ConfigOption{WithLLMCallEvents(tc.Config.EmitLLMCalls), WithCaptureContent(tc.Config.CaptureContent)}
+			opts := []ConfigOption{WithLLMCallEvents(tc.Config.EmitLLMCalls), WithEmitSpans(tc.Config.EmitSpans), WithCaptureContent(tc.Config.CaptureContent)}
 			if tc.Config.MaxCalls > 0 {
 				opts = append(opts, WithLimits(Limits{MaxCallsPerInteraction: tc.Config.MaxCalls}))
 			}
