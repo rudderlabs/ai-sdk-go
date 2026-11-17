@@ -809,3 +809,39 @@ func TestObserveMCPTransportPreservesSerializerOrder(t *testing.T) {
 		}
 	}
 }
+
+type failedSnapshot struct{ calls *int }
+
+func (s failedSnapshot) MarshalJSON() ([]byte, error) {
+	*s.calls++
+	return nil, errors.New("snapshot failed")
+}
+
+func TestObserveMCPTransportSnapshotFailureFailedWrite(t *testing.T) {
+	setupAI(t)
+	s := mcp.NewServer(&mcp.Implementation{Name: "snapshot-failed-write", Version: "1"}, nil)
+	r := wrap(t, s, Options{CaptureContent: true})
+	w, _ := instances.get(s)
+	responses := mcpbridge.NewResponses()
+	defer responses.Close()
+	rc := w.begin(mcpbridge.Request{Ctx: context.Background(), RequestID: 1, Responses: responses})
+	calls := 0
+	rc.finish("mcp_tool_called", "tool_name", "lookup", "error", map[string]any{
+		"error_type": "api_error", "unencodable": failedSnapshot{&calls},
+	})
+	if calls != 1 || len(r.named("mcp_tool_called")) != 0 {
+		t.Fatal("failed snapshot bypassed the hold")
+	}
+	writer := mcpbridge.NewWriter(failingWriter{}, responses)
+	if _, err := io.WriteString(writer, `{"jsonrpc":"2.0","id":1,"error":{"code":-32603,"message":"never sent"}}`+"\n"); err == nil {
+		t.Fatal("write error swallowed")
+	}
+	responses.Close()
+	events := r.named("mcp_tool_called")
+	if len(events) != 1 {
+		t.Fatalf("got %d events", len(events))
+	}
+	if _, ok := events[0].Properties["error_message"]; ok {
+		t.Fatal("error_message after snapshot failure and failed write")
+	}
+}
