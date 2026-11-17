@@ -816,6 +816,14 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 		i = &Interaction{id: uuid.NewString(), conversationID: uuid.NewString(), trigger: TriggerUser, ended: true, untracked: true, seen: map[string]*recordedCall{}, toolsByID: map[string]*recordedTool{}}
 		return context.WithValue(ctx, keyInteraction, i), i
 	}
+	i.startPrompt(o)
+	return context.WithValue(ctx, keyInteraction, i), i
+}
+
+// startPrompt keeps the prompt text for the classifier and, for a user-triggered interaction that
+// is not a resume, holds its ai_user_prompt_created. Integrations that learn the prompt after the
+// interaction started call it through the hook.
+func (i *Interaction) startPrompt(o InteractionOptions) {
 	i.mu.Lock()
 	if i.keepsTextLocked() && o.PromptText != "" {
 		i.prompt = o.PromptText
@@ -824,7 +832,6 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 	if !o.NoPromptEvent && i.trigger == TriggerUser && !i.resumed {
 		i.emitPrompt(o)
 	}
-	return context.WithValue(ctx, keyInteraction, i), i
 }
 
 // RunInteraction runs fn with a new interaction in its context (and the interaction's identity

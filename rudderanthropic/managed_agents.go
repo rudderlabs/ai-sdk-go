@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,7 +16,6 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/capture"
-	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 	"github.com/rudderlabs/ai-sdk-go/internal/kit"
 )
 
@@ -142,6 +142,7 @@ func TrackSessionEvents[T SessionEvent](ctx context.Context, stream SessionEvent
 			if c.model == "" {
 				c.model = c.sessionModel
 			}
+			c.interaction = snapshotOptions(c.interaction) // a later change by the caller has no effect
 			scope := c.sessionID
 			if scope == "" {
 				scope = "stream:" + strconv.FormatUint(streams.Add(1), 10)
@@ -316,19 +317,27 @@ func sessionStateOf(sessionID string) *sessionState {
 	return state
 }
 
+// pendingWork is what a turn leaves in flight for a later stream of the session to finish: open
+// requests (start times, the retrying error type, the output so far) and tools already recorded.
+type pendingWork struct {
+	starts, recorded        []mapEntry[msTime]
+	modelError, requestText string
+}
+
 // pausedTurn is a turn paused at requires_action: its answer and the tools still waiting on the app.
 type pausedTurn struct {
 	i        *rudderstackai.Interaction
 	tools    []*turnTool
 	blocking map[string]rudderstackai.PauseReason
+	pending  pendingWork
 }
 
-// borrowedTurn is a turn in the caller's interaction whose stream ended before its recorded tools
-// settled: a later stream of the session in the same interaction settles them.
+// borrowedTurn is a turn in the caller's interaction whose stream ended with work in flight: a later
+// stream of the session in the same interaction finishes it.
 type borrowedTurn struct {
 	i        *rudderstackai.Interaction
-	recorded *boundedMap[msTime]
-	blocking *boundedMap[rudderstackai.PauseReason]
+	blocking []mapEntry[rudderstackai.PauseReason]
+	pending  pendingWork
 }
 
 // pausedTurns are turns paused at requires_action, by session ID: a later stream resumes them.
@@ -401,11 +410,12 @@ type turn struct {
 	compactions     int
 	borrowed        *rudderstackai.Interaction // the caller's interaction, fixed when the turn opened
 	resumed         *rudderstackai.Interaction // the paused answer this turn continues
-	interaction     *rudderstackai.Interaction // the answer the turn reports into once it started recording
+	interaction     *rudderstackai.Interaction // the answer the turn reports into, started with the turn
+	promptSent      bool                       // the prompt event was sent (or is not this turn's to send)
+	backdated       bool                       // a resumed answer's segment start was moved to the turn's first event
 	abandoned       bool                       // opened by an ending event to settle a paused turn
 	lastModel       string                     // model of the latest successful call that is not a grader cycle
 	hasGrader       bool
-	capture         *rudderstackai.ContentCapture // the policy in force when the turn started, every key explicit
 }
 
 type turnEnd struct {
@@ -415,28 +425,35 @@ type turnEnd struct {
 }
 
 type sessionTracker struct {
-	ctx          context.Context
-	cfg          sessionConfig
-	shared       *sessionState
-	scope        string // key prefix in seenEvents and childThreads: the session, else this stream
-	turn         *turn
-	runningAt    msTime
-	runningCap   *rudderstackai.ContentCapture // the policy in force at that running event
-	lastError    string
-	conversation string
+	ctx             context.Context
+	cfg             sessionConfig
+	shared          *sessionState
+	scope           string // key prefix in seenEvents and childThreads: the session, else this stream
+	turn            *turn
+	runningAt       msTime
+	runningSet      bool                       // runningBorrowed was fixed at that running event
+	runningBorrowed *rudderstackai.Interaction // the caller's interaction when that running event was read
+	runningAnswer   *rudderstackai.Interaction // the answer that running event started
+	lastError       string
+	conversation    string
 }
 
-// frozenCapture is the policy in force now (the global setting under o's own) with every key
-// explicit: neither the caller's policy nor the global setting changing later has effect.
-func frozenCapture(o rudderstackai.InteractionOptions) *rudderstackai.ContentCapture {
-	r := capture.Resolve(hook.Tracing.CaptureLevel(), capture.Level(o.CaptureContent, o.ContentCapture))
-	p := rudderstackai.Ptr[bool]
-	return &rudderstackai.ContentCapture{
-		Default: p(r.Fallback), AnswerText: p(r.AnswerText), LLMCalls: p(r.LLMCalls),
-		FeedbackText: p(r.FeedbackText), ScoreExplanation: p(r.ScoreExplanation),
-		IntentSummary: r.IntentSummary, CallReason: p(r.CallReason), ErrorMessage: p(r.ErrorMessage),
-		Spans: &capture.SpanPolicy{Default: p(r.Fallback), Messages: p(r.Spans.Messages), ToolCalls: p(r.Spans.ToolCalls), HTTP: p(r.Spans.HTTP)},
+// snapshotOptions copies what the caller could change through a pointer, slice or map after the
+// call: the turn's settings are the ones given.
+func snapshotOptions(o rudderstackai.InteractionOptions) rudderstackai.InteractionOptions {
+	dup := func(p *bool) *bool {
+		if p == nil {
+			return nil
+		}
+		return rudderstackai.Ptr(*p)
 	}
+	o.CaptureContent, o.ContentCapture = dup(o.CaptureContent), capture.Clone(o.ContentCapture)
+	o.ToolBreakdown, o.Classify, o.IdentityFromCookies = dup(o.ToolBreakdown), dup(o.Classify), dup(o.IdentityFromCookies)
+	if o.AttachmentCount != nil {
+		o.AttachmentCount = rudderstackai.Ptr(*o.AttachmentCount)
+	}
+	o.AttachmentTypes, o.Context, o.CookieValues = slices.Clone(o.AttachmentTypes), maps.Clone(o.Context), maps.Clone(o.CookieValues)
+	return o
 }
 
 func str(v any) string { s, _ := v.(string); return s }
@@ -515,11 +532,18 @@ func (s *sessionTracker) observe(raw string) {
 		if thread != "" {
 			childThreads.add(s.scope + thread)
 		}
-	case "session.status_running":
+	case "session.status_running", "session.status_rescheduled":
 		if s.turn != nil {
 			s.turn.waiting = ""
-		} else {
-			s.runningAt, s.runningCap = at, frozenCapture(s.cfg.interaction)
+		} else if !s.isRunning() {
+			s.running(at)
+		}
+	case "agent.thinking", "agent.thread_message_received", "agent.thread_message_sent", "span.outcome_evaluation_ongoing", "system.message":
+		s.open(kind, at)
+	case "span.outcome_evaluation_start":
+		t := s.open(kind, at)
+		if id != "" {
+			t.starts.set(id, at)
 		}
 	case "user.message", "user.define_outcome":
 		t := s.open(kind, at)
@@ -530,6 +554,7 @@ func (s *sessionTracker) observe(raw string) {
 			} else {
 				t.promptText = str(e["description"])
 			}
+			s.sendPrompt(t)
 		}
 	case "user.custom_tool_result":
 		s.settle(s.open(kind, at), str(e["custom_tool_use_id"]), e, at, "")
@@ -554,7 +579,12 @@ func (s *sessionTracker) observe(raw string) {
 	case "span.outcome_evaluation_end":
 		t := s.open(kind, at)
 		t.hasGrader = true
-		s.push(t, turnCall{agent: grader, endAt: at}.withUsage(obj(e["usage"])))
+		c := turnCall{agent: grader, endAt: at}.withUsage(obj(e["usage"]))
+		if startID := str(e["outcome_evaluation_start_id"]); startID != "" {
+			c.startAt, _ = t.starts.get(startID)
+			t.starts.delete(startID)
+		}
+		s.push(t, c)
 	case "agent.message":
 		t := s.open(kind, at)
 		if text := textOf(e["content"]); text != "" {
@@ -572,7 +602,7 @@ func (s *sessionTracker) observe(raw string) {
 	case "session.error":
 		// An error while the session runs (a repository that cannot be cloned), or that ends a
 		// paused session, belongs to a turn.
-		if s.turn == nil && s.runningAt.ok {
+		if s.turn == nil && s.isRunning() {
 			s.open(kind, at)
 		}
 		t := s.turn
@@ -604,7 +634,7 @@ func (s *sessionTracker) observe(raw string) {
 func (s *sessionTracker) close(err error) {
 	t := s.turn
 	// A running session whose stream stopped before any other event still had a turn.
-	if t == nil && s.runningAt.ok {
+	if t == nil && s.isRunning() {
 		t = s.open("session.status_running", s.runningAt)
 	}
 	if t == nil {
@@ -633,7 +663,7 @@ func (s *sessionTracker) ending(kind string, at msTime) *turn {
 	paused := s.hasPausedTurn()
 	// A running session that ends before any other event (an agent stopped before its first
 	// request) still has a turn.
-	if !paused && !s.runningAt.ok {
+	if !paused && !s.isRunning() {
 		return nil
 	}
 	t := s.open(kind, at)
@@ -648,6 +678,13 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 		if s.runningAt.ok && at.ok && s.runningAt.v < at.v {
 			start = s.runningAt
 		}
+		// Whose answer the turn is in is fixed when it starts: its running event, else this one.
+		borrowed := s.runningBorrowed
+		if !s.runningSet {
+			borrowed = s.owner()
+		}
+		started := s.runningAnswer
+		s.runningAt, s.runningSet, s.runningBorrowed, s.runningAnswer = msTime{}, false, nil, nil
 		// A turn that settles earlier work continues it, also when the settling event was sent
 		// before this stream opened (the paused turn is then the only trace of it).
 		// Per the Managed Agents docs, "while the session is idle with requires_action, a
@@ -658,25 +695,30 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 		}
 		continuation := settleEvents[kind] || (!promptEvents[kind] && s.hasPausedTurn())
 		t = &turn{
-			startAt: start, continuation: continuation, tools: map[string]*turnTool{},
+			startAt: start, continuation: continuation, tools: map[string]*turnTool{}, borrowed: borrowed,
 			starts:   newBoundedMap[msTime]("claude-managed-agents starts"),
 			recorded: newBoundedMap[msTime]("claude-managed-agents tools"),
 			blocking: newBoundedMap[rudderstackai.PauseReason]("claude-managed-agents blocking"),
 		}
-		// The policy, like the owner, is the one in force when the turn started: its running event, else this one.
-		t.capture = s.runningCap
-		if t.capture == nil {
-			t.capture = frozenCapture(s.cfg.interaction)
-		}
-		// Whose answer the turn is in is fixed now, wherever its later events are read.
-		if active := rudderstackai.FromContext(s.ctx); active != nil && !active.Ended() {
-			t.borrowed = active
-		}
-		s.turn, s.runningAt, s.runningCap = t, msTime{}, nil
+		s.turn = t
 		if t.borrowed != nil {
 			s.adoptBorrowed(t)
 		} else if t.continuation {
 			s.resume(t)
+		}
+		// A new answer starts with the turn, so every setting (identity, capture) resolves now.
+		if t.borrowed == nil && t.resumed == nil {
+			if t.interaction = started; started == nil {
+				t.interaction = s.startAnswer(at)
+			}
+		} else if started != nil {
+			contain(func() {
+				started.End(rudderstackai.EndOptions{Status: rudderstackai.StatusCancelled, ErrorType: "cancelled"})
+			})
+		}
+		// A turn whose prompt was sent before this stream (initial_events) still has its prompt event.
+		if !promptEvents[kind] {
+			s.sendPrompt(t)
 		}
 	}
 	// Any event after a requires_action idle means the app answered.
@@ -685,6 +727,68 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 		t.lastAt = at
 	}
 	return t
+}
+
+// isRunning reports a running event read outside a turn.
+func (s *sessionTracker) isRunning() bool { return s.runningAt.ok || s.runningAnswer != nil }
+
+// owner is the caller's interaction the turn starting now reports into, if it is still open.
+func (s *sessionTracker) owner() *rudderstackai.Interaction {
+	if active := rudderstackai.FromContext(s.ctx); active != nil && !active.Ended() {
+		return active
+	}
+	return nil
+}
+
+// running handles a running event outside a turn: the next turn starts here, and so does its answer.
+func (s *sessionTracker) running(at msTime) {
+	s.runningAt, s.runningSet, s.runningBorrowed = at, true, s.owner()
+	// A paused answer may continue with the next event instead: that event decides.
+	if s.runningBorrowed == nil && !s.hasPausedTurn() {
+		s.runningAnswer = s.startAnswer(at)
+	}
+}
+
+// startAnswer starts a new answer in the context the tracker was given, with its prompt event held
+// back until the prompt arrives (sendPrompt); nil when starting it fails.
+func (s *sessionTracker) startAnswer(at msTime) (i *rudderstackai.Interaction) {
+	contain(func() {
+		o := s.cfg.interaction
+		o.ConversationID = s.conversationID()
+		o.NoPromptEvent = true
+		_, i = kit.StartInteraction(s.ctx, o, managedAgentsIntegration, s.cfg.analytics, clockAt(at)(at))
+		s.conversation = i.ConversationID() // minted for the first turn when nothing names one
+		kit.Adopt(i, managedAgentsIntegration, s.cfg.analytics)
+	})
+	return i
+}
+
+// sendPrompt sends the turn's prompt event once, as StartInteraction would have: with the prompt's
+// text when the turn has one, never for a continuation, a resumed answer or the caller's own.
+func (s *sessionTracker) sendPrompt(t *turn) {
+	if t.promptSent || t.interaction == nil || t.interaction == t.borrowed || t.resumed != nil {
+		return
+	}
+	t.promptSent = true
+	o := s.cfg.interaction
+	o.PromptText = first(o.PromptText, t.promptText)
+	o.NoPromptEvent = o.NoPromptEvent || t.continuation
+	contain(func() { kit.StartPrompt(t.interaction, o) })
+}
+
+// pendingOf is the work the turn leaves in flight for a later stream of this session.
+func pendingOf(t *turn) pendingWork {
+	return pendingWork{starts: t.starts.entries(), recorded: t.recorded.entries(), modelError: t.modelError, requestText: t.requestText}
+}
+
+func restorePending(t *turn, p pendingWork) {
+	for _, e := range p.starts {
+		t.starts.set(e.key, e.value)
+	}
+	for _, e := range p.recorded {
+		t.recorded.set(e.key, e.value)
+	}
+	t.modelError, t.requestText = first(t.modelError, p.modelError), first(t.requestText, p.requestText)
 }
 
 // hasPausedTurn reports whether this session has a paused turn to resume.
@@ -709,7 +813,10 @@ func (s *sessionTracker) adoptBorrowed(t *turn) {
 	}
 	s.shared.mu.Unlock()
 	if open != nil {
-		t.recorded, t.blocking = open.recorded, open.blocking
+		restorePending(t, open.pending)
+		for _, e := range open.blocking {
+			t.blocking.set(e.key, e.value)
+		}
 	}
 }
 
@@ -755,7 +862,8 @@ func (s *sessionTracker) resume(t *turn) {
 		return
 	}
 	paused.i.Resume()
-	t.resumed = paused.i
+	t.resumed, t.interaction = paused.i, paused.i
+	restorePending(t, paused.pending)
 	for _, tool := range paused.tools {
 		t.tools[tool.id] = tool
 		t.toolOrder = append(t.toolOrder, tool.id)
@@ -932,7 +1040,8 @@ func (s *sessionTracker) idle(e map[string]any, at msTime) {
 		found := false
 		for _, id := range ids {
 			// A tool the session waits on is the app's to run or answer (a sandbox tool too).
-			if _, ok := t.tools[str(id)]; ok {
+			_, open := t.tools[str(id)]
+			if _, recorded := t.recorded.get(str(id)); open || recorded {
 				if _, blocked := t.blocking.get(str(id)); !blocked {
 					t.blocking.set(str(id), rudderstackai.PauseDeferredTool)
 				}
@@ -970,7 +1079,7 @@ func (s *sessionTracker) idle(e map[string]any, at msTime) {
 
 func (s *sessionTracker) finish(end turnEnd, at msTime) {
 	t := s.turn
-	s.turn, s.runningAt, s.runningCap = nil, msTime{}, nil
+	s.turn, s.runningAt, s.runningSet, s.runningBorrowed, s.runningAnswer = nil, msTime{}, false, nil, nil
 	if t == nil {
 		return
 	}
@@ -995,35 +1104,21 @@ func (s *sessionTracker) spillIfFull(t *turn) {
 	}
 }
 
-// interactionFor is the answer the turn reports into: the caller's, the resumed one, else a new one.
+// interactionFor is the answer the turn reports into: the caller's, the resumed one, else its own.
 func (s *sessionTracker) interactionFor(t *turn, local func(msTime) time.Time) *rudderstackai.Interaction {
-	if t.interaction != nil {
-		return t.interaction
+	if t.interaction == nil {
+		// The caller's answer stays the turn's, also once the caller ended it.
+		if t.interaction = t.borrowed; t.interaction == nil {
+			t.interaction = s.startAnswer(t.lastAt)
+		}
+		kit.Adopt(t.interaction, managedAgentsIntegration, s.cfg.analytics)
 	}
-	var i *rudderstackai.Interaction
-	switch {
-	case t.borrowed != nil: // the caller's answer stays the turn's, also once the caller ended it
-		i = t.borrowed
-	case t.resumed != nil && !t.resumed.Ended():
-		i = t.resumed
+	if t.resumed != nil && !t.backdated {
+		t.backdated = true
 		// Read after the fact (history): the resumed segment keeps its own latency.
-		kit.Backdate(i, local(t.startAt))
-	default:
-		o := s.cfg.interaction
-		o.CaptureContent, o.ContentCapture = nil, t.capture
-		o.ConversationID = s.conversationID()
-		if o.PromptText == "" {
-			o.PromptText = t.promptText
-		}
-		if t.continuation {
-			o.NoPromptEvent = true
-		}
-		_, i = kit.StartInteraction(s.ctx, o, managedAgentsIntegration, s.cfg.analytics, local(t.startAt))
-		s.conversation = i.ConversationID() // minted for the first turn when nothing names one
+		kit.Backdate(t.resumed, local(t.startAt))
 	}
-	kit.Adopt(i, managedAgentsIntegration, s.cfg.analytics)
-	t.interaction = i
-	return i
+	return t.interaction
 }
 
 // clockAt maps server times onto the local clock so that endAt is now.
@@ -1067,9 +1162,14 @@ func (s *sessionTracker) flush(t *turn, local func(msTime) time.Time, final bool
 	}
 	toolCalls := make([]rudderstackai.ToolCall, 0, len(tools))
 	for _, tool := range tools {
-		toolCalls = append(toolCalls, rudderstackai.ToolCall{
+		call := rudderstackai.ToolCall{
 			ID: tool.id, Name: tool.name, MCPServer: tool.mcpServer, AgentName: s.cfg.agentName, Args: tool.args,
-		})
+		}
+		// Without an ID no result can settle it later: a refusal known up front goes with the call.
+		if tool.id == "" && tool.settled {
+			call.Error, call.ErrorType, call.Duration = tool.err, tool.errorType, tool.duration
+		}
+		toolCalls = append(toolCalls, call)
 	}
 	i.RecordToolCalls(toolCalls...)
 	for _, tool := range tools {
@@ -1119,9 +1219,9 @@ func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime) {
 		kit.KeepAnswer(i, t.answer)
 		kit.HintStatus(i, end.status, end.errorType, end.pauseReason)
 		// A reconnect in the same interaction settles the tools still open.
-		if t.recorded.len() > 0 {
+		if t.recorded.len() > 0 || t.starts.len() > 0 {
 			s.shared.mu.Lock()
-			s.shared.borrowed = &borrowedTurn{i: i, recorded: t.recorded, blocking: t.blocking}
+			s.shared.borrowed = &borrowedTurn{i: i, blocking: t.blocking.entries(), pending: pendingOf(t)}
 			s.shared.mu.Unlock()
 		}
 		return
@@ -1138,7 +1238,13 @@ func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime) {
 	if _, ok := pausedTurns.m[s.cfg.sessionID]; !ok {
 		pausedTurns.order = append(pausedTurns.order, s.cfg.sessionID)
 	}
-	pausedTurns.m[s.cfg.sessionID] = &pausedTurn{i: i, tools: carry, blocking: blocking}
+	// A tool already recorded that the pause waits on stays blocking for the segment that resumes.
+	for _, e := range t.recorded.entries() {
+		if reason, ok := t.blocking.get(e.key); ok {
+			blocking[e.key] = reason
+		}
+	}
+	pausedTurns.m[s.cfg.sessionID] = &pausedTurn{i: i, tools: carry, blocking: blocking, pending: pendingOf(t)}
 	evicted := false
 	for len(pausedTurns.m) > kit.MaxMapEntries() && len(pausedTurns.order) > 0 {
 		delete(pausedTurns.m, pausedTurns.order[0])
@@ -1231,6 +1337,25 @@ func newBoundedMap[V any](where string) *boundedMap[V] {
 func (b *boundedMap[V]) get(key string) (V, bool) { v, ok := b.m[key]; return v, ok }
 
 func (b *boundedMap[V]) len() int { return len(b.m) }
+
+// mapEntry is a boundedMap entry.
+type mapEntry[V any] struct {
+	key   string
+	value V
+}
+
+// entries is a copy of the entries, oldest first.
+func (b *boundedMap[V]) entries() []mapEntry[V] {
+	out := make([]mapEntry[V], 0, len(b.m))
+	seen := make(map[string]bool, len(b.m))
+	for _, key := range b.order {
+		if v, ok := b.m[key]; ok && !seen[key] {
+			seen[key] = true
+			out = append(out, mapEntry[V]{key, v})
+		}
+	}
+	return out
+}
 
 func (b *boundedMap[V]) delete(key string) { delete(b.m, key) }
 
