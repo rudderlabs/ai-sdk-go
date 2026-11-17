@@ -316,7 +316,8 @@ func (i *Interaction) filterSpanCallsLocked() {
 // Capture may record more calls or change the inferred answer. Reapply the rules
 // after each redaction and tool callback, keeping evidence until capture settles.
 // The caller holds mu; callbacks run unlocked and this returns with mu held.
-func (i *Interaction) captureResponseLocked(explicit string) (text string, ok bool) {
+func (i *Interaction) captureResponseLocked(explicit string, freeze bool) (text string, ok bool) {
+	i.filterSpanCallsLocked()
 	selected := first(explicit, i.spanAnswer)
 	drained := 0
 	for {
@@ -336,6 +337,9 @@ func (i *Interaction) captureResponseLocked(explicit string) (text string, ok bo
 		}
 		i.filterSpanCallsLocked()
 		selected = first(explicit, i.spanAnswer)
+		if freeze {
+			selected = captured
+		}
 		if selected == captured {
 			break
 		}

@@ -18,6 +18,7 @@ import (
 )
 
 type pauseSegmentsStep struct {
+	Text        string              `json:"text"`
 	Op          string              `json:"op"`
 	Source      string              `json:"source"`
 	Provider    string              `json:"provider"`
@@ -128,10 +129,22 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				}
 				opts = append(opts, WithEventRules(EventRules{Tools: rules}))
 			}
+			var redactors []pauseSegmentsStep
+			var run func([]pauseSegmentsStep)
+			opts = append(opts, WithRedactHook(func(text string) (string, error) {
+				for n, h := range redactors {
+					if h.Text == text {
+						redactors = append(redactors[:n], redactors[n+1:]...)
+						run(h.Steps)
+						break
+					}
+				}
+				return text, nil
+			}))
 			r := setupAI(t, opts...)
 			client := &pauseSegmentsClient{recorder: r}
 			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
-			client.run = func(steps []pauseSegmentsStep) {
+			run = func(steps []pauseSegmentsStep) {
 				for _, step := range steps {
 					switch step.Op {
 					case "record_call":
@@ -163,6 +176,8 @@ func TestPauseSegmentsFixture(t *testing.T) {
 						client.mu.Lock()
 						client.hooks = append(client.hooks, pauseSegmentsHook{step.Event, step.Steps})
 						client.mu.Unlock()
+					case "on_redact":
+						redactors = append(redactors, step)
 					case "pause":
 						snapshot, ok := i.Pause(PauseOptions{})
 						if !ok {
@@ -184,6 +199,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 					}
 				}
 			}
+			client.run = run
 			client.run(tc.Steps)
 
 			segments := r.named("ai_response_received")

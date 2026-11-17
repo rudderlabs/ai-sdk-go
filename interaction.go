@@ -2109,7 +2109,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		safely(fn)
 	}
 	i.mu.Lock()
-	responseText, responseOK := i.captureResponseLocked(o.ResponseText)
+	responseText, responseOK := i.captureResponseLocked(o.ResponseText, true)
 	defer i.unlock()
 	if i.ended {
 		snapshot, ok = i.snapshotLocked()
@@ -2883,7 +2883,7 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	i.checkDisconnected()
 	i.mu.Lock()
-	responseText, responseOK := i.captureResponseLocked(o.ResponseText)
+	responseText, responseOK := i.captureResponseLocked(o.ResponseText, false)
 	i.ended, i.ending = true, false
 	var props map[string]any
 	i.emitPendingCallsLocked()

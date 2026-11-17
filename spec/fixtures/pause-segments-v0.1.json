@@ -834,6 +834,518 @@
         ],
         "tool_events": []
       }
+    },
+    {
+      "name": "review137 pending tool delivery preserves paused answer (segment)",
+      "description": "Freeze the answer before any pause-time tool delivery, including tools created by response redaction; callback calls retain their usage and events in the paused segment.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "output_text": "First answer."
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "Looked Up",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310,
+              "output_text": "Late answer."
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "response_text": "First answer.",
+            "total_input_tokens": 30,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": null,
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "review137 pending tool delivery preserves paused answer (in-process)",
+      "description": "Freeze the answer before any pause-time tool delivery, including tools created by response redaction; callback calls retain their usage and events in the paused segment.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "output_text": "First answer."
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "Looked Up",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310,
+              "output_text": "Late answer."
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "response_text": "First answer.",
+            "total_input_tokens": 30,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": null,
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "review137 pending tool delivery preserves paused answer (json)",
+      "description": "Freeze the answer before any pause-time tool delivery, including tools created by response redaction; callback calls retain their usage and events in the paused segment.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "output_text": "First answer."
+        },
+        {
+          "op": "record_tool_call",
+          "calls": [
+            {
+              "name": "lookup"
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "Looked Up",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310,
+              "output_text": "Late answer."
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "response_text": "First answer.",
+            "total_input_tokens": 30,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": null,
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "review137 redactor-created tool delivery preserves paused answer (segment)",
+      "description": "Freeze the answer before any pause-time tool delivery, including tools created by response redaction; callback calls retain their usage and events in the paused segment.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "output_text": "First answer."
+        },
+        {
+          "op": "on_redact",
+          "text": "First answer.",
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "name": "lookup"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "Looked Up",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310,
+              "output_text": "Late answer."
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "response_text": "First answer.",
+            "total_input_tokens": 30,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": null,
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "review137 redactor-created tool delivery preserves paused answer (in-process)",
+      "description": "Freeze the answer before any pause-time tool delivery, including tools created by response redaction; callback calls retain their usage and events in the paused segment.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "output_text": "First answer."
+        },
+        {
+          "op": "on_redact",
+          "text": "First answer.",
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "name": "lookup"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "Looked Up",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310,
+              "output_text": "Late answer."
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "response_text": "First answer.",
+            "total_input_tokens": 30,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": null,
+            "tool_status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "review137 redactor-created tool delivery preserves paused answer (json)",
+      "description": "Freeze the answer before any pause-time tool delivery, including tools created by response redaction; callback calls retain their usage and events in the paused segment.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true,
+        "event_rules": {
+          "tools": {
+            "lookup": "Looked Up"
+          }
+        }
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "output_text": "First answer."
+        },
+        {
+          "op": "on_redact",
+          "text": "First answer.",
+          "steps": [
+            {
+              "op": "record_tool_call",
+              "calls": [
+                {
+                  "name": "lookup"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "on_event",
+          "event": "Looked Up",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 20,
+              "started_ms": 300,
+              "ended_ms": 310,
+              "output_text": "Late answer."
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 2,
+            "response_text": "First answer.",
+            "total_input_tokens": 30,
+            "tool_call_count": 1
+          },
+          {
+            "llm_call_count": 0
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [
+          {
+            "event": "Looked Up",
+            "tool_call_id": null,
+            "tool_status": "unknown"
+          }
+        ]
+      }
     }
   ]
 }
