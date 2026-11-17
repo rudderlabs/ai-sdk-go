@@ -155,7 +155,8 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 		return false
 	}
 	k := key(s.SpanContext())
-	if hook.Tracing.SDKOwnsCall(ctx, interaction) {
+	if owner, owns := hook.Tracing.SDKOwnsCall(ctx, interaction); owns {
+		owner.Cover()
 		p.markCovered(k)
 		return true
 	}

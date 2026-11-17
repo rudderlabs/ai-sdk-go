@@ -37,6 +37,9 @@ type Options struct {
 	ExtraProperties             map[string]any
 	UserID, AnonymousID         string
 	LibraryName, LibraryVersion string
+	// DeliveryCore, for an SDK span that replaced or covered an OTel span: its admitted core. Such
+	// a span sheds optional fields instead of being dropped when truncation cannot fit it.
+	DeliveryCore *analytics.Track
 }
 
 func iso(t time.Time) string {
@@ -70,30 +73,26 @@ func cutValue(value string, target int) string {
 	return value[:end] + truncationSuffix
 }
 
-// DestinationFits reports whether delivery can send the span: its whole message (envelope, IDs,
-// times, status, summary, identity and context) fits the event budget once every attribute value
-// is at the shortest delivery's truncation makes it. A span that cannot fit is always dropped.
-func DestinationFits(s Span, options Options) bool {
-	m, p, candidates, maxBytes := build(s, options)
-	for _, c := range candidates {
-		value := c["stringValue"].(string)
-		if shortened := cutValue(value, minTruncatedValueBytes); len(shortened) < len(value) {
-			c["stringValue"] = shortened
-			p["truncated"] = true
-		}
-	}
-	b, err := json.Marshal(m)
-	return err == nil && len(b) <= maxBytes
-}
-
 // SpanToTrack maps one ended span; nil means it could not fit the event budget.
 // It does not apply the export filter. The original span is never mutated.
 func ToTrack(s Span, options Options) (*analytics.Track, error) {
 	m, p, candidates, maxBytes := build(s, options)
-	return truncateToFit(m, p, candidates, maxBytes, s.Context.SpanID)
+	fits, err := truncateToFit(m, p, candidates, maxBytes)
+	if err != nil {
+		return nil, err
+	}
+	if fits {
+		return m, nil
+	}
+	if options.DeliveryCore != nil {
+		shed(m, options.DeliveryCore, maxBytes)
+		return m, nil
+	}
+	slog.Warn("[rudderstack-ai] span exceeds maxEventBytes after truncation; dropped", "span_id", s.Context.SpanID, "maxEventBytes", maxBytes)
+	return nil, nil
 }
 
-// build is the untruncated track message, shared by delivery and DestinationFits so both measure
+// build is the untruncated track message, shared by delivery and DeliveryCore so both measure
 // the same fields. It returns the message, its properties, the shortenable values and the budget.
 func build(s Span, options Options) (*analytics.Track, object, []map[string]any, int) {
 	var kinds capture.Spans
@@ -175,15 +174,16 @@ func build(s Span, options Options) (*analytics.Track, object, []map[string]any,
 	return m, p, candidates, maxBytes
 }
 
-func truncateToFit(m *analytics.Track, p object, candidates []map[string]any, maxBytes int, spanID string) (*analytics.Track, error) {
+// truncateToFit shortens the longest strings until the message fits; false when it cannot.
+func truncateToFit(m *analytics.Track, p object, candidates []map[string]any, maxBytes int) (bool, error) {
 	measure := func() (int, error) { b, err := json.Marshal(m); return len(b), err }
 	size, err := measure()
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	for range 1000 {
 		if size <= maxBytes {
-			return m, nil
+			return true, nil
 		}
 		longest, n := -1, 0
 		for i, c := range candidates {
@@ -205,12 +205,8 @@ func truncateToFit(m *analytics.Track, p object, candidates []map[string]any, ma
 		p["truncated"] = true
 		size, err = measure()
 		if err != nil {
-			return nil, err
+			return false, err
 		}
 	}
-	if size <= maxBytes {
-		return m, nil
-	}
-	slog.Warn("[rudderstack-ai] span exceeds maxEventBytes after truncation; dropped", "span_id", spanID, "maxEventBytes", maxBytes)
-	return nil, nil
+	return size <= maxBytes, nil
 }

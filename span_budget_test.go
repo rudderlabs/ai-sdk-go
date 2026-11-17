@@ -6,47 +6,38 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/spanmodel"
 )
 
-// The size check for replacing or covering an OTel span must agree with delivery at the byte:
-// a span fits exactly when the same span, delivered, is sent.
-func TestSpanSizeCheckMatchesDeliveryAtTheBudget(t *testing.T) {
+// Replacing or covering an OTel span is admitted when the span's mandatory core plus the
+// completion reserve fits the budget, at the byte (FIXTURE-FORMAT.md, SDK span delivery budget).
+func TestSpanAdmissionFitsTheCoreWithTheCompletionReserve(t *testing.T) {
 	started := time.Date(2026, 11, 17, 1, 2, 3, 0, time.UTC)
 	ended := started.Add(1500 * time.Millisecond)
-	// deliver runs one wrapper span whose message context holds pad bytes and reports the check
-	// and the delivered size (0 when delivery dropped the span).
-	deliver := func(t *testing.T, pad int) (fits bool, size int) {
+	// core reports whether a wrapper span whose message context holds pad bytes is admitted, and
+	// its core's size.
+	core := func(t *testing.T, pad int) (bool, int) {
 		t.Helper()
-		r := setupAI(t, WithEmitSpans(true))
+		setupAI(t, WithEmitSpans(true))
 		ctx, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Context: map[string]any{"pad": strings.Repeat("x", pad)}})
 		_, s := beginWrapperSpan(ctx, i, started)
-		fits = s.fitsAt(ended, s.TraceID, s.SpanID, s.parentID)
-		s.finish("chat", "chat", "wrapper", nil, nil, false, ended)
-		for _, m := range r.named("ai_otel_span") {
-			b, err := json.Marshal(m)
-			if err != nil {
-				t.Fatal(err)
-			}
-			size = len(b)
+		c, ok := s.admitAt(ended, s.TraceID, s.SpanID, s.parentID)
+		b, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
 		}
-		return fits, size
+		return ok, len(b)
 	}
-	_, base := deliver(t, 0)
-	if base == 0 {
-		t.Fatal("an empty context was not delivered")
-	}
-	// Message size grows one byte per padding byte, so this pad puts it exactly at the budget.
-	budgetPad := 32_000 - base
+	_, base := core(t, 0)
+	// The core grows one byte per padding byte (context is mandatory).
+	budgetPad := 32_000 - spanmodel.CompletionReserveBytes - base
 	for _, c := range []struct {
 		pad  int
 		want bool
 	}{{budgetPad - 1, true}, {budgetPad, true}, {budgetPad + 1, false}} {
-		fits, size := deliver(t, c.pad)
-		if fits != c.want || (size > 0) != c.want {
-			t.Errorf("pad %d (budget%+d): check=%v delivered=%v, want both %v", c.pad, c.pad-budgetPad, fits, size > 0, c.want)
-		}
-		if c.pad == budgetPad && size != 32_000 {
-			t.Errorf("pad %d delivered %d bytes, want exactly 32000", c.pad, size)
+		if ok, _ := core(t, c.pad); ok != c.want {
+			t.Errorf("pad %d (budget%+d): admitted=%v, want %v", c.pad, c.pad-budgetPad, ok, c.want)
 		}
 	}
 }

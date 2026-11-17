@@ -48,30 +48,34 @@ type Span struct {
 	seq uint64
 	// call: a provider wrapper's model call.
 	call bool
-	// sendable: the span has a client and its whole message fits the budget.
-	sendOnce sync.Once
-	sendable bool
+	// replaced: it adopted an OTel span's IDs. covered: an OTel model-call span inside it is not
+	// exported. Either way delivery sheds optional fields instead of dropping it.
+	replaced bool
+	covered  atomic.Bool
+	// sendable: the span has a client and its mandatory core (deliveryCore) fits the budget.
+	sendOnce     sync.Once
+	sendable     bool
+	deliveryCore *analytics.Track
 }
 
-// canSend reports whether this span can be sent: it has an analytics client, and its whole
-// message as known now (envelope, IDs, times, status, summary, identity and context, with every
-// attribute value at delivery's truncation minimum) fits the span size budget. Otherwise nothing
-// replaces or covers an OTel span for it.
+// canSend reports whether this span can replace or cover an OTel span: it has an analytics
+// client, and its mandatory core as known now, plus room for completion, fits the span size
+// budget (FIXTURE-FORMAT.md, SDK span delivery budget).
 func (s *Span) canSend() bool {
-	s.sendOnce.Do(func() { s.sendable = s.fits(s.TraceID, s.SpanID, s.parentID) })
+	s.sendOnce.Do(func() { s.deliveryCore, s.sendable = s.admit(s.TraceID, s.SpanID, s.parentID) })
 	return s.sendable
 }
 
-// fits reports whether the span could be sent under the given trace, span and parent IDs.
-func (s *Span) fits(traceID, spanID, parentID string) bool {
-	return s.fitsAt(time.Now(), traceID, spanID, parentID)
+// admit is the span's mandatory core under the given trace, span and parent IDs, and whether it
+// is admitted.
+func (s *Span) admit(traceID, spanID, parentID string) (*analytics.Track, bool) {
+	return s.admitAt(time.Now(), traceID, spanID, parentID)
 }
 
-// fitsAt is fits for a span ending at ended. The message is built as delivery builds it, from
-// what is known now, then measured at delivery's truncation minimum.
-func (s *Span) fitsAt(ended time.Time, traceID, spanID, parentID string) bool {
+// admitAt is admit for a span ending at ended, built as delivery builds it from what is known now.
+func (s *Span) admitAt(ended time.Time, traceID, spanID, parentID string) (*analytics.Track, bool) {
 	if s.client == nil {
-		return false
+		return nil, false
 	}
 	n := s.model("chat", "chat", "wrapper", nil, nil, nil, ended)
 	n.Context.TraceID, n.Context.SpanID = traceID, spanID
@@ -79,26 +83,26 @@ func (s *Span) fitsAt(ended time.Time, traceID, spanID, parentID string) bool {
 	if parentID != "" {
 		n.Parent = spanmodel.Context{TraceID: traceID, SpanID: parentID}
 	}
-	return spanmodel.DestinationFits(n, s.trackOptions(false))
+	return spanmodel.DeliveryCore(n, s.trackOptions(false))
 }
 
 func (s *Span) trackOptions(masked bool) spanmodel.Options {
 	return spanmodel.Options{Capture: &s.capture, ContentMasked: masked, SDKIdentity: true, UserID: s.userID, AnonymousID: productAnonymousID(s.userID, s.anonymousID), MessageContext: s.msgContext, LibraryName: LibraryName, LibraryVersion: Version}
 }
 
-// ownsCall reports whether an active SDK call span of interaction i encloses ctx's innermost
-// active SDK span, or is it. A manual span inside the call does not hide it; the walk stops at
-// the interaction boundary.
-func ownsCall(ctx context.Context, i any) bool {
+// ownsCall is the active SDK call span of interaction i that encloses ctx's innermost active SDK
+// span, or is it. A manual span inside the call does not hide it; the walk stops at the
+// interaction boundary.
+func ownsCall(ctx context.Context, i any) *Span {
 	for s := activeSDKSpan(ctx); s != nil && any(s.interaction) == i; s = s.parent {
 		s.mu.Lock()
 		ended := s.ended
 		s.mu.Unlock()
 		if !ended && s.call && s.canSend() {
-			return true
+			return s
 		}
 	}
-	return false
+	return nil
 }
 
 type sdkSpanKey struct{}
@@ -241,16 +245,20 @@ func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time)
 	// An SDK span that cannot be sent under the IDs it would take never replaces the OTel span:
 	// the processor keeps it. Measured before the OTel span is marked replaced.
 	childID := randomSpanID(8)
-	o, ok := hook.Tracing.AdoptOTelCall(ctx, i, activeSeq, func(o hook.OTelCall) bool {
+	var core *analytics.Track
+	o, ok := hook.Tracing.AdoptOTelCall(ctx, i, activeSeq, func(o hook.OTelCall) (admitted bool) {
 		if o.Adopted {
-			return s.fits(o.TraceID, o.SpanID, o.ParentID)
+			core, admitted = s.admit(o.TraceID, o.SpanID, o.ParentID)
+		} else {
+			core, admitted = s.admit(o.TraceID, childID, o.SpanID)
 		}
-		return s.fits(o.TraceID, childID, o.SpanID)
+		return admitted
 	})
 	if !ok {
 		return nil
 	}
-	s.sendOnce.Do(func() { s.sendable = true })
+	s.sendOnce.Do(func() { s.sendable, s.deliveryCore = true, core })
+	s.replaced = o.Adopted
 	s.TraceID, s.SpanID, s.parentID = o.TraceID, o.SpanID, o.ParentID
 	if !o.Adopted {
 		s.SpanID, s.parentID = childID, o.SpanID
@@ -445,7 +453,11 @@ func (s *Span) send(n spanmodel.Span, masked bool) {
 	if s.client == nil {
 		return
 	}
-	m, e := spanmodel.ToTrack(n, s.trackOptions(masked))
+	options := s.trackOptions(masked)
+	if s.replaced || s.covered.Load() {
+		options.DeliveryCore = s.deliveryCore
+	}
+	m, e := spanmodel.ToTrack(n, options)
 	if e != nil {
 		report(KindInternal, "span.map", e)
 		return
@@ -507,8 +519,12 @@ func finishWrapperSpan(s *Span, call LLMCall, content *callContent) {
 func init() {
 	hook.Tracing.EmitSpans = emitSpans.Load
 	hook.Tracing.NextSpanSeq = func() uint64 { return spanSeq.Add(1) }
-	hook.Tracing.SDKOwnsCall = func(ctx context.Context, i any) bool {
-		return ownsCall(ctx, i)
+	hook.Tracing.SDKOwnsCall = func(ctx context.Context, i any) (hook.SDKCall, bool) {
+		s := ownsCall(ctx, i)
+		if s == nil {
+			return hook.SDKCall{}, false
+		}
+		return hook.SDKCall{TraceID: s.TraceID, SpanID: s.SpanID, Cover: func() { s.covered.Store(true) }}, true
 	}
 	hook.Tracing.WrapperCaptureContent = func(value any) bool {
 		s, _ := value.(*Span)
