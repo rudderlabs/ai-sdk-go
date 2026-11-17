@@ -317,9 +317,10 @@ func TestReviewPinnedResumePreservesReplacementSpan(t *testing.T) {
 						}
 						first.End()
 						ctx := context.Background()
-						if ambient == "matching" {
+						switch ambient {
+						case "matching":
 							ctx = bctx
-						} else if ambient == "foreign" {
+						case "foreign":
 							var foreign *rudderstackai.Interaction
 							ctx, foreign = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{InteractionID: "foreign", UserID: "foreign", Classify: rudderstackai.Ptr(false)})
 							defer foreign.End(rudderstackai.EndOptions{})
