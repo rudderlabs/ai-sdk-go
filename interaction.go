@@ -431,6 +431,7 @@ type recordedCall struct {
 	fromSpan, twinMatched, usageUnknown              bool
 	callEventPending                                 bool
 	pricingRevision                                  int
+	pricingActive                                    bool
 	reportSequence                                   int
 	creditsExplicit                                  bool
 	credits                                          *float64
@@ -1003,33 +1004,50 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 		credits = earlier.credits
 	}
 	earlier.pricingRevision++
-	revision := earlier.pricingRevision
-	priorCredits := earlier.credits
 	// Publish before unlocking so nested repeats see the combined metadata.
 	earlier.agentName, earlier.callPurpose = agent, purpose
 	earlier.fallbackUsed, earlier.byok = fallback, byok
-	if credits == nil && !earlier.creditsExplicit && hook != nil && earlier.errorType == "" && !earlier.usageUnknown {
-		basis := CreditCall{
-			Provider: earlier.provider, Model: first(earlier.rawModel, earlier.model),
-			InputTokens: earlier.inputTokens, OutputTokens: earlier.outputTokens,
-			ReasoningTokens: earlier.reasoningTokens, CachedInputTokens: earlier.cachedInputTokens,
-			CacheWriteTokens: earlier.cacheWriteTokens, ServiceTier: earlier.serviceTier,
-			CostUSD: earlier.costUSD, CallCount: max(earlier.callCount, max(call.CallCount, 1)),
-			AgentName: agent, CallPurpose: purpose, FallbackUsed: fallback, BYOK: byok,
+	if credits == nil && !earlier.creditsExplicit && !earlier.pricingActive && hook != nil && earlier.errorType == "" && !earlier.usageUnknown {
+		for attempt := 0; attempt < 3; attempt++ {
+			if earlier.errorType != "" || earlier.usageUnknown {
+				credits = nil
+				break
+			}
+			if earlier.creditsExplicit {
+				return
+			}
+			version := earlier.pricingRevision
+			basis := CreditCall{
+				Provider: earlier.provider, Model: first(earlier.rawModel, earlier.model),
+				InputTokens: earlier.inputTokens, OutputTokens: earlier.outputTokens,
+				ReasoningTokens: earlier.reasoningTokens, CachedInputTokens: earlier.cachedInputTokens,
+				CacheWriteTokens: earlier.cacheWriteTokens, ServiceTier: earlier.serviceTier,
+				CostUSD: earlier.costUSD, CallCount: max(earlier.callCount, max(call.CallCount, 1)),
+				AgentName: earlier.agentName, CallPurpose: earlier.callPurpose, FallbackUsed: earlier.fallbackUsed, BYOK: earlier.byok,
+			}
+			earlier.pricingActive = true
+			i.mu.Unlock()
+			credits = priceCredits(hook, basis)
+			i.mu.Lock()
+			earlier.pricingActive = false
+			if version == earlier.pricingRevision {
+				break
+			}
+			if attempt == 2 {
+				credits = nil
+				i.mu.Unlock()
+				report("user_callback", "credits", fmt.Errorf("pricing basis changed during three credits attempts"))
+				i.mu.Lock()
+			}
 		}
-		i.mu.Unlock()
-		credits = priceCredits(hook, basis)
-		i.mu.Lock()
 	}
 	if i.ended || !slices.Contains(i.calls, earlier) {
 		return
 	}
-	if earlier.pricingRevision != revision || earlier.agentName != agent || earlier.callPurpose != purpose || earlier.fallbackUsed != fallback || earlier.byok != byok || earlier.credits != priorCredits {
-		return // newer enrichment already priced the combined metadata
-	}
 	if !earlier.creditsExplicit {
 		earlier.credits, earlier.creditsExplicit = credits, explicit
 	}
+	i.emitReadyCallsLocked()
 }
 
 // RecordCall reports one model call (or CallCount aggregated calls). It returns false when the
@@ -1122,9 +1140,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		provider: call.Provider, model: canonicalModel(call.Model), responseID: call.ResponseID, agentName: call.AgentName,
 		fromSpan: call.Integration == "tracing", startedAt: call.StartedAt, endedAt: call.EndedAt,
 	})
-	pricingRevision := 0
 	if pricingTwin != nil {
-		pricingRevision = pricingTwin.pricingRevision
 		pricingCallCount = max(callCount, pricingTwin.callCount)
 	}
 	useTwinUsage := pricingCallCount > 1 && pricingTwin != nil && !pricingTwin.fromSpan &&
@@ -1157,7 +1173,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	// A twin's explicit credits stand, unless this report's usage replaces the twin's.
 	explicitTwin := pricingTwin != nil && pricingTwin.creditsExplicit &&
 		(call.UsageUnknown || call.ErrorType != "" || (call.Integration == "tracing" && !pricingTwin.usageUnknown))
-	if credits == nil && c.credits != nil && call.ErrorType == "" && (!call.UsageUnknown || useTwinUsage) && !explicitTwin {
+	if credits == nil && c.credits != nil && call.ErrorType == "" && (!call.UsageUnknown || useTwinUsage) && !explicitTwin && (pricingTwin == nil || !pricingTwin.pricingActive) {
 		// App callbacks may inspect, update or end this interaction.
 		own := CreditCall{
 			Provider: call.Provider, Model: call.Model, InputTokens: input, OutputTokens: output,
@@ -1181,9 +1197,45 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			creditCall.ReasoningTokens, creditCall.CachedInputTokens = pricingTwin.reasoningTokens, pricingTwin.cachedInputTokens
 			creditCall.CacheWriteTokens, creditCall.ServiceTier, creditCall.CostUSD = pricingTwin.cacheWriteTokens, pricingTwin.serviceTier, pricingTwin.costUSD
 		}
-		i.mu.Unlock()
-		credits = priceCredits(c.credits, creditCall)
-		i.mu.Lock()
+		for attempt := 0; attempt < 3; attempt++ {
+			version := 0
+			if pricingTwin != nil {
+				version = pricingTwin.pricingRevision
+				creditCall.AgentName = first(pricingTwin.agentName, own.AgentName)
+				creditCall.CallPurpose = first(pricingTwin.callPurpose, own.CallPurpose)
+				if pricingTwin.fallbackUsed != nil {
+					creditCall.FallbackUsed = copyCreditPointer(pricingTwin.fallbackUsed)
+				}
+				if pricingTwin.byok != nil {
+					creditCall.BYOK = copyCreditPointer(pricingTwin.byok)
+				}
+				creditCall.CallCount = max(callCount, pricingTwin.callCount)
+				if !replacesTwin || pricingTwin.twinMatched {
+					creditCall.Model = first(pricingTwin.rawModel, pricingTwin.model)
+					creditCall.InputTokens, creditCall.OutputTokens = pricingTwin.inputTokens, pricingTwin.outputTokens
+					creditCall.ReasoningTokens, creditCall.CachedInputTokens = pricingTwin.reasoningTokens, pricingTwin.cachedInputTokens
+					creditCall.CacheWriteTokens, creditCall.ServiceTier, creditCall.CostUSD = pricingTwin.cacheWriteTokens, pricingTwin.serviceTier, pricingTwin.costUSD
+				}
+			}
+			if pricingTwin != nil {
+				pricingTwin.pricingActive = true
+			}
+			i.mu.Unlock()
+			credits = priceCredits(c.credits, creditCall)
+			i.mu.Lock()
+			if pricingTwin != nil {
+				pricingTwin.pricingActive = false
+			}
+			if pricingTwin == nil || version == pricingTwin.pricingRevision {
+				break
+			}
+			if attempt == 2 {
+				credits = nil
+				i.mu.Unlock()
+				report("user_callback", "credits", fmt.Errorf("pricing basis changed during three credits attempts"))
+				i.mu.Lock()
+			}
+		}
 		if i.ended {
 			return false
 		}
@@ -1297,10 +1349,6 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 		if i.spanAnswerSource == r {
 			i.spanAnswerSource = twin
 		}
-		// A repeat published and priced newer metadata during the unlocked twin hook.
-		if twin == pricingTwin && twin.pricingRevision != pricingRevision && !r.creditsExplicit {
-			r.credits, r.creditsExplicit = twin.credits, twin.creditsExplicit
-		}
 		mergeCallTwin(twin, r)
 		// A merge does not advance callCount, so discard a generic app hint that
 		// would otherwise hide the newly learned provider classification.
@@ -1404,6 +1452,9 @@ func (i *Interaction) emitPendingCallsLocked() {
 
 func (i *Interaction) emitReadyCallsLocked() {
 	for _, r := range i.calls {
+		if r.pricingActive {
+			return
+		}
 		if r.callEventPending && !r.twinMatched && (r.fromSpan || r.usageUnknown) && !r.startedAt.IsZero() && !r.endedAt.IsZero() {
 			return
 		}

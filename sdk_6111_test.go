@@ -10,11 +10,48 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	analytics "github.com/rudderlabs/analytics-go/v4"
 )
+
+func TestSDK6111CreditsReentrySharesRetryBudget(t *testing.T) {
+	var i *Interaction
+	armed := false
+	attempts := 0
+	span := sdk6942Call()
+	r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+		if armed {
+			attempts++
+			if attempts < 6 {
+				e := span
+				e.BYOK = Ptr(c.BYOK == nil || !*c.BYOK)
+				i.RecordCall(e)
+			}
+		}
+		factor := 1.0
+		if c.BYOK != nil && *c.BYOK {
+			factor = 2
+		}
+		return Ptr(float64(c.InputTokens) * factor), nil
+	}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.RecordCall(span)
+	armed = true
+	w := span
+	w.Integration = "openai"
+	w.InputTokens = 100
+	i.RecordCall(w)
+	i.End(EndOptions{})
+	if attempts != 3 {
+		t.Fatal(attempts)
+	}
+	if _, ok := lastResponse(t, r)["total_credits"]; ok {
+		t.Fatal(lastResponse(t, r))
+	}
+}
 
 func sdk6111Window(call LLMCall, startMs int64) LLMCall {
 	call.StartedAt, call.EndedAt = time.UnixMilli(startMs), time.UnixMilli(startMs+10)
@@ -1600,6 +1637,248 @@ func TestSDK6111Review137CustomMarshalerOutputException(t *testing.T) {
 							t.Fatal(got)
 						}
 					}
+				}
+			})
+		}
+	}
+}
+
+func TestSDK6111FinalReentrantAuthoritativePricing(t *testing.T) {
+	var i *Interaction
+	inject := false
+	priced := [][2]any{}
+	span := sdk6942Call()
+	r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+		priced = append(priced, [2]any{c.InputTokens, c.AgentName})
+		if inject {
+			inject = false
+			enriched := span
+			enriched.AgentName = "planner"
+			i.RecordCall(enriched)
+		}
+		factor := 1.0
+		if c.AgentName == "planner" {
+			factor = 2
+		}
+		return Ptr(float64(c.InputTokens) * factor), nil
+	}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.RecordCall(span)
+	inject = true
+	wrapper := span
+	wrapper.Integration = "openai"
+	wrapper.InputTokens = 100
+	i.RecordCall(wrapper)
+	i.End(EndOptions{})
+	p := lastResponse(t, r)
+	t.Logf("PRICING %v RESPONSE %v", priced, p)
+	if sdk6111Num(p["total_credits"]) != 200 {
+		t.Fatalf("wanted 200 credits, got %v for %v tokens", p["total_credits"], p["total_input_tokens"])
+	}
+}
+
+func TestSDK6111FinalBlockedAuthoritativePricing(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		t.Run(mode, func(t *testing.T) {
+			var i *Interaction
+			entered, release := make(chan struct{}), make(chan struct{})
+			var gate atomic.Bool
+			span := sdk6942Call()
+			r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+				if c.InputTokens == 100 && c.AgentName == "" && gate.CompareAndSwap(false, true) {
+					close(entered)
+					<-release
+				}
+				factor := 1.0
+				if c.AgentName == "planner" {
+					factor = 2
+				}
+				return Ptr(float64(c.InputTokens) * factor), nil
+			}))
+			i = sdk6111ReviewPending(t, r, mode, func(target *Interaction) { target.RecordCall(span) })
+			wrapper := span
+			wrapper.Integration = "openai"
+			wrapper.InputTokens = 100
+			done := make(chan struct{})
+			go func() { i.RecordCall(wrapper); close(done) }()
+			select {
+			case <-entered:
+			case <-time.After(3 * time.Second):
+				t.Fatal("hook did not run")
+			}
+			enriched := span
+			enriched.AgentName = "planner"
+			i.RecordCall(enriched)
+			close(release)
+			select {
+			case <-done:
+			case <-time.After(3 * time.Second):
+				t.Fatal("hook deadlocked")
+			}
+			i.End(EndOptions{})
+			p := lastResponse(t, r)
+			t.Logf("RESPONSE %v", p)
+			if sdk6111Num(p["total_credits"]) != 200 {
+				t.Fatalf("wanted 200 credits, got %v", p["total_credits"])
+			}
+		})
+	}
+}
+
+func TestSDK6111FinalPricingBasis(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, spanFirst := range []bool{true, false} {
+			for _, shared := range []bool{true, false} {
+				for _, field := range []string{"agent", "purpose", "fallback", "byok"} {
+					t.Run(fmt.Sprintf("%s/%t/%t/%s", mode, spanFirst, shared, field), func(t *testing.T) {
+						var i *Interaction
+						inject := false
+						first := sdk6942Call()
+						if !spanFirst {
+							first.Integration = "openai"
+							first.InputTokens = 100
+						}
+						r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+							if inject {
+								inject = false
+								enriched := first
+								switch field {
+								case "agent":
+									enriched.AgentName = "planner"
+								case "purpose":
+									enriched.CallPurpose = "planner"
+								case "fallback":
+									enriched.FallbackUsed = Ptr(true)
+								case "byok":
+									enriched.BYOK = Ptr(true)
+								}
+								i.RecordCall(enriched)
+							}
+							factor := 1.0
+							if (field == "agent" && c.AgentName == "planner") || (field == "purpose" && c.CallPurpose == "planner") || (field == "fallback" && c.FallbackUsed != nil && *c.FallbackUsed) || (field == "byok" && c.BYOK != nil && *c.BYOK) {
+								factor = 2
+							}
+							return Ptr(float64(c.InputTokens*c.CallCount) * factor), nil
+						}))
+						i = sdk6111ReviewPending(t, r, mode, func(target *Interaction) { target.RecordCall(first) })
+						inject = true
+						second := first
+						second.CallCount = 2
+						if spanFirst {
+							second.Integration = "openai"
+							second.InputTokens = 100
+						} else {
+							second.Integration = "tracing"
+							second.InputTokens = 10
+						}
+						if !shared {
+							second.ResponseID = ""
+						}
+						i.RecordCall(second)
+						i.End(EndOptions{})
+						p := lastResponse(t, r)
+						if sdk6111Num(p["total_credits"]) != 400 || sdk6111Num(p["total_input_tokens"]) != 100 || sdk6111Num(p["llm_call_count"]) != 2 {
+							t.Fatal(p)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func TestSDK6111FinalPricingRetriesBounded(t *testing.T) {
+	var i *Interaction
+	armed := false
+	attempts := 0
+	span := sdk6942Call()
+	r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+		if armed && c.InputTokens == 100 {
+			attempts++
+			e := span
+			e.BYOK = Ptr(c.BYOK == nil || !*c.BYOK)
+			i.RecordCall(e)
+		}
+		factor := 1.0
+		if c.BYOK != nil && *c.BYOK {
+			factor = 2
+		}
+		return Ptr(float64(c.InputTokens) * factor), nil
+	}))
+	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	i.RecordCall(span)
+	armed = true
+	w := span
+	w.Integration = "openai"
+	w.InputTokens = 100
+	i.RecordCall(w)
+	i.End(EndOptions{})
+	if attempts != 3 {
+		t.Fatal(attempts)
+	}
+	if _, ok := lastResponse(t, r)["total_credits"]; ok {
+		t.Fatal(lastResponse(t, r))
+	}
+	events := r.named("ai_llm_response_received")
+	if _, ok := events[len(events)-1].Properties["credits"]; ok {
+		t.Fatal(events)
+	}
+}
+func TestSDK6111RepeatPricingAfterConcurrentReplacement(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, field := range []string{"agent", "purpose", "fallback", "byok"} {
+			t.Run(mode+"/"+field, func(t *testing.T) {
+				var i *Interaction
+				entered, release := make(chan struct{}), make(chan struct{})
+				var gate atomic.Bool
+				span := sdk6942Call()
+				r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+					enriched := (field == "agent" && c.AgentName == "planner") || (field == "purpose" && c.CallPurpose == "planner") || (field == "fallback" && c.FallbackUsed != nil && *c.FallbackUsed) || (field == "byok" && c.BYOK != nil && *c.BYOK)
+					if c.InputTokens == 10 && enriched && gate.CompareAndSwap(false, true) {
+						close(entered)
+						<-release
+					}
+					factor := 1.0
+					if enriched {
+						factor = 2
+					}
+					return Ptr(float64(c.InputTokens*c.CallCount) * factor), nil
+				}))
+				i = sdk6111ReviewPending(t, r, mode, func(target *Interaction) { target.RecordCall(span) })
+				e := span
+				switch field {
+				case "agent":
+					e.AgentName = "planner"
+				case "purpose":
+					e.CallPurpose = "planner"
+				case "fallback":
+					e.FallbackUsed = Ptr(true)
+				case "byok":
+					e.BYOK = Ptr(true)
+				}
+				done := make(chan struct{})
+				go func() { i.RecordCall(e); close(done) }()
+				select {
+				case <-entered:
+				case <-time.After(3 * time.Second):
+					t.Fatal("hook did not run")
+				}
+				w := span
+				w.Integration = "openai"
+				w.InputTokens = 100
+				w.Model = "gpt-4o-2024-08-06"
+				w.CallCount = 2
+				i.RecordCall(w)
+				close(release)
+				select {
+				case <-done:
+				case <-time.After(3 * time.Second):
+					t.Fatal("hook deadlocked")
+				}
+				i.End(EndOptions{})
+				p := lastResponse(t, r)
+				if sdk6111Num(p["total_credits"]) != 400 || sdk6111Num(p["total_input_tokens"]) != 100 || sdk6111Num(p["llm_call_count"]) != 2 {
+					t.Fatal(p)
 				}
 			})
 		}
