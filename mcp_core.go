@@ -109,7 +109,7 @@ func (w *wrapped) Rewrap(opts any) error {
 		return err
 	}
 	old := w.opts.Load()
-	n.resolveName(old.reflectedName, old.version)
+	n.resolveName(old.reflectedName, old.rawVersion)
 	w.opts.Store(n)
 	return nil
 }
