@@ -2449,8 +2449,15 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		}
 		i.filterSpanCallsLocked()
 		i.emitPendingCallsLocked()
-		if len(i.outbox) == 0 && len(i.tools) <= fired && len(i.pendingOverflowCalls) == 0 &&
+		if len(i.outbox) == 0 && len(i.pendingOverflowCalls) == 0 &&
 			!slices.ContainsFunc(i.calls, func(call *recordedCall) bool { return call.callEventPending }) {
+			// A tool recorded while those events went out fires in this segment too.
+			if jobs := i.toolEventJobsLocked(i.tools, true); len(jobs) > 0 {
+				i.mu.Unlock()
+				i.runToolEvents(jobs)
+				i.mu.Lock()
+				continue
+			}
 			break
 		}
 		i.unlock()
