@@ -494,19 +494,44 @@ func (m *keyedBoundedMap[K, V]) get(k K) (V, bool) {
 }
 
 func (m *keyedBoundedMap[K, V]) set(k K, v V) {
+	if notice := m.setSilent(k, v); notice != nil {
+		notice()
+	}
+}
+
+// setSilent settles eviction under the caller's lock and detaches all callbacks.
+func (m *keyedBoundedMap[K, V]) setSilent(k K, v V) func() {
 	if e, ok := m.items[k]; ok {
 		m.order.Remove(e)
 	}
 	m.items[k] = m.order.PushBack(&boundedEntry[K, V]{key: k, value: v})
+	var evicted []V
 	for m.order.Len() > m.max {
 		oldest := m.order.Front()
 		m.order.Remove(oldest)
 		e := oldest.Value.(*boundedEntry[K, V])
 		delete(m.items, e.key)
-		if m.evicted != nil {
-			m.evicted(e.value)
+		evicted = append(evicted, e.value)
+	}
+	if len(evicted) == 0 {
+		return nil
+	}
+	onEvicted := m.evicted
+	return func() {
+		for _, v := range evicted {
+			if onEvicted != nil {
+				onEvicted(v)
+			}
+			limitReached("MCP map cap")
 		}
-		limitReached("MCP map cap")
+	}
+}
+
+func deliverMapNotices(notices []func()) {
+	for _, fn := range notices {
+		if fn != nil {
+			fn()
+		}
 	}
 }
 

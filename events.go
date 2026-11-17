@@ -146,6 +146,8 @@ func TrackMCPEventSubscription(ctx context.Context, server *mcp.Server, change S
 
 // TrackSubscription records one subscription change for this server.
 func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
+	var notices []func()
+	defer func() { deliverMapNotices(notices) }()
 	change, ok := c.(SubscriptionChange)
 	if !ok || !w.opts.Load().MCPEvents {
 		return
@@ -212,7 +214,7 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 			st.Unlock()
 			safely(func() { w.TrackSubscription(context.WithoutCancel(ctx), expired) })
 		})
-		st.expiries.set(stateKey, t)
+		notices = append(notices, st.expiries.setSilent(stateKey, t))
 	}
 }
 

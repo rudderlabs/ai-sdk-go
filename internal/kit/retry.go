@@ -251,16 +251,20 @@ func (a *attempt) settleIfTaken() {
 // probeBody settles a held failed response when the SDK reads it: the call ends with it.
 type probeBody struct {
 	io.ReadCloser
-	once sync.Once
-	a    *attempt
+	claimed atomic.Bool
+	a       *attempt
 }
 
 func (b *probeBody) Read(p []byte) (int, error) {
-	b.once.Do(func() { safe(b.a.settleIfTaken) })
+	if !b.claimed.Swap(true) {
+		safe(b.a.settleIfTaken)
+	}
 	return b.ReadCloser.Read(p)
 }
 
 func (b *probeBody) Close() error {
-	b.once.Do(func() { b.a.closed.Store(true) })
+	if !b.claimed.Swap(true) {
+		b.a.closed.Store(true)
+	}
 	return b.ReadCloser.Close()
 }

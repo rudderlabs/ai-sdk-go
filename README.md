@@ -481,3 +481,5 @@ Wrapper and manual spans are opt-in with `rudderstackai.WithEmitSpans(true)`, in
 and Go platform limits.
 
 Credits retries preserve the newest retained call usage and metadata when a hook re-enters and matches a twin. The published credits belong to that same usage and metadata. Snapshot outcome hints prefer canonical keys even when their value is null; legacy aliases are read only if the canonical key is absent.
+
+User hooks and analytics client methods run after the SDK releases its bookkeeping locks, so a callback can re-enter tracking from another thread or goroutine. Credits hooks must still be side-effect free and idempotent because pricing may retry. Flush waits for in-flight terminal span reporting within its deadline.

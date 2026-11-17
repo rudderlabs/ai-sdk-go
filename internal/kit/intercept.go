@@ -300,8 +300,9 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 					// Serialize cancellation with parsing, retaining every observed attribute.
 					// This also settles an unread stream without waiting for Read or Close.
 					body.mu.Lock()
-					defer body.mu.Unlock()
-					safe(func() { body.end(req.Context().Err()) })
+					body.end(req.Context().Err())
+					body.mu.Unlock()
+					body.drainCallbacks()
 				})
 				body.mu.Unlock()
 			}
@@ -475,51 +476,73 @@ type sseBody struct {
 	buf      bytes.Buffer
 	event    string
 	data     []string
-	once     sync.Once
 	mu       sync.Mutex
 	readMu   sync.Mutex
 	finished bool
 	// With a filter, an event's lines are held until its blank line decides whether it is shown.
 	filter EventFilter
 	held   bytes.Buffer
-	hide   bool
 	// broken: parsing panicked; the rest of the stream passes through unobserved.
 	broken           bool
 	stopCancellation func() bool
 	preferTerminal   bool
+	callbacks        []func()
+	draining         bool
+}
+
+// drainCallbacks claims each notice or observer operation before calling it. Re-entry
+// can add work, but never waits for its own callback or holds a parser mutex.
+func (b *sseBody) drainCallbacks() {
+	b.mu.Lock()
+	if b.draining {
+		b.mu.Unlock()
+		return
+	}
+	b.draining = true
+	for len(b.callbacks) > 0 {
+		fn := b.callbacks[0]
+		b.callbacks[0] = nil
+		b.callbacks = b.callbacks[1:]
+		b.mu.Unlock()
+		safe(fn)
+		b.mu.Lock()
+	}
+	b.draining = false
+	b.mu.Unlock()
 }
 
 func (b *sseBody) Read(p []byte) (int, error) {
 	b.readMu.Lock()
-	defer b.readMu.Unlock()
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	defer func() { b.mu.Unlock(); b.readMu.Unlock(); b.drainCallbacks() }()
 	for b.buf.Len() == 0 {
-		// Provider reads may block even after context cancellation.
-		line, err := func() ([]byte, error) {
-			b.mu.Unlock()
-			defer b.mu.Lock()
-			return b.reader.ReadBytes('\n')
-		}()
+		b.mu.Unlock()
+		line, err := b.reader.ReadBytes('\n')
+		b.mu.Lock()
 		if len(line) > 0 {
 			b.takeSafely(line)
 		}
 		if err != nil {
 			b.buf.Write(b.held.Bytes())
 			b.held.Reset()
+			b.end(err)
+		}
+		// Observation and its error hooks run after parser state is settled.
+		b.mu.Unlock()
+		b.readMu.Unlock()
+		b.drainCallbacks()
+		b.readMu.Lock()
+		b.mu.Lock()
+		if err != nil {
 			if b.buf.Len() == 0 {
-				b.end(err)
 				return 0, err
 			}
-			defer b.end(err)
 			break
 		}
 	}
 	return b.buf.Read(p)
 }
 
-// takeSafely takes a line; a panic in the SDK's parsing stops observing the stream, and the app
-// still gets every byte.
 func (b *sseBody) takeSafely(line []byte) {
 	if b.broken || b.finished {
 		b.buf.Write(line)
@@ -528,13 +551,13 @@ func (b *sseBody) takeSafely(line []byte) {
 	bufLen, heldLen := b.buf.Len(), b.held.Len()
 	defer func() {
 		if r := recover(); r != nil {
-			hook.Recovered(r, "kit.sseBody")
 			b.broken = true
 			b.buf.Truncate(bufLen)
 			b.held.Truncate(heldLen)
 			b.buf.Write(b.held.Bytes())
 			b.held.Reset()
 			b.buf.Write(line)
+			b.callbacks = append(b.callbacks, func() { hook.Recovered(r, "kit.sseBody") })
 		}
 	}()
 	b.take(line)
@@ -546,16 +569,27 @@ func (b *sseBody) take(line []byte) {
 		b.parse(line)
 		return
 	}
+	event, data := b.event, []byte(strings.Join(b.data, "\n"))
+	hasEvent := b.event != "" || len(b.data) > 0
 	b.held.Write(line)
 	b.parse(line)
 	if len(bytes.TrimRight(line, "\r\n")) > 0 {
 		return
 	}
-	if !b.hide {
-		b.buf.Write(b.held.Bytes())
-	}
+	held := append([]byte(nil), b.held.Bytes()...)
 	b.held.Reset()
-	b.hide = false
+	// OnEvent precedes this action, so the filter sees its completed observation.
+	b.callbacks = append(b.callbacks, func() {
+		hide := false
+		if hasEvent {
+			safe(func() { hide = b.filter.Hide(event, data) })
+		}
+		b.mu.Lock()
+		if !hide {
+			b.buf.Write(held)
+		}
+		b.mu.Unlock()
+	})
 }
 
 func (b *sseBody) parse(line []byte) {
@@ -565,10 +599,7 @@ func (b *sseBody) parse(line []byte) {
 		if len(b.data) > 0 || b.event != "" {
 			event, data := b.event, strings.Join(b.data, "\n")
 			b.event, b.data = "", nil
-			safe(func() { b.h.OnEvent(event, []byte(data)) })
-			if b.filter != nil {
-				safe(func() { b.hide = b.filter.Hide(event, []byte(data)) })
-			}
+			b.callbacks = append(b.callbacks, func() { b.h.OnEvent(event, []byte(data)) })
 		}
 	case strings.HasPrefix(s, ":"):
 	case strings.HasPrefix(s, "event:"):
@@ -579,17 +610,24 @@ func (b *sseBody) parse(line []byte) {
 	case strings.HasPrefix(s, "id:"), strings.HasPrefix(s, "retry:"):
 	default:
 		if lh, ok := b.h.(LineHandler); ok {
-			safe(func() { lh.OnLine([]byte(s)) })
+			b.callbacks = append(b.callbacks, func() { lh.OnLine([]byte(s)) })
 		}
 	}
 }
 
+// end is called with mu held: detach completion before invoking observers or hooks.
 func (b *sseBody) end(err error) {
-	b.once.Do(func() {
-		b.finished = true
-		if b.stopCancellation != nil {
-			b.stopCancellation()
-		}
+	if b.finished {
+		return
+	}
+	b.finished = true
+	if b.stopCancellation != nil {
+		b.stopCancellation()
+	}
+	if errors.Is(err, io.EOF) && !b.broken {
+		b.parse([]byte("\n"))
+	}
+	b.callbacks = append(b.callbacks, func() {
 		complete := false
 		if b.preferTerminal {
 			safe(func() { complete = b.h.Complete() })
@@ -599,10 +637,6 @@ func (b *sseBody) end(err error) {
 			return
 		}
 		if errors.Is(err, io.EOF) {
-			// A last event without its blank line still counts.
-			if !b.broken {
-				safe(func() { b.parse([]byte("\n")) })
-			}
 			safe(func() { b.h.Finish(Completed, "") })
 			return
 		}
@@ -611,7 +645,7 @@ func (b *sseBody) end(err error) {
 			t = ErrorTypeOfTransport(b.ctx.Err())
 		}
 		if b.i != nil {
-			safe(func() { NoteCallError(b.i, err, t) })
+			NoteCallError(b.i, err, t)
 		}
 		if t == "cancelled" {
 			safe(func() { b.h.Finish(Cancelled, "") })
@@ -623,20 +657,23 @@ func (b *sseBody) end(err error) {
 
 func (b *sseBody) Close() error {
 	b.mu.Lock()
-	b.once.Do(func() {
+	if !b.finished {
 		b.finished = true
 		if b.stopCancellation != nil {
 			b.stopCancellation()
 		}
-		complete := false
-		safe(func() { complete = b.h.Complete() })
-		if complete {
-			safe(func() { b.h.Finish(Completed, "") })
-			return
-		}
-		safe(func() { b.h.Finish(Cancelled, "") })
-	})
+		b.callbacks = append(b.callbacks, func() {
+			complete := false
+			safe(func() { complete = b.h.Complete() })
+			if complete {
+				safe(func() { b.h.Finish(Completed, "") })
+				return
+			}
+			safe(func() { b.h.Finish(Cancelled, "") })
+		})
+	}
 	b.mu.Unlock()
+	b.drainCallbacks()
 	return b.src.Close()
 }
 
