@@ -2,6 +2,8 @@ package spanmodel
 
 import (
 	"encoding/json"
+	"errors"
+	"math"
 	"strconv"
 	"testing"
 	"time"
@@ -59,5 +61,34 @@ func TestShedRestoresTheCoreWithFinalIDsAndTimestamp(t *testing.T) {
 	if span["spanId"] != "2222222222222222" || span["parentSpanId"] != "3333333333333333" ||
 		span["endTimeUnixNano"] != strconv.FormatInt(final.End.UnixNano(), 10) || span["status"].(object)["code"] != 2 {
 		t.Errorf("OTLP span not final: %v", span)
+	}
+}
+
+type failingMarshaler struct{}
+
+func (failingMarshaler) MarshalJSON() ([]byte, error) { return nil, errors.New("cannot encode") }
+
+// A core that cannot be encoded is never admitted, however small: an encoding error is not a
+// size of zero.
+func TestDeliveryCoreRefusesAnUnencodableCore(t *testing.T) {
+	kinds := capture.Spans{}
+	span := Span{
+		Name: "chat m", Kind: 3, Context: Context{TraceID: "0102030405060708090a0b0c0d0e0f10", SpanID: "1111111111111111"},
+		Start: time.Unix(1, 0), End: time.Unix(2, 0), Scope: Scope{Name: "ai-sdk-go"},
+		Attributes: map[string]any{"gen_ai.operation.name": "chat", "gen_ai.request.model": "m"},
+	}
+	for name, value := range map[string]any{
+		"NaN": math.NaN(), "+Inf": math.Inf(1), "-Inf": math.Inf(-1),
+		"invalid json.Number in a map":  map[string]any{"n": json.Number("not-a-number")},
+		"invalid json.Number in a list": []any{1, json.Number("1e")},
+		"failing Marshaler":             failingMarshaler{},
+		"channel":                       make(chan int),
+	} {
+		t.Run(name, func(t *testing.T) {
+			options := Options{Capture: &kinds, SDKIdentity: true, UserID: "u", MessageContext: map[string]any{"bad": value}, LibraryName: "ai-sdk-go", LibraryVersion: "test"}
+			if core, ok := DeliveryCore(span, options); ok || core != nil {
+				t.Errorf("an unencodable core was admitted (core %v)", core != nil)
+			}
+		})
 	}
 }

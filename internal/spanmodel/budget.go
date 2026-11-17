@@ -3,6 +3,7 @@ package spanmodel
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"reflect"
 	"slices"
 	"sort"
@@ -32,8 +33,10 @@ func otlpSpan(p object) (rs, ss, span object) {
 }
 
 // DeliveryCore is the mandatory core of an SDK span's message (FIXTURE-FORMAT.md, SDK span
-// delivery budget), at the shortest truncation. ok when it plus CompletionReserveBytes fits the
-// budget: only then may the span replace or cover an OTel span, and shedding never removes it.
+// delivery budget), at the shortest truncation. ok when it encodes as JSON and, plus
+// CompletionReserveBytes, fits the budget: only then may the span replace or cover an OTel span,
+// and shedding never removes it. A core that cannot be encoded (a NaN or infinite number, an
+// invalid json.Number) can never be sent, so it is nil and never admitted.
 func DeliveryCore(s Span, options Options) (core *analytics.Track, ok bool) {
 	m, _, _, maxBytes := build(s, options)
 	core = cloneTrack(m)
@@ -62,7 +65,11 @@ func DeliveryCore(s Span, options Options) (core *analytics.Track, ok bool) {
 		}
 	}
 	p["truncated"] = true
-	return core, jsonSize(core)+CompletionReserveBytes <= maxBytes
+	b, err := json.Marshal(core)
+	if err != nil {
+		return nil, false
+	}
+	return core, len(b)+CompletionReserveBytes <= maxBytes
 }
 
 // otlpStrings are the string values of an OTLP span, in the order truncation visits them.
@@ -209,10 +216,12 @@ func sortedKeys(o object) []string {
 	return keys
 }
 
+// jsonSize is v's compact JSON size. A value that cannot be encoded never fits: it measures as
+// the largest size, never as zero.
 func jsonSize(v any) int {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return 0
+		return math.MaxInt
 	}
 	return len(b)
 }

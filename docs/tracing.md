@@ -111,8 +111,10 @@ are dropped, cycles are dropped, and other unrepresentable list entries keep nul
 
 When `WithEmitSpans(true)` and a `rudderotel` span processor (`NewSpanProcessor` or
 `RegisterTracing`) both see a model call, the SDK span is the one sent when it has an analytics
-client and its mandatory core fits the span size budget with room for completion timing and status.
-Otherwise the OpenTelemetry span exports normally, and the SDK span follows its ordinary delivery path.
+client and its mandatory core encodes as JSON and fits the span size budget with room for
+completion timing and status. A message context that JSON cannot encode (a NaN or infinite
+number, an invalid `json.Number`) never fits. Otherwise the OpenTelemetry span exports normally,
+and the SDK span follows its ordinary delivery path.
 
 - An OpenTelemetry model-call span (the conventions in
   [product events from spans](#product-events-from-spans): GenAI `chat` / `text_completion` /

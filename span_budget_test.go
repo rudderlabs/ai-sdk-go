@@ -3,6 +3,7 @@ package rudderstackai
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -58,5 +59,27 @@ func TestSpanSizeCheckCountsTheWholeMessage(t *testing.T) {
 	_, s := beginWrapperSpan(ctx, i, time.Now())
 	if !s.canSend() {
 		t.Error("a span with room failed the check")
+	}
+}
+
+// A wrapper span whose mandatory message context cannot be encoded can never be sent, so it is
+// never admitted to replace or cover an OTel span, however small.
+func TestSpanAdmissionRefusesAnUnencodableContext(t *testing.T) {
+	for name, value := range map[string]any{
+		"NaN": math.NaN(), "+Inf": math.Inf(1), "-Inf": math.Inf(-1),
+		"invalid json.Number in a map":  map[string]any{"n": json.Number("not-a-number")},
+		"invalid json.Number in a list": []any{1, json.Number("1e")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			setupAI(t, WithEmitSpans(true))
+			ctx, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Context: map[string]any{"bad": value}})
+			_, s := beginWrapperSpan(ctx, i, time.Now())
+			if s.canSend() {
+				t.Error("an unencodable context passed the check")
+			}
+			if _, ok := s.admitAt(time.Now(), s.TraceID, "1111111111111111", s.SpanID); ok {
+				t.Error("an unencodable context was admitted under adopted IDs")
+			}
+		})
 	}
 }
