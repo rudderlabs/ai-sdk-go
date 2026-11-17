@@ -74,6 +74,7 @@ type observedWriter struct {
 func (o *observedWriter) Unwrap() http.ResponseWriter { return o.ResponseWriter }
 
 func (o *observedWriter) Write(p []byte) (int, error) {
+	safely(o.snapshot)
 	n, err := o.ResponseWriter.Write(p)
 	if err != nil {
 		o.fail()
@@ -81,6 +82,15 @@ func (o *observedWriter) Write(p []byte) (int, error) {
 	}
 	safely(func() { o.observe(p[:n]) })
 	return n, err
+}
+
+func (o *observedWriter) snapshot() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !o.decided {
+		sse := strings.HasPrefix(o.Header().Get("Content-Type"), "text/event-stream")
+		o.sse, o.keep, o.decided = sse, o.responses.Waiting(), true
+	}
 }
 
 func (o *observedWriter) observe(p []byte) {
