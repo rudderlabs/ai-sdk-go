@@ -1842,8 +1842,12 @@ func TestManagedAgentsKeepsServerLatencyUpToALastRunningOrErrorEvent(t *testing.
 			maDrain(events)
 			_ = events.Close()
 			got := rec.events(t)["ai_response_received"]
-			if len(got) != 1 || got[0]["latency_ms"] != float64(3000) {
+			// Server time maps onto the local clock to the millisecond: allow rounding, not the 1000 ms bug.
+			if len(got) != 1 {
 				t.Fatalf("%v", got)
+			}
+			if ms, _ := got[0]["latency_ms"].(float64); ms <= 2900 || ms >= 3500 {
+				t.Fatalf("latency_ms %v", got[0]["latency_ms"])
 			}
 		})
 	}
