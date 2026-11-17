@@ -1314,3 +1314,49 @@ func TestManagedAgentsKeepsPrimaryModelWhenTheCallerPausesOrEndsRightAfterAGrade
 		}
 	}
 }
+
+// countingStream numbers an event each time Current is read, like a source whose Current has side effects.
+type countingStream struct {
+	*sliceStream
+	reads int
+}
+
+func (c *countingStream) Current() anthropic.BetaManagedAgentsStreamSessionEventsUnion {
+	c.reads++
+	return c.events[c.reads-1]
+}
+
+func TestManagedAgentsReadsTheSourcesCurrentOncePerEvent(t *testing.T) {
+	for _, tracked := range []bool{true, false} {
+		t.Run(fmt.Sprintf("tracked=%v", tracked), func(t *testing.T) {
+			_, rec := setup(t)
+			resetMA(t)
+			src := &countingStream{sliceStream: maEvents(t,
+				`{"id":"sevt_1","type":"user.message","content":[]}`,
+				`{"id":"sevt_2","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1}}`,
+			)}
+			opt := rudderanthropic.WithSessionID("sesn_once")
+			if !tracked {
+				opt = rudderanthropic.PanickingOption() // leaves the events untracked
+			}
+			events := rudderanthropic.TrackSessionEvents(context.Background(), src, opt)
+			if !events.Next() {
+				t.Fatal("no first event")
+			}
+			var got struct{ ID string }
+			_ = json.Unmarshal([]byte(events.Current().RawJSON()), &got)
+			if got.ID != "sevt_1" || src.reads != 1 {
+				t.Fatalf("app got %q after %d source reads, want sevt_1 after 1", got.ID, src.reads)
+			}
+			_ = events.Close()
+			if !tracked {
+				return
+			}
+			// Tracking saw the user message only: a second read would have recorded a model call.
+			res := rec.events(t)["ai_response_received"]
+			if len(res) != 1 || res[0]["llm_call_count"] == float64(1) {
+				t.Fatalf("tracked a different event than the app got: %v", res)
+			}
+		})
+	}
+}
