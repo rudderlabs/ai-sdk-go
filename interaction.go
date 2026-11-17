@@ -2077,6 +2077,7 @@ func (i *Interaction) resumeAtLocked(start time.Time) {
 		start = time.Now()
 	}
 	i.lastPause = max(start.Sub(i.pausedAt), 0)
+	i.beyondPause = 0 // a new segment: nothing moved beyond this pause yet
 	i.pausedTotal += i.lastPause
 	i.pausedAt = time.Time{}
 	i.started = start
