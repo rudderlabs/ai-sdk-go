@@ -1273,10 +1273,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			}
 			fillString(&earlier.agentName, call.AgentName)
 			fillString(&earlier.callPurpose, call.CallPurpose)
-			if call.BYOK != nil && !(earlier == pricingTwin && earlier.twinMatched) {
+			if call.BYOK != nil && (earlier != pricingTwin || !earlier.twinMatched) {
 				earlier.byok = copyCreditPointer(call.BYOK)
 			}
-			if call.FallbackUsed != nil && !(earlier == pricingTwin && earlier.twinMatched) {
+			if call.FallbackUsed != nil && (earlier != pricingTwin || !earlier.twinMatched) {
 				earlier.fallbackUsed = copyCreditPointer(call.FallbackUsed)
 			}
 			// A nested authoritative twin can become matched while this hook is pricing it.
