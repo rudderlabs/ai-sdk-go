@@ -3,9 +3,10 @@ package rudderstackai
 import (
 	"context"
 	"encoding/json"
-	analytics "github.com/rudderlabs/analytics-go/v4"
 	"testing"
 	"time"
+
+	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 func sdk6111TwinWindow(c LLMCall) LLMCall {
