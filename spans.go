@@ -52,18 +52,30 @@ type Span struct {
 	// exported. Either way delivery sheds optional fields instead of dropping it.
 	replaced bool
 	covered  atomic.Bool
-	// sendable: the span has a client and its mandatory core (deliveryCore) fits the budget.
-	sendOnce     sync.Once
-	sendable     bool
-	deliveryCore *analytics.Track
+	// admission: set once, by the first size check to finish.
+	admission atomic.Pointer[admission]
+}
+
+// admission is whether a span can be sent (it has a client and its mandatory core fits the
+// budget), and that core.
+type admission struct {
+	sendable bool
+	core     *analytics.Track
 }
 
 // canSend reports whether this span can replace or cover an OTel span: it has an analytics
 // client, and its mandatory core as known now, plus room for completion, fits the span size
-// budget (FIXTURE-FORMAT.md, SDK span delivery budget).
+// budget (FIXTURE-FORMAT.md, SDK span delivery budget). The check maps the span as delivery
+// does, which can call app code (the redact hook, on content) that starts a model span inside
+// this call and so asks again: no lock is held, and the first answer stored wins.
 func (s *Span) canSend() bool {
-	s.sendOnce.Do(func() { s.deliveryCore, s.sendable = s.admit(s.TraceID, s.SpanID, s.parentID) })
-	return s.sendable
+	a := s.admission.Load()
+	if a == nil {
+		core, sendable := s.admit(s.TraceID, s.SpanID, s.parentID)
+		s.admission.CompareAndSwap(nil, &admission{sendable: sendable, core: core})
+		a = s.admission.Load()
+	}
+	return a.sendable
 }
 
 // admit is the span's mandatory core under the given trace, span and parent IDs, and whether it
@@ -257,7 +269,7 @@ func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time)
 	if !ok {
 		return nil
 	}
-	s.sendOnce.Do(func() { s.sendable, s.deliveryCore = true, core })
+	s.admission.Store(&admission{sendable: true, core: core})
 	s.replaced = o.Adopted
 	s.TraceID, s.SpanID, s.parentID = o.TraceID, o.SpanID, o.ParentID
 	if !o.Adopted {
@@ -454,8 +466,8 @@ func (s *Span) send(n spanmodel.Span, masked bool) {
 		return
 	}
 	options := s.trackOptions(masked)
-	if s.replaced || s.covered.Load() {
-		options.DeliveryCore = s.deliveryCore
+	if a := s.admission.Load(); a != nil && (s.replaced || s.covered.Load()) {
+		options.DeliveryCore = a.core
 	}
 	m, e := spanmodel.ToTrack(n, options)
 	if e != nil {
@@ -524,7 +536,16 @@ func init() {
 		if s == nil {
 			return hook.SDKCall{}, false
 		}
-		return hook.SDKCall{TraceID: s.TraceID, SpanID: s.SpanID, Cover: func() { s.covered.Store(true) }}, true
+		return hook.SDKCall{TraceID: s.TraceID, SpanID: s.SpanID, Cover: func() bool {
+			// Under the span's lock, so an end either sees the mark or comes first and is seen.
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if s.ended {
+				return false
+			}
+			s.covered.Store(true)
+			return true
+		}}, true
 	}
 	hook.Tracing.WrapperCaptureContent = func(value any) bool {
 		s, _ := value.(*Span)

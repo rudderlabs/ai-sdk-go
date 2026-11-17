@@ -45,17 +45,19 @@ var Tracing struct {
 	// processor registered, when it belongs to interaction and is nested inside the active SDK
 	// span with start order activeSeq (0 if none). The first call adopts its IDs and marks it
 	// replaced, so every processor drops it at its end; later calls inside are children. fits is
-	// asked, before anything is marked, whether the SDK span can be sent under the IDs it would
-	// take; when it cannot, nothing is adopted and the OTel span exports normally.
+	// asked, before anything is marked and with no lock held (it can run app code), whether the
+	// SDK span can be sent under the IDs it would take; when it cannot, or the span's state
+	// changed while it ran, nothing is adopted and the OTel span exports normally.
 	// Set by rudderotel.
 	AdoptOTelCall func(ctx context.Context, interaction any, activeSeq uint64, fits func(OTelCall) bool) (OTelCall, bool)
 }
 
 // SDKCall is an SDK call span an OTel model-call span starts inside. Cover marks that the OTel
-// span is not exported, so the SDK span sheds optional fields instead of being dropped.
+// span is not exported, so the SDK span sheds optional fields instead of being dropped; false,
+// marking nothing, when the call already ended.
 type SDKCall struct {
 	TraceID, SpanID string
-	Cover           func()
+	Cover           func() bool
 }
 
 // OTelCall is an OTel model-call span an SDK call starts inside.

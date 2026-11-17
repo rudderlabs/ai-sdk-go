@@ -19,15 +19,17 @@ import (
 // the descendants of a covered span (they export under its SDK owner), and an open model-call
 // span an earlier processor started a child under before RudderStack saw it start.
 //
-// Go has no weak maps, so entries have explicit lifetimes. An entry is open from the span's start
-// to its first end, or until every processor that started it shut down, and an open entry is
-// never evicted. At most Limits.MaxMapEntries entries are open: a model-call span starting while
-// they are full gets none, so it is never covered or adopted and exports as without dedup.
-// Descendants of a covered span always get one, so its tree stays intact. At the span's end, an
-// entry later readers may need moves to the ended entries, at most MaxMapEntries, oldest out: a
-// replaced or covered span, for processors that end it after the first, and a covered tree, for
-// children started after their parent ended. Export reads no map: a delivered span holds its
-// entry, and an entry its parent's.
+// An entry is open from the span's start to its first end, or until every processor that
+// started it shut down, and an open entry is never evicted. At most Limits.MaxMapEntries entries
+// are open: a model-call span starting while they are full gets none, so it is never covered or
+// adopted and exports as without dedup. Descendants of a covered span always get one, so its tree
+// stays intact. At the span's end, an entry later readers may need moves to the ended entries, at
+// most MaxMapEntries, oldest out: a replaced or covered span, for processors that end it after
+// the first, and a covered tree, for children started after their parent ended. Export reads no
+// map: a delivered span holds its entry, and an entry its parent's.
+//
+// No app code runs while mu is held: an SDK call's size check, whose mapper can call the redact
+// hook, runs before the lock, and the span's state is checked again under it.
 var otelSpans = struct {
 	mu    sync.Mutex
 	open  map[spanKey]*otelSpan
@@ -201,6 +203,7 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	if interaction == nil || interaction.Ended() || spanRole(s) != "llm" {
 		return
 	}
+	// Before the lock: finding the owner runs the call's size check, which can run app code.
 	var owner *hook.SDKCall
 	if o, owns := hook.Tracing.SDKOwnsCall(ctx, interaction); owns {
 		owner = &o
@@ -209,20 +212,22 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	if s.Parent().IsValid() {
 		parentID = s.Parent().SpanID().String()
 	}
-	if !p.dedupLocked(key(s.SpanContext()), parentID, owner, interaction, limit()) {
+	if !p.dedupLocked(s, parentID, owner, interaction, limit()) {
 		reportFull()
 	}
 }
 
-// dedupLocked is dedup under the lock, for span k with parent span ID parentID; false when the
+// dedupLocked is dedup under the lock, for span s with parent span ID parentID; false when the
 // span needed an entry and none was free.
-func (p *SpanProcessor) dedupLocked(k spanKey, parentID string, owner *hook.SDKCall, interaction *rudderstackai.Interaction, limit int) bool {
+func (p *SpanProcessor) dedupLocked(s trace.Span, parentID string, owner *hook.SDKCall, interaction *rudderstackai.Interaction, limit int) bool {
 	otelSpans.mu.Lock()
 	defer otelSpans.mu.Unlock()
-	// Under the lock, so an entry never outlives this processor's Shutdown.
-	if p.closed.Load() {
+	// Under the lock, so an entry never outlives this processor's Shutdown. A span that app code
+	// ended during the owner's size check is left as without dedup.
+	if p.closed.Load() || !s.IsRecording() {
 		return true
 	}
+	k := key(s.SpanContext())
 	e := otelSpans.open[k]
 	switch {
 	case e != nil && e.decided:
@@ -247,37 +252,54 @@ func (p *SpanProcessor) dedupLocked(k spanKey, parentID string, owner *hook.SDKC
 	}
 	ownerTrace, traceErr := trace.TraceIDFromHex(owner.TraceID)
 	ownerSpan, spanErr := trace.SpanIDFromHex(owner.SpanID)
-	// A processor before this one may already have sent a child under the span: keep it.
-	if traceErr != nil || spanErr != nil || (e.published && (k.trace != ownerTrace || k.span != ownerSpan)) {
+	// A processor before this one may already have sent a child under the span: keep it. A call
+	// that ended since its size check may have sent its span without the admitted core: it
+	// covers nothing.
+	if traceErr != nil || spanErr != nil || (e.published && (k.trace != ownerTrace || k.span != ownerSpan)) || !owner.Cover() {
 		return true
 	}
 	e.covered, e.tree, e.ownerTrace, e.ownerSpan = true, true, ownerTrace, ownerSpan
-	owner.Cover()
 	return true
 }
 
-func init() {
-	hook.Tracing.AdoptOTelCall = func(ctx context.Context, interaction any, activeSeq uint64, fits func(hook.OTelCall) bool) (hook.OTelCall, bool) {
-		s := trace.SpanFromContext(ctx)
-		sc := s.SpanContext()
-		otelSpans.mu.Lock()
-		defer otelSpans.mu.Unlock()
-		// Checked under the lock: a span's end is observed by its processors after it stops
-		// recording, so a call that sees it recording is adopted before any processor's end.
-		if !s.IsRecording() {
-			return hook.OTelCall{}, false
-		}
-		e := otelSpans.open[key(sc)]
-		if e == nil || !e.candidate || any(e.interaction) != interaction || activeSeq > e.seq {
-			return hook.OTelCall{}, false
-		}
-		call := hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: e.parentID, Adopted: !e.replaced}
-		if fits != nil && !fits(call) {
-			return hook.OTelCall{}, false
-		}
-		e.replaced = true
-		return call, true
+func init() { hook.Tracing.AdoptOTelCall = adoptOTelCall }
+
+// adoptOTelCall is hook.Tracing.AdoptOTelCall. fits measures the SDK span through the shared
+// mapper, which can call app code (the redact hook, on content) that ends the span or starts
+// others, so it runs with no lock held: the span is read before it and checked again after it,
+// under the lock, and a span whose state changed meanwhile is not adopted and exports as without
+// dedup.
+func adoptOTelCall(ctx context.Context, interaction any, activeSeq uint64, fits func(hook.OTelCall) bool) (hook.OTelCall, bool) {
+	s := trace.SpanFromContext(ctx)
+	otelSpans.mu.Lock()
+	e, call, ok := adoptable(s, interaction, activeSeq)
+	otelSpans.mu.Unlock()
+	if !ok || (fits != nil && !fits(call)) {
+		return hook.OTelCall{}, false
 	}
+	otelSpans.mu.Lock()
+	defer otelSpans.mu.Unlock()
+	if again, now, ok := adoptable(s, interaction, activeSeq); !ok || again != e || now != call {
+		return hook.OTelCall{}, false
+	}
+	e.replaced = true
+	return call, true
+}
+
+// adoptable is the open entry of s an SDK call of interaction, nested inside the active SDK span
+// with start order activeSeq, may adopt, and the call it would make. Holds the lock.
+func adoptable(s trace.Span, interaction any, activeSeq uint64) (*otelSpan, hook.OTelCall, bool) {
+	// Checked under the lock: a span's end is observed by its processors after it stops
+	// recording, so a call that sees it recording is adopted before any processor's end.
+	if !s.IsRecording() {
+		return nil, hook.OTelCall{}, false
+	}
+	sc := s.SpanContext()
+	e := otelSpans.open[key(sc)]
+	if e == nil || !e.candidate || any(e.interaction) != interaction || activeSeq > e.seq {
+		return nil, hook.OTelCall{}, false
+	}
+	return e, hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: e.parentID, Adopted: !e.replaced}, true
 }
 
 // endSpan is a processor reaching s's end, whether or not it saw the span start. The first end
