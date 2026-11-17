@@ -518,7 +518,8 @@ type Interaction struct {
 	pendingRunning         int           // queued ends being delivered; pendingDone stays until zero
 	pauseCount             int
 	pausedTotal            time.Duration
-	lastPause              time.Duration // the latest pause's length: how far backdate may move the start back
+	lastPause              time.Duration // the latest pause's length: how much time backdate may take from paused time
+	beyondPause            time.Duration // how far backdate moved the start back beyond the latest pause
 	adapterAnalytics       analytics.Client
 	intent, outcome        string
 	traceID                string
@@ -2083,8 +2084,8 @@ func (i *Interaction) resumeAtLocked(start time.Time) {
 }
 
 // backdate moves the current segment's start to startedAt (never past now), for an adapter that
-// reads a segment's events after they happened. A first segment moves freely; a resumed one moves
-// between it and the latest pause, so never before that pause began. No-op while paused.
+// reads a segment's events after they happened (its latency is the events' own). On a resumed
+// segment the moved time comes out of the latest pause, as far as that pause goes. No-op while paused.
 func (i *Interaction) backdate(startedAt time.Time) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -2094,9 +2095,6 @@ func (i *Interaction) backdate(startedAt time.Time) {
 	first := !i.restored && i.pauseCount == 0
 	// Positive moves the start back, negative forward (a reader that fell behind the events).
 	shift := i.started.Sub(startedAt)
-	if !first {
-		shift = min(shift, i.lastPause)
-	}
 	// Forward never past now on the clock latency reads (time.Since(i.started)).
 	shift = max(shift, -time.Since(i.started))
 	if shift == 0 {
@@ -2106,8 +2104,14 @@ func (i *Interaction) backdate(startedAt time.Time) {
 	if first {
 		return
 	}
-	i.pausedTotal -= shift
-	i.lastPause -= shift
+	// Paused time gives what it has; a forward move first undoes time taken beyond the pause.
+	beyond := -min(-shift, i.beyondPause)
+	if shift > 0 {
+		beyond = max(0, shift-i.lastPause)
+	}
+	i.beyondPause += beyond
+	i.pausedTotal -= shift - beyond
+	i.lastPause -= shift - beyond
 }
 
 // Paused reports whether the run is paused and not resumed or ended yet.

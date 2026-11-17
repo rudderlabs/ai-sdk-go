@@ -14,6 +14,7 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/capture"
 	"github.com/rudderlabs/ai-sdk-go/internal/kit"
 )
 
@@ -403,6 +404,8 @@ type turn struct {
 	abandoned       bool                       // opened by an ending event to settle a paused turn
 	lastModel       string                     // model of the latest successful call that is not a grader cycle
 	hasGrader       bool
+	captureContent  *bool                         // the capture policy when the turn opened: a later change to the caller's is not this turn's
+	contentCapture  *rudderstackai.ContentCapture // (copied two levels deep)
 }
 
 type turnEnd struct {
@@ -420,6 +423,15 @@ type sessionTracker struct {
 	runningAt    msTime
 	lastError    string
 	conversation string
+}
+
+// frozenCapture copies the capture policy of o, so the caller changing its values later has no effect.
+func frozenCapture(o rudderstackai.InteractionOptions) (*bool, *rudderstackai.ContentCapture) {
+	var on *bool
+	if o.CaptureContent != nil {
+		on = rudderstackai.Ptr(*o.CaptureContent)
+	}
+	return on, capture.Clone(o.ContentCapture)
 }
 
 func str(v any) string { s, _ := v.(string); return s }
@@ -646,6 +658,7 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 			recorded: newBoundedMap[msTime]("claude-managed-agents tools"),
 			blocking: newBoundedMap[rudderstackai.PauseReason]("claude-managed-agents blocking"),
 		}
+		t.captureContent, t.contentCapture = frozenCapture(s.cfg.interaction)
 		// Whose answer the turn is in is fixed now, wherever its later events are read.
 		if active := rudderstackai.FromContext(s.ctx); active != nil && !active.Ended() {
 			t.borrowed = active
@@ -909,6 +922,12 @@ func (s *sessionTracker) idle(e map[string]any, at msTime) {
 		t.waiting = rudderstackai.PauseOther
 		found := false
 		for _, id := range ids {
+			// A tool the session waits on is the app's to run or answer (a sandbox tool too).
+			if _, ok := t.tools[str(id)]; ok {
+				if _, blocked := t.blocking.get(str(id)); !blocked {
+					t.blocking.set(str(id), rudderstackai.PauseDeferredTool)
+				}
+			}
 			reason, ok := t.blocking.get(str(id))
 			if !ok {
 				continue
@@ -981,6 +1000,7 @@ func (s *sessionTracker) interactionFor(t *turn, local func(msTime) time.Time) *
 		kit.Backdate(i, local(t.startAt))
 	default:
 		o := s.cfg.interaction
+		o.CaptureContent, o.ContentCapture = t.captureContent, t.contentCapture
 		o.ConversationID = s.conversationID()
 		if o.PromptText == "" {
 			o.PromptText = t.promptText
