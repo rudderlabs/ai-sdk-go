@@ -181,107 +181,12 @@ func (s *SessionEvents[T]) Next() bool {
 		return false
 	}
 	if s.tracker != nil {
-		contain(func() {
-			var original any
-			_ = json.Unmarshal([]byte(event.RawJSON()), &original)
-			if raw, err := json.Marshal(deliveredValue(reflect.ValueOf(event), original)); err == nil {
-				s.tracker.observe(string(raw))
-			}
-		})
+		contain(func() { s.tracker.observe(event.RawJSON()) })
 	}
 	s.mu.Unlock()
 	// A Close during the event (from a hook) could not finish: the last to release mu does.
 	s.finishIfClosed()
 	return true
-}
-
-// deliveredValue reads response fields as delivered, retaining unknown fields and presence from
-// the wire. SDK response unions use json:",inline", which encoding/json does not flatten;
-// AsAny would decode the original RawJSON again and discard the caller's changes.
-func deliveredValue(v reflect.Value, original any) any {
-	if !v.IsValid() {
-		return nil
-	}
-	if v.Kind() == reflect.Interface || v.Kind() == reflect.Pointer {
-		if v.IsNil() {
-			return nil
-		}
-		return deliveredValue(v.Elem(), original)
-	}
-	if _, ok := v.Interface().(time.Time); ok && v.IsZero() && original == nil {
-		return nil // A nullable SDK timestamp decodes to the zero time.
-	}
-	if _, ok := v.Interface().(json.Marshaler); ok {
-		return v.Interface()
-	}
-	switch v.Kind() {
-	case reflect.Struct:
-		out, _ := original.(map[string]any)
-		if out == nil {
-			out = map[string]any{}
-		}
-		for i := 0; i < v.NumField(); i++ {
-			field := v.Type().Field(i)
-			if !field.IsExported() {
-				continue
-			}
-			tag := field.Tag.Get("json")
-			if tag == "-" {
-				continue
-			}
-			value := v.Field(i)
-			if tag == ",inline" {
-				if !value.IsZero() {
-					return deliveredValue(value, original)
-				}
-				continue
-			}
-			name, _, _ := strings.Cut(tag, ",")
-			if name == "" {
-				name = field.Name
-			}
-			previous, present := out[name]
-			if present || !value.IsZero() {
-				// Every inline content variant can be populated by the SDK decoder. Select
-				// the delivered event's type, rather than the first populated slice.
-				if name == "content" && value.Kind() == reflect.Struct {
-					kind := v.FieldByName("Type")
-					if kind.IsValid() && kind.Kind() == reflect.String {
-						variant := strings.NewReplacer(".", "", "_", "").Replace(kind.String())
-						for j := 0; j < value.NumField(); j++ {
-							fieldName := strings.TrimPrefix(value.Type().Field(j).Name, "OfBetaManagedAgents")
-							if strings.EqualFold(fieldName, variant+"EventContentArray") || (variant == "systemmessage" && fieldName == "SystemContentBlockArray") {
-								value = value.Field(j)
-								break
-							}
-						}
-					}
-				}
-				out[name] = deliveredValue(value, previous)
-			}
-		}
-		return out
-	case reflect.Slice, reflect.Array:
-		if v.Kind() == reflect.Slice && v.IsNil() {
-			return nil
-		}
-		previous, _ := original.([]any)
-		out := make([]any, v.Len())
-		for i := range out {
-			var item any
-			if i < len(previous) {
-				item = previous[i]
-			}
-			out[i] = deliveredValue(v.Index(i), item)
-		}
-		return out
-	default:
-		// Opaque RawJSON-only sources have no decoded fields to observe.
-		if _, ok := v.Interface().(SessionEvent); ok {
-			return original
-		}
-		return v.Interface()
-	}
 }
 
 // finishIfClosed finishes after a Close that found mu held; a failed TryLock means the holder
