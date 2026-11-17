@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -244,13 +245,16 @@ func TestMCPGoReusedResponseSnapshot(t *testing.T) {
 		for _, source := range []string{"rpc", "result"} {
 			t.Run(transport+"/"+source, func(t *testing.T) {
 				s := server.NewMCPServer("reuse", "1", server.WithToolCapabilities(true))
+				result := &mcp.CallToolResult{IsError: true, StructuredContent: map[string]any{"errorType": "cancelled"}}
 				s.AddTool(mcp.NewTool("lookup"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 					if source == "rpc" {
 						return nil, errors.New("handler failure")
 					}
-					return &mcp.CallToolResult{IsError: true}, nil
+					return result, nil
 				})
-				r := wrap(t, s, Options{CaptureContent: true})
+				r := wrap(t, s, Options{CaptureContent: true, ClassifyToolError: func(_ string, got *mcp.CallToolResult) string {
+					return got.StructuredContent.(map[string]any)["errorType"].(string)
+				}})
 				response := map[string]any{"jsonrpc": "2.0", "id": 1}
 				block := map[string]any{"type": "text", "text": "first failure"}
 				rpc := map[string]any{"code": -32603, "message": "first failure"}
@@ -324,11 +328,12 @@ func TestMCPGoReusedResponseSnapshot(t *testing.T) {
 					t.Fatal("first write never started")
 				}
 				<-handled
-				if len(r.named("mcp_tool_called")) != 0 {
+				if source == "rpc" && len(r.named("mcp_tool_called")) != 0 {
 					t.Fatal("event before successful write")
 				}
 				response["id"] = 2
 				block["text"], rpc["message"] = "second failure", "second failure"
+				result.StructuredContent.(map[string]any)["errorType"] = "api_error"
 				second := make(chan struct{})
 				go func() { defer close(second); send(2) }()
 				select {
@@ -342,8 +347,21 @@ func TestMCPGoReusedResponseSnapshot(t *testing.T) {
 				seen := map[any]any{}
 				for _, e := range r.named("mcp_tool_called") {
 					seen[e.Properties["request_id"]] = e.Properties["error_message"]
+					if source == "result" {
+						expected := "api_error"
+						if e.Properties["request_id"] == "1" {
+							expected = "cancelled"
+						}
+						if e.Properties["error_type"] != expected {
+							t.Fatalf("classification: %v", e.Properties)
+						}
+					}
 				}
-				if len(seen) != 2 || seen["1"] != "first failure" || seen["2"] != "second failure" {
+				var firstMessage any = "first failure"
+				if source == "result" {
+					firstMessage = nil
+				}
+				if len(seen) != 2 || seen["1"] != firstMessage || seen["2"] != "second failure" {
 					t.Fatalf("request messages: %v", seen)
 				}
 			})
@@ -579,5 +597,223 @@ func TestMCPGoErrorMessageNoWriteWait(t *testing.T) {
 				<-done
 			})
 		}
+	}
+}
+
+func TestMCPGoHeldFieldSnapshot(t *testing.T) {
+	fields := []string{"error.code", "error.message", "error.data", "isError", "resultType", "content.text", "content.type", "content.size", "structuredContent", "structured.nextCursor", "structured.next_cursor", "meta.status", "structured.status", "structured.statusCode", "classifier.input", "classifier.output", "invalid_arguments", "declared.when", "declared.properties", "declared.output", "declared.content", "request.identity"}
+	for _, field := range fields {
+		t.Run(field, func(t *testing.T) {
+			s := server.NewMCPServer("fields", "1", server.WithToolCapabilities(true))
+			sc := map[string]any{"label": "rate_limit"}
+			result := mcp.NewToolResultError("first failure")
+			result.StructuredContent = sc
+			if field == "structured.nextCursor" {
+				sc["nextCursor"] = "first"
+			}
+			if field == "structured.next_cursor" {
+				sc["next_cursor"] = "first"
+			}
+			if field == "meta.status" {
+				result.Meta = &mcp.Meta{AdditionalFields: map[string]any{"com.rudderstack/http_status": 429}}
+			}
+			if field == "structured.status" {
+				sc["status"] = 429
+			}
+			if field == "structured.statusCode" {
+				sc["statusCode"] = 429
+			}
+			if field == "declared.content" {
+				result.StructuredContent = nil
+				result.Content[0] = mcp.TextContent{Type: "text", Text: `{"label":"rate_limit","message":"first failure"}`}
+			}
+			tool := mcp.NewTool("lookup")
+			tool.InputSchema.Properties = map[string]any{"value": map[string]any{"type": "object", "const": map[string]any{"valid": true}}}
+			s.AddTool(tool, func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				if strings.HasPrefix(field, "error.") {
+					return nil, errors.New("first failure")
+				}
+				return result, nil
+			})
+			output := map[string]any{"nested": map[string]any{"value": "first"}}
+			var liveArgs map[string]any
+			classification := "rate_limit"
+			classified := []string{}
+			r := wrap(t, s, Options{CaptureContent: true, ClassifyToolError: func(_ string, got *mcp.CallToolResult) string {
+				if got != result {
+					t.Error("classifier lost live result")
+				}
+				if got.StructuredContent == nil {
+					return ""
+				}
+				classified = append(classified, got.StructuredContent.(map[string]any)["label"].(string))
+				if field == "classifier.input" {
+					return got.StructuredContent.(map[string]any)["label"].(string)
+				}
+				if field == "classifier.output" {
+					return classification
+				}
+				return ""
+			}, EventRules: rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{"lookup": {
+				Event: "lookup_failed", When: func(args map[string]any, _ any) bool {
+					liveArgs = args
+					return field != "declared.when" || args["value"].(map[string]any)["valid"] == false
+				},
+				Properties: func(args map[string]any, _ any) map[string]any { liveArgs = args; return output },
+			}}}})
+			w := &reusedResponseWriter{started: make(chan struct{}), release: make(chan struct{}), header: make(http.Header)}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			observed, _, out := ObserveStdio(ctx, strings.NewReader(""), w)
+			request := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"lookup","arguments":{"value":{"valid":false}}}}`)
+			var response map[string]any
+			var size int
+			done := make(chan error, 1)
+			go func() {
+				reply := s.HandleMessage(observed, request)
+				wire, err := json.Marshal(reply)
+				if err != nil {
+					done <- err
+					return
+				}
+				if err = json.Unmarshal(wire, &response); err != nil {
+					done <- err
+					return
+				}
+				if payload, ok := response["result"].(map[string]any); ok {
+					encoded, _ := json.Marshal(payload)
+					size = len(encoded)
+				}
+				_, err = out.Write(append(wire, '\n'))
+				done <- err
+			}()
+			select {
+			case <-w.started:
+			case <-ctx.Done():
+				t.Fatal("write never started")
+			}
+			if len(r.named("mcp_tool_called")) != 0 {
+				t.Fatal("event before write settled")
+			}
+			switch field {
+			case "error.code":
+				response["error"].(map[string]any)["code"] = -32602
+			case "error.message":
+				response["error"].(map[string]any)["message"] = "second failure"
+			case "error.data":
+				response["error"].(map[string]any)["data"] = map[string]any{"changed": true}
+			case "isError":
+				result.IsError = false
+			case "resultType":
+				result.ResultType = "input_required"
+			case "content.text":
+				result.Content[0] = mcp.TextContent{Type: "text", Text: "second failure"}
+			case "content.type":
+				result.Content[0] = mcp.ImageContent{Type: "image", Data: "second", MIMEType: "image/png"}
+			case "content.size":
+				result.Content = append(result.Content, mcp.TextContent{Type: "text", Text: strings.Repeat("x", 200)})
+			case "structuredContent":
+				result.StructuredContent = map[string]any{"label": "auth_error"}
+			case "structured.nextCursor":
+				delete(sc, "nextCursor")
+			case "structured.next_cursor":
+				delete(sc, "next_cursor")
+			case "meta.status":
+				result.Meta.AdditionalFields["com.rudderstack/http_status"] = 401
+			case "structured.status":
+				sc["status"] = 401
+			case "structured.statusCode":
+				sc["statusCode"] = 401
+			case "classifier.input":
+				sc["label"] = "auth_error"
+			case "classifier.output":
+				classification = "auth_error"
+			case "invalid_arguments", "declared.when", "declared.properties":
+				liveArgs["value"].(map[string]any)["valid"] = true
+			case "declared.content":
+				result.Content[0] = mcp.TextContent{Type: "text", Text: `{"label":"auth_error","message":"second failure"}`}
+			case "declared.output":
+				output["nested"].(map[string]any)["value"] = "second"
+			case "request.identity":
+				copy(request, []byte(strings.Replace(string(request), `"id":1`, `"id":2`, 1)))
+			}
+			close(w.release)
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			p := r.props(t, "mcp_tool_called")
+			wantKind := "invalid_request"
+			if strings.Contains(field, "status") || strings.HasPrefix(field, "classifier.") {
+				wantKind = "rate_limit"
+			}
+			if strings.HasPrefix(field, "error.") {
+				wantKind = "api_error"
+			}
+			wantMessage := "first failure"
+			if field == "declared.content" {
+				wantMessage = `{"label":"rate_limit","message":"first failure"}`
+			}
+			if p["request_id"] != "1" || p["tool_status"] != "error" || p["error_type"] != wantKind || p["error_message"] != wantMessage {
+				t.Fatalf("completion: %v", p)
+			}
+			if !strings.HasPrefix(field, "error.") && (p["result_size_bytes"] != size || p["result_tokens_estimate"] != size/4 || p["is_error_result"] != true || p["result_paginated"] != strings.HasPrefix(field, "structured.next")) {
+				t.Fatalf("stats: %v", p)
+			}
+			if mustJSON(r.props(t, "lookup_failed")["nested"]) != `{"value":"first"}` {
+				t.Fatalf("declared: %v", r.props(t, "lookup_failed"))
+			}
+		})
+	}
+}
+
+func TestMCPGoHTTPHeaderSnapshot(t *testing.T) {
+	for _, sse := range []bool{false, true} {
+		t.Run(fmt.Sprint(sse), func(t *testing.T) {
+			s := server.NewMCPServer("header-snapshot", "1", server.WithToolCapabilities(true))
+			s.AddTool(mcp.NewTool("lookup"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+				return mcp.NewToolResultError("first failure"), nil
+			})
+			r := wrap(t, s, Options{CaptureContent: true})
+			w := &reusedResponseWriter{started: make(chan struct{}), release: make(chan struct{}), header: make(http.Header)}
+			h := ObserveHTTP(http.HandlerFunc(func(out http.ResponseWriter, req *http.Request) {
+				contentType := "application/json"
+				if sse {
+					contentType = "text/event-stream"
+				}
+				out.Header().Set("Content-Type", contentType)
+				reply := s.HandleMessage(req.Context(), []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"lookup","arguments":{}}}`))
+				data, err := json.Marshal(reply)
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if sse {
+					data = append(append([]byte("data: "), data...), '\n', '\n')
+				}
+				if _, err := out.Write(data); err != nil {
+					t.Error(err)
+				}
+				if sse {
+					out.(http.Flusher).Flush()
+				}
+			}))
+			done := make(chan struct{})
+			go func() { defer close(done); h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/", nil)) }()
+			select {
+			case <-w.started:
+			case <-time.After(5 * time.Second):
+				t.Fatal("write never started")
+			}
+			changed := "text/event-stream"
+			if sse {
+				changed = "application/json"
+			}
+			w.header.Set("Content-Type", changed)
+			close(w.release)
+			<-done
+			if p := r.props(t, "mcp_tool_called"); p["error_message"] != "first failure" {
+				t.Fatalf("header reuse changed completion: %v", p)
+			}
+		})
 	}
 }

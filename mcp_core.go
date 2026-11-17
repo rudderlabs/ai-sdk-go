@@ -881,7 +881,9 @@ func (rc *reqCtx) finish(event, nameKey, name, status string, extra map[string]a
 	for k, v := range extra {
 		p[k] = v
 	}
-	rc.send(event, p, func() { emit(rc.opts.Analytics, event, rc.who, p) })
+	p = jsonSafeMap(p)
+	client, identity := rc.opts.Analytics, rc.who
+	rc.send(event, p, func() { emit(client, event, identity, p) })
 }
 
 // heldEvents are a failed request's event and the request's later events, sent in order once
@@ -1067,8 +1069,9 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 	p["tool_name"] = rc.toolName
 	p["tool_status"] = status
 	rates := cfg().sampleRates
-	fitted := fitToolEventProperties(rule.Event, p, custom, rates)
-	rc.send(rule.Event, fitted, func() { emitRates(rc.opts.Analytics, rule.Event, rc.who, fitted, rates) })
+	fitted := jsonSafeMap(fitToolEventProperties(rule.Event, p, custom, rates))
+	client, identity, event := rc.opts.Analytics, rc.who, rule.Event
+	rc.send(event, fitted, func() { emitRates(client, event, identity, fitted, rates) })
 }
 
 // inputKey scopes a pending elicitation to its caller and session or interaction, so another

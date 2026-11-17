@@ -100,7 +100,7 @@ func TestObserveMCPTransportReusedResponseSnapshot(t *testing.T) {
 		t.Run(source, func(t *testing.T) {
 			setupAI(t)
 			text := &mcp.TextContent{Text: "first failure"}
-			result := &mcp.CallToolResult{IsError: true, Content: []mcp.Content{text}}
+			result := &mcp.CallToolResult{IsError: true, Content: []mcp.Content{text}, StructuredContent: map[string]any{"errorType": "cancelled"}}
 			rpc := &jsonrpc.Error{Code: -32602, Message: "first failure"}
 			handled := make(chan string, 2)
 			s := mcp.NewServer(&mcp.Implementation{Name: "reuse", Version: "1"}, nil)
@@ -111,7 +111,9 @@ func TestObserveMCPTransportReusedResponseSnapshot(t *testing.T) {
 				}
 				return result, nil
 			})
-			r := wrap(t, s, Options{CaptureContent: true})
+			r := wrap(t, s, Options{CaptureContent: true, ClassifyToolError: func(_ string, got *mcp.CallToolResult) string {
+				return got.StructuredContent.(map[string]any)["errorType"].(string)
+			}})
 			c1, c2 := net.Pipe()
 			w := reusedResponseWriter{Conn: c2, started: make(chan struct{}), release: make(chan struct{})}
 			cs := connectOver(t, s, &mcp.IOTransport{Reader: c2, Writer: w}, &mcp.IOTransport{Reader: c1, Writer: c1}, true)
@@ -129,12 +131,13 @@ func TestObserveMCPTransportReusedResponseSnapshot(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal("first write never started")
 			}
-			if len(r.named("mcp_tool_called")) != 0 {
+			if source == "rpc" && len(r.named("mcp_tool_called")) != 0 {
 				t.Fatal("event before successful write")
 			}
 			// The first response is serialized; reuse its source while that write is held.
 			firstID := <-handled
 			text.Text, rpc.Message = "second failure", "second failure"
+			result.StructuredContent.(map[string]any)["errorType"] = "api_error"
 			second := make(chan struct{})
 			go func() {
 				defer close(second)
@@ -153,8 +156,21 @@ func TestObserveMCPTransportReusedResponseSnapshot(t *testing.T) {
 			seen := map[any]any{}
 			for _, e := range events {
 				seen[e.Properties["request_id"]] = e.Properties["error_message"]
+				if source == "result" {
+					expected := "api_error"
+					if e.Properties["request_id"] == firstID {
+						expected = "cancelled"
+					}
+					if e.Properties["error_type"] != expected {
+						t.Fatalf("classification: %v", e.Properties)
+					}
+				}
 			}
-			if len(seen) != 2 || seen[firstID] != "first failure" || seen[secondID] != "second failure" {
+			var firstMessage any = "first failure"
+			if source == "result" {
+				firstMessage = nil
+			}
+			if len(seen) != 2 || seen[firstID] != firstMessage || seen[secondID] != "second failure" {
 				t.Fatalf("request messages: %v", seen)
 			}
 		})
@@ -500,5 +516,189 @@ func TestObserveMCPStdioFailedWriteSendsWithoutMessage(t *testing.T) {
 	}
 	if _, ok := r.props(t, "mcp_tool_called")["error_message"]; ok {
 		t.Fatal("text from failed stdio write")
+	}
+}
+
+func TestHeldFieldSnapshot(t *testing.T) {
+	fields := []string{"error.code", "error.message", "error.data", "isError", "resultType", "content.text", "content.type", "content.size", "structuredContent", "nextCursor", "structured.nextCursor", "structured.next_cursor", "meta.status", "structured.status", "structured.statusCode", "classifier.input", "classifier.output", "invalid_arguments", "declared.when", "declared.properties", "declared.output", "declared.content", "request.identity", "inputRequests", "inputRequests.key", "inputRequests.method", "requestState"}
+	for _, field := range fields {
+		t.Run(field, func(t *testing.T) {
+			setupAI(t)
+			output := map[string]any{"nested": map[string]any{"value": "first"}}
+			seen := []any{}
+			s := mcp.NewServer(&mcp.Implementation{Name: "field-snapshot", Version: "1"}, nil)
+			r := wrap(t, s, Options{CaptureContent: true, EventRules: EventRules{Tools: map[string]ToolEventRule{"lookup": {
+				Event: "lookup_failed",
+				When: func(args map[string]any, _ any) bool {
+					return field != "declared.when" || args["value"].(map[string]any)["valid"] == false
+				},
+				Properties: func(args map[string]any, value any) map[string]any {
+					seen = append(seen, args["value"].(map[string]any)["valid"])
+					return output
+				},
+			}}}})
+			w, _ := instances.get(s)
+			responses := mcpbridge.NewResponses()
+			schema := map[string]any{"type": "object", "properties": map[string]any{"value": map[string]any{"type": "object", "const": map[string]any{"valid": true}}}}
+			request := mcpbridge.Request{Ctx: context.Background(), RequestID: 1, Responses: responses, RegisteredTools: []mcpbridge.Tool{{Name: "lookup", Schema: schema}}}
+			rc := w.begin(request)
+			args := map[string]json.RawMessage{"value": json.RawMessage(`{"valid":false}`)}
+			rc.ToolCall("lookup", args, false, nil, "")
+			block := map[string]any{"type": "text", "text": "first failure"}
+			sc := map[string]any{"label": "rate_limit"}
+			result := map[string]any{"isError": true, "resultType": "complete", "content": []any{block}, "structuredContent": sc}
+			if field == "nextCursor" {
+				result["nextCursor"] = "first"
+			}
+			if field == "structured.nextCursor" {
+				sc["nextCursor"] = "first"
+			}
+			if field == "structured.next_cursor" {
+				sc["next_cursor"] = "first"
+			}
+			if field == "meta.status" {
+				result["_meta"] = map[string]any{"com.rudderstack/http_status": 429}
+			}
+			if field == "structured.status" {
+				sc["status"] = 429
+			}
+			if field == "structured.statusCode" {
+				sc["statusCode"] = 429
+			}
+			if field == "declared.content" {
+				delete(result, "structuredContent")
+				block["text"] = `{"label":"rate_limit","message":"first failure"}`
+			}
+			b, _ := json.Marshal(result)
+			outcome := mcpbridge.Outcome{Result: result}
+			if strings.HasPrefix(field, "classifier.") {
+				outcome.ClassifiedError = "rate_limit"
+			}
+			rpc := map[string]any{"code": -32602, "message": "first failure", "data": map[string]any{"unused": "first"}}
+			response := map[string]any{"jsonrpc": "2.0", "id": 1, "result": result}
+			if strings.HasPrefix(field, "error.") {
+				outcome = mcpbridge.Outcome{ErrorType: "invalid_request"}
+				delete(response, "result")
+				response["error"] = rpc
+			}
+			inputField := strings.HasPrefix(field, "inputRequests") || field == "requestState"
+			if inputField {
+				result["resultType"] = "input_required"
+				result["inputRequests"] = map[string]any{"first": map[string]any{"method": "elicitation/create"}}
+				result["requestState"] = "first-state"
+				outcome = mcpbridge.Outcome{InputRequired: true, InputKeys: []string{"first"}, RequestState: "first-state"}
+			}
+			rc.ToolDone(outcome)
+			wire, _ := json.Marshal(response)
+			writer := reusedResponseWriter{started: make(chan struct{}), release: make(chan struct{})}
+			// Use a pipe only for the blocking writer, with its receiver already draining.
+			c1, c2 := net.Pipe()
+			writer.Conn = c2
+			defer c1.Close()
+			defer c2.Close()
+			go func() { _, _ = io.Copy(io.Discard, c1) }()
+			done := make(chan error, 1)
+			go func() { _, err := mcpbridge.NewWriter(writer, responses).Write(append(wire, '\n')); done <- err }()
+			select {
+			case <-writer.started:
+			case <-time.After(5 * time.Second):
+				t.Fatal("write never started")
+			}
+			if len(r.named("mcp_tool_called")) != 0 {
+				t.Fatal("event before write settled")
+			}
+			switch field {
+			case "inputRequests":
+				result["inputRequests"] = map[string]any{}
+			case "inputRequests.key":
+				outcome.InputKeys[0] = "second"
+			case "inputRequests.method":
+				result["inputRequests"].(map[string]any)["first"].(map[string]any)["method"] = "changed"
+			case "requestState":
+				outcome.RequestState = "second-state"
+			case "error.code":
+				rpc["code"] = -32603
+			case "error.message":
+				rpc["message"] = "second failure"
+			case "error.data":
+				rpc["data"].(map[string]any)["unused"] = "second"
+			case "isError":
+				result["isError"] = false
+			case "resultType":
+				result["resultType"] = "input_required"
+				result["inputRequests"] = map[string]any{"changed": map[string]any{"method": "elicitation/create"}}
+			case "content.text":
+				block["text"] = "second failure"
+			case "content.type":
+				block["type"] = "image"
+			case "content.size":
+				result["content"] = append(result["content"].([]any), map[string]any{"type": "image", "data": strings.Repeat("x", 200)})
+			case "structuredContent":
+				result["structuredContent"] = map[string]any{"label": "auth_error"}
+			case "nextCursor":
+				delete(result, "nextCursor")
+			case "structured.nextCursor":
+				delete(sc, "nextCursor")
+			case "structured.next_cursor":
+				delete(sc, "next_cursor")
+			case "meta.status":
+				result["_meta"].(map[string]any)["com.rudderstack/http_status"] = 401
+			case "structured.status":
+				sc["status"] = 401
+			case "structured.statusCode":
+				sc["statusCode"] = 401
+			case "classifier.input":
+				sc["label"] = "auth_error"
+			case "classifier.output":
+				outcome.ClassifiedError = "auth_error"
+			case "invalid_arguments", "declared.when", "declared.properties":
+				copy(args["value"], []byte(`{"valid":true }`))
+			case "declared.content":
+				block["text"] = `{"label":"auth_error","message":"second failure"}`
+			case "declared.output":
+				output["nested"].(map[string]any)["value"] = "second"
+			case "request.identity":
+				request.RequestID = "second"
+				request.RegisteredTools[0].Name = "changed"
+			}
+			close(writer.release)
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			if inputField {
+				pending, ok := rc.st.inputRequired.get(rc.inputKey("first", "first-state"))
+				if !ok || pending.requestID != "1" || len(r.named("mcp_tool_called")) != 0 {
+					t.Fatalf("input snapshot: %+v", pending)
+				}
+				return
+			}
+			p := r.props(t, "mcp_tool_called")
+			wantKind := "invalid_request"
+			if strings.Contains(field, "status") || strings.HasPrefix(field, "classifier.") {
+				wantKind = "rate_limit"
+			}
+			wantMessage := "first failure"
+			if field == "declared.content" {
+				wantMessage = `{"label":"rate_limit","message":"first failure"}`
+			}
+			if p["request_id"] != "1" || p["tool_name"] != "lookup" || p["tool_status"] != "error" || p["error_type"] != wantKind || p["error_message"] != wantMessage {
+				t.Fatalf("completion: %v", p)
+			}
+			if !strings.HasPrefix(field, "error.") {
+				if p["is_error_result"] != true || p["result_size_bytes"] != len(b) || p["result_tokens_estimate"] != len(b)/4 || p["result_paginated"] != (strings.Contains(field, "Cursor") || field == "structured.next_cursor") {
+					t.Fatalf("stats: %v", p)
+				}
+				wantTypes := `["text","structured"]`
+				if field == "declared.content" {
+					wantTypes = `["text"]`
+				}
+				if mustJSON(p["result_content_types"]) != wantTypes || mustJSON(p["invalid_arguments"]) != `["value"]` {
+					t.Fatalf("types/arguments: %v", p)
+				}
+			}
+			if mustJSON(seen) != `[false]` || mustJSON(r.props(t, "lookup_failed")["nested"]) != `{"value":"first"}` {
+				t.Fatalf("declared: seen=%v properties=%v", seen, r.props(t, "lookup_failed"))
+			}
+		})
 	}
 }
