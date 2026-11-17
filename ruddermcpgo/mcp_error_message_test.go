@@ -859,3 +859,88 @@ func TestNonToolIsErrorOmitsErrorMessage(t *testing.T) {
 		})
 	}
 }
+
+type serializerSequence struct{ calls *int }
+
+func (s serializerSequence) MarshalJSON() ([]byte, error) {
+	*s.calls++
+	return fmt.Appendf(nil, `{"sequence":%d}`, *s.calls), nil
+}
+
+func TestMCPGoObserverPreservesSerializerOrder(t *testing.T) {
+	for _, transport := range []string{"stdio", "http-json", "http-sse"} {
+		for _, capture := range []bool{false, true} {
+			for _, outcome := range []string{"rpc", "isError", "success"} {
+				t.Run(fmt.Sprintf("%s/capture=%v/%s", transport, capture, outcome), func(t *testing.T) {
+					calls := 0
+					s := server.NewMCPServer("serializer-order", "1", server.WithToolCapabilities(true))
+					s.AddTool(mcp.NewTool("lookup"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+						if outcome == "rpc" {
+							return nil, errors.New("first failure")
+						}
+						return &mcp.CallToolResult{IsError: outcome == "isError", Content: []mcp.Content{mcp.TextContent{Type: "text", Text: "first failure"}}, StructuredContent: serializerSequence{&calls}}, nil
+					})
+					wrap(t, s, Options{CaptureContent: capture})
+					var received map[string]any
+					handle := func(ctx context.Context, out io.Writer) {
+						response := s.HandleMessage(ctx, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"lookup","arguments":{}}}`))
+						want := 2 // Main's onSuccess copy and ToolDone stats each marshal once.
+						if outcome == "rpc" {
+							want = 0
+							rpc := response.(mcp.JSONRPCError)
+							rpc.Error.Data = serializerSequence{&calls}
+							response = rpc
+						}
+						if calls != want {
+							t.Fatalf("before transport calls=%d, want %d", calls, want)
+						}
+						body, err := json.Marshal(response)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if calls != want+1 {
+							t.Fatalf("after transport calls=%d, want %d", calls, want+1)
+						}
+						if err := json.Unmarshal(body, &received); err != nil {
+							t.Fatal(err)
+						}
+						if transport == "http-sse" {
+							body = append(append([]byte("data: "), body...), '\n')
+						}
+						if _, err := out.Write(append(body, '\n')); err != nil {
+							t.Fatal(err)
+						}
+						if calls != want+1 {
+							t.Fatalf("observer reserialized: %d", calls)
+						}
+					}
+					if transport == "stdio" {
+						ctx, cancel := context.WithCancel(context.Background())
+						defer cancel()
+						ctx, _, out := ObserveStdio(ctx, strings.NewReader(""), io.Discard)
+						handle(ctx, out)
+						mcpbridge.ResponsesFrom(ctx).Close()
+					} else {
+						ObserveHTTP(http.HandlerFunc(func(out http.ResponseWriter, req *http.Request) {
+							if transport == "http-sse" {
+								out.Header().Set("Content-Type", "text/event-stream")
+							}
+							handle(req.Context(), out)
+						})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/mcp", nil))
+					}
+					var data map[string]any
+					want := float64(3)
+					if outcome == "rpc" {
+						data = received["error"].(map[string]any)["data"].(map[string]any)
+						want = 1
+					} else {
+						data = received["result"].(map[string]any)["structuredContent"].(map[string]any)
+					}
+					if data["sequence"] != want {
+						t.Fatalf("client sequence=%v, want %v", data["sequence"], want)
+					}
+				})
+			}
+		}
+	}
+}

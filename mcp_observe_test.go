@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -750,6 +752,58 @@ func TestObserveMCPTransportNonToolIsError(t *testing.T) {
 				p := events[len(events)-1].Properties
 				if p["tool_status"] != "success" || p["result_size_bytes"] != len(body) {
 					t.Fatalf("success properties: %v", p)
+				}
+			})
+		}
+	}
+}
+
+type serializerSequence struct{ calls *atomic.Int32 }
+
+func (s serializerSequence) MarshalJSON() ([]byte, error) {
+	return fmt.Appendf(nil, `{"sequence":%d}`, s.calls.Add(1)), nil
+}
+
+func TestObserveMCPTransportPreservesSerializerOrder(t *testing.T) {
+	for _, capture := range []bool{false, true} {
+		for _, outcome := range []string{"rpc", "isError", "success"} {
+			t.Run(fmt.Sprintf("capture=%v/%s", capture, outcome), func(t *testing.T) {
+				setupAI(t)
+				var calls atomic.Int32
+				s := mcp.NewServer(&mcp.Implementation{Name: "serializer-order", Version: "1"}, nil)
+				s.AddTool(&mcp.Tool{Name: "lookup", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+					if outcome == "rpc" {
+						data, err := json.Marshal(serializerSequence{&calls})
+						if err != nil {
+							return nil, err
+						}
+						return nil, &jsonrpc.Error{Code: -32603, Message: "first failure", Data: data}
+					}
+					return &mcp.CallToolResult{IsError: outcome == "isError", Content: []mcp.Content{&mcp.TextContent{Text: "first failure"}}, StructuredContent: serializerSequence{&calls}}, nil
+				})
+				wrap(t, s, Options{CaptureContent: capture})
+				cs := connectMaybeObserved(t, s, true)
+				result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "lookup"})
+				if outcome == "rpc" {
+					var rpc *jsonrpc.Error
+					if !errors.As(err, &rpc) || string(rpc.Data) != `{"sequence":1}` {
+						t.Fatalf("RPC response: %v", err)
+					}
+				} else {
+					if err != nil {
+						t.Fatal(err)
+					}
+					// Main marshals once for result stats, then the transport marshals.
+					if result.StructuredContent.(map[string]any)["sequence"] != float64(2) {
+						t.Fatalf("client result: %#v", result.StructuredContent)
+					}
+				}
+				want := int32(2)
+				if outcome == "rpc" {
+					want = 1
+				}
+				if calls.Load() != want {
+					t.Fatalf("serializer calls=%d, want %d", calls.Load(), want)
 				}
 			})
 		}
