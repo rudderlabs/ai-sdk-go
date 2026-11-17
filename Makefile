@@ -7,7 +7,7 @@ govulncheck = golang.org/x/vuln/cmd/govulncheck@v1.9.0
 MODULES = . rudderopenai rudderanthropic ruddergenai rudderbedrock rudderotel cmd/aicheck internal/conformance examples
 PKGS = ./... $(addsuffix /...,$(addprefix ./,$(filter-out .,$(MODULES))))
 
-.PHONY: build lint test cover vulncheck tidy example
+.PHONY: build lint test cover vulncheck tidy example bench load
 
 build:
 	$(GO) build $(PKGS)
@@ -32,3 +32,13 @@ EXAMPLES = mcp-server mcp-server-mcpgo mcp-stateless-http mcp-auth openai anthro
 
 example:
 	for e in $(EXAMPLES); do $(GO) run ./examples/$$e --check || exit 1; done
+
+# Overhead per interaction and MCP call, with and without the SDK (docs/performance.md).
+bench:
+	mkdir -p bench-results
+	$(GO) test -run '^$$' -bench Overhead -benchmem . ./rudderopenai > bench-results/go.txt
+	$(GO) run ./internal/benchreport -out bench-results/go.json < bench-results/go.txt
+
+# Sustained interactions and MCP calls through analytics-go to a local data plane.
+load:
+	$(GO) test -tags load -run TestLoad -count=1 -v . ./internal/conformance

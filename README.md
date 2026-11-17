@@ -293,6 +293,8 @@ rudderstackai.CloseClient(ctx, client) // afterwards, close each client you own 
 
 An analytics-go client (v4.5.1, the minimum) sends its queue on `Flush`; a custom client without `Flush(ctx)` or `Flush()` cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` then `CloseClient` for your clients on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
 
+Overhead: the SDK adds about 23 µs to an interaction with one wrapped model call on a CI runner (19 µs on a laptop), against hundreds of milliseconds for the model call itself; content capture adds a few milliseconds of masking. Budget, measurements, the load test and limits: [docs/performance.md](docs/performance.md).
+
 ## Events
 
 | Event                                                   | When                                                                         |
@@ -461,6 +463,7 @@ From the repository root: `go run ./examples/<name> --check` runs one end to end
 - [docs/configuration.md](docs/configuration.md): `Configure` options, interaction and task options, context values and `Middleware`, cookies, `trace_id`, masking, pricing and `EstimateCost`, classifier and evaluator, flushing, logging, API reference.
 - [docs/integrations.md](docs/integrations.md): per-integration setup and behaviour, streaming, retries, gateways, manual recording, limits.
 - [docs/mcp.md](docs/mcp.md): MCP server tracking.
+- [docs/performance.md](docs/performance.md): what the SDK costs per interaction and MCP call, the load test, the fuzz tests and the limits.
 
 ## Contributing
 
