@@ -1537,3 +1537,71 @@ func TestSDK6111Review137TwinPricingRetainsNewerEnrichment(t *testing.T) {
 		}
 	}
 }
+
+// SDK-6948: marshaler output is plain data with spans off, even when it encodes native bytes.
+type sdk6111Review137JSONPayload struct {
+	Body []byte `json:"body"`
+	Keep string `json:"keep"`
+}
+
+func (p sdk6111Review137JSONPayload) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{"body": p.Body, "keep": p.Keep})
+}
+
+type sdk6111Review137TextPayload sdk6111Review137JSONPayload
+
+func (p sdk6111Review137TextPayload) MarshalText() ([]byte, error) {
+	return []byte("Y3VzdG9tZXItYmluYXJ5LVMzY3IzdA=="), nil
+}
+func TestSDK6111Review137CustomMarshalerOutputException(t *testing.T) {
+	for _, spans := range []bool{false, true} {
+		for _, kind := range []string{"json", "text"} {
+			t.Run(fmt.Sprintf("spans=%t/%s", spans, kind), func(t *testing.T) {
+				r := setupAI(t, WithLLMCallEvents(true), WithCaptureContent(true), WithEmitSpans(spans))
+				payload := sdk6111Review137JSONPayload{Body: []byte("customer-binary-S3cr3t"), Keep: "ok"}
+				var value any = payload
+				if kind == "text" {
+					value = sdk6111Review137TextPayload(payload)
+				}
+				_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+				i.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4o", InputTokens: 10,
+					OutputToolCalls: []GenAIToolCall{{Name: "lookup", Arguments: map[string]any{"nested": []any{value}}}},
+					InputMessages: []GenAIMessage{{Role: "user", Parts: []GenAIPart{
+						{"type": "tool_call", "id": "t", "name": "lookup", "arguments": value},
+						{"type": "tool_call_response", "id": "t", "response": value},
+					}}},
+				})
+				i.End(EndOptions{})
+				calls := r.named("ai_llm_response_received")
+				if len(calls) != 1 {
+					t.Fatal(len(calls))
+				}
+				content := pauseSegmentsJSON(t, calls[0].Properties).(map[string]any)
+				out := content["output_tool_calls"].([]any)[0].(map[string]any)["arguments"].(map[string]any)["nested"].([]any)[0]
+				parts := content["input_messages"].([]any)[0].(map[string]any)["parts"].([]any)
+				arguments := parts[0].(map[string]any)["arguments"]
+				response := parts[1].(map[string]any)["response"]
+				for _, got := range []any{out, arguments, response} {
+					encoded := "Y3VzdG9tZXItYmluYXJ5LVMzY3IzdA=="
+					if !spans && kind == "text" {
+						if got != encoded {
+							t.Fatal(got)
+						}
+					} else {
+						m, ok := got.(map[string]any)
+						if !ok || m["keep"] != "ok" {
+							t.Fatal(got)
+						}
+						if spans {
+							if _, exists := m["body"]; exists {
+								t.Fatal(got)
+							}
+						} else if m["body"] != encoded {
+							t.Fatal(got)
+						}
+					}
+				}
+			})
+		}
+	}
+}

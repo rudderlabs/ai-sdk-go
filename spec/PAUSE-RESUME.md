@@ -31,3 +31,5 @@ Pause timestamps use the wall clock so cross-process waits can be measured; nega
 `fixtures/conformance-v0.4.json` covers repeated pauses, explicit and implicit resumes, persisted snapshots, no-ops, final ends while paused and chained task starts. Approval-loop examples in each SDK demonstrate three worker invocations separated by two approvals.
 
 With `emitSpans`, snapshots preserve an internal `sdk_trace_id` independently of application `trace_id`, and pending calls preserve `span_id`. JSON restore publishes pending product events with their join IDs without replaying spans. Overflow calls omit span IDs.
+
+Per-call content follows the binary sanitization rules in `fixtures/FIXTURE-FORMAT.md`. Go exception (SDK-6948): with `emit_spans` off, a value's own `MarshalJSON` or `MarshalText` output is stripped as plain data; bytes that the marshaler encodes as ordinary text, including base64, can reach per-call content. Pause snapshots still omit captured per-call content.
