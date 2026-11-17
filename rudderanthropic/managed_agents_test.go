@@ -832,6 +832,76 @@ func TestManagedAgentsRecordsABorrowedAnswersWorkAsItArrivesSoTheCallersPauseHol
 	}
 }
 
+func TestManagedAgentsResumesAPausedAnswerReadInsideAnotherCallersAmbientInteractionAsItself(t *testing.T) {
+	f, sc := maFixtureScenario(t, "custom_tool_pause_resume")
+	_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
+	resetMA(t)
+	session := rudderanthropic.WithSession(withID(f.Session, "sesn_resume_owner"))
+	owner := rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{UserID: "owner"})
+	read := func(ctx context.Context, n int, opts ...rudderanthropic.SessionOption) {
+		events := rudderanthropic.TrackSessionEvents(ctx, &sliceStream{events: decodeEvents(t, sc.Streams[n].Events)}, append([]rudderanthropic.SessionOption{session}, opts...)...)
+		for events.Next() {
+		}
+		_ = events.Close()
+	}
+	read(context.Background(), 0, owner)
+	ctx, caller := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "other", NoPromptEvent: true})
+	read(ctx, 1)
+	caller.End(rudderstackai.EndOptions{Status: rudderstackai.StatusSuccess})
+	rec.events(t) // flush
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	var status, ids, tools, otherTools []any
+	for _, m := range rec.msgs {
+		if m.Event != "ai_response_received" {
+			continue
+		}
+		switch m.UserId {
+		case "owner":
+			status, ids, tools = append(status, m.Properties["response_status"]), append(ids, m.Properties["interaction_id"]), append(tools, m.Properties["tool_call_count"])
+		case "other":
+			otherTools = append(otherTools, m.Properties["tool_call_count"])
+		}
+	}
+	if fmt.Sprint(status) != "[paused success]" || len(ids) != 2 || ids[0] != ids[1] || fmt.Sprint(tools) != "[0 1]" || fmt.Sprint(otherTools) != "[0]" {
+		t.Fatalf("status %v ids %v tools %v other %v", status, ids, tools, otherTools)
+	}
+}
+
+func TestManagedAgentsKeepsTheOptionsNestedObjectsAsTheyWereWhenTheStreamWasWrapped(t *testing.T) {
+	f, sc := maFixtureScenario(t, "text_turn_capture")
+	_, rec := setup(t, rudderstackai.WithIdentityFromCookies(true))
+	resetMA(t)
+	policy := &rudderstackai.ContentCapture{Default: rudderstackai.Ptr(false)}
+	cookies := map[string]string{"rl_anonymous_id": "%22original%22"}
+	attachmentTypes := []string{"image"}
+	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)},
+		rudderanthropic.WithSession(withID(f.Session, "sesn_nested_options")),
+		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{
+			ContentCapture: policy, CookieValues: cookies, AttachmentCount: rudderstackai.Ptr(1), AttachmentTypes: attachmentTypes,
+		}))
+	*policy.Default = true
+	cookies["rl_anonymous_id"] = "%22later%22"
+	attachmentTypes[0] = "audio"
+	for events.Next() {
+	}
+	_ = events.Close()
+	got := rec.events(t)
+	rec.mu.Lock()
+	for _, m := range rec.msgs {
+		if m.AnonymousId != "original" {
+			t.Errorf("%s anonymousId %q", m.Event, m.AnonymousId)
+		}
+	}
+	rec.mu.Unlock()
+	if types := fmt.Sprint(got["ai_user_prompt_created"][0]["attachment_types"]); types != "[image]" {
+		t.Errorf("attachment_types %s", types)
+	}
+	if r := got["ai_response_received"][0]; r["prompt_text"] != nil || r["response_text"] != nil {
+		t.Errorf("captured text: %v", r)
+	}
+}
+
 func TestManagedAgentsTimesASpilledDenialFromTheToolUse(t *testing.T) {
 	f, sc := maFixtureScenario(t, "denied_after_wait")
 	_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 1}))
