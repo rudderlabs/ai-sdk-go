@@ -2,7 +2,11 @@ package rudderstackai
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strconv"
 	"strings"
@@ -360,5 +364,217 @@ func TestJoinInteractionRechecksTheTargetAfterTheWarning(t *testing.T) {
 				t.Errorf("joined %p after the target changed, want the caller's %p", got, original)
 			}
 		})
+	}
+}
+
+// restoreFromJSON pauses i and restores it in this process from its snapshot's JSON, as a worker
+// that stored the snapshot would.
+func restoreFromJSON(ctx context.Context, t *testing.T, i *Interaction, o InteractionOptions) *Interaction {
+	t.Helper()
+	snapshot, ok := i.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("pause failed")
+	}
+	var stored PausedInteraction
+	if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
+		t.Fatal(err)
+	}
+	o.Resume = &stored
+	_, restored := StartInteraction(ctx, o)
+	return restored
+}
+
+// A join carries the session and message context the interaction resolved, whether its options
+// (cookies, a request, Context) or the context supplied them, to helpers, child interactions and
+// a call after it ended.
+func TestJoinInteractionCarriesTheResolvedSessionAndContext(t *testing.T) {
+	const session = int64(1700000000000)
+	cookies := map[string]string{"rl_session": `{"id":1700000000000}`}
+	header := "rl_session=%7B%22id%22%3A1700000000000%7D"
+	sources := map[string]func(context.Context, *InteractionOptions) context.Context{
+		"options cookie values": func(ctx context.Context, o *InteractionOptions) context.Context {
+			o.CookieValues = cookies
+			return ctx
+		},
+		"options cookie header": func(ctx context.Context, o *InteractionOptions) context.Context {
+			o.Cookies = header
+			return ctx
+		},
+		"options request": func(ctx context.Context, o *InteractionOptions) context.Context {
+			o.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+			o.Request.Header.Set("Cookie", header)
+			return ctx
+		},
+		"options session ID": func(ctx context.Context, o *InteractionOptions) context.Context {
+			o.Context = map[string]any{"sessionId": session}
+			return ctx
+		},
+		"options context": func(ctx context.Context, o *InteractionOptions) context.Context {
+			o.Context = map[string]any{"app": "owner"}
+			return ctx
+		},
+		"context cookies": func(ctx context.Context, _ *InteractionOptions) context.Context {
+			return WithValues(ctx, ContextValues{CookieValues: cookies})
+		},
+		"context session ID": func(ctx context.Context, _ *InteractionOptions) context.Context {
+			return WithValues(ctx, ContextValues{Context: map[string]any{"sessionId": session}})
+		},
+	}
+	for name, source := range sources {
+		for _, phase := range []string{"open", "resumed", "restored"} {
+			t.Run(name+"/"+phase, func(t *testing.T) {
+				r := setupAI(t)
+				o := InteractionOptions{UserID: "owner", ConversationID: "conv", Classify: Ptr(false)}
+				started := source(context.Background(), &o)
+				_, target := StartInteraction(started, o)
+				switch phase {
+				case "resumed":
+					target.Pause(PauseOptions{})
+					target.Resume()
+				case "restored":
+					target = restoreFromJSON(started, t, target, o)
+				}
+				from := len(r.all())
+				// The worker's own context carries another request's message context.
+				caller := WithValues(context.Background(), ContextValues{UserID: "caller", Context: map[string]any{"app": "caller"}})
+				joined := JoinInteraction(caller, target.ID(), JoinOptions{})
+				TrackAction(joined, TrackActionOptions{ActionType: ActionAccepted, InteractionID: target.ID()})
+				TrackScore(joined, TrackScoreOptions{InteractionID: target.ID(), Score: Score{EvaluationName: "quality", ScoreValue: Ptr(1.0), Evaluator: "human"}})
+				TrackClassification(joined, TrackClassificationOptions{InteractionID: target.ID(), Intent: "help", Outcome: "resolved"})
+				TrackLimitReached(joined, TrackLimitReachedOptions{LimitType: "daily"})
+				_, child := StartInteraction(joined, InteractionOptions{Classify: Ptr(false)})
+				child.End(EndOptions{})
+				target.End(EndOptions{})
+				wrapperCall(joined, "after-end")
+				events := r.all()[from:]
+				var own map[string]any
+				for _, e := range events {
+					if e.Event == "ai_response_received" && e.Properties["interaction_id"] == target.ID() {
+						own = e.Context.Extra
+					}
+				}
+				wantSession, wantApp := own["sessionId"], own["app"]
+				if phase != "restored" {
+					// Restoring reads no cookies: only Context survives it, as the target's own events show.
+					wantSession, wantApp = any(session), nil
+					if name == "options context" {
+						wantSession, wantApp = nil, "owner"
+					}
+					if own["sessionId"] != wantSession || own["app"] != wantApp {
+						t.Fatalf("the target's own answer carries %v/%v, want %v/%v", own["sessionId"], own["app"], wantSession, wantApp)
+					}
+				}
+				seen := map[string]bool{}
+				for _, e := range events {
+					seen[e.Event] = true
+					if got := e.Context.Extra; got["sessionId"] != wantSession || got["app"] != wantApp {
+						t.Errorf("%s of %v: session %v, app %v; want the target's %v, %v", e.Event, e.Properties["interaction_id"], got["sessionId"], got["app"], wantSession, wantApp)
+					}
+				}
+				for _, want := range []string{"ai_user_action", "ai_interaction_scored", "ai_interaction_classified", "ai_limit_reached", "ai_user_prompt_created", "ai_response_received"} {
+					if !seen[want] {
+						t.Errorf("no %s sent", want)
+					}
+				}
+				if answers := r.named("ai_response_received"); answers[len(answers)-1].Properties["llm_call_count"] != 1 {
+					t.Error("the call after the end was not a separate answer")
+				}
+			})
+		}
+	}
+}
+
+// A join sends through the client the interaction resolved: its own, or the one a wrapper call
+// adopted, never the caller's or the global one.
+func TestJoinInteractionUsesTheInteractionsClient(t *testing.T) {
+	for _, how := range []string{"options", "context", "adopted"} {
+		for _, phase := range []string{"open", "resumed"} {
+			t.Run(how+"/"+phase, func(t *testing.T) {
+				global := setupAI(t)
+				owner, caller := &sink{}, &sink{}
+				ctx := context.Background()
+				o := InteractionOptions{UserID: "owner", Classify: Ptr(false)}
+				switch how {
+				case "options":
+					o.Analytics = owner
+				case "context":
+					ctx = WithValues(ctx, ContextValues{Analytics: owner})
+				}
+				ctx, target := StartInteraction(ctx, o)
+				if how == "adopted" {
+					forCall(ctx, IntegrationOpenAI, owner)
+				}
+				if phase == "resumed" {
+					target.Pause(PauseOptions{})
+					target.Resume()
+				}
+				before := len(owner.names())
+				joined := JoinInteraction(WithValues(context.Background(), ContextValues{Analytics: caller}), target.ID(), JoinOptions{})
+				TrackAction(joined, TrackActionOptions{ActionType: ActionAccepted, InteractionID: target.ID()})
+				_, child := StartInteraction(joined, InteractionOptions{Classify: Ptr(false)})
+				child.End(EndOptions{})
+				got := owner.names()[before:]
+				if !slices.Contains(got, "ai_user_action") || !slices.Contains(got, "ai_response_received") {
+					t.Errorf("the owner's client got %v", got)
+				}
+				if n := len(caller.names()); n != 0 {
+					t.Errorf("the caller's client got %d events", n)
+				}
+				if n := len(global.all()); n != 0 {
+					t.Errorf("the global client got %d events", n)
+				}
+				target.End(EndOptions{})
+			})
+		}
+	}
+}
+
+// A child interaction started with capture off inside a join keeps its calls, and their content,
+// under its own policy.
+func TestJoinInteractionChildKeepsItsCapturePolicy(t *testing.T) {
+	for _, spans := range []bool{false, true} {
+		for _, start := range []string{"StartInteraction", "RunInteraction"} {
+			t.Run(fmt.Sprintf("%s spans=%v", start, spans), func(t *testing.T) {
+				r := setupAI(t, WithEmitSpans(spans), WithLLMCallEvents(true), WithCaptureContent(true))
+				_, target := StartInteraction(context.Background(), InteractionOptions{UserID: "target", Classify: Ptr(false)})
+				joined := JoinInteraction(context.Background(), target.ID(), JoinOptions{})
+				o := InteractionOptions{UserID: "child", CaptureContent: Ptr(false), Classify: Ptr(false)}
+				var child *Interaction
+				call := func(ctx context.Context) {
+					i, _ := forCall(ctx, IntegrationOpenAI, nil)
+					_, s := beginWrapperSpan(ctx, i, time.Now())
+					i.recordWrapperCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "r1", InputTokens: 1, OutputTokens: 1,
+						InputMessages: []GenAIMessage{textMessage("user", "private-input")}, OutputText: "private-output"}, s, 200)
+				}
+				if start == "RunInteraction" {
+					_ = RunInteraction(joined, o, func(ctx context.Context, c *Interaction) error {
+						child = c
+						call(ctx)
+						return nil
+					})
+				} else {
+					var ctx context.Context
+					ctx, child = StartInteraction(joined, o)
+					call(ctx)
+					child.End(EndOptions{})
+				}
+				target.End(EndOptions{})
+				waitBackgroundWork(10 * time.Second)
+				for _, e := range r.all() {
+					if b, _ := json.Marshal(e); strings.Contains(string(b), "private-") {
+						t.Errorf("%s sent the child's content", e.Event)
+					}
+				}
+				for _, e := range r.named("ai_response_received") {
+					want := 0
+					if e.Properties["interaction_id"] == child.ID() {
+						want = 1
+					}
+					if e.Properties["llm_call_count"] != want {
+						t.Errorf("%v counted %v calls, want %d", e.Properties["interaction_id"], e.Properties["llm_call_count"], want)
+					}
+				}
+			})
+		}
 	}
 }
