@@ -70,9 +70,9 @@ func limitReached(name string) {
 var open = struct {
 	mu        sync.Mutex
 	list      *list.List
-	paused    map[string]struct{} // IDs of paused runs, which hold a slot until they end
+	paused    map[string]*Interaction // paused runs by ID, which hold a slot until they end
 	lastSweep time.Time
-}{list: list.New(), paused: map[string]struct{}{}}
+}{list: list.New(), paused: map[string]*Interaction{}}
 
 // register opens i; false when MaxOpenInteractions is reached. A restore of a run that holds a
 // slot here (paused in this process) takes it over; any other restore is admitted like a new run.
@@ -106,7 +106,14 @@ func unregister(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	delete(open.paused, i.id)
+	releasePausedSlotLocked(i)
+}
+
+// releasePausedSlotLocked frees the paused slot i holds, not one another run under its ID holds.
+func releasePausedSlotLocked(i *Interaction) {
+	if open.paused[i.id] == i {
+		delete(open.paused, i.id)
+	}
 }
 
 // holdPausedSlot keeps a paused run counted toward MaxOpenInteractions, off the TTL list. The
@@ -118,17 +125,20 @@ func holdPausedSlot(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	open.paused[i.id] = struct{}{}
+	open.paused[i.id] = i
 }
 
-// takePausedSlot moves a paused run's slot to i; false when this process holds none for its ID.
+// takePausedSlot moves a paused run's slot to i, which continues it: contexts carrying the paused
+// run then report into i. False when this process holds none for its ID.
 func takePausedSlot(i *Interaction) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	if _, held := open.paused[i.id]; !held {
+	paused, held := open.paused[i.id]
+	if !held {
 		return false
 	}
 	delete(open.paused, i.id)
+	paused.continueAs(i)
 	if i.elem == nil {
 		i.opened = time.Now()
 		i.elem = open.list.PushBack(i)
@@ -141,7 +151,7 @@ func takePausedSlot(i *Interaction) bool {
 func reopen(i *Interaction) {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	delete(open.paused, i.id)
+	releasePausedSlotLocked(i)
 	if i.elem == nil {
 		i.opened = time.Now()
 		i.elem = open.list.PushBack(i)
@@ -210,7 +220,7 @@ func resetOpenForTest() {
 	defer open.mu.Unlock()
 	// A new list: interactions of earlier tests that end later are not on it.
 	open.list = list.New()
-	open.paused = map[string]struct{}{}
+	open.paused = map[string]*Interaction{}
 	open.lastSweep = time.Time{}
 }
 
