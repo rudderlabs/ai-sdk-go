@@ -427,6 +427,7 @@ type recordedCall struct {
 	answerText                                       string
 	answerFiltered                                   bool
 	spanID                                           string
+	finishSpan                                       func()
 	startedAt, endedAt                               time.Time
 	fromSpan, twinMatched, usageUnknown              bool
 	callEventPending                                 bool
@@ -1340,6 +1341,24 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			return ""
 		}(),
 	}
+
+	if call.wrapperSpan != nil {
+		r.finishSpan = func() { finishWrapperSpan(call.wrapperSpan, call, content) }
+		// The ordinary deferred completion handles held events. Do not retain callback content.
+		defer func() {
+			for _, stored := range i.calls {
+				if stored.spanID == call.wrapperSpan.SpanID {
+					stored.finishSpan = nil
+				}
+			}
+			for _, stored := range i.pendingOverflowCalls {
+				if stored.spanID == call.wrapperSpan.SpanID {
+					stored.finishSpan = nil
+				}
+			}
+			r.finishSpan = nil
+		}()
+	}
 	if call.ErrorType == "" {
 		i.keepAnswerLocked(call.OutputText, r.fromSpan)
 		if r.fromSpan && i.capture.AnswerText {
@@ -1446,7 +1465,9 @@ func (i *Interaction) emitPendingCallLocked(r *recordedCall) {
 	i.sendLocked("ai_llm_response_received", func() map[string]any { return props })
 	// Deliver each claimed call before selecting the next: a callback may drain later
 	// ready calls, whose pending flags the outer pass must then observe.
-	i.unlock()
+	finishSpan := r.finishSpan
+	r.finishSpan = nil
+	i.unlockSpan(finishSpan)
 	i.mu.Lock()
 }
 
@@ -1524,6 +1545,9 @@ func sameModel(a, b string) bool {
 }
 
 func mergeCallTwin(kept, later *recordedCall) {
+	if later.finishSpan != nil {
+		kept.finishSpan = later.finishSpan
+	}
 	kept.pricingRevision++
 	if kept.spanSource == nil {
 		kept.spanSource = later.spanSource

@@ -488,6 +488,7 @@ type sseBody struct {
 	preferTerminal   bool
 	callbacks        []func()
 	draining         bool
+	drained          chan struct{}
 }
 
 // drainCallbacks claims each notice or observer operation before calling it. Re-entry
@@ -499,6 +500,7 @@ func (b *sseBody) drainCallbacks() {
 		return
 	}
 	b.draining = true
+	b.drained = make(chan struct{})
 	for len(b.callbacks) > 0 {
 		fn := b.callbacks[0]
 		b.callbacks[0] = nil
@@ -508,6 +510,7 @@ func (b *sseBody) drainCallbacks() {
 		b.mu.Lock()
 	}
 	b.draining = false
+	close(b.drained)
 	b.mu.Unlock()
 }
 
@@ -531,6 +534,15 @@ func (b *sseBody) Read(p []byte) (int, error) {
 		b.mu.Unlock()
 		b.readMu.Unlock()
 		b.drainCallbacks()
+		if err != nil {
+			b.mu.Lock()
+			done := b.drained
+			active := b.draining
+			b.mu.Unlock()
+			if active {
+				<-done
+			}
+		}
 		b.readMu.Lock()
 		b.mu.Lock()
 		if err != nil {
