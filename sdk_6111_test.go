@@ -1396,3 +1396,52 @@ func TestSDK6111R1CreditsFollowRetainedStatusAndTwinReplacement(t *testing.T) {
 		})
 	}
 }
+
+func TestSDK6111Review137FilteredReportsKeepPrimaryOrder(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, removed := range []int{1, 3} {
+			t.Run(fmt.Sprintf("%s/%d", mode, removed), func(t *testing.T) {
+				r := setupAI(t, WithLLMCallEvents(true))
+				older := taggedRuleCall("older", "", true, "older", "")
+				older.Model = "older-model"
+				older.spanSource.ResponseModel = "older-model"
+				older.StartedAt = time.UnixMilli(200)
+				older.EndedAt = time.UnixMilli(210)
+				older.spanSource.Start = 200
+				older.spanSource.End = 210
+				older.InputTokens = 10
+				i := sdk6111ReviewPending(t, r, mode, func(i *Interaction) {
+					for n := 0; n < removed; n++ {
+						prep := taggedRuleCall(fmt.Sprintf("prep-%d", n), "", false, "", "")
+						prep.spanSource.LLM = true
+						prep.Model = "prep"
+						prep.spanSource.ResponseModel = "prep"
+						prep.InputTokens = 0
+						prep.UsageUnknown = true
+						prep.StartedAt = time.UnixMilli(100)
+						prep.EndedAt = time.UnixMilli(110)
+						prep.spanSource.Start = 100
+						prep.spanSource.End = 110
+						i.RecordCall(prep)
+					}
+					i.RecordCall(older)
+					i.RecordCall(LLMCall{Provider: "openai", Model: "latest-model", ResponseID: "latest", InputTokens: 10, Integration: "openai", StartedAt: time.UnixMilli(300), EndedAt: time.UnixMilli(310)})
+				})
+				client := &sdk6111ReenterClient{recorder: r, event: "ai_llm_response_received", reenter: func() { w := older; w.Integration = "openai"; w.spanSource = nil; i.RecordCall(w) }}
+				i.explicitAnalytics = client
+				i.Pause(PauseOptions{})
+				p := lastResponse(t, r)
+				if !client.done || p["primary_model"] != "latest-model" || sdk6111Num(p["llm_call_count"]) != 2 || sdk6111Num(p["total_input_tokens"]) != 20 {
+					t.Fatal(p)
+				}
+				var total float64
+				for _, e := range r.named("ai_response_received") {
+					total += sdk6111Num(e.Properties["llm_call_count"])
+				}
+				if total != 2 {
+					t.Fatal(total)
+				}
+			})
+		}
+	}
+}
