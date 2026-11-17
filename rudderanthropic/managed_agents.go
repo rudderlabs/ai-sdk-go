@@ -15,6 +15,7 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/capture"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 	"github.com/rudderlabs/ai-sdk-go/internal/kit"
 )
 
@@ -404,8 +405,7 @@ type turn struct {
 	abandoned       bool                       // opened by an ending event to settle a paused turn
 	lastModel       string                     // model of the latest successful call that is not a grader cycle
 	hasGrader       bool
-	captureContent  *bool                         // the capture policy when the turn opened: a later change to the caller's is not this turn's
-	contentCapture  *rudderstackai.ContentCapture // (copied two levels deep)
+	capture         *rudderstackai.ContentCapture // the policy in force when the turn started, every key explicit
 }
 
 type turnEnd struct {
@@ -421,17 +421,22 @@ type sessionTracker struct {
 	scope        string // key prefix in seenEvents and childThreads: the session, else this stream
 	turn         *turn
 	runningAt    msTime
+	runningCap   *rudderstackai.ContentCapture // the policy in force at that running event
 	lastError    string
 	conversation string
 }
 
-// frozenCapture copies the capture policy of o, so the caller changing its values later has no effect.
-func frozenCapture(o rudderstackai.InteractionOptions) (*bool, *rudderstackai.ContentCapture) {
-	var on *bool
-	if o.CaptureContent != nil {
-		on = rudderstackai.Ptr(*o.CaptureContent)
+// frozenCapture is the policy in force now (the global setting under o's own) with every key
+// explicit: neither the caller's policy nor the global setting changing later has effect.
+func frozenCapture(o rudderstackai.InteractionOptions) *rudderstackai.ContentCapture {
+	r := capture.Resolve(hook.Tracing.CaptureLevel(), capture.Level(o.CaptureContent, o.ContentCapture))
+	p := rudderstackai.Ptr[bool]
+	return &rudderstackai.ContentCapture{
+		Default: p(r.Fallback), AnswerText: p(r.AnswerText), LLMCalls: p(r.LLMCalls),
+		FeedbackText: p(r.FeedbackText), ScoreExplanation: p(r.ScoreExplanation),
+		IntentSummary: r.IntentSummary, CallReason: p(r.CallReason), ErrorMessage: p(r.ErrorMessage),
+		Spans: &capture.SpanPolicy{Default: p(r.Fallback), Messages: p(r.Spans.Messages), ToolCalls: p(r.Spans.ToolCalls), HTTP: p(r.Spans.HTTP)},
 	}
-	return on, capture.Clone(o.ContentCapture)
 }
 
 func str(v any) string { s, _ := v.(string); return s }
@@ -514,7 +519,7 @@ func (s *sessionTracker) observe(raw string) {
 		if s.turn != nil {
 			s.turn.waiting = ""
 		} else {
-			s.runningAt = at
+			s.runningAt, s.runningCap = at, frozenCapture(s.cfg.interaction)
 		}
 	case "user.message", "user.define_outcome":
 		t := s.open(kind, at)
@@ -658,12 +663,16 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 			recorded: newBoundedMap[msTime]("claude-managed-agents tools"),
 			blocking: newBoundedMap[rudderstackai.PauseReason]("claude-managed-agents blocking"),
 		}
-		t.captureContent, t.contentCapture = frozenCapture(s.cfg.interaction)
+		// The policy, like the owner, is the one in force when the turn started: its running event, else this one.
+		t.capture = s.runningCap
+		if t.capture == nil {
+			t.capture = frozenCapture(s.cfg.interaction)
+		}
 		// Whose answer the turn is in is fixed now, wherever its later events are read.
 		if active := rudderstackai.FromContext(s.ctx); active != nil && !active.Ended() {
 			t.borrowed = active
 		}
-		s.turn, s.runningAt = t, msTime{}
+		s.turn, s.runningAt, s.runningCap = t, msTime{}, nil
 		if t.borrowed != nil {
 			s.adoptBorrowed(t)
 		} else if t.continuation {
@@ -961,7 +970,7 @@ func (s *sessionTracker) idle(e map[string]any, at msTime) {
 
 func (s *sessionTracker) finish(end turnEnd, at msTime) {
 	t := s.turn
-	s.turn, s.runningAt = nil, msTime{}
+	s.turn, s.runningAt, s.runningCap = nil, msTime{}, nil
 	if t == nil {
 		return
 	}
@@ -973,10 +982,11 @@ func (s *sessionTracker) finish(end turnEnd, at msTime) {
 
 // spillIfFull records what the turn holds once it reaches the call cap, so it never grows past it.
 func (s *sessionTracker) spillIfFull(t *turn) {
-	// Tools waiting on the app stay with the turn, for a pause to carry them to the next segment.
+	// Tools still waiting on their result stay with the turn, so a pause that names one (the app
+	// runs it) still carries it; up to MaxMapEntries of them.
 	waiting := map[string]bool{}
 	for _, key := range t.toolOrder {
-		if _, ok := t.blocking.get(key); ok && !t.tools[key].settled {
+		if tool := t.tools[key]; !tool.settled && tool.id != "" && len(waiting) < kit.MaxMapEntries() {
 			waiting[key] = true
 		}
 	}
@@ -1000,7 +1010,7 @@ func (s *sessionTracker) interactionFor(t *turn, local func(msTime) time.Time) *
 		kit.Backdate(i, local(t.startAt))
 	default:
 		o := s.cfg.interaction
-		o.CaptureContent, o.ContentCapture = t.captureContent, t.contentCapture
+		o.CaptureContent, o.ContentCapture = nil, t.capture
 		o.ConversationID = s.conversationID()
 		if o.PromptText == "" {
 			o.PromptText = t.promptText
