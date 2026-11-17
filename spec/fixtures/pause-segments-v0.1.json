@@ -2163,6 +2163,564 @@
           "pricing_in_flight"
         ]
       }
+    },
+    {
+      "name": "cancelled same-source repeat follows retained status with late explicit credits segment",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "error_type": "cancelled"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled same-source repeat follows retained status with late explicit credits in-process",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "cancelled same-source repeat follows retained status with late explicit credits json",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "cancelled"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "cancelled",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          null
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "api_error same-source repeat follows retained status with late explicit credits segment",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "error_type": "api_error"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "error",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 7
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          7
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "api_error same-source repeat follows retained status with late explicit credits in-process",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "api_error"
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "error",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 7
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          7
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "api_error same-source repeat follows retained status with late explicit credits json",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "api_error"
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "error",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 7
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          7
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "api_error same-source repeat follows retained status with retained credits 3 segment",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "error_type": "api_error",
+          "credits": 3
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "error",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "api_error same-source repeat follows retained status with retained credits 3 in-process",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "api_error",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "error",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
+    },
+    {
+      "name": "api_error same-source repeat follows retained status with retained credits 3 json",
+      "config": {
+        "emit_llm_calls": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "response_id": "r",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "error_type": "api_error",
+              "credits": 3
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "source": "span",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "response_id": "r",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110,
+          "call_purpose": "answer",
+          "credits": 7
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "response_status": "error",
+            "llm_call_count": 1,
+            "total_input_tokens": 10,
+            "total_credits": 3
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "call_credits": [
+          3
+        ],
+        "tool_events": []
+      }
     }
   ]
 }

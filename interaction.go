@@ -986,7 +986,7 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	if call.ErrorType == "" && call.Integration != "tracing" {
 		i.keepAnswerLocked(call.OutputText, false)
 	}
-	if call.Credits != nil {
+	if call.Credits != nil && earlier.errorType != "cancelled" && (earlier.errorType == "" || !earlier.creditsExplicit) {
 		earlier.credits = creditsOf(call.Credits)
 		earlier.creditsExplicit = true
 	}
@@ -1006,6 +1006,9 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 		byok = copyCreditPointer(call.BYOK)
 	}
 	credits := creditsOf(call.Credits)
+	if earlier.errorType == "cancelled" {
+		credits = nil
+	}
 	explicit := credits != nil
 	priced := false
 	if credits == nil && earlier.errorType != "" {

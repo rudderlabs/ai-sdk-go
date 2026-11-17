@@ -19,6 +19,9 @@ import (
 )
 
 type pauseSegmentsStep struct {
+	ErrorType   string              `json:"error_type"`
+	CallPurpose string              `json:"call_purpose"`
+	Credits     *float64            `json:"credits"`
 	Refused     bool                `json:"refused"`
 	ResponseID  string              `json:"response_id"`
 	BYOK        *bool               `json:"byok"`
@@ -189,7 +192,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				for _, step := range steps {
 					switch step.Op {
 					case "record_call":
-						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: derefInt(step.InputTokens), OutputText: step.OutputText, ResponseID: step.ResponseID, BYOK: step.BYOK}
+						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: derefInt(step.InputTokens), OutputText: step.OutputText, ResponseID: step.ResponseID, BYOK: step.BYOK, ErrorType: step.ErrorType, CallPurpose: step.CallPurpose, Credits: step.Credits}
 						if step.Source == "span" {
 							call.Integration = "tracing"
 						}
@@ -297,8 +300,10 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				}
 				for _, amount := range tc.Expected.CallCredits {
 					if amount == nil {
-						if _, ok := segments[0].Properties["total_credits"]; ok {
-							t.Error("uncredited call has total_credits")
+						for _, segment := range segments {
+							if _, ok := segment.Properties["total_credits"]; ok {
+								t.Error("uncredited call has total_credits")
+							}
 						}
 					}
 				}
