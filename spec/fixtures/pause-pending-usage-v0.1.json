@@ -859,6 +859,2089 @@
           "latency_ms": 10
         }
       ]
+    },
+    "validation": [
+      {
+        "name": "corrupt-timestamp",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "started_at": "not-a-time"
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "wrong-typed-number",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": "12"
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "null-optional-field",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "credits": null
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "negative-timestamp",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "started_at": "1969-12-31T23:59:59Z"
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "fractional-integer",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1.5,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "unsafe-integer",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 9007199254740992
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "wrong-typed-span-id",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "span_id": 1
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "malformed-span-source",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "span_source": {}
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "wrong-typed-call-flag",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "last": 1
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "wrong-typed-tool-number",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1,
+              "duration_ms": "12"
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "wrong-typed-tool-flag",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1,
+              "overflow": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "wrong-typed-tool-name",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": 1,
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "malformed-call-rule-outcome",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "rule_outcome": {
+                "suppressed": false,
+                "properties": {},
+                "error_type": "wrong"
+              }
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "malformed-tool-rule-outcome",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1,
+              "rule_outcome": {
+                "suppressed": false,
+                "properties": {},
+                "error_type": "wrong"
+              }
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "negative-tool-number",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1,
+              "duration_ms": -1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "fractional-latency",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "latency_ms": 0.5,
+              "time_to_first_token_ms": 0.5
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": true,
+          "response": {
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 3
+          }
+        }
+      },
+      {
+        "name": "large-finite-float",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "cost_usd": 1e+16
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": true,
+          "response": {
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 3
+          }
+        }
+      },
+      {
+        "name": "call-extension-on-tool",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1,
+              "input_tokens": "extension"
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": true,
+          "response": {
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 3
+          }
+        }
+      },
+      {
+        "name": "tool-extension-on-call",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "duration_ms": "extension"
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": true,
+          "response": {
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 3
+          }
+        }
+      },
+      {
+        "name": "legacy-unknown-usage-extension",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "usage_unknown": "extension"
+            }
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": true,
+          "response": {
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 3
+          }
+        }
+      },
+      {
+        "name": "pending_calls-null-array",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": null,
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending_calls-non-array",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": {},
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending_calls-null-record",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            null
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending_calls-non-record",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            1
+          ],
+          "pending_tools": [
+            {
+              "tool_name": "lookup",
+              "call_count": 1
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending_tools-null-array",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": null
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending_tools-non-array",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": {}
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending_tools-null-record",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": [
+            null
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending_tools-non-record",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3
+            }
+          ],
+          "pending_tools": [
+            1
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      }
+    ],
+    "roundtrip": {
+      "description": "Actual snapshots from the current branch writers and released Node/Python 0.14.0 and Go v0.10.0 writers. Normal, overflow and suppressed-tool-rule variants exercise optional fields. Restore, end twice, keep the ID, and count each held call/tool once. No pending field written by a released writer is JSON null.",
+      "snapshots": [
+        {
+          "written_by": "current-go",
+          "snapshot": {
+            "interaction_id": "ba04b75d-ccac-414e-82d1-dfe8eb29a5f0",
+            "conversation_id": "f084ba66-e978-4504-892d-d9b0b1317a3a",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896601740,
+            "user_id": "u",
+            "pending_calls": [
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": true,
+                "call_event_pending": false,
+                "call_index": 1,
+                "cost_usd": 0.01,
+                "credits": 2,
+                "credits_explicit": true,
+                "error_count": 0,
+                "from_span": false,
+                "input_tokens": 3,
+                "matched": false,
+                "model": "example-model",
+                "output_tokens": 2,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 1,
+                "server_tool_call_count": 0,
+                "usage_known": true
+              },
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": true,
+                "call_event_pending": false,
+                "call_index": 2,
+                "credits_explicit": false,
+                "error_count": 0,
+                "from_span": false,
+                "input_tokens": 0,
+                "last": true,
+                "last_ok": true,
+                "matched": false,
+                "model": "example-model",
+                "output_tokens": 0,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 2,
+                "server_tool_call_count": 0,
+                "usage_known": false
+              }
+            ],
+            "pending_tools": [
+              {
+                "call_count": 1,
+                "fired": false,
+                "raw_name": "lookup",
+                "settled": false,
+                "tool_call_id": "lookup-1",
+                "tool_name": "lookup"
+              },
+              {
+                "call_count": 1,
+                "fired": false,
+                "raw_name": "lookup",
+                "settled": false,
+                "tool_call_id": "lookup-2",
+                "tool_name": "lookup"
+              }
+            ],
+            "report_count": 2,
+            "successful_call_sequence": 2,
+            "call_sequence": 2
+          }
+        },
+        {
+          "written_by": "current-node",
+          "snapshot": {
+            "interaction_id": "c4c09fe9-a9f1-457d-ac00-3b0187a79db6",
+            "conversation_id": "85d9b37e-a611-4054-b26c-b93fab4215d2",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896607019,
+            "report_count": 2,
+            "successful_call_sequence": 2,
+            "pending_compactions": 0,
+            "call_sequence": 2,
+            "pending_calls": [
+              {
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "call_index": 1,
+                "report_sequence": 1,
+                "error_count": 0,
+                "input_tokens": 3,
+                "output_tokens": 2,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "cost_usd": 0.01,
+                "credits": 2,
+                "credits_explicit": true,
+                "server_tool_call_count": 0,
+                "usage_known": true,
+                "from_span": false,
+                "matched": false,
+                "started_at": 1794896607019,
+                "ended_at": 1794896607019
+              },
+              {
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "call_index": 2,
+                "report_sequence": 2,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "credits_explicit": false,
+                "server_tool_call_count": 0,
+                "usage_known": false,
+                "from_span": false,
+                "matched": false,
+                "started_at": 1794896607020,
+                "ended_at": 1794896607020,
+                "last": true,
+                "last_ok": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-1",
+                "call_count": 1,
+                "settled": false,
+                "fired": false
+              },
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-2",
+                "call_count": 1,
+                "settled": false,
+                "fired": false
+              }
+            ],
+            "user_id": "u"
+          }
+        },
+        {
+          "written_by": "current-python",
+          "snapshot": {
+            "interaction_id": "cf879773-365b-447f-98d3-81857d845a14",
+            "conversation_id": "12e42e9a-aa03-4011-8af9-9bd2c5f52556",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896598592,
+            "user_id": "u",
+            "report_count": 2,
+            "call_sequence": 2,
+            "successful_call_sequence": 2,
+            "pending_calls": [
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 3,
+                "output_tokens": 2,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "cost_usd": 0.01,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "matched": false,
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "usage_known": true,
+                "credits": 2.0,
+                "credits_explicit": true,
+                "call_index": 1,
+                "report_sequence": 1,
+                "started_at": 1794896598591.801,
+                "ended_at": 1794896598591.801
+              },
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "matched": false,
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "usage_known": true,
+                "credits_explicit": false,
+                "call_index": 2,
+                "report_sequence": 2,
+                "started_at": 1794896598592.626,
+                "ended_at": 1794896598592.626,
+                "last": true,
+                "last_ok": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-1",
+                "call_count": 1,
+                "settled": false,
+                "fired": false,
+                "span_matched": false
+              },
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-2",
+                "call_count": 1,
+                "settled": false,
+                "fired": false,
+                "span_matched": false
+              }
+            ]
+          }
+        },
+        {
+          "written_by": "released-go-overflow",
+          "snapshot": {
+            "interaction_id": "f17bbec4-2714-48b8-a0e7-0cfc9f880753",
+            "conversation_id": "b1397c4d-beda-424f-b8e7-c6a898b40033",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896502323,
+            "user_id": "u",
+            "pending_calls": [
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": true,
+                "call_event_pending": false,
+                "call_index": 1,
+                "cost_usd": 0.01,
+                "credits": 2,
+                "credits_explicit": true,
+                "error_count": 0,
+                "from_span": false,
+                "input_tokens": 3,
+                "model": "example-model",
+                "output_tokens": 2,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 1,
+                "server_tool_call_count": 0,
+                "twin_matched": false,
+                "usage_unknown": false
+              },
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": false,
+                "call_event_pending": false,
+                "call_index": 2,
+                "credits_explicit": false,
+                "error_count": 0,
+                "from_span": false,
+                "input_tokens": 0,
+                "model": "example-model",
+                "output_tokens": 0,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 2,
+                "server_tool_call_count": 0,
+                "twin_matched": false,
+                "usage_unknown": true
+              },
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": false,
+                "call_event_pending": true,
+                "call_index": 2,
+                "credits_explicit": false,
+                "error_count": 0,
+                "from_span": false,
+                "history_only": true,
+                "input_tokens": 0,
+                "last": true,
+                "model": "example-model",
+                "output_tokens": 0,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 2,
+                "server_tool_call_count": 0,
+                "twin_matched": false,
+                "usage_unknown": true
+              },
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": false,
+                "call_event_pending": true,
+                "call_index": 2,
+                "credits_explicit": false,
+                "error_count": 0,
+                "from_span": false,
+                "history_only": true,
+                "input_tokens": 0,
+                "last_ok": true,
+                "model": "example-model",
+                "output_tokens": 0,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 2,
+                "server_tool_call_count": 0,
+                "twin_matched": false,
+                "usage_unknown": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "call_count": 1,
+                "fired": false,
+                "raw_name": "lookup",
+                "settled": false,
+                "tool_call_id": "lookup-1",
+                "tool_name": "lookup"
+              },
+              {
+                "call_count": 1,
+                "fired": false,
+                "overflow": true,
+                "settled": false,
+                "tool_name": "lookup"
+              }
+            ],
+            "report_count": 2,
+            "successful_call_sequence": 2,
+            "call_sequence": 2
+          }
+        },
+        {
+          "written_by": "released-go-rules",
+          "snapshot": {
+            "interaction_id": "b64a44b2-a7d7-40e5-981f-4c3f6fd86959",
+            "conversation_id": "72bef8aa-c4a4-4b42-b684-2d791a85ecce",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896502324,
+            "user_id": "u",
+            "pending_calls": [
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": true,
+                "call_event_pending": false,
+                "call_index": 1,
+                "cost_usd": 0.01,
+                "credits": 2,
+                "credits_explicit": true,
+                "error_count": 0,
+                "from_span": false,
+                "input_tokens": 3,
+                "model": "example-model",
+                "output_tokens": 2,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 1,
+                "server_tool_call_count": 0,
+                "twin_matched": false,
+                "usage_unknown": false
+              },
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": true,
+                "call_event_pending": false,
+                "call_index": 2,
+                "credits_explicit": false,
+                "error_count": 0,
+                "from_span": false,
+                "input_tokens": 0,
+                "last": true,
+                "last_ok": true,
+                "model": "example-model",
+                "output_tokens": 0,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 2,
+                "server_tool_call_count": 0,
+                "twin_matched": false,
+                "usage_unknown": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "call_count": 1,
+                "fired": false,
+                "raw_name": "lookup",
+                "rule_outcome": {
+                  "properties": {},
+                  "suppressed": true
+                },
+                "settled": false,
+                "tool_call_id": "lookup-1",
+                "tool_name": "lookup"
+              },
+              {
+                "call_count": 1,
+                "fired": false,
+                "raw_name": "lookup",
+                "rule_outcome": {
+                  "properties": {},
+                  "suppressed": true
+                },
+                "settled": false,
+                "tool_call_id": "lookup-2",
+                "tool_name": "lookup"
+              }
+            ],
+            "report_count": 2,
+            "successful_call_sequence": 2,
+            "call_sequence": 2
+          }
+        },
+        {
+          "written_by": "released-go",
+          "snapshot": {
+            "interaction_id": "dec35d8a-b6e8-4550-b5f9-a8aefafd4ffe",
+            "conversation_id": "64bedf23-3307-4c36-a354-0ea3a231123c",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896470888,
+            "user_id": "u",
+            "pending_calls": [
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": true,
+                "call_event_pending": false,
+                "call_index": 1,
+                "cost_usd": 0.01,
+                "credits": 2,
+                "credits_explicit": true,
+                "error_count": 0,
+                "from_span": false,
+                "input_tokens": 3,
+                "model": "example-model",
+                "output_tokens": 2,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 1,
+                "server_tool_call_count": 0,
+                "twin_matched": false,
+                "usage_unknown": false
+              },
+              {
+                "cache_write_1h_tokens": 0,
+                "cache_write_tokens": 0,
+                "cached_input_tokens": 0,
+                "call_count": 1,
+                "call_event_emitted": true,
+                "call_event_pending": false,
+                "call_index": 2,
+                "credits_explicit": false,
+                "error_count": 0,
+                "from_span": false,
+                "input_tokens": 0,
+                "last": true,
+                "last_ok": true,
+                "model": "example-model",
+                "output_tokens": 0,
+                "provider": "openai",
+                "raw_model": "example-model",
+                "report_sequence": 2,
+                "server_tool_call_count": 0,
+                "twin_matched": false,
+                "usage_unknown": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "call_count": 1,
+                "fired": false,
+                "raw_name": "lookup",
+                "settled": false,
+                "tool_call_id": "lookup-1",
+                "tool_name": "lookup"
+              },
+              {
+                "call_count": 1,
+                "fired": false,
+                "raw_name": "lookup",
+                "settled": false,
+                "tool_call_id": "lookup-2",
+                "tool_name": "lookup"
+              }
+            ],
+            "report_count": 2,
+            "successful_call_sequence": 2,
+            "call_sequence": 2
+          }
+        },
+        {
+          "written_by": "released-node-overflow",
+          "snapshot": {
+            "interaction_id": "689761ba-a86e-4eb6-a47b-4d234267b324",
+            "conversation_id": "84d7220a-92de-4be6-8803-e6b502fa9cc8",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896451099,
+            "report_count": 2,
+            "successful_call_sequence": 2,
+            "pending_compactions": 0,
+            "call_sequence": 2,
+            "pending_calls": [
+              {
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "provider": "openai",
+                "model": "example-model",
+                "call_count": 1,
+                "call_index": 1,
+                "error_count": 0,
+                "input_tokens": 3,
+                "output_tokens": 2,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "cost_usd": 0.01,
+                "credits": 2,
+                "server_tool_call_count": 0,
+                "usage_known": true,
+                "from_span": false,
+                "matched": false,
+                "started_at": 1794896451100,
+                "ended_at": 1794896451100
+              },
+              {
+                "call_event_pending": false,
+                "call_event_emitted": false,
+                "provider": "openai",
+                "model": "example-model",
+                "call_count": 1,
+                "call_index": 2,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "usage_known": false,
+                "from_span": false,
+                "matched": true,
+                "started_at": 1794896451100,
+                "ended_at": 1794896451100,
+                "unpriced": true
+              },
+              {
+                "call_event_pending": true,
+                "call_event_emitted": false,
+                "provider": "openai",
+                "model": "example-model",
+                "call_count": 1,
+                "call_index": 2,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "usage_known": false,
+                "from_span": false,
+                "matched": false,
+                "started_at": 1794896451100,
+                "ended_at": 1794896451100,
+                "history_only": true,
+                "last": true,
+                "last_ok": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-1",
+                "call_count": 1,
+                "settled": false,
+                "fired": false
+              },
+              {
+                "tool_name": "lookup",
+                "call_count": 1,
+                "settled": true,
+                "fired": true,
+                "overflow": true
+              }
+            ],
+            "user_id": "u"
+          }
+        },
+        {
+          "written_by": "released-node-rules",
+          "snapshot": {
+            "interaction_id": "282e7e3c-dce2-4e00-bb29-354a8982fcc5",
+            "conversation_id": "7bf5ca53-e802-475e-9819-7d739a9acc02",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896500696,
+            "report_count": 2,
+            "successful_call_sequence": 2,
+            "pending_compactions": 0,
+            "call_sequence": 2,
+            "pending_calls": [
+              {
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "provider": "openai",
+                "model": "example-model",
+                "call_count": 1,
+                "call_index": 1,
+                "error_count": 0,
+                "input_tokens": 3,
+                "output_tokens": 2,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "cost_usd": 0.01,
+                "credits": 2,
+                "server_tool_call_count": 0,
+                "usage_known": true,
+                "from_span": false,
+                "matched": false,
+                "started_at": 1794896500697,
+                "ended_at": 1794896500697
+              },
+              {
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "provider": "openai",
+                "model": "example-model",
+                "call_count": 1,
+                "call_index": 2,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "usage_known": false,
+                "from_span": false,
+                "matched": false,
+                "started_at": 1794896500697,
+                "ended_at": 1794896500697,
+                "last": true,
+                "last_ok": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-1",
+                "call_count": 1,
+                "settled": false,
+                "fired": false,
+                "rule_outcome": {
+                  "suppressed": true,
+                  "properties": {}
+                }
+              },
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-2",
+                "call_count": 1,
+                "settled": false,
+                "fired": false,
+                "rule_outcome": {
+                  "suppressed": true,
+                  "properties": {}
+                }
+              }
+            ],
+            "user_id": "u"
+          }
+        },
+        {
+          "written_by": "released-node",
+          "snapshot": {
+            "interaction_id": "e8d69634-49a9-44f1-87e0-431674d1aa20",
+            "conversation_id": "1615860a-e171-4dbe-b44d-c2ce1b5ddde2",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896451348,
+            "report_count": 2,
+            "successful_call_sequence": 2,
+            "pending_compactions": 0,
+            "call_sequence": 2,
+            "pending_calls": [
+              {
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "provider": "openai",
+                "model": "example-model",
+                "call_count": 1,
+                "call_index": 1,
+                "error_count": 0,
+                "input_tokens": 3,
+                "output_tokens": 2,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "cost_usd": 0.01,
+                "credits": 2,
+                "server_tool_call_count": 0,
+                "usage_known": true,
+                "from_span": false,
+                "matched": false,
+                "started_at": 1794896451349,
+                "ended_at": 1794896451349
+              },
+              {
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "provider": "openai",
+                "model": "example-model",
+                "call_count": 1,
+                "call_index": 2,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "usage_known": false,
+                "from_span": false,
+                "matched": false,
+                "started_at": 1794896451349,
+                "ended_at": 1794896451349,
+                "last": true,
+                "last_ok": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-1",
+                "call_count": 1,
+                "settled": false,
+                "fired": false
+              },
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-2",
+                "call_count": 1,
+                "settled": false,
+                "fired": false
+              }
+            ],
+            "user_id": "u"
+          }
+        },
+        {
+          "written_by": "released-python-overflow",
+          "snapshot": {
+            "interaction_id": "d74837d2-478f-47e6-a51e-5f98a9075b94",
+            "conversation_id": "15a8b3db-123d-4fa9-b9b1-d4d08eff09a9",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896451168,
+            "user_id": "u",
+            "report_count": 2,
+            "call_sequence": 2,
+            "successful_call_sequence": 2,
+            "pending_calls": [
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 3,
+                "output_tokens": 2,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "cost_usd": 0.01,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "started_ns": 1794896451168344000,
+                "ended_ns": 1794896451168344000,
+                "matched": false,
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "usage_known": true,
+                "credits": 2.0,
+                "call_index": 1
+              },
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "started_ns": 1794896451168626000,
+                "ended_ns": 1794896451168626000,
+                "matched": true,
+                "call_event_pending": false,
+                "call_event_emitted": false,
+                "usage_known": true,
+                "call_index": 2,
+                "unpriced": true
+              },
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "started_ns": 1794896451168626000,
+                "ended_ns": 1794896451168626000,
+                "matched": false,
+                "call_event_pending": true,
+                "call_event_emitted": false,
+                "usage_known": true,
+                "call_index": 2,
+                "history_only": true,
+                "last": true
+              },
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "started_ns": 1794896451168626000,
+                "ended_ns": 1794896451168626000,
+                "matched": false,
+                "call_event_pending": true,
+                "call_event_emitted": false,
+                "usage_known": true,
+                "call_index": 2,
+                "history_only": true,
+                "last_ok": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-1",
+                "call_count": 1,
+                "settled": false,
+                "fired": false,
+                "span_matched": false
+              },
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-2",
+                "call_count": 1,
+                "settled": true,
+                "fired": true,
+                "span_matched": false,
+                "overflow": true
+              }
+            ]
+          }
+        },
+        {
+          "written_by": "released-python-rules",
+          "snapshot": {
+            "interaction_id": "ac8d3fdd-c2a3-48bb-9cca-6b7b87d5f17d",
+            "conversation_id": "24b9e8fd-680a-4576-8284-ccd490615aab",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896598591,
+            "user_id": "u",
+            "report_count": 2,
+            "call_sequence": 2,
+            "successful_call_sequence": 2,
+            "pending_calls": [
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 3,
+                "output_tokens": 2,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "cost_usd": 0.01,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "started_ns": 1794896598590721000,
+                "ended_ns": 1794896598590721000,
+                "matched": false,
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "usage_known": true,
+                "credits": 2.0,
+                "call_index": 1
+              },
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "started_ns": 1794896598590985000,
+                "ended_ns": 1794896598590985000,
+                "matched": false,
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "usage_known": true,
+                "call_index": 2,
+                "last": true,
+                "last_ok": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-1",
+                "call_count": 1,
+                "settled": false,
+                "fired": false,
+                "span_matched": false,
+                "rule_outcome": {
+                  "suppressed": true,
+                  "properties": {}
+                }
+              },
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-2",
+                "call_count": 1,
+                "settled": false,
+                "fired": false,
+                "span_matched": false,
+                "rule_outcome": {
+                  "suppressed": true,
+                  "properties": {}
+                }
+              }
+            ]
+          }
+        },
+        {
+          "written_by": "released-python",
+          "snapshot": {
+            "interaction_id": "046737df-7100-4135-ba1e-4aa86988488f",
+            "conversation_id": "905c8ed4-24bd-47db-8860-4242a3d23d12",
+            "trigger": "user",
+            "pause_count": 1,
+            "total_paused_ms": 0,
+            "paused_at": 1794896451116,
+            "user_id": "u",
+            "report_count": 2,
+            "call_sequence": 2,
+            "successful_call_sequence": 2,
+            "pending_calls": [
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 3,
+                "output_tokens": 2,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "cost_usd": 0.01,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "started_ns": 1794896451115678000,
+                "ended_ns": 1794896451115678000,
+                "matched": false,
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "usage_known": true,
+                "credits": 2.0,
+                "call_index": 1
+              },
+              {
+                "provider": "openai",
+                "model": "example-model",
+                "raw_model": "example-model",
+                "call_count": 1,
+                "error_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "cache_write_1h_tokens": 0,
+                "server_tool_call_count": 0,
+                "from_span": false,
+                "started_ns": 1794896451115949000,
+                "ended_ns": 1794896451115949000,
+                "matched": false,
+                "call_event_pending": false,
+                "call_event_emitted": true,
+                "usage_known": true,
+                "call_index": 2,
+                "last": true,
+                "last_ok": true
+              }
+            ],
+            "pending_tools": [
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-1",
+                "call_count": 1,
+                "settled": false,
+                "fired": false,
+                "span_matched": false
+              },
+              {
+                "tool_name": "lookup",
+                "raw_name": "lookup",
+                "tool_call_id": "lookup-2",
+                "call_count": 1,
+                "settled": false,
+                "fired": false,
+                "span_matched": false
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "response": {
+          "llm_call_count": 2,
+          "tool_call_count": 2,
+          "total_input_tokens": 3,
+          "total_output_tokens": 2,
+          "total_tokens": 5,
+          "tool_breakdown": [
+            {
+              "tool_name": "lookup",
+              "call_count": 2
+            }
+          ]
+        },
+        "absent_response_fields": [
+          "total_cost_usd",
+          "total_credits"
+        ]
+      }
     }
   },
   "legacy_failed_credits": {

@@ -2526,7 +2526,7 @@ func pendingNumber(p map[string]any, key string) float64 {
 	case json.Number: // a snapshot decoded with Decoder.UseNumber
 		n, _ = v.Float64()
 	}
-	if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 || (key != "started_at" && key != "ended_at" && n > 9007199254740991) {
+	if math.IsNaN(n) || math.IsInf(n, 0) || n < 0 {
 		return 0
 	}
 	return n
