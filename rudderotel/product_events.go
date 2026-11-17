@@ -247,12 +247,21 @@ func toolValue(a map[string]attribute.Value, keys ...string) any {
 	return nil
 }
 
-// resolveProductOwner is used at start and, only for unknown owners, at end.
+// resolveProductOwner prefers a live matching ambient interaction; otherwise,
+// it requires exactly one live owner of the ID.
 func resolveProductOwner(id string, ambient *rudderstackai.Interaction) *rudderstackai.Interaction {
-	if id == "" || (ambient != nil && ambient.ID() == id) {
+	if ambient != nil {
+		if id != "" && ambient.ID() != id {
+			ambient = nil
+		} else if ambient.Ended() {
+			// A matching ended context is unresolved, never a detached lookup.
+			return nil
+		}
+	}
+	if id == "" {
 		return ambient
 	}
-	owner, _ := hook.Tracing.Open(id).(*rudderstackai.Interaction)
+	owner, _ := hook.Tracing.ProductOwner(id, ambient).(*rudderstackai.Interaction)
 	return owner
 }
 
@@ -267,9 +276,6 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 		return
 	}
 	i := owner
-	if i == nil {
-		i = resolveProductOwner(id, nil)
-	}
 	// A late or changed ID cannot reroute an already-owned span.
 	if i == nil || i.ID() != id || i.Ended() {
 		return

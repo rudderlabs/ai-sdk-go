@@ -50,6 +50,39 @@ func init() {
 		}
 		return owner
 	}
+	hook.Tracing.ProductOwner = func(id string, ambient any) any {
+		if i, ok := ambient.(*Interaction); ok && i != nil && i.ID() == id {
+			if i.Ended() {
+				return nil
+			}
+			return i
+		}
+		open.mu.Lock()
+		defer open.mu.Unlock()
+		var owner *Interaction
+		for e := open.list.Front(); e != nil; e = e.Next() {
+			i := e.Value.(*Interaction)
+			if i.id != id {
+				continue
+			}
+			if owner != nil && owner != i {
+				return nil
+			}
+			owner = i
+		}
+		for ref, slot := range open.paused {
+			if slot.id != id {
+				continue
+			}
+			if i := ref.Value(); i != nil {
+				if owner != nil && owner != i {
+					return nil
+				}
+				owner = i
+			}
+		}
+		return owner
+	}
 	hook.Tracing.AdoptAnalytics = func(i any, c analytics.Client) { i.(*Interaction).adoptAnalytics(c) }
 	hook.Tracing.RecordTool = func(i, call any) { i.(*Interaction).recordToolCalls(true, call.(ToolCall)) }
 	hook.Tracing.Analytics = func() analytics.Client { return cfg().analytics }

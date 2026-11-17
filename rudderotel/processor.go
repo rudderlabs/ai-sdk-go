@@ -27,7 +27,9 @@ type spanState struct {
 	tags map[string]string
 	// Product spans pin their resolved owner until End. finish never copies
 	// this reference into the ended-parent cache.
-	owner      *rudderstackai.Interaction
+	owner *rudderstackai.Interaction
+	// Only spans without an interaction ID at start may resolve it at end.
+	lateID     bool
 	suppressed bool
 }
 
@@ -178,13 +180,17 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 		if owner != nil {
 			interaction = owner.(*rudderstackai.Interaction)
 		}
+		startID := firstString(own, InteractionIDAttribute)
+		if startID == "" {
+			startID = tags[InteractionIDAttribute]
+		}
 		var productOwner *rudderstackai.Interaction
 		if p.options.ProductEvents {
 			// Pin explicit routing before dedup filters can run app code, including
-			// spans that are not AI yet. The ambient owner cannot override a named one.
-			productOwner = resolveProductOwner(firstString(own, InteractionIDAttribute), interaction)
+			// spans that are not AI yet. A live matching ambient owner takes precedence.
+			productOwner = resolveProductOwner(startID, interaction)
 		}
-		if p.options.ProductEvents && interaction != nil && (firstString(own, InteractionIDAttribute) == "" || firstString(own, InteractionIDAttribute) == interaction.ID()) && spanRole(s) != "" && !interaction.Ended() {
+		if p.options.ProductEvents && productOwner != nil && productOwner == interaction && spanRole(s) != "" && !interaction.Ended() {
 			interaction.Resume()
 		}
 		// Preserve the own identity too, for child spans.
@@ -212,7 +218,7 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 		if p.options.ProductEvents {
 			p.recordAncestry(s, productOwner)
 		}
-		p.remember(key(s.SpanContext()), spanState{tags: held, owner: productOwner})
+		p.remember(key(s.SpanContext()), spanState{tags: held, owner: productOwner, lateID: startID == ""})
 		p.inner.OnStart(ctx, s)
 	})
 }
@@ -252,9 +258,10 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 		}
 		if p.options.ProductEvents {
 			owner := state.owner
-			// Only a genuinely unknown owner may be resolved at end. A known
-			// owner's pause, end, or ID reuse never changes this span's routing.
-			if owner == nil {
+			// An ID present at start is final, including an unresolved match.
+			// A late ID or an end-only snapshot (no observed start) may
+			// resolve only to a unique owner, preserving conformance inputs.
+			if owner == nil && (state.lateID || !p.started(key(s.SpanContext()))) {
 				owner = resolveProductOwner(firstString(attributes(s.Attributes()), InteractionIDAttribute), nil)
 			}
 			safe("tracing.productEvents", func() { p.recordAncestry(s, owner); recordSpan(s, p.exporter.client, owner) })

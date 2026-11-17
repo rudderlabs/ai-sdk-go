@@ -89,7 +89,7 @@ func TestNamedSpanTenantIsolation(t *testing.T) {
 	}
 }
 
-func TestProductSpanUnknownOwnerResolvedAtEnd(t *testing.T) {
+func TestProductSpanLateIDResolution(t *testing.T) {
 	for _, lateID := range []bool{false, true} {
 		t.Run(fmt.Sprintf("late-id=%v", lateID), func(t *testing.T) {
 			provider, p, events := testProvider(t, Options{Simple: true, ProductEvents: true})
@@ -112,8 +112,9 @@ func TestProductSpanUnknownOwnerResolvedAtEnd(t *testing.T) {
 					calls++
 				}
 			}
-			if calls != 1 {
-				t.Fatalf("unknown owner calls=%d, want 1", calls)
+			want := boolInt(lateID)
+			if calls != want {
+				t.Fatalf("late ID calls=%d, want %d", calls, want)
 			}
 		})
 	}
@@ -297,7 +298,8 @@ func TestReviewPausedOwnerSurvivesForeignEnd(t *testing.T) {
 	}
 }
 
-// Completing A's in-flight call must not reclaim B's reused ID before B's next call.
+// A's pinned call still delivers; B's follow-up needs a matching ambient owner
+// while the ID is ambiguous.
 func TestReviewPinnedResumePreservesReplacementSpan(t *testing.T) {
 	for _, simple := range []bool{true, false} {
 		for _, emit := range []bool{false, true} {
@@ -342,15 +344,23 @@ func TestReviewPinnedResumePreservesReplacementSpan(t *testing.T) {
 								t.Errorf("B received A private output: %s", render(e))
 							}
 						}
-						for _, events := range []func() []object{eventsA, eventsB} {
+						for tenant, events := range []func() []object{eventsA, eventsB} {
 							calls := 0
 							for _, e := range events() {
 								if e["event"] == "ai_llm_response_received" {
 									calls++
+									secret := fmt.Sprintf("tenant-%c-secret", 'a'+tenant)
+									if !strings.Contains(render(e), secret) {
+										t.Errorf("owner lost private output: %s", render(e))
+									}
 								}
 							}
-							if calls != 1 {
-								t.Errorf("tenant calls=%d, want 1", calls)
+							want := 1 - tenant
+							if tenant == 1 && ambient == "matching" {
+								want = 1
+							}
+							if calls != want {
+								t.Errorf("tenant calls=%d, want %d", calls, want)
 							}
 						}
 					})
@@ -403,7 +413,7 @@ func TestSequentialIDsAcrossThreeTenants(t *testing.T) {
 						second := span(1)
 						c := start(2)
 						pause(c)
-						second.End()                      // Resumes B without reclaiming paused C.
+						second.End()                      // Ambiguous at start: drop without resuming B.
 						b.End(rudderstackai.EndOptions{}) // Must preserve paused C.
 						third := span(2)
 						a.End(rudderstackai.EndOptions{})
@@ -428,7 +438,10 @@ func TestSequentialIDsAcrossThreeTenants(t *testing.T) {
 								}
 							}
 						}
-						want := 2
+						want := 0
+						if tenant == 0 {
+							want = 2
+						}
 						if calls != want {
 							t.Errorf("tenant %d calls=%d, want %d", tenant, calls, want)
 						}

@@ -28,8 +28,8 @@ func TestDuplicateIdentitySnapshotNeverTakesForeignOwner(t *testing.T) {
 						restoreClient, foreignEvents, followupEvents = clientB, eventsB, eventsA
 						followupClient, followupTenant = clientA, "A"
 					}
-					// The follow-up owner is registered last in both directions, as
-					// detached spans select the most recently registered owner by ID.
+					// Both original paused owners remain live after the ambiguous
+					// restore: the detached follow-up must drop in both directions.
 					opts := rudderstackai.InteractionOptions{
 						InteractionID: "same-id", UserID: "user-1", AnonymousID: "anon-1", ConversationID: "conversation-1",
 						Analytics: restoreClient, Classify: rudderstackai.Ptr(false),
@@ -78,8 +78,8 @@ func TestDuplicateIdentitySnapshotNeverTakesForeignOwner(t *testing.T) {
 					for _, e := range followupEvents() {
 						received = received || strings.Contains(render(e), secret)
 					}
-					if !received {
-						t.Error("registered follow-up owner lost its call")
+					if received {
+						t.Error("ambiguous follow-up should drop")
 					}
 				})
 			}

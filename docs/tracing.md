@@ -402,6 +402,11 @@ Spans must name an open interaction through `rudderstack.interaction_id`. Spans 
 or ending after its final End, do not produce product events. An in-flight span retains its owner
 if the interaction pauses before the span ends, and accepted work resumes it, following Python.
 The interaction's explicit/context client wins; otherwise it adopts tracing's client.
+When the live ambient (context) interaction's ID matches the ID present at span start,
+that interaction owns the span, even if other live interactions share the ID. Otherwise,
+exactly one live open or paused interaction must match. Ambiguous or unresolved IDs are
+dropped from product events and never looked up again at End. A span with no ID at start
+may acquire one through `SetAttributes`; it records only if exactly one owner matches at End.
 
 The first convention present decides the role:
 

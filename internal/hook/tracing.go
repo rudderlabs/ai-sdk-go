@@ -37,6 +37,10 @@ var Tracing struct {
 	RememberClient           func(analytics.Client)
 	Wait                     func(context.Context) bool
 	FlushClient              func(context.Context, analytics.Client) bool
+	// ProductOwner returns the live ambient interaction when its ID matches.
+	// Otherwise, it returns an owner only if exactly one live open or paused
+	// interaction matches the ID.
+	ProductOwner func(string, any) any
 	// NextSpanSeq orders SDK spans and processor-seen OTel model-call spans by start.
 	NextSpanSeq func() uint64
 	// SDKOwnsCall is the active SDK call span in ctx that a model-call span starting now belongs
