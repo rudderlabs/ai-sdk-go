@@ -9,9 +9,10 @@ import (
 	"time"
 	"weak"
 
-	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
 
 func privateOwnerAttrs() []attribute.KeyValue {
@@ -21,7 +22,7 @@ func privateOwnerAttrs() []attribute.KeyValue {
 // An explicit interaction_id routes an async span at start; reusing that ID must
 // never reroute the already-started call into the next tenant at end.
 func TestNamedSpanTenantIsolation(t *testing.T) {
-	for _, lifecycle := range []string{"paused", "ended", "open"} {
+	for _, lifecycle := range []string{"paused-before-start", "paused", "ended", "open"} {
 		for _, ambient := range []bool{false, true} {
 			for _, simple := range []bool{true, false} {
 				for _, emit := range []bool{false, true} {
@@ -31,6 +32,11 @@ func TestNamedSpanTenantIsolation(t *testing.T) {
 						clientA, eventsA := recorder(t)
 						clientB, eventsB := recorder(t)
 						_, a := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: "shared", UserID: "tenant-a", ConversationID: "conv-a", Analytics: clientA, Classify: rudderstackai.Ptr(false)})
+						if lifecycle == "paused-before-start" {
+							if _, ok := a.Pause(rudderstackai.PauseOptions{}); !ok {
+								t.Fatal("pause failed")
+							}
+						}
 						ctx := context.Background()
 						if ambient {
 							var c *rudderstackai.Interaction
@@ -154,7 +160,7 @@ func TestProductSpanChangedIDCannotReroute(t *testing.T) {
 // Only the snapshot and span survive the request. Product delivery must keep the
 // resolved owner alive until End, including spans that acquire their AI role late.
 func TestPausedInFlightSpanOwnerDelivery(t *testing.T) {
-	for _, routing := range []string{"ambient-late", "detached", "foreign-ambient"} {
+	for _, routing := range []string{"ambient-late", "detached", "foreign-ambient", "detached-paused-late"} {
 		for _, simple := range []bool{true, false} {
 			for _, emit := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/simple=%v/emit=%v", routing, simple, emit), func(t *testing.T) {
@@ -173,8 +179,19 @@ func TestPausedInFlightSpanOwnerDelivery(t *testing.T) {
 							ctx, c = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{InteractionID: "ambient", UserID: "tenant-c", Classify: rudderstackai.Ptr(false)})
 							t.Cleanup(func() { c.End(rudderstackai.EndOptions{}) })
 						}
+						var snapshot rudderstackai.PausedInteraction
+						var ok bool
+						if routing == "detached-paused-late" {
+							snapshot, ok = a.Pause(rudderstackai.PauseOptions{})
+							if !ok {
+								t.Fatal("pause failed")
+							}
+							attrs = []attribute.KeyValue{attribute.String(InteractionIDAttribute, "shared")}
+						}
 						_, span := provider.Tracer("async").Start(ctx, "in-flight", trace.WithAttributes(attrs...))
-						snapshot, ok := a.Pause(rudderstackai.PauseOptions{})
+						if routing != "detached-paused-late" {
+							snapshot, ok = a.Pause(rudderstackai.PauseOptions{})
+						}
 						if !ok {
 							t.Fatal("pause failed")
 						}

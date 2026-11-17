@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"weak"
 )
 
 // Limits caps the memory the SDK holds. A zero field keeps its default. Identical defaults in
@@ -70,9 +71,9 @@ func limitReached(name string) {
 var open = struct {
 	mu        sync.Mutex
 	list      *list.List
-	paused    map[string]struct{} // IDs of paused runs, which hold a slot until they end
+	paused    map[string]weak.Pointer[Interaction] // Paused runs hold slots without keeping owners alive.
 	lastSweep time.Time
-}{list: list.New(), paused: map[string]struct{}{}}
+}{list: list.New(), paused: map[string]weak.Pointer[Interaction]{}}
 
 // register opens i; false when MaxOpenInteractions is reached. A restore of a run that holds a
 // slot here (paused in this process) takes it over; any other restore is admitted like a new run.
@@ -118,7 +119,7 @@ func holdPausedSlot(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	open.paused[i.id] = struct{}{}
+	open.paused[i.id] = weak.Make(i)
 }
 
 // takePausedSlot moves a paused run's slot to i; false when this process holds none for its ID.
@@ -210,7 +211,7 @@ func resetOpenForTest() {
 	defer open.mu.Unlock()
 	// A new list: interactions of earlier tests that end later are not on it.
 	open.list = list.New()
-	open.paused = map[string]struct{}{}
+	open.paused = map[string]weak.Pointer[Interaction]{}
 	open.lastSweep = time.Time{}
 }
 

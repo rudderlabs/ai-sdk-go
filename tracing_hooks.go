@@ -37,7 +37,9 @@ func init() {
 				return i
 			}
 		}
-		return nil
+		// Detached spans can start after a segment pauses. Resolve that owner
+		// now so a later interaction reusing the ID cannot receive its output.
+		return open.paused[id].Value()
 	}
 	hook.Tracing.AdoptAnalytics = func(i any, c analytics.Client) { i.(*Interaction).adoptAnalytics(c) }
 	hook.Tracing.RecordTool = func(i, call any) { i.(*Interaction).recordToolCalls(true, call.(ToolCall)) }
