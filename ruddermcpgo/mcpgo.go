@@ -444,6 +444,11 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 		return
 	}
 	sequence := t.sequence.Add(1)
+	// Read before the copy below: marshaling runs app MarshalJSON methods in _meta.
+	var caller map[string]any
+	if call, ok := message.(*mcp.CallToolRequest); ok && call.Params.Meta != nil {
+		caller = mcpbridge.CallerModel(call.Params.Meta.AdditionalFields)
+	}
 	b, err := json.Marshal(message)
 	if err != nil {
 		return
@@ -457,7 +462,7 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 	if method == "tools/call" {
 		identityCtx = mcpbridge.WithToolCall(ctx, env.Params.Name, env.Params.Arguments)
 	}
-	r := mcpbridge.Request{Ctx: identityCtx, Meta: env.Params.Meta, RequestID: id, HTTP: len(header) > 0, UserAgent: header.Get("User-Agent"), Responses: mcpbridge.ResponsesFrom(ctx)}
+	r := mcpbridge.Request{Ctx: identityCtx, Meta: env.Params.Meta, CallerModel: caller, CallerModelRead: true, RequestID: id, HTTP: len(header) > 0, UserAgent: header.Get("User-Agent"), Responses: mcpbridge.ResponsesFrom(ctx)}
 	session := server.ClientSessionFromContext(ctx)
 	// Read per request: names come from the registry as it is now, never from earlier lists.
 	if (method == "tools/call" || method == "tools/list") && t.tools != nil {

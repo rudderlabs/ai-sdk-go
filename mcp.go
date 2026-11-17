@@ -215,7 +215,11 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	if tool, ok := req.(*mcp.CallToolRequest); ok && tool.Params != nil {
 		ctx = mcpbridge.WithToolCall(ctx, tool.Params.Name, tool.Params.Arguments)
 	}
-	r := mcpbridge.Request{Ctx: ctx, Meta: metaOf(params), RequestID: requestIDOf(ctx)}
+	meta := metaOf(params)
+	r := mcpbridge.Request{Ctx: ctx, Meta: meta, CallerModelRead: true, RequestID: requestIDOf(ctx)}
+	if method == "tools/call" { // read now: listing the registered tools below can run app schema marshalers
+		r.CallerModel = callerModel(meta)
+	}
 	// Read per request: names come from the registry as it is now, never from earlier lists.
 	if (method == "tools/call" || method == "tools/list") && w.tools != nil {
 		r.RegisteredTools = w.tools()

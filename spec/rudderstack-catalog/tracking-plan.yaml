@@ -347,6 +347,8 @@ spec:
         - property: '#property:intent'
         - property: '#property:user_sentiment'
         - property: '#property:call_reason'
+        - property: '#property:caller_model'
+        - property: '#property:caller_model_source'
         - property: '#property:server_version'
 
     - type: event_rule

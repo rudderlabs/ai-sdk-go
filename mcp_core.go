@@ -74,6 +74,7 @@ var owned = map[string]bool{
 
 func init() {
 	mcpbridge.ErrorType = errorType
+	mcpbridge.CallerModel = callerModel
 	mcpbridge.Wrap = func(name, version string, opts any) (mcpbridge.Server, error) {
 		o, _ := opts.(Options)
 		n, err := normalizeOptions(o)
@@ -264,6 +265,7 @@ type reqCtx struct {
 	sequence          uint64
 	http              bool
 	meta              map[string]any
+	callerModel       map[string]any
 	start             time.Time
 	tool              *toolState
 	// responses, rawID and held send a failed request's events once its final response is
@@ -303,6 +305,11 @@ func (w *wrapped) Begin(r mcpbridge.Request) mcpbridge.Call { return w.begin(r) 
 func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	received := time.Now()
 	sequence := requestSequence.Add(1)
+	// Before any app callback (Identify, ClientInfo, ClientInfoFallback) can change _meta.
+	caller := r.CallerModel
+	if !r.CallerModelRead {
+		caller = callerModel(r.Meta)
+	}
 	opts := w.opts.Load()
 	tok, _ := r.Token.(*auth.TokenInfo)
 	id := opts.identity(r.Ctx, tok)
@@ -398,6 +405,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 		client: seenClient, requestID: safeRequestID(r.RequestID), rawID: r.RequestID, responses: r.Responses, http: r.HTTP, meta: map[string]any{}, start: time.Now(),
 		initializeClient: r.InitializeClient, received: received, sequence: sequence, registeredTools: r.RegisteredTools, registeredPrompts: r.RegisteredPrompts,
 	}
+	rc.callerModel = caller
 	// A copy: the SDK may remove the protocol keys from _meta while it handles the request.
 	for _, k := range []string{metaProtocolVersion, metaClientInfo, metaClientCapabilities} {
 		if v, ok := r.Meta[k]; ok {
@@ -565,6 +573,7 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 		t.props["argument_keys"] = registeredArgumentNames(t.schema, keys)
 	}
 	t.props["progress_requested"] = progress
+	maps.Copy(t.props, rc.callerModel)
 	t.answered = len(answers) > 0
 	var position map[string]any
 	if t.answered {
