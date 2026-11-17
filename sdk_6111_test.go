@@ -983,7 +983,7 @@ func TestSDK6111GAEnrichingRepeatPricesRetainedCountAndUsage(t *testing.T) {
 	}
 }
 
-func TestSDK6111R1CancelledCallsNeverGainCredits(t *testing.T) {
+func TestSDK6111R1CancelledCallsKeepOnlyExplicitCredits(t *testing.T) {
 	for _, field := range []string{"agent", "purpose", "fallback", "byok"} {
 		for _, mode := range []string{"segment", "in-process", "json"} {
 			for _, source := range []string{"openai", "tracing"} {
@@ -1029,9 +1029,10 @@ func TestSDK6111R1CancelledCallsNeverGainCredits(t *testing.T) {
 					for _, e := range r.named("ai_response_received") {
 						calls += sdk6111Num(e.Properties["llm_call_count"])
 						tokens += sdk6111Num(e.Properties["total_input_tokens"])
-						if _, ok := e.Properties["total_credits"]; ok {
-							t.Error("cancelled credits", e.Properties)
-						}
+
+					}
+					if sdk6111Num(lastResponse(t, r)["total_credits"]) != 7 {
+						t.Fatal("explicit credits lost", lastResponse(t, r))
 					}
 					if calls != 1 || tokens != 10 {
 						t.Fatalf("calls=%g tokens=%g", calls, tokens)
@@ -1040,8 +1041,8 @@ func TestSDK6111R1CancelledCallsNeverGainCredits(t *testing.T) {
 						t.Fatal(lastResponse(t, r))
 					}
 					for _, e := range r.named("ai_llm_response_received") {
-						if _, ok := e.Properties["credits"]; ok {
-							t.Error("call credits", e.Properties)
+						if source == "tracing" && sdk6111Num(e.Properties["credits"]) != 7 {
+							t.Error("explicit call credits lost", e.Properties)
 						}
 					}
 				})
@@ -1441,11 +1442,7 @@ func TestSDK6111R1CreditsFollowRetainedStatusAndTwinReplacement(t *testing.T) {
 					i.RecordCall(call)
 					i.End(EndOptions{})
 					resp := lastResponse(t, r)
-					if errType == "cancelled" {
-						if _, ok := resp["total_credits"]; ok {
-							t.Fatal(resp)
-						}
-					} else if sdk6111Num(resp["total_credits"]) != 7 {
+					if sdk6111Num(resp["total_credits"]) != 7 {
 						t.Fatal(resp)
 					}
 				})

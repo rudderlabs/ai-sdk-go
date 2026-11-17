@@ -247,13 +247,13 @@ func TestDuplicateReportKeepsOnlyExplicitCredits(t *testing.T) {
 	}
 }
 
-func TestDuplicateCannotGiveCreditsToCancelledCall(t *testing.T) {
+func TestDuplicateCanReportProviderCreditsForCancelledCall(t *testing.T) {
 	r := setupAI(t)
 	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
 	i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "r1", ErrorType: "cancelled"})
 	i.RecordCall(LLMCall{Provider: "openai", Model: "m", ResponseID: "r1", Credits: Ptr(5.0)})
 	i.End(EndOptions{})
-	if p := r.props(t, "ai_response_received"); p["total_credits"] != nil {
-		t.Fatalf("credits on a cancelled call: %v", p["total_credits"])
+	if p := r.props(t, "ai_response_received"); sdk6111Num(p["total_credits"]) != 5 {
+		t.Fatalf("explicit credits lost: %v", p["total_credits"])
 	}
 }

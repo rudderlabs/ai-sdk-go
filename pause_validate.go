@@ -35,7 +35,7 @@ var pendingCallKinds = map[string]string{
 	"provider": "s", "model": "s", "raw_model": "s", "requested_model": "s", "agent_name": "s", "span_id": "s",
 	"call_count": "i", "call_index": "i", "report_sequence": "i", "error_count": "i", "input_tokens": "i", "output_tokens": "i",
 	"reasoning_tokens": "i", "cached_input_tokens": "i", "cache_write_tokens": "i", "cache_write_1h_tokens": "i",
-	"cost_usd": "f", "credits": "f", "credits_explicit": "b", "call_purpose": "s", "fallback_used": "b", "byok": "b",
+	"cost_usd": "f", "credits": "f", "credits_explicit": "b", "cost_explicit": "b", "call_purpose": "s", "fallback_used": "b", "byok": "b",
 	"latency_ms": "f", "time_to_first_token_ms": "f", "finish_reason": "s", "error_type": "s", "response_id": "s", "service_tier": "s",
 	"server_tool_call_count": "i", "server_tool_cost_usd": "f", "usage_known": "b", "from_span": "b", "matched": "b",
 	"started_at": "f", "ended_at": "f", "last": "b", "last_ok": "b", "history_only": "b", "unpriced": "b", "fees_unknown": "b",

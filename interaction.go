@@ -435,6 +435,7 @@ type recordedCall struct {
 	pricingActive                                    bool
 	reportSequence                                   int
 	creditsExplicit                                  bool
+	costExplicit                                     bool
 	credits                                          *float64
 	callPurpose                                      string
 	fallbackUsed, byok                               *bool
@@ -985,7 +986,7 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	if call.ErrorType == "" && call.Integration != "tracing" {
 		i.keepAnswerLocked(call.OutputText, false)
 	}
-	if call.Credits != nil && call.ErrorType != "cancelled" && earlier.errorType != "cancelled" {
+	if call.Credits != nil {
 		earlier.credits = creditsOf(call.Credits)
 		earlier.creditsExplicit = true
 	}
@@ -1005,12 +1006,9 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 		byok = copyCreditPointer(call.BYOK)
 	}
 	credits := creditsOf(call.Credits)
-	if earlier.errorType == "cancelled" {
-		credits = nil
-	}
 	explicit := credits != nil
 	priced := false
-	if credits == nil && earlier.errorType != "" && earlier.errorType != "cancelled" {
+	if credits == nil && earlier.errorType != "" {
 		credits = earlier.credits
 	}
 	earlier.pricingRevision++
@@ -1152,9 +1150,8 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	if call.CostUSD != nil && validRate(*call.CostUSD) {
 		cost = Ptr(*call.CostUSD)
 	}
-	if call.ErrorType == "cancelled" {
-		cost = nil
-	} else if call.ErrorType == "" && cost == nil && !call.UsageUnknown {
+	costExplicit := cost != nil
+	if call.ErrorType == "" && cost == nil && !call.UsageUnknown {
 		if priced, fees, ok := priceCall(call.Provider, call.Model, input, output, nonNegative(call.CachedInputTokens), cacheWrite, min(nonNegative(call.CacheWrite1hTokens), cacheWrite), tier, serverTools); ok {
 			cost, serverToolCost = &priced, fees
 		}
@@ -1203,9 +1200,6 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	if useTwinUsage && pricingTwin.callCount < pricingCallCount && !pricingTwin.creditsExplicit {
 		credits = creditsOf(call.Credits)
-	}
-	if call.ErrorType == "cancelled" {
-		credits = nil
 	}
 	// A twin's explicit credits stand, unless this report's usage replaces the twin's.
 	explicitTwin := pricingTwin != nil && pricingTwin.creditsExplicit &&
@@ -1322,7 +1316,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 				}
 			}
 			// Hook-derived credits on a different basis cannot merge.
-			if call.Credits != nil && call.ErrorType != "cancelled" && earlier.errorType != "cancelled" {
+			if call.Credits != nil {
 				earlier.credits = creditsOf(call.Credits)
 			}
 			return false
@@ -1347,7 +1341,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	r := &recordedCall{
 		startedAt: call.StartedAt, endedAt: call.EndedAt,
 		fromSpan: call.Integration == "tracing", usageUnknown: call.UsageUnknown,
-		creditsExplicit: call.Credits != nil, credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
+		costExplicit: costExplicit, creditsExplicit: call.Credits != nil, credits: credits, callPurpose: call.CallPurpose, fallbackUsed: call.FallbackUsed, byok: call.BYOK,
 		latency: latency, ttft: ttft,
 		provider: call.Provider, model: canonicalModel(call.Model), requestedModel: call.RequestedModel, agentName: call.AgentName,
 		rawModel:  call.Model,
@@ -1586,6 +1580,20 @@ func sameModel(a, b string) bool {
 }
 
 func mergeCallTwin(kept, later *recordedCall) {
+	// Save explicit provider amounts before authoritative usage replaces twin pricing.
+	adapter, span := kept, later
+	if !later.fromSpan {
+		adapter, span = later, kept
+	}
+	var explicitCost, explicitCredits *float64
+	for _, report := range []*recordedCall{adapter, span} {
+		if explicitCost == nil && report.costExplicit {
+			explicitCost = report.costUSD
+		}
+		if explicitCredits == nil && report.creditsExplicit {
+			explicitCredits = report.credits
+		}
+	}
 	if later.finishSpan != nil {
 		kept.finishSpan = later.finishSpan
 	}
@@ -1621,11 +1629,11 @@ func mergeCallTwin(kept, later *recordedCall) {
 		kept.cachedInputTokens, kept.cacheWriteTokens, kept.cacheWrite1 = later.cachedInputTokens, later.cacheWriteTokens, later.cacheWrite1
 		kept.serverToolCallCount, kept.serverToolCostUSD = later.serverToolCallCount, later.serverToolCostUSD
 		// Amounts belong to the authoritative usage, including an unknown price.
-		kept.costUSD = later.costUSD
+		kept.costUSD, kept.costExplicit = later.costUSD, later.costExplicit
 		kept.credits, kept.usageUnknown, kept.creditsExplicit = later.credits, false, later.creditsExplicit
 	}
 	if kept.costUSD == nil && kept.usageUnknown && kept.errorType == "" {
-		kept.costUSD = later.costUSD
+		kept.costUSD, kept.costExplicit = later.costUSD, later.costExplicit
 	}
 	// An unset or successful span cannot erase a wrapper's failure (native
 	// instrumentation may leave cancelled spans unset). A wrapper can still
@@ -1639,10 +1647,10 @@ func mergeCallTwin(kept, later *recordedCall) {
 	if later.finishReason != "" && finishErrors[kept.finishReason] != "length" {
 		kept.finishReason = later.finishReason
 	}
-	if kept.errorType == "cancelled" {
-		kept.costUSD, kept.credits = nil, nil
-	} else if kept.errorType != "" && !kept.creditsExplicit {
-		kept.credits = nil
+	if kept.errorType != "" {
+		kept.costUSD, kept.costExplicit = explicitCost, explicitCost != nil
+		kept.credits, kept.creditsExplicit = explicitCredits, explicitCredits != nil
+		kept.serverToolCostUSD = nil
 	}
 	fillString(&kept.model, later.model)
 	fillString(&kept.requestedModel, later.requestedModel)
@@ -2549,6 +2557,9 @@ func pendingCall(c *recordedCall) map[string]any {
 	// Shared twin keys; keep RFC3339Nano UTC timestamps for released Go readers.
 	p["from_span"], p["matched"], p["usage_known"] = c.fromSpan, c.twinMatched, !c.usageUnknown
 	p["credits_explicit"] = c.creditsExplicit
+	if c.costExplicit {
+		p["cost_explicit"] = true
+	}
 
 	p["report_sequence"] = c.reportSequence
 	if c.callIndex > 0 {
@@ -2811,6 +2822,10 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		}
 		c.finishReason = pendingText(p, "finish_reason")
 		c.errorType = pendingText(p, "error_type")
+		c.costExplicit = pendingBool(p, "cost_explicit")
+		if _, present := p["cost_explicit"]; !present {
+			c.costExplicit = c.costUSD != nil && c.errorType != ""
+		}
 		c.responseID = pendingText(p, "response_id")
 		c.serviceTier = pendingText(p, "service_tier")
 		c.serverToolCallCount = int(pendingNumber(p, "server_tool_call_count"))

@@ -342,13 +342,16 @@ func TestCallCostsOnEvents(t *testing.T) {
 	if calls[1].Properties["cost_usd"] != 0.0 || calls[2].Properties["cost_usd"] != 1.0 {
 		t.Fatalf("reported 0 kept, negative ignored: %v %v", calls[1].Properties, calls[2].Properties)
 	}
-	for _, n := range []int{3, 4} {
+	for _, n := range []int{3} {
 		if _, has := calls[n].Properties["cost_usd"]; has {
 			t.Fatalf("failed or cancelled call priced: %v", calls[n].Properties)
 		}
 	}
+	if calls[4].Properties["cost_usd"] != 5.0 {
+		t.Fatal("provider cancellation amount lost", calls[4].Properties)
+	}
 	resp := r.response(t)
-	if resp["total_cost_usd"] != round8(1.52+0+1+0.000001) {
+	if resp["total_cost_usd"] != round8(1.52+0+1+5+0.000001) {
 		t.Fatalf("total: %v", resp["total_cost_usd"])
 	}
 	b := resp["usage_breakdown"].([]map[string]any)

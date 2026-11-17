@@ -185,9 +185,11 @@ func TestNativeAnthropicFailedTwinsUnbilled(t *testing.T) {
 				calls, responses := 0, 0
 				billed := 0
 				nativeIndex, wrapperIndex := -1, -1
+				exportedSpans := 0
 				for index, e := range r.all() {
 					switch e.Event {
 					case "ai_otel_span":
+						exportedSpans++
 						if e.Properties["span_name"] == "anthropic.messages.create" {
 							nativeIndex = index
 						} else {
@@ -217,18 +219,18 @@ func TestNativeAnthropicFailedTwinsUnbilled(t *testing.T) {
 				if calls != 1 || responses != 1 {
 					t.Fatalf("calls=%d responses=%d events=%v", calls, responses, r.all())
 				}
-				// Native Close ends its span before closing the tracked body. Normal
-				// completion records the wrapper first. Exercise both actual orders.
+				// Main emits only the SDK span; the other processor still receives native
+				// instrumentation unchanged. The plain-setup regressions exercise both report orders.
+				if exportedSpans != 1 {
+					t.Fatalf("expected one span per call, got %d", exportedSpans)
+				}
 				if emitSpans {
-					if nativeIndex < 0 || wrapperIndex < 0 {
-						t.Fatal("missing native or wrapper span")
+					if nativeIndex >= 0 || wrapperIndex < 0 {
+						t.Fatal("SDK span did not cover native twin")
 					}
-					if scenario == "stream_close" && nativeIndex > wrapperIndex {
-						t.Fatal("early close did not exercise span-first ordering")
-					}
-					if success && wrapperIndex > nativeIndex {
-						t.Fatal("completion did not exercise wrapper-first ordering")
-					}
+
+				} else if nativeIndex < 0 || wrapperIndex >= 0 {
+					t.Fatal("spans-off native export changed")
 				}
 				t.Logf("RESULT provider=anthropic sdk_spans=%t scenario=%s failed=%t call_billed=%t response_billed=%t hooks=%d native_status=%s native_index=%d wrapper_index=%d", emitSpans, scenario, !success, billed > 0, billed > 1, hooks.Load(), spans[0].Status().Code, nativeIndex, wrapperIndex)
 				if !success && billed > 0 {
