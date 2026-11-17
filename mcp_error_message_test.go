@@ -47,7 +47,7 @@ func TestMCPErrorMessageFixtures(t *testing.T) {
 				source["jsonrpc"], source["id"] = "2.0", "fixture"
 				responses.Await("fixture", func(message map[string]any) { got = errorMessage(message, MaskText) })
 				b, _ := json.Marshal(source)
-				var out io.Writer = io.Discard
+				out := io.Discard
 				if tc.Write == "fails" {
 					out = fixtureFailingWriter{}
 				}

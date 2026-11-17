@@ -223,7 +223,7 @@ func TestObserveMCPTransportFixtureParity(t *testing.T) {
 				msg["result"] = tc.Result
 			}
 			b, _ := json.Marshal(msg)
-			var out io.Writer = io.Discard
+			out := io.Discard
 			if tc.Write == "fails" {
 				out = fixtureFailingWriter{}
 			}
