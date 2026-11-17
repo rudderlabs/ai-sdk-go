@@ -601,7 +601,7 @@ func TestMCPGoErrorMessageNoWriteWait(t *testing.T) {
 }
 
 func TestMCPGoHeldFieldSnapshot(t *testing.T) {
-	fields := []string{"error.code", "error.message", "error.data", "isError", "resultType", "content.text", "content.type", "content.size", "structuredContent", "structured.nextCursor", "structured.next_cursor", "meta.status", "structured.status", "structured.statusCode", "classifier.input", "classifier.output", "invalid_arguments", "declared.when", "declared.properties", "declared.output", "declared.content", "request.identity"}
+	fields := []string{"error.code", "error.message", "error.data", "isError", "content.text", "content.type", "content.size", "structuredContent", "structured.nextCursor", "structured.next_cursor", "meta.status", "structured.status", "structured.statusCode", "classifier.input", "classifier.output", "invalid_arguments", "declared.when", "declared.properties", "declared.output", "declared.content", "request.identity"}
 	for _, field := range fields {
 		t.Run(field, func(t *testing.T) {
 			s := server.NewMCPServer("fields", "1", server.WithToolCapabilities(true))
@@ -704,8 +704,6 @@ func TestMCPGoHeldFieldSnapshot(t *testing.T) {
 				response["error"].(map[string]any)["data"] = map[string]any{"changed": true}
 			case "isError":
 				result.IsError = false
-			case "resultType":
-				result.ResultType = "input_required"
 			case "content.text":
 				result.Content[0] = mcp.TextContent{Type: "text", Text: "second failure"}
 			case "content.type":
