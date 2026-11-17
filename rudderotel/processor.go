@@ -156,6 +156,10 @@ func (p *SpanProcessor) dedup(ctx context.Context, s sdktrace.ReadWriteSpan, int
 	}
 	k := key(s.SpanContext())
 	if owner, owns := hook.Tracing.SDKOwnsCall(ctx, interaction); owns {
+		// A processor before this one may already have sent a child under the span: keep it.
+		if !cover(k, owner) {
+			return false
+		}
 		owner.Cover()
 		p.markCovered(k)
 		return true
@@ -315,6 +319,9 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 			p.remember(key(s.SpanContext()), spanState{suppressed: true})
 			return
 		}
+		if hook.Tracing.EmitSpans() {
+			recordParent(ctx, s)
+		}
 		if !system && (p.options.PropagateIdentity == nil || *p.options.PropagateIdentity) {
 			parentAttrs := map[string]attribute.Value{}
 			if readable, ok := parent.(sdktrace.ReadOnlySpan); ok {
@@ -411,6 +418,9 @@ func (p *SpanProcessor) OnEnd(s sdktrace.ReadOnlySpan) {
 			safe("tracing.productEvents", func() { p.recordAncestry(s, state.owner); recordSpan(s, p.exporter.client, state.owner) })
 		}
 		if !replaced && !covered {
+			if hook.Tracing.EmitSpans() {
+				s = newDeliveredSpan(s)
+			}
 			p.inner.OnEnd(s)
 		}
 	})

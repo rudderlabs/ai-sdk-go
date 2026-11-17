@@ -61,6 +61,9 @@ func (e *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 			return errors.Join(append(failures, err)...)
 		}
 		safe("tracing.export", func() {
+			if d, ok := s.(*deliveredSpan); ok {
+				d.resolve()
+			}
 			keep := IsAISpan(s)
 			if e.options.Filter != nil {
 				keep = filterSpan(e.options.Filter, s)
@@ -70,8 +73,11 @@ func (e *Exporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpa
 			if !keep {
 				return
 			}
-			if err := e.send(s); err != nil {
+			sent, err := e.send(s)
+			if err != nil {
 				failures = append(failures, err)
+			} else if sent && hook.Tracing.EmitSpans() {
+				sentRaw(s)
 			}
 		})
 	}
@@ -89,17 +95,21 @@ func filterSpan(filter func(sdktrace.ReadOnlySpan) bool, s sdktrace.ReadOnlySpan
 	return filter(s)
 }
 
-// send maps one span and enqueues it; a transport panic is an export failure, like an Enqueue error.
-func (e *Exporter) send(s sdktrace.ReadOnlySpan) error {
+// send maps one span and enqueues it, reporting whether it was enqueued; a transport panic is
+// an export failure, like an Enqueue error.
+func (e *Exporter) send(s sdktrace.ReadOnlySpan) (bool, error) {
 	m, err := SpanToTrack(s, e.options)
 	if err != nil {
 		hook.Report(rudderstackai.KindInternal, "tracing.map", err)
-		return nil
+		return false, nil
 	}
 	if m == nil {
-		return nil
+		return false, nil
 	}
-	return enqueue(e.client, *m)
+	if err := enqueue(e.client, *m); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func enqueue(c analytics.Client, m analytics.Track) (err error) {
