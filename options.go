@@ -178,12 +178,15 @@ type options struct {
 	// name is ServerName, else reflectedName (the server's own), else "unknown".
 	name          string
 	reflectedName string
-	version       string
+	// rawVersion is the server's own version as given; version is its normalised form. A rewrap
+	// normalises rawVersion again, never version, so a cap ending in white space keeps it.
+	rawVersion string
+	version    string
 }
 
 // resolveName sets the server name and version from the server's own.
 func (o *options) resolveName(reflected, version string) {
-	o.reflectedName, o.version = reflected, capID(version)
+	o.reflectedName, o.rawVersion, o.version = reflected, version, capID(version)
 	o.name = capID(o.ServerName)
 	if o.name == "" {
 		o.name = capID(reflected)

@@ -109,7 +109,7 @@ func (w *wrapped) Rewrap(opts any) error {
 		return err
 	}
 	old := w.opts.Load()
-	n.resolveName(old.reflectedName, old.version)
+	n.resolveName(old.reflectedName, old.rawVersion)
 	w.opts.Store(n)
 	return nil
 }
@@ -737,7 +737,7 @@ func (rc *reqCtx) ResourceName(uri string) string {
 		return true
 	})
 	if found != "" {
-		return found
+		return capID(found)
 	}
 	if name, _ := rc.st.resources.get(uri); name != "" {
 		return name
@@ -836,9 +836,10 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 func (rc *reqCtx) Finished(method, name string, size int, errorType string) {
 	event, nameKey := "mcp_resource_read", "resource_name"
 	if method == "prompts/get" {
+		// The exact registered name, as for tools; resource names come off the wire.
 		event, nameKey = "mcp_prompt_used", "prompt_name"
 	}
-	name = capID(name)
+	// ResourceName already normalizes templates; cached static names were normalized on listing.
 	if name == "" {
 		return
 	}

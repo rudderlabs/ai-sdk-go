@@ -83,7 +83,8 @@ func TestRedactionConformance(t *testing.T) {
 func TestTraceparent(t *testing.T) {
 	cases := map[any]string{
 		"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01":    "4bf92f3577b34da6a3ce929d0e0e4736",
-		" 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-x": "4bf92f3577b34da6a3ce929d0e0e4736",
+		" 01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-x": "4bf92f3577b34da6a3ce929d0e0e4736",
+		"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-x":  "",
 		"ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01":    "",
 		"00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01":    "",
 		"00-4BF92F3577B34DA6A3CE929D0E0E4736-00f067aa0ba902b7-01":    "",

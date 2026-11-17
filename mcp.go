@@ -60,7 +60,7 @@ func WrapMCPServer(server *mcp.Server, opts Options) error {
 		return err
 	}
 	if w, ok := instances.get(server); ok {
-		n.resolveName(w.opts.Load().reflectedName, w.opts.Load().version)
+		n.resolveName(w.opts.Load().reflectedName, w.opts.Load().rawVersion)
 		w.opts.Store(n)
 		return nil
 	}

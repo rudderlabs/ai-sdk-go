@@ -1297,7 +1297,9 @@
             "oauth",
             "api_key",
             "none"
-          ]
+          ],
+          "maxLength": 64,
+          "description": "At most 64 characters."
         },
         "oauth_client_id": {
           "type": "string",
@@ -1314,7 +1316,8 @@
         "country": {
           "type": "string",
           "minLength": 1,
-          "description": "Coarse, derived from the request IP, which is never sent."
+          "description": "Coarse, derived from the request IP, which is never sent. At most 64 characters.",
+          "maxLength": 64
         }
       }
     },
@@ -1337,7 +1340,8 @@
         },
         "auth_method": {
           "type": "string",
-          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none)."
+          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none). At most 64 characters.",
+          "maxLength": 64
         },
         "request_id": {
           "type": "string",
@@ -1478,7 +1482,8 @@
         },
         "auth_method": {
           "type": "string",
-          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none)."
+          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none). At most 64 characters.",
+          "maxLength": 64
         },
         "elicitation_action": {
           "enum": [
@@ -1525,7 +1530,8 @@
         },
         "auth_method": {
           "type": "string",
-          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none)."
+          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none). At most 64 characters.",
+          "maxLength": 64
         },
         "capability": {
           "type": "string",
@@ -1556,7 +1562,8 @@
         },
         "auth_method": {
           "type": "string",
-          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none)."
+          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none). At most 64 characters.",
+          "maxLength": 64
         },
         "feedback_category": {
           "enum": [
@@ -1607,7 +1614,8 @@
         },
         "auth_method": {
           "type": "string",
-          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none)."
+          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none). At most 64 characters.",
+          "maxLength": 64
         },
         "request_id": {
           "type": "string",
@@ -1663,7 +1671,8 @@
         },
         "auth_method": {
           "type": "string",
-          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none)."
+          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none). At most 64 characters.",
+          "maxLength": 64
         },
         "request_id": {
           "type": "string",
@@ -1839,7 +1848,8 @@
         },
         "auth_method": {
           "type": "string",
-          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none)."
+          "description": "How the request authenticated, as on mcp_client_seen (for example oauth, api_key or none). At most 64 characters.",
+          "maxLength": 64
         },
         "tool_name": {
           "type": "string",

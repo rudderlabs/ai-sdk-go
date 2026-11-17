@@ -103,16 +103,18 @@ func capID(s string) string { return capText(strings.TrimSpace(s), maxMetaLength
 // capLabel trims and caps a short label, such as a protocol version or a delivery mode.
 func capLabel(s string) string { return capText(strings.TrimSpace(s), maxLabelLength) }
 
-var traceparentRE = regexp.MustCompile(`^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})(?:-|$)`)
+var traceparentRE = regexp.MustCompile(`(?s)^([0-9a-f]{2})-([0-9a-f]{32})-([0-9a-f]{16})-[0-9a-f]{2}(-.*)?$`)
 
-// traceIDFromTraceparent returns the trace-id of a W3C traceparent, never the all-zero one.
+// traceIDFromTraceparent returns the trace-id of a W3C traceparent
+// (spec/fixtures/mcp-traceparent-v0.1.json): never version ff or an all-zero ID; only a version
+// after 00 may add fields after the flags.
 func traceIDFromTraceparent(v any) string {
 	s, ok := v.(string)
 	if !ok {
 		return ""
 	}
 	m := traceparentRE.FindStringSubmatch(strings.TrimSpace(s))
-	if m == nil || m[1] == "ff" || strings.Trim(m[2], "0") == "" || strings.Trim(m[3], "0") == "" {
+	if m == nil || m[1] == "ff" || (m[1] == "00" && m[4] != "") || strings.Trim(m[2], "0") == "" || strings.Trim(m[3], "0") == "" {
 		return ""
 	}
 	return m[2]
