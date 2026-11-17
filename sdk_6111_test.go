@@ -1937,3 +1937,69 @@ func TestSDK6111AggregateTwinRetainsWrapperFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestSDK6111DetachedCallPublishesOwnMetadata(t *testing.T) {
+	for _, mode := range []string{"segment", "in-process", "json"} {
+		for _, shared := range []bool{true, false} {
+			for _, ownFlags := range []*bool{nil, Ptr(false)} {
+				t.Run(fmt.Sprintf("%s/%t/%v", mode, shared, ownFlags), func(t *testing.T) {
+					var i *Interaction
+					armed := false
+					r := setupAI(t, WithLLMCallEvents(true), WithCredits(func(c CreditCall) (*float64, error) {
+						if armed {
+							armed = false
+							i.Pause(PauseOptions{})
+						}
+						same := func(v *bool) bool {
+							return (v == nil && ownFlags == nil) || (v != nil && ownFlags != nil && *v == *ownFlags)
+						}
+						if c.CallPurpose == "new-purpose" && same(c.BYOK) && same(c.FallbackUsed) {
+							return Ptr(7.0), nil
+						}
+						return Ptr(2.0), nil
+					}))
+					call := sdk6942Call()
+					if !shared {
+						call.ResponseID = ""
+					}
+					call.UsageUnknown = true
+					call.InputTokens = 0
+					call.CallPurpose = "old-purpose"
+					call.BYOK = Ptr(true)
+					call.FallbackUsed = Ptr(true)
+					i = sdk6111ReviewPending(t, r, mode, func(target *Interaction) { target.RecordCall(call) })
+					armed = true
+					call.Integration = "openai"
+					call.UsageUnknown = false
+					call.InputTokens = 100
+					call.CallPurpose = "new-purpose"
+					call.BYOK = ownFlags
+					call.FallbackUsed = ownFlags
+					i.RecordCall(call)
+					i.End(EndOptions{})
+					events := r.named("ai_llm_response_received")
+					p := events[len(events)-1].Properties
+					if sdk6111Num(p["input_tokens"]) != 100 || sdk6111Num(p["credits"]) != 7 || p["call_purpose"] != "new-purpose" {
+						t.Fatal(p)
+					}
+					for _, key := range []string{"byok", "fallback_used"} {
+						if ownFlags == nil {
+							if _, ok := p[key]; ok {
+								t.Fatal(p)
+							}
+						} else if p[key] != *ownFlags {
+							t.Fatal(p)
+						}
+					}
+					var total float64
+					for _, e := range r.named("ai_response_received") {
+						total += sdk6111Num(e.Properties["total_input_tokens"])
+					}
+					if total != 100 {
+						t.Fatal(total)
+					}
+				})
+			}
+		}
+	}
+}

@@ -1240,7 +1240,12 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			return false
 		}
 		// A pause during the hook closed the twin's segment: this report is priced as the new call it now is.
-		if pricingTwin != nil && !slices.Contains(i.calls, pricingTwin) && (useTwinUsage || pricingCallCount != callCount) {
+		sameFlag := func(a, b *bool) bool {
+			return (a == nil && b == nil) || (a != nil && b != nil && *a == *b)
+		}
+		metadataChanged := creditCall.AgentName != own.AgentName || creditCall.CallPurpose != own.CallPurpose ||
+			!sameFlag(creditCall.FallbackUsed, own.FallbackUsed) || !sameFlag(creditCall.BYOK, own.BYOK)
+		if pricingTwin != nil && !slices.Contains(i.calls, pricingTwin) && (useTwinUsage || pricingCallCount != callCount || metadataChanged) {
 			credits = nil
 			if !call.UsageUnknown {
 				i.mu.Unlock()
