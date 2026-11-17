@@ -701,6 +701,11 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 			blocking: newBoundedMap[rudderstackai.PauseReason]("claude-managed-agents blocking"),
 		}
 		s.turn = t
+		// A paused answer continues as itself wherever the rest is read: another caller's
+		// interaction never takes over its tools, identity or client.
+		if t.continuation && s.hasPausedTurn() {
+			t.borrowed = nil
+		}
 		if t.borrowed != nil {
 			s.adoptBorrowed(t)
 		} else if t.continuation {
