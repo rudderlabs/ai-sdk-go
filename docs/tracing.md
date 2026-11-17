@@ -111,8 +111,8 @@ are dropped, cycles are dropped, and other unrepresentable list entries keep nul
 
 When `WithEmitSpans(true)` and a `rudderotel` span processor (`NewSpanProcessor` or
 `RegisterTracing`) both see a model call, the SDK span is the one sent when it has an analytics
-client and its whole message fits the span size budget even after the parts that can be shortened
-are. Otherwise the OpenTelemetry span exports normally, and the SDK span follows its ordinary delivery path.
+client and its mandatory core fits the span size budget with room for completion timing and status.
+Otherwise the OpenTelemetry span exports normally, and the SDK span follows its ordinary delivery path.
 
 - An OpenTelemetry model-call span (the conventions in
   [product events from spans](#product-events-from-spans): GenAI `chat` / `text_completion` /
@@ -120,7 +120,13 @@ are. Otherwise the OpenTelemetry span exports normally, and the SDK span follows
   inside any active wrapper call ancestor in the current interaction is dropped by every
   `rudderotel` processor, using a mark they share. Manual tool, retrieval and agent middleware do
   not hide the call; the ancestry stops at the interaction boundary. Other processors and
-  exporters receive it unchanged. Span-built product events still count the call once.
+  exporters receive it unchanged. Exported descendants of a covered OpenTelemetry model span keep
+  their span IDs in the SDK owner's trace; direct children use the SDK owner as parent, and deeper
+  parent links stay intact. Your APM spans keep the original OpenTelemetry data. Span-built product
+  events still count the call once.
+- If an earlier processor already sent a child under an OpenTelemetry model span's original IDs
+  before RudderStack observed that parent, the original parent is kept as well as the SDK span.
+  Buffered children still resolve to the SDK owner at export.
 - For an active, still-recording model-call span a processor observed outside an SDK call, in the
   same open interaction, the first wrapper call that starts directly inside it takes its place.
   The SDK span adopts its trace ID, span ID and parent span ID, and fixes the interaction's SDK
@@ -132,6 +138,21 @@ are. Otherwise the OpenTelemetry span exports normally, and the SDK span follows
   read after the OpenTelemetry span ended still sends the adopted span.
 - An outer model-call span with no wrapper call inside is exported normally. A newer SDK span in
   between prevents adoption: the most recently started active SDK span decides.
+- An SDK span that replaced or covered an OpenTelemetry span sheds optional fields in this order
+  after ordinary string truncation: (1) content span, resource and scope attributes and events
+  identified by [`span-content-keys-v0.1.json`](../spec/fixtures/span-content-keys-v0.1.json), OTLP
+  `status.message` and property `status_message`; (2) all other optional span, resource and scope
+  attributes, events, links, optional `gen_ai` entries and properties, and span
+  `droppedAttributesCount`, `droppedEventsCount`, `droppedLinksCount`. Each group sheds the
+  largest compact-JSON UTF-8 value first; ties follow the
+  [shared delivery rule](../spec/fixtures/FIXTURE-FORMAT.md#sdk-span-delivery-budget). The message
+  identity and context, span IDs, name, kind, timing and status, session, interaction and
+  conversation IDs, the OTLP envelope and scope, and the core GenAI summary are never shed. Core
+  span attribute keys, when present at admission, are `gen_ai.operation.name`,
+  `gen_ai.provider.name`, `gen_ai.system`, `gen_ai.request.model`, `gen_ai.conversation.id`,
+  `rudderstack.interaction_id`, `rudderstack.span_source`, `user.id` and
+  `rudderstack.anonymous_id`. String shortening or shedding sets `truncated: true`; an ordinary
+  oversized SDK span that replaced or covered nothing still drops.
 
 The trade-off: RudderStack gets the SDK span, with its attributes and timing, under the
 OpenTelemetry span's IDs, not the attributes and timing your application put on its span.
@@ -148,8 +169,6 @@ Matching uses context nesting only, never times or model names. Limits:
   A recording span the sampler does not sample is eligible too.
 - A span that already ended, an ended interaction, and a span that started in another interaction
   never adopt.
-- An exported child of a dropped OpenTelemetry span keeps that span as its `parent_span_id`,
-  although RudderStack never received it.
 - Go has no framework integrations, so no integration model spans take part.
 
 ## Framework trees with manual spans

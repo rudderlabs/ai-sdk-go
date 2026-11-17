@@ -30,25 +30,83 @@ type dedupNode struct {
 	Operation         string      `json:"operation"`
 	EndBeforeChildren bool        `json:"end_before_children"`
 	Legacy            bool        `json:"legacy"`
+	AnonymousID       string      `json:"anonymous_id"`
+	ConversationID    string      `json:"conversation_id"`
+	StartTimeMS       int64       `json:"start_time_ms"`
+	EndTimeMS         int64       `json:"end_time_ms"`
+	Initial           attrValues  `json:"initial_attributes"`
+	Completion        attrValues  `json:"completion_attributes"`
+	ChildBefore       *dedupChild `json:"child_before_processor"`
 	Children          []dedupNode `json:"children"`
 }
 
+type dedupChild struct {
+	Label     string `json:"label"`
+	Operation string `json:"operation"`
+}
+
+// attrValues are fixture attributes; {"repeat": n, "count": c} is a fixed array of c values n.
+type attrValues map[string]any
+
+func (a attrValues) expand() map[string]any {
+	number := func(v any) (int64, bool) {
+		switch n := v.(type) {
+		case float64:
+			return int64(n), true
+		case json.Number:
+			i, err := n.Int64()
+			return i, err == nil
+		}
+		return 0, false
+	}
+	out := map[string]any{}
+	for k, v := range a {
+		if o, ok := v.(map[string]any); ok {
+			if count, ok := number(o["count"]); ok {
+				repeat, _ := number(o["repeat"])
+				values := make([]int64, count)
+				for i := range values {
+					values[i] = repeat
+				}
+				out[k] = values
+				continue
+			}
+		}
+		if i, ok := number(v); ok {
+			out[k] = i
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
 type dedupScenario struct {
-	Name          string    `json:"name"`
-	EmitSpans     bool      `json:"emit_spans"`
-	Requires      string    `json:"requires"`
-	Tree          dedupNode `json:"tree"`
-	ExpectedSpans []struct {
-		Label    string  `json:"label"`
-		Parent   *string `json:"parent"`
-		Replaces string  `json:"replaces"`
+	Name           string    `json:"name"`
+	EmitSpans      bool      `json:"emit_spans"`
+	CaptureContent bool      `json:"capture_content"`
+	Processor      string    `json:"processor"`
+	Requires       string    `json:"requires"`
+	Tree           dedupNode `json:"tree"`
+	ExpectedSpans  []struct {
+		Label         string   `json:"label"`
+		Parent        *string  `json:"parent"`
+		Replaces      string   `json:"replaces"`
+		AttributeKeys []string `json:"attribute_keys"`
+		ShedKeys      []string `json:"shed_attribute_keys"`
+		Truncated     *bool    `json:"truncated"`
 	} `json:"expected_spans"`
 	CallSpan           any      `json:"call_span"`
 	OtherProcessorsSee []string `json:"other_processors_see"`
 }
 
+// wrapperOnlyKeys are attributes Go's only SDK model emitter, the provider wrapper, always sets.
+// The fixture's model-emitter (integration) nodes run through it, so attribute key checks allow them.
+var wrapperOnlyKeys = []string{"gen_ai.response.model", "http.response.status_code"}
+
 // dedupRun drives one scenario tree: interactions, wrapper calls (children run inside the
-// provider request, as an instrumentation would), manual spans and active OTel spans.
+// provider request, as an instrumentation would), model emitters, manual spans and active OTel
+// spans.
 func dedupRun(ctx context.Context, tracer trace.Tracer, n dedupNode) {
 	children := func(ctx context.Context) {
 		for _, c := range n.Children {
@@ -57,7 +115,7 @@ func dedupRun(ctx context.Context, tracer trace.Tracer, n dedupNode) {
 	}
 	switch n.Kind {
 	case "interaction":
-		ctx, i := rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: n.Label})
+		ctx, i := rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: n.Label, AnonymousID: n.AnonymousID, ConversationID: n.ConversationID})
 		children(ctx)
 		i.End(rudderstackai.EndOptions{})
 	case "manual":
@@ -81,7 +139,62 @@ func dedupRun(ctx context.Context, tracer trace.Tracer, n dedupNode) {
 		ctx, s := hook.Tracing.BeginWrapper(ctx, i, started)
 		children(ctx)
 		hook.Tracing.RecordWrapper(i, rudderstackai.LLMCall{Provider: "openai", Model: n.Label, ResponseID: "r-" + n.Label, InputTokens: 1, OutputTokens: 1, StartedAt: started, EndedAt: time.Now()}, s, 200)
+	case "integration":
+		// An SDK model emitter with set times and attributes: Go's is the provider wrapper.
+		i := rudderstackai.FromContext(ctx)
+		started, ended := time.Now(), time.Time{}
+		if n.StartTimeMS > 0 {
+			started, ended = time.UnixMilli(n.StartTimeMS), time.UnixMilli(n.EndTimeMS)
+		}
+		ctx, value := hook.Tracing.BeginWrapper(ctx, i, started)
+		s, _ := value.(*rudderstackai.Span)
+		initial := n.Initial.expand()
+		s.SetAttributes(initial)
+		children(ctx)
+		s.SetAttributes(n.Completion.expand())
+		provider, model := "openai", n.Label
+		if v, ok := initial["gen_ai.provider.name"].(string); ok {
+			provider = v
+		}
+		if v, ok := initial["gen_ai.request.model"].(string); ok {
+			model = v
+		}
+		if ended.IsZero() {
+			ended = time.Now()
+		}
+		hook.Tracing.FinishRaw(value, provider, model, 0, ended, nil)
 	}
+}
+
+// earlyProcessor starts and ends a child synchronously in its OnStart for span target, with the
+// model active, before RudderStack's processor sees the model span.
+type earlyProcessor struct {
+	target string
+	child  *dedupChild
+	tracer func() trace.Tracer
+}
+
+func (e *earlyProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
+	if e.child == nil || s.Name() != e.target {
+		return
+	}
+	_, child := e.tracer().Start(trace.ContextWithSpan(ctx, s), e.child.Label, trace.WithAttributes(attribute.String("gen_ai.operation.name", e.child.Operation)))
+	child.End()
+}
+func (e *earlyProcessor) OnEnd(sdktrace.ReadOnlySpan)      {}
+func (e *earlyProcessor) Shutdown(context.Context) error   { return nil }
+func (e *earlyProcessor) ForceFlush(context.Context) error { return nil }
+
+func findChildBefore(n dedupNode) (string, *dedupChild) {
+	if n.ChildBefore != nil {
+		return n.Label, n.ChildBefore
+	}
+	for _, c := range n.Children {
+		if label, child := findChildBefore(c); child != nil {
+			return label, child
+		}
+	}
+	return "", nil
 }
 
 func TestSharedSpanDedupFixture(t *testing.T) {
@@ -99,11 +212,21 @@ func TestSharedSpanDedupFixture(t *testing.T) {
 				t.Skip("platform limit: Go has no framework integrations")
 			}
 			apm := tracetest.NewSpanRecorder()
-			provider, _, events := testProvider(t, Options{Simple: true}, apm)
-			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(sc.EmitSpans), rudderstackai.WithLLMCallEvents(true)); err != nil {
+			// The tested processor sits between an early processor and a plain one.
+			_, p, events := testProvider(t, Options{Simple: sc.Processor != "batch"})
+			target, child := findChildBefore(sc.Tree)
+			var tracer trace.Tracer
+			early := &earlyProcessor{target: target, child: child, tracer: func() trace.Tracer { return tracer }}
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(early), sdktrace.WithSpanProcessor(p), sdktrace.WithSpanProcessor(apm))
+			t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+			tracer = provider.Tracer("app")
+			if err := rudderstackai.Configure(rudderstackai.WithEmitSpans(sc.EmitSpans), rudderstackai.WithLLMCallEvents(true), rudderstackai.WithCaptureContent(sc.CaptureContent)); err != nil {
 				t.Fatal(err)
 			}
-			dedupRun(context.Background(), provider.Tracer("app"), sc.Tree)
+			dedupRun(context.Background(), tracer, sc.Tree)
+			if err := provider.ForceFlush(context.Background()); err != nil {
+				t.Fatal(err)
+			}
 
 			labels := map[string]string{}
 			otel := map[string]sdktrace.ReadOnlySpan{}
@@ -131,6 +254,9 @@ func TestSharedSpanDedupFixture(t *testing.T) {
 					}
 					found = true
 					parent, _ := p["parent_span_id"].(string)
+					if want.AttributeKeys != nil {
+						checkBudgetSpan(t, e, want.AttributeKeys, want.ShedKeys, want.Truncated)
+					}
 					if want.Replaces != "" {
 						// The SDK span carries the OTel span's IDs; its content is the SDK call's.
 						o := otel[want.Replaces]
@@ -154,6 +280,14 @@ func TestSharedSpanDedupFixture(t *testing.T) {
 						t.Errorf("%s: parent %q, want none", want.Label, labels[parent])
 					case want.Parent != nil && labels[parent] != *want.Parent:
 						t.Errorf("%s: parent %q, want %q", want.Label, labels[parent], *want.Parent)
+					}
+					// A child shares its parent's trace, including a covered subtree moved under its owner.
+					if want.Parent != nil {
+						for _, other := range exported {
+							if op := other["properties"].(object); label(op["span_name"]) == *want.Parent && op["trace_id"] != p["trace_id"] {
+								t.Errorf("%s is on trace %v, its parent %s on %v", want.Label, p["trace_id"], *want.Parent, op["trace_id"])
+							}
+						}
 					}
 				}
 				if !found {
@@ -202,6 +336,43 @@ func TestSharedSpanDedupFixture(t *testing.T) {
 				t.Errorf("%d call events, want %d", n, len(wantCalls))
 			}
 		})
+	}
+}
+
+// checkBudgetSpan checks a shed SDK span: its OTLP span attribute keys, the removed keys, the
+// core summary and timing, and that it fits the default budget.
+func checkBudgetSpan(t *testing.T, e object, keys, shed []string, truncated *bool) {
+	t.Helper()
+	p := e["properties"].(object)
+	span := p["otlp"].(object)["resourceSpans"].([]any)[0].(object)["scopeSpans"].([]any)[0].(object)["spans"].([]any)[0].(object)
+	got := []string{}
+	for _, kv := range span["attributes"].([]any) {
+		if k := kv.(object)["key"].(string); !slices.Contains(wrapperOnlyKeys, k) {
+			got = append(got, k)
+		}
+	}
+	slices.Sort(got)
+	if !slices.Equal(got, keys) {
+		t.Errorf("attribute keys %v, want %v", got, keys)
+	}
+	for _, k := range shed {
+		if slices.Contains(got, k) {
+			t.Errorf("%s was not shed", k)
+		}
+	}
+	if truncated != nil && p["truncated"] != *truncated {
+		t.Errorf("truncated=%v, want %v", p["truncated"], *truncated)
+	}
+	summary, _ := p["gen_ai"].(object)
+	if p["start_time"] != "2025-10-09T08:53:20.000Z" || p["end_time"] != "2025-10-09T08:53:21.500Z" || p["duration_ms"] != 1500.0 || p["status_code"] != "ok" ||
+		p["conversation_id"] != "conversation" || summary["operation_name"] != "chat" || summary["provider_name"] != "openai" || summary["request_model"] != "m" {
+		t.Errorf("core properties changed: %v", p)
+	}
+	if e["userId"] != "A" || e["anonymousId"] != "anon" || e["originalTimestamp"] == nil {
+		t.Errorf("identity or timestamp lost: %v/%v/%v", e["userId"], e["anonymousId"], e["originalTimestamp"])
+	}
+	if b, _ := json.Marshal(e); len(b) > 32_000 {
+		t.Errorf("delivered %d bytes, over the 32000 budget", len(b))
 	}
 }
 
