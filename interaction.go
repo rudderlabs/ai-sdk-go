@@ -381,12 +381,15 @@ type PauseOptions struct {
 
 // PausedInteraction is a paused run, as JSON: store it with the run's own state and pass it as
 // [InteractionOptions.Resume] or [TaskOptions.Resume] to continue the same interaction later, in
-// any process. Keys match the event properties.
+// any process. Except for PauseToken, keys match the event properties.
 type PausedInteraction struct {
 	invalidSnapshot bool
-	InteractionID   string  `json:"interaction_id"`
-	ConversationID  string  `json:"conversation_id"`
-	Trigger         Trigger `json:"trigger"`
+	// PauseToken identifies this specific pause for saved-context routing in the same process.
+	// Older snapshots without it still restore, without linking a saved context or paused slot.
+	PauseToken     string  `json:"pause_token,omitempty"`
+	InteractionID  string  `json:"interaction_id"`
+	ConversationID string  `json:"conversation_id"`
+	Trigger        Trigger `json:"trigger"`
 	// PauseCount is the pauses so far, this one included.
 	PauseCount int `json:"pause_count"`
 	// TotalPausedMS is the time spent paused before this pause.
@@ -577,6 +580,9 @@ type Interaction struct {
 	scope *contextValues
 	// resumed: continued from a Resume snapshot.
 	resumed bool
+	// pauseToken names the snapshot's paused slot; a fresh token is minted for each pause.
+	// Guarded by open.mu; snapshot reads also hold mu, as does holdPausedSlot when writing it.
+	pauseToken string
 	// cont, once a snapshot of this run is restored in this process, names its newest segment.
 	cont atomic.Pointer[continuation]
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
@@ -844,6 +850,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		resumed:           resumed,
 	}
 	if resumed {
+		i.pauseToken = snapshot.PauseToken
 		i.userID, i.anonymousID = snapshot.UserID, snapshot.AnonymousID
 		i.feature, i.surface = snapshot.Feature, surfaceOf(snapshot.Surface)
 		i.accountID, i.onBehalfOf = snapshot.AccountID, snapshot.OnBehalfOf
@@ -2720,6 +2727,7 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		return PausedInteraction{}, false
 	}
 	snapshot := PausedInteraction{
+		PauseToken:    i.pauseToken,
 		InteractionID: i.id, ConversationID: i.conversationID, Trigger: i.trigger,
 		PauseCount: i.pauseCount, TotalPausedMS: roundMS(i.pausedTotal), PausedAt: i.pausedAt.UnixMilli(),
 		UserID: i.userID, AnonymousID: i.anonymousID, Feature: i.feature, Surface: i.surface,

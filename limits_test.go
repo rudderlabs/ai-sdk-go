@@ -429,6 +429,9 @@ func TestRestoreDuplicateIdentityPreservesPausedSlots(t *testing.T) {
 					}
 					slots[n] = slotFor(originals[n])
 				}
+				// A snapshot without a pause token (an older SDK version) matches no slot, even
+				// by identity.
+				snapshots[restoreIndex].PauseToken = ""
 				_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshots[restoreIndex], Classify: Ptr(false)})
 				defer restored.End(EndOptions{})
 				if restored.Ended() != (limit == 2) {
@@ -501,5 +504,42 @@ func TestAgentTextWithheldOnMaskingTimeout(t *testing.T) {
 	o := &options{}
 	if got := o.maskedText(strings.Repeat("a", 40)+"!", maxTextLength); got != "" {
 		t.Fatalf("maskedText = %q, want it withheld", got)
+	}
+}
+
+func TestRestoreWithPauseTokenTakesOnlyItsOwnPausedSlot(t *testing.T) {
+	for _, restoreIndex := range []int{0, 1} {
+		t.Run(fmt.Sprintf("restore=%d", restoreIndex), func(t *testing.T) {
+			setupAI(t, WithLimits(Limits{MaxOpenInteractions: 2}))
+			var originals [2]*Interaction
+			var snapshots [2]PausedInteraction
+			for n := range originals {
+				_, originals[n] = StartInteraction(context.Background(), InteractionOptions{
+					InteractionID: "shared", UserID: "user", AnonymousID: "anonymous", ConversationID: "conversation", Classify: Ptr(false),
+				})
+				defer originals[n].End(EndOptions{})
+				var ok bool
+				snapshots[n], ok = originals[n].Pause(PauseOptions{})
+				if !ok {
+					t.Fatal("pause failed")
+				}
+			}
+			if snapshots[0].PauseToken == "" || snapshots[0].PauseToken == snapshots[1].PauseToken {
+				t.Fatalf("pause tokens must be set and distinct: %q, %q", snapshots[0].PauseToken, snapshots[1].PauseToken)
+			}
+			_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshots[restoreIndex], Classify: Ptr(false)})
+			defer restored.End(EndOptions{})
+			if restored.Ended() {
+				t.Fatal("a restore holding its pause's token must take that pause's slot")
+			}
+			open.mu.Lock()
+			defer open.mu.Unlock()
+			if _, ok := open.paused[weak.Make(originals[restoreIndex])]; ok {
+				t.Error("the restored pause's slot was not transferred")
+			}
+			if _, ok := open.paused[weak.Make(originals[1-restoreIndex])]; !ok {
+				t.Error("the other pause lost its slot")
+			}
+		})
 	}
 }

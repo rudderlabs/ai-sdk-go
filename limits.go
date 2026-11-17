@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 	"weak"
+
+	"github.com/google/uuid"
 )
 
 // Limits caps the memory the SDK holds. A zero field keeps its default. Identical defaults in
@@ -65,11 +67,12 @@ func limitReached(name string) {
 // must match the run's identity, not just an application-chosen interaction ID.
 type pausedSlot struct {
 	id, conversationID, userID, anonymousID string
+	token                                   string
 	order                                   uint64
 }
 
 func slotFor(i *Interaction) pausedSlot {
-	return pausedSlot{i.id, i.conversationID, i.userID, i.anonymousID, i.ownerOrder}
+	return pausedSlot{i.id, i.conversationID, i.userID, i.anonymousID, i.pauseToken, i.ownerOrder}
 }
 
 // open holds the open interactions, oldest first, for MaxOpenInteractions and the TTL sweep.
@@ -127,12 +130,13 @@ func holdPausedSlot(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
+	i.pauseToken = uuid.NewString()
 	open.paused[weak.Make(i)] = slotFor(i)
 }
 
-// takePausedSlot transfers a counted slot only when the restored identity has a
-// unique match. Ambiguous matches leave every original registered and go through
-// ordinary admission, just like a snapshot from another process.
+// takePausedSlot transfers a counted slot only to the restore of the exact pause the
+// snapshot names: its token and identity both match. Anything else (an older snapshot
+// without a token, one from another process or tenant) goes through ordinary admission.
 func takePausedSlot(i *Interaction) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
@@ -140,7 +144,7 @@ func takePausedSlot(i *Interaction) bool {
 	var matchedSlot pausedSlot
 	found := false
 	for ref, slot := range open.paused {
-		if slot.id != i.id || slot.conversationID != i.conversationID ||
+		if i.pauseToken == "" || slot.token != i.pauseToken || slot.id != i.id || slot.conversationID != i.conversationID ||
 			slot.userID != i.userID || slot.anonymousID != i.anonymousID {
 			continue
 		}
