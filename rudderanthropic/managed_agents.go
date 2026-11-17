@@ -452,6 +452,9 @@ func snapshotOptions(o rudderstackai.InteractionOptions) rudderstackai.Interacti
 	if o.AttachmentCount != nil {
 		o.AttachmentCount = rudderstackai.Ptr(*o.AttachmentCount)
 	}
+	if o.Request != nil {
+		o.Request = o.Request.Clone(o.Request.Context()) // deep-copies the headers that carry cookies
+	}
 	o.AttachmentTypes, o.Context, o.CookieValues = slices.Clone(o.AttachmentTypes), maps.Clone(o.Context), maps.Clone(o.CookieValues)
 	return o
 }
@@ -535,6 +538,10 @@ func (s *sessionTracker) observe(raw string) {
 	case "session.status_running", "session.status_rescheduled":
 		if s.turn != nil {
 			s.turn.waiting = ""
+			// The turn runs at least until this event, also when it is the last one read.
+			if at.ok {
+				s.turn.lastAt = at
+			}
 		} else if !s.isRunning() {
 			s.running(at)
 		}
@@ -608,6 +615,10 @@ func (s *sessionTracker) observe(raw string) {
 		t := s.turn
 		if t == nil {
 			t = s.ending(kind, at)
+		}
+		// A last error still counts in the turn's latency.
+		if t != nil && at.ok {
+			t.lastAt = at
 		}
 		s.sessionError(t, e)
 	case "session.status_idle":

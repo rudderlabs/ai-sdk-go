@@ -1817,3 +1817,53 @@ func TestManagedAgentsCountsTheDenialOfAToolWithoutAnID(t *testing.T) {
 		t.Fatalf("%v", entry)
 	}
 }
+
+func TestManagedAgentsKeepsServerLatencyUpToALastRunningOrErrorEvent(t *testing.T) {
+	for _, last := range []struct{ typ, fields string }{
+		{"session.status_running", ""},
+		{"session.status_rescheduled", ""},
+		{"session.error", `"error":{"type":"unknown_error","message":"x","retry_status":{"type":"terminal"}},`},
+	} {
+		t.Run(last.typ, func(t *testing.T) {
+			_, rec := setup(t)
+			resetMA(t)
+			events := rudderanthropic.TrackSessionEvents(context.Background(), maEvents(t,
+				`{"id":"sevt_last_r","type":"session.status_running",`+maAt(0)+`}`,
+				`{"id":"sevt_last_u","type":"user.message","content":[],`+maAt(0)+`}`,
+				`{"id":"sevt_last_s","type":"span.model_request_start",`+maAt(1000)+`}`,
+				`{"id":"sevt_last_x","type":"`+last.typ+`",`+last.fields+maAt(3000)+`}`,
+			), rudderanthropic.WithSessionID("sesn_last_"+last.typ))
+			maDrain(events)
+			_ = events.Close()
+			got := rec.events(t)["ai_response_received"]
+			if len(got) != 1 || got[0]["latency_ms"] != float64(3000) {
+				t.Fatalf("%v", got)
+			}
+		})
+	}
+}
+
+func TestManagedAgentsKeepsTheOptionsRequestCookiesAsTheyWereWhenTheStreamWasWrapped(t *testing.T) {
+	f, sc := maFixtureScenario(t, "text_turn_capture")
+	_, rec := setup(t, rudderstackai.WithIdentityFromCookies(true))
+	resetMA(t)
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Cookie", "rl_anonymous_id=%22original%22")
+	events := rudderanthropic.TrackSessionEvents(context.Background(), &sliceStream{events: decodeEvents(t, sc.Streams[0].Events)},
+		rudderanthropic.WithSession(withID(f.Session, "sesn_nested_request")),
+		rudderanthropic.WithInteractionOptions(rudderstackai.InteractionOptions{Request: req}))
+	req.Header.Set("Cookie", "rl_anonymous_id=%22later%22")
+	maDrain(events)
+	_ = events.Close()
+	rudderstackai.Flush(context.Background())
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.msgs) == 0 {
+		t.Fatal("no events")
+	}
+	for _, m := range rec.msgs {
+		if m.AnonymousId != "original" {
+			t.Errorf("%s anonymousId %q", m.Event, m.AnonymousId)
+		}
+	}
+}
