@@ -156,10 +156,12 @@ err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{T
 
 - In process, `Resume()` continues the run; a model or tool call recorded while paused resumes it too.
 - Across processes (a worker restart, a wait of days), store the `PausedInteraction` (JSON, keys as the event properties) with your own run state and pass it as `InteractionOptions.Resume` or `TaskOptions.Resume`. The optional `last_failed_call_type` field retains the latest failed model call’s category so a resumed `RunTask` that returns a generic error reports the same error type and status. Older snapshots without it remain valid and use `app_error` until another model call fails. The snapshot carries the IDs, identity, background fields, agent version, variant, confidence, intent, outcome, trace ID, integration, pause count and paused time, and when the pause started; the time until the resume counts as paused, by the wall clock. Calls before the pause are already sent; usage accepted during pause delivery is kept for the next segment, including credits and per-call fields.
-- A context saved before a snapshot was restored in this process follows the run: model calls, spans and `FromContext` with it use the restored interaction, and once that ended a call is a separate answer.
+- A context saved before a snapshot was restored in this process follows the run: model calls, spans and `FromContext` with it use the restored interaction, and once that ended a call is a separate answer. Snapshots produced by older SDK versions still restore but cannot link saved contexts.
 - `RunInteraction` and `RunTask` leave a paused run paused when `fn` returns nil (an error still ends it). A paused run is off the open list: `Limits.InteractionTTL` and `Shutdown` never end it, and an abandoned one ends with its last `paused` event.
 - `PauseOptions`: `Reason` (default `PauseOther`), `ResponseText` (sent as `response_text` only with content capture on), `ExtraProperties`. Pausing again before a resume sends nothing and returns the same snapshot; after `End`, `ok` is false.
 - `End` while paused ends the run: the wait counts as paused time, and the final segment has no calls.
+
+After restoring a snapshot in the same process, run follow-up work in the restored interaction's context; helpers on a context saved before the restore keep the old client and session.
 
 ## Context values
 

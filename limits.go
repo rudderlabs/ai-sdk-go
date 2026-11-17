@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Limits caps the memory the SDK holds. A zero field keeps its default. Identical defaults in
@@ -70,7 +72,7 @@ func limitReached(name string) {
 var open = struct {
 	mu        sync.Mutex
 	list      *list.List
-	paused    map[string]*Interaction // paused runs by ID, which hold a slot until they end
+	paused    map[string]*Interaction // paused runs by per-pause token, each holding its own slot
 	lastSweep time.Time
 }{list: list.New(), paused: map[string]*Interaction{}}
 
@@ -111,8 +113,8 @@ func unregister(i *Interaction) {
 
 // releasePausedSlotLocked frees the paused slot i holds, not one another run under its ID holds.
 func releasePausedSlotLocked(i *Interaction) {
-	if open.paused[i.id] == i {
-		delete(open.paused, i.id)
+	if open.paused[i.pauseToken] == i {
+		delete(open.paused, i.pauseToken)
 	}
 }
 
@@ -125,19 +127,20 @@ func holdPausedSlot(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	open.paused[i.id] = i
+	i.pauseToken = uuid.NewString()
+	open.paused[i.pauseToken] = i
 }
 
 // takePausedSlot moves a paused run's slot to i, which continues it: contexts carrying the paused
-// run then report into i. False when this process holds none for its ID.
+// run then report into i. Only the exact pause named by the snapshot can supply the slot.
 func takePausedSlot(i *Interaction) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	paused, held := open.paused[i.id]
-	if !held {
+	paused, held := open.paused[i.pauseToken]
+	if !held || paused.id != i.id {
 		return false
 	}
-	delete(open.paused, i.id)
+	delete(open.paused, i.pauseToken)
 	paused.continueAs(i)
 	if i.elem == nil {
 		i.opened = time.Now()
