@@ -1009,6 +1009,7 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 		credits = nil
 	}
 	explicit := credits != nil
+	priced := false
 	if credits == nil && earlier.errorType != "" && earlier.errorType != "cancelled" {
 		credits = earlier.credits
 	}
@@ -1038,9 +1039,14 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 			earlier.credits = nil
 			i.mu.Unlock()
 			var failed bool
+			priced = true
 			credits, failed = priceCreditsAttempt(hook, basis)
 			i.mu.Lock()
 			earlier.pricingActive = false
+			if earlier.errorType != "" || earlier.usageUnknown {
+				credits = nil
+				break
+			}
 			if failed || version == earlier.pricingRevision {
 				break
 			}
@@ -1055,6 +1061,9 @@ func (i *Interaction) enrichRepeatLocked(earlier *recordedCall, call LLMCall, ho
 	}
 	if i.ended || !slices.Contains(i.calls, earlier) {
 		return
+	}
+	if priced && earlier.errorType != "" {
+		credits = nil
 	}
 	if !earlier.creditsExplicit {
 		earlier.credits, earlier.creditsExplicit = credits, explicit
@@ -1173,6 +1182,7 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	responseBeforeCredits := i.seen[call.Provider+"\x00"+call.ResponseID]
 	liveTwin := responseBeforeCredits != nil && responseBeforeCredits.fromSpan != (call.Integration == "tracing") && !responseBeforeCredits.twinMatched
 	credits := creditsOf(call.Credits)
+	hookPriced := false
 	// Retained credits apply only when the new report keeps the retained usage.
 	replacesTwin := pricingTwin != nil && !call.UsageUnknown && call.ErrorType == "" &&
 		(call.Integration != "tracing" || pricingTwin.usageUnknown)
@@ -1215,6 +1225,10 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			creditCall.CacheWriteTokens, creditCall.ServiceTier, creditCall.CostUSD = pricingTwin.cacheWriteTokens, pricingTwin.serviceTier, pricingTwin.costUSD
 		}
 		for attempt := 0; attempt < 3; attempt++ {
+			if pricingTwin != nil && pricingTwin.errorType != "" {
+				credits = nil
+				break
+			}
 			version := 0
 			if pricingTwin != nil {
 				version = pricingTwin.pricingRevision
@@ -1238,10 +1252,17 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 				pricingTwin.pricingActive = true
 			}
 			i.mu.Unlock()
+			hookPriced = true
 			credits = priceCredits(c.credits, creditCall)
 			i.mu.Lock()
 			if pricingTwin != nil {
 				pricingTwin.pricingActive = false
+				// A concurrent report may have failed the retained call while pricing
+				// ran outside the lock. Neither this result nor a retry may bill it.
+				if pricingTwin.errorType != "" {
+					credits = nil
+					break
+				}
 			}
 			if pricingTwin == nil || version == pricingTwin.pricingRevision {
 				break
@@ -1284,7 +1305,11 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 			// A nested authoritative twin can become matched while this hook is pricing it.
 			// The retry used its current basis; publish that amount with the retained metadata.
 			if earlier == pricingTwin && earlier.twinMatched && !earlier.creditsExplicit && c.credits != nil {
-				earlier.credits = credits
+				if earlier.errorType == "" {
+					earlier.credits = credits
+				} else {
+					earlier.credits = nil
+				}
 			}
 			// Hook-derived credits on a different basis cannot merge.
 			if call.Credits != nil && call.ErrorType != "cancelled" && earlier.errorType != "cancelled" {
@@ -1371,6 +1396,11 @@ func (i *Interaction) recordCall(call LLMCall) bool {
 	}
 	// Select after the credit callback, which may itself record another report.
 	if twin := i.callTwinLocked(r); twin != nil {
+		// A twin may have first appeared while the hook ran, so re-read its
+		// outcome at publication even when there was no pre-hook pricing twin.
+		if hookPriced && twin.errorType != "" {
+			r.credits = nil
+		}
 		// A twin that stands for more calls takes more places in call_index.
 		i.callSeq += max(0, r.callCount-twin.callCount)
 		if i.answerSource == r {
@@ -1588,8 +1618,12 @@ func mergeCallTwin(kept, later *recordedCall) {
 	if kept.costUSD == nil && kept.errorType == "" {
 		kept.costUSD = later.costUSD
 	}
-	// The latest error classification wins; known finish reasons and caps survive.
-	kept.errorType, kept.errorCount = later.errorType, later.errorCount
+	// An unset or successful span cannot erase a wrapper's failure (native
+	// instrumentation may leave cancelled spans unset). A wrapper can still
+	// supersede its span's outcome; otherwise the latest failure wins.
+	if later.errorType != "" || !later.fromSpan || kept.errorType == "" {
+		kept.errorType, kept.errorCount = later.errorType, later.errorCount
+	}
 	if later.errorType != "" && later.errorCount == later.callCount {
 		kept.errorCount = kept.callCount
 	}
@@ -1598,6 +1632,8 @@ func mergeCallTwin(kept, later *recordedCall) {
 	}
 	if kept.errorType == "cancelled" {
 		kept.costUSD, kept.credits = nil, nil
+	} else if kept.errorType != "" && !kept.creditsExplicit {
+		kept.credits = nil
 	}
 	fillString(&kept.model, later.model)
 	fillString(&kept.requestedModel, later.requestedModel)

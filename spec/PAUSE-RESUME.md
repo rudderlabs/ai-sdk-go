@@ -49,4 +49,3 @@ Per-call content follows the binary sanitization rules in `fixtures/FIXTURE-FORM
 
 - Corrupt snapshots: Node accepts some non-RFC3339 timestamp strings that `Date.parse` understands (for example `"2026-11-17"`); Python and Go reject the snapshot.
 - Go only: a credits hook that changes the call's metadata and then fails (error, panic or invalid value) is retried, and the retry's credits are published; Node and Python stop at the failing attempt and omit credits.
-- Go only: if another goroutine reports a call as failed, cancelled or timed out while its credits hook is still running, the call can be published with credits; Node and Python omit them.
