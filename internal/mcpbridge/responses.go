@@ -15,7 +15,8 @@ var ResponseTimeout = 10 * time.Second
 
 // Responses matches the JSON-RPC responses one connection or HTTP request writes to the client
 // with the tracked requests awaiting them, by request id. Each waiter runs exactly once: with the
-// response, or with nil when none can follow (failed write, close, timeout).
+// response, or with nil when none is seen (close, timeout). A response whose write failed is
+// passed with failed set.
 type Responses struct {
 	mu      sync.Mutex
 	waiting map[string]*waiter
@@ -24,8 +25,15 @@ type Responses struct {
 }
 
 type waiter struct {
-	done  func(response map[string]any)
+	done  func(response map[string]any, failed bool)
 	timer *time.Timer
+}
+
+// run calls done, containing a panic: waiters run on the application's writer and timer
+// goroutines, where telemetry must never fail the transport.
+func (w *waiter) run(response map[string]any, failed bool) {
+	defer func() { _ = recover() }()
+	w.done(response, failed)
 }
 
 // NewResponses returns an open observer.
@@ -33,9 +41,20 @@ func NewResponses() *Responses {
 	return &Responses{waiting: map[string]*waiter{}}
 }
 
-// Await registers done for the response to request id. It returns false, and never calls done,
-// when r is nil or closed, the id is not a JSON-RPC id, or the id is already awaited.
+// Await registers done for the response to request id; a response whose write failed is passed
+// as nil. It returns false, and never calls done, when r is nil or closed, the id is not a
+// JSON-RPC id, or the id is already awaited.
 func (r *Responses) Await(id any, done func(response map[string]any)) bool {
+	return r.AwaitWrite(id, func(response map[string]any, failed bool) {
+		if failed {
+			response = nil
+		}
+		done(response)
+	})
+}
+
+// AwaitWrite is Await, also reporting whether the response's write failed.
+func (r *Responses) AwaitWrite(id any, done func(response map[string]any, failed bool)) bool {
 	key, ok := IDKey(id)
 	if r == nil || !ok {
 		return false
@@ -49,7 +68,7 @@ func (r *Responses) Await(id any, done func(response map[string]any)) bool {
 	r.waiting[key] = w
 	w.timer = time.AfterFunc(ResponseTimeout, func() {
 		if r.take(key, w) {
-			done(nil)
+			w.run(nil, false)
 		}
 	})
 	r.mu.Unlock()
@@ -90,17 +109,19 @@ func (r *Responses) Waiting() bool {
 
 // Deliver hands a decoded message to the request awaiting its id. Only responses (an id with a
 // result or an error, and no method) match: a server-to-client request may reuse an id.
-func (r *Responses) Deliver(msg map[string]any) {
+func (r *Responses) Deliver(msg map[string]any) { r.deliver(msg, false) }
+
+func (r *Responses) deliver(msg map[string]any, failed bool) {
 	if _, ok := msg["method"]; ok {
 		return
 	}
 	_, result := msg["result"]
-	_, failed := msg["error"]
-	if !result && !failed {
+	_, rpcError := msg["error"]
+	if !result && !rpcError {
 		return
 	}
 	if w := r.pop(msg["id"]); w != nil {
-		w.done(msg)
+		w.run(msg, failed)
 	}
 }
 
@@ -115,25 +136,47 @@ func (r *Responses) Incoming(data []byte) {
 	}
 }
 
-// decode reads one JSON-RPC message or a batch.
+// decode reads one JSON-RPC message or a batch. A response's _result_size is the written
+// length of its result, so sizes follow the bytes the client got.
 func decode(data []byte) (out []map[string]any) {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
-	var v any
-	if dec.Decode(&v) != nil {
-		return nil
-	}
-	switch x := v.(type) {
-	case map[string]any:
-		out = append(out, x)
-	case []any:
-		for _, item := range x {
-			if m, ok := item.(map[string]any); ok {
+	data = bytes.TrimSpace(data)
+	if bytes.HasPrefix(data, []byte("[")) {
+		var items []json.RawMessage
+		if json.Unmarshal(data, &items) != nil {
+			return nil
+		}
+		for _, item := range items {
+			if m := decodeMessage(item); m != nil {
 				out = append(out, m)
 			}
 		}
+		return out
+	}
+	if m := decodeMessage(data); m != nil {
+		out = append(out, m)
 	}
 	return out
+}
+
+func decodeMessage(data []byte) map[string]any {
+	var members map[string]json.RawMessage
+	if json.Unmarshal(data, &members) != nil {
+		return nil
+	}
+	m := make(map[string]any, len(members))
+	for k, raw := range members {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.UseNumber()
+		var v any
+		if dec.Decode(&v) != nil {
+			return nil
+		}
+		m[k] = v
+	}
+	if result, ok := members["result"]; ok && m["_result_size"] == nil {
+		m["_result_size"] = len(result)
+	}
+	return m
 }
 
 // DeliverJSON decodes one message or a batch and delivers each response in it.
@@ -143,10 +186,17 @@ func (r *Responses) DeliverJSON(data []byte) {
 	}
 }
 
-// Fail runs the waiter for id without a response: its write failed.
+// FailJSON passes each response in a message or batch whose write failed to its waiter.
+func (r *Responses) FailJSON(data []byte) {
+	for _, msg := range decode(data) {
+		r.deliver(msg, true)
+	}
+}
+
+// Fail runs the waiter for id without a response: none will be matched to it.
 func (r *Responses) Fail(id any) {
 	if w := r.pop(id); w != nil {
-		w.done(nil)
+		w.run(nil, false)
 	}
 }
 
@@ -163,7 +213,7 @@ func (r *Responses) Close() {
 	}
 	for _, w := range waiting {
 		w.timer.Stop()
-		w.done(nil)
+		w.run(nil, false)
 	}
 }
 

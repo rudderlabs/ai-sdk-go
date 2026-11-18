@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"maps"
 	"math"
 	"reflect"
@@ -246,13 +247,14 @@ func (w *weakMap[K, V]) size() int {
 
 // reqCtx is everything known about one request, for the events it causes.
 type reqCtx struct {
-	w         *wrapped
-	st        *serverState
-	opts      *options
-	base      map[string]any
-	who       who
-	identity  Identity
-	requestID string
+	interaction *Interaction
+	w           *wrapped
+	st          *serverState
+	opts        *options
+	base        map[string]any
+	who         who
+	identity    Identity
+	requestID   string
 	// scopeParts are the raw ["session"|"interaction"|"connection", id]; nil when there is none.
 	// scope is their caller-scoped state key.
 	scopeParts        []string
@@ -269,6 +271,8 @@ type reqCtx struct {
 	meta              map[string]any
 	callerModel       map[string]any
 	start             time.Time
+	completed         time.Time
+	wireResultSize    int
 	tool              *toolState
 	// responses, rawID and held send a failed request's events once its final response is
 	// written, with error_message from that response.
@@ -402,7 +406,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 		base["interaction_id"] = mintID()
 	}
 	put(base, "trace_id", traceID)
-	rc := &reqCtx{
+	rc := &reqCtx{interaction: FromContext(r.Ctx),
 		w: w, st: st, opts: opts, base: base, who: who{id.UserID, id.AnonymousID}, identity: id,
 		client: seenClient, requestID: safeRequestID(r.RequestID), rawID: r.RequestID, responses: r.Responses, http: r.HTTP, meta: map[string]any{}, start: time.Now(),
 		initializeClient: r.InitializeClient, received: received, sequence: sequence, registeredTools: r.RegisteredTools, registeredPrompts: r.RegisteredPrompts,
@@ -795,6 +799,80 @@ func (w *wrapped) RememberTemplates(templates []string) {
 
 // ToolDone records the end of a tools/call.
 func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
+	if rc.tool == nil || rc.tool.skip {
+		return
+	}
+	rc.completed = time.Now()
+	if rc.scope != "" {
+		rc.st.Lock()
+		if scope, ok := rc.st.scopes.get(rc.scope); ok {
+			scope.last = rc.completed
+		}
+		rc.st.Unlock()
+	}
+	if rc.responses != nil && o.Result != nil && !o.InputRequired {
+		h := &heldEvents{props: map[string]any{}, tool: true, sent: make(chan struct{}), current: rc.currentOptions}
+		// Publish before Await: a concurrent close can release the callback immediately.
+		rc.held = h
+		if rc.responses.AwaitWrite(rc.rawID, func(response map[string]any, failed bool) {
+			// The held events go out even if mapping the response fails; a failed write gives
+			// them no error_message.
+			delivered := response
+			if failed {
+				delivered = nil
+			}
+			defer h.flush(delivered)
+			safely(func() { rc.toolWritten(o, response, failed) })
+		}) {
+			return
+		}
+		rc.held = nil
+		// The observer is closed or cannot match this id: capture as without an observer.
+	}
+	rc.toolDone(o)
+}
+
+// toolWritten records a tools/call once its response is written. A response that is not seen
+// (close, timeout, reused id) is captured as without an observer; a failed write captures no
+// result content. Either way the outcome follows the handler's result, as before.
+func (rc *reqCtx) toolWritten(o mcpbridge.Outcome, response map[string]any, failed bool) {
+	if response == nil {
+		rc.toolDone(o)
+		return
+	}
+	original := o.Result
+	if result, present := response["result"]; present {
+		rc.wireResultSize, _ = strconv.Atoi(fmt.Sprint(response["_result_size"]))
+		// An oversized message keeps no body: the handler's result gives the rule inputs.
+		if response["_content_omitted"] != true {
+			o.Result = result
+		}
+	} else if e, ok := response["error"].(map[string]any); ok {
+		o.Result = nil
+		code, _ := strconv.Atoi(fmt.Sprint(e["code"]))
+		o.ErrorType = mcpWireErrorType(code)
+	}
+	rc.toolDoneSeed(o, original, failed)
+}
+
+func (rc *reqCtx) toolDone(o mcpbridge.Outcome) { rc.toolDoneSeed(o, nil, false) }
+
+// declaredRule is the declared event rule for this tools/call, if any.
+func (rc *reqCtx) declaredRule() (ToolEventRule, bool) {
+	if rc.tool == nil || !rc.tool.registered {
+		return ToolEventRule{}, false
+	}
+	rule, ok := rc.opts.rules[rc.rawToolName]
+	return rule, ok
+}
+
+// toolDoneSeed records the outcome. original is the handler's result when o.Result is the written
+// one; failed leaves result content uncaptured.
+func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
+	if rc.interaction != nil {
+		leave := rc.interaction.enterCallback(false)
+		defer leave()
+	}
 	t := rc.tool
 	if t == nil || t.skip {
 		return
@@ -802,11 +880,12 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 	extra := map[string]any{}
 	status := "success"
 	var result map[string]any
+	var resultContent captureReport
 	switch {
 	case o.Cancelled:
 		status = "error"
 		extra["error_type"] = "cancelled"
-		extra["time_to_cancel_ms"] = time.Since(rc.start).Milliseconds()
+		extra["time_to_cancel_ms"] = rc.completed.Sub(rc.start).Milliseconds()
 	case o.ErrorType != "":
 		status = "error"
 		extra["error_type"] = o.ErrorType
@@ -818,14 +897,49 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 		status = "error"
 		extra["error_type"] = "api_error"
 	default:
-		b, _ := compactJSON(o.Result)
-		_ = json.Unmarshal(b, &result)
-		for k, v := range resultStats(result, len(b)) {
+		size := 0
+		if _, declared := rc.declaredRule(); declared && !failed {
+			// Rule properties reuse this report's content instead of serializing again.
+			resultContent = captureResolved(o.Result, func(resolved any) {
+				b, _ := compactJSON(resolved)
+				_ = json.Unmarshal(b, &result)
+			})
+			size = resultContent.size
+			source := o.Result
+			if original != nil {
+				source = original
+			}
+			seedMCPResult(&walk{memo: resultContent.memo}, source, resultContent.value)
+		} else {
+			// Nothing is stored: the base encoding gives the classification inputs and size.
+			b, _ := captureEncoded(o.Result)
+			_ = json.Unmarshal(b, &result)
+			size = len(b)
+		}
+		if rc.wireResultSize > 0 {
+			size = rc.wireResultSize
+		}
+
+		if requests, ok := result["inputRequests"].(map[string]any); ok {
+			var keys []string
+			for key, value := range requests {
+				if m, _ := value.(map[string]any); m["method"] == "elicitation/create" {
+					keys = append(keys, key)
+				}
+			}
+			rc.inputRequired(keys, str(result["requestState"]))
+			return
+		}
+		for k, v := range resultStats(result, size) {
 			extra[k] = v
 		}
 		isError, _ := result["isError"].(bool)
 		extra["is_error_result"] = isError
-		if isError {
+		if isError && o.ContextCancelled {
+			status = "error"
+			extra["error_type"] = "cancelled"
+			extra["time_to_cancel_ms"] = rc.completed.Sub(rc.start).Milliseconds()
+		} else if isError {
 			status = "error"
 			kind := toolErrorType(o.ClassifiedError, result)
 			if invalid := invalidArguments(t.schema, t.args); len(invalid) > 0 {
@@ -841,7 +955,7 @@ func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 		}
 	}
 	rc.finish("mcp_tool_called", "tool_name", rc.toolName, status, extra)
-	rc.declaredEvent(result, status)
+	rc.declaredEvent(result, status, resultContent)
 }
 
 // Finished records a resources/read or prompts/get.
@@ -867,7 +981,10 @@ func (rc *reqCtx) Finished(method, name string, size int, errorType string) {
 }
 
 func (rc *reqCtx) finish(event, nameKey, name, status string, extra map[string]any) {
-	end := time.Now()
+	end := rc.completed
+	if end.IsZero() {
+		end = time.Now()
+	}
 	p := map[string]any{}
 	for k, v := range rc.base {
 		p[k] = v
@@ -882,7 +999,7 @@ func (rc *reqCtx) finish(event, nameKey, name, status string, extra map[string]a
 		for k, v := range t.props {
 			p[k] = v
 		}
-		if rc.scope != "" {
+		if rc.scope != "" && rc.completed.IsZero() {
 			rc.st.Lock()
 			if s, ok := rc.st.scopes.get(rc.scope); ok {
 				s.last = end
@@ -895,7 +1012,8 @@ func (rc *reqCtx) finish(event, nameKey, name, status string, extra map[string]a
 	}
 	p = jsonSafeMap(p)
 	client, identity := rc.opts.Analytics, rc.who
-	rc.send(event, p, func() { emit(client, event, identity, p) })
+	// Held until the response is written: the event still describes the handler's end.
+	rc.send(event, p, func() { emitAt(client, event, identity, p, end) })
 }
 
 // heldEvents are a failed request's event and the request's later events, sent in order once
@@ -914,9 +1032,12 @@ type heldEvents struct {
 
 // add queues send behind the held events. Once flushing has begun it waits until they are sent
 // and returns false, so the caller sends afterwards and the order holds.
-func (h *heldEvents) add(send func()) bool {
+func (h *heldEvents) add(send func(), props map[string]any) bool {
 	h.mu.Lock()
 	if !h.done {
+		if props != nil {
+			h.props = props
+		}
 		h.sends = append(h.sends, send)
 		h.mu.Unlock()
 		return true
@@ -934,7 +1055,7 @@ func (h *heldEvents) flush(response map[string]any) {
 	sends := h.sends
 	h.sends = nil
 	h.mu.Unlock()
-	if response != nil {
+	if response != nil && h.props["error_type"] != "cancelled" && h.props["tool_status"] != "success" {
 		safely(func() {
 			opts := h.current()
 			if !opts.capture().ErrorMessage {
@@ -972,7 +1093,11 @@ func (rc *reqCtx) currentOptions() *options {
 }
 
 func (rc *reqCtx) send(event string, p map[string]any, send func()) {
-	if h := rc.held; h != nil && h.add(send) {
+	var heldProps map[string]any
+	if failureEvents[event] {
+		heldProps = p
+	}
+	if h := rc.held; h != nil && h.add(send, heldProps) {
 		return
 	}
 	if rc.responses != nil && rc.opts.capture().ErrorMessage && failureEvents[event] &&
@@ -1010,11 +1135,8 @@ func toolResultValue(result map[string]any) any {
 	return result["content"]
 }
 
-func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
-	if rc.tool == nil || !rc.tool.registered {
-		return
-	}
-	rule, ok := rc.opts.rules[rc.rawToolName]
+func (rc *reqCtx) declaredEvent(result map[string]any, status string, captured ...captureReport) {
+	rule, ok := rc.declaredRule()
 	if !ok {
 		return
 	}
@@ -1074,6 +1196,19 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 			}
 		}
 	}
+	var seeds []captureSeed
+	if len(captured) > 0 {
+		seeds = append(seeds, captureSeed{memo: captured[0].memo})
+	}
+	sdk := map[string]any{}
+	for _, key := range []string{"argument_keys", "invalid_arguments", "request_id", "tool_name", "client_name", "client_title", "client_version"} {
+		if value, ok := p[key]; ok {
+			sdk[key] = value
+			delete(p, key)
+		}
+	}
+	p = captureProperties(p, seeds...)
+	maps.Copy(p, sdk)
 	custom := slices.Collect(maps.Keys(p))
 	for k, v := range rc.base {
 		p[k] = v
@@ -1083,7 +1218,11 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string) {
 	rates := cfg().sampleRates
 	fitted := jsonSafeMap(fitToolEventProperties(rule.Event, p, custom, rates))
 	client, identity, event := rc.opts.Analytics, rc.who, rule.Event
-	rc.send(event, fitted, func() { emitRates(client, event, identity, fitted, rates) })
+	at := rc.completed
+	if at.IsZero() {
+		at = time.Now()
+	}
+	rc.send(event, fitted, func() { emitRatesAt(client, event, identity, fitted, rates, at) })
 }
 
 // inputKey scopes a pending elicitation to its caller and session or interaction, so another
@@ -1493,4 +1632,45 @@ func errorMessage(failure map[string]any, mask func(string) (string, bool)) stri
 		return ""
 	}
 	return capText(masked, maxTextLength)
+}
+
+func mcpWireErrorType(code int) string {
+	switch code {
+	case -32700, -32600, -32601, -32602, -32020, -32021, -32022:
+		return "invalid_request"
+	case -32001:
+		return "timeout"
+	case -32000:
+		return "connection_error"
+	case -32042:
+		return "auth_error"
+	default:
+		return "api_error"
+	}
+}
+
+// The MCP libraries' result envelopes have fixed field projections. Their own MarshalJSON
+// must not hide the identities of app values inside structuredContent from this report.
+func seedMCPResult(w *walk, original, captured any) {
+	rv := reflect.ValueOf(original)
+	w.seed(rv, captured, 0)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() || rv.Kind() != reflect.Struct || rv.Type().Name() != "CallToolResult" {
+		return
+	}
+	path := rv.Type().PkgPath()
+	if path != "github.com/mark3labs/mcp-go/mcp" && path != "github.com/modelcontextprotocol/go-sdk/mcp" {
+		return
+	}
+	m, _ := captured.(map[string]any)
+	for field, key := range map[string]string{"StructuredContent": "structuredContent", "Content": "content"} {
+		if value := rv.FieldByName(field); value.IsValid() {
+			w.seed(value, m[key], 0)
+		}
+	}
 }

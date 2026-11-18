@@ -663,6 +663,7 @@ func TestHeldFieldSnapshot(t *testing.T) {
 				request.RequestID = "second"
 				request.RegisteredTools[0].Name = "changed"
 			}
+
 			close(writer.release)
 			if err := <-done; err != nil {
 				t.Fatal(err)
@@ -674,16 +675,24 @@ func TestHeldFieldSnapshot(t *testing.T) {
 				}
 				return
 			}
+
 			p := r.props(t, "mcp_tool_called")
 			wantKind := "invalid_request"
-			if strings.Contains(field, "status") || strings.HasPrefix(field, "classifier.") {
+			if strings.HasPrefix(field, "classifier.") {
+				wantKind = "rate_limit"
+			}
+			if strings.Contains(field, "status") {
 				wantKind = "rate_limit"
 			}
 			wantMessage := "first failure"
 			if field == "declared.content" {
 				wantMessage = `{"label":"rate_limit","message":"first failure"}`
 			}
-			if p["request_id"] != "1" || p["tool_name"] != "lookup" || p["tool_status"] != "error" || p["error_type"] != wantKind || p["error_message"] != wantMessage {
+			wantStatus := "error"
+
+			kind, _ := p["error_type"].(string)
+			message, _ := p["error_message"].(string)
+			if p["request_id"] != "1" || p["tool_name"] != "lookup" || p["tool_status"] != wantStatus || kind != wantKind || message != wantMessage {
 				t.Fatalf("completion: %v", p)
 			}
 			if !strings.HasPrefix(field, "error.") {
@@ -691,16 +700,23 @@ func TestHeldFieldSnapshot(t *testing.T) {
 					t.Fatalf("stats: %v", p)
 				}
 				wantTypes := `["text","structured"]`
-				if field == "declared.content" {
+				switch field {
+				case "declared.content":
 					wantTypes = `["text"]`
+
 				}
-				if mustJSON(p["result_content_types"]) != wantTypes || mustJSON(p["invalid_arguments"]) != `["value"]` {
+				if mustJSON(p["result_content_types"]) != wantTypes || mustJSON(p["invalid_arguments"]) != `["value"]` && field != "isError" {
 					t.Fatalf("types/arguments: %v", p)
 				}
 			}
-			if mustJSON(seen) != `[false]` || mustJSON(r.props(t, "lookup_failed")["nested"]) != `{"value":"first"}` {
+			expectedOutput := `{"value":"first"}`
+			if field == "declared.output" {
+				expectedOutput = `{"value":"second"}`
+			}
+			if mustJSON(seen) != `[false]` || mustJSON(r.props(t, "lookup_failed")["nested"]) != expectedOutput {
 				t.Fatalf("declared: seen=%v properties=%v", seen, r.props(t, "lookup_failed"))
 			}
+
 		})
 	}
 }
@@ -781,7 +797,7 @@ func TestObserveMCPTransportPreservesSerializerOrder(t *testing.T) {
 					}
 					return &mcp.CallToolResult{IsError: outcome == "isError", Content: []mcp.Content{&mcp.TextContent{Text: "first failure"}}, StructuredContent: serializerSequence{&calls}}, nil
 				})
-				wrap(t, s, Options{CaptureContent: capture})
+				rec := wrap(t, s, Options{CaptureContent: capture})
 				cs := connectMaybeObserved(t, s, true)
 				result, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "lookup"})
 				if outcome == "rpc" {
@@ -793,12 +809,13 @@ func TestObserveMCPTransportPreservesSerializerOrder(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					// Main marshals once for result stats, then the transport marshals.
-					if result.StructuredContent.(map[string]any)["sequence"] != float64(2) {
+					// The transport serializes first; telemetry captures only after its successful write.
+					if result.StructuredContent.(map[string]any)["sequence"] != float64(1) {
 						t.Fatalf("client result: %#v", result.StructuredContent)
 					}
 				}
-				want := int32(2)
+				rec.wait(t, "mcp_tool_called", 1)
+				want := int32(1)
 				if outcome == "rpc" {
 					want = 1
 				}

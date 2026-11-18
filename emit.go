@@ -58,11 +58,21 @@ type who struct {
 // emit sends one MCP track call, within the properties budget, unless WithSampleRates samples it
 // out. Never panics; a client error drops the event.
 func emit(client analytics.Client, event string, w who, properties map[string]any) {
-	emitRates(client, event, w, properties, cfg().sampleRates)
+	emitAt(client, event, w, properties, time.Now())
+}
+
+// emitAt is emit stamped with at, for an event sent after the moment it describes.
+func emitAt(client analytics.Client, event string, w who, properties map[string]any, at time.Time) {
+	emitRatesAt(client, event, w, properties, cfg().sampleRates, at)
 }
 
 // emitRates is emit under one rates snapshot, so an event fitted under it is sampled under it.
 func emitRates(client analytics.Client, event string, w who, properties map[string]any, rates map[string]float64) {
+	emitRatesAt(client, event, w, properties, rates, time.Now())
+}
+
+// emitRatesAt stamps the event with at, for an event that is sent after the moment it describes.
+func emitRatesAt(client analytics.Client, event string, w who, properties map[string]any, rates map[string]float64, at time.Time) {
 	safely(func() {
 		rememberClient(client)
 		properties, kept := sample(event, properties, rates)
@@ -74,7 +84,7 @@ func emitRates(client analytics.Client, event string, w who, properties map[stri
 			UserId:            w.userID,
 			AnonymousId:       w.anonymousID,
 			Properties:        analytics.Properties(fitProperties(event, jsonSafeMap(properties))),
-			OriginalTimestamp: time.Now().UTC(),
+			OriginalTimestamp: at.UTC(),
 			Context: &analytics.Context{Extra: map[string]any{
 				"wrapperLibrary": map[string]any{
 					"name":        LibraryName,
