@@ -1005,6 +1005,43 @@ func TestRestorePendingUsageDecodedWithUseNumber(t *testing.T) {
 	}
 }
 
+func TestRestorePendingUsageExplicitCreditsThroughSpanTwin(t *testing.T) {
+	b, err := os.ReadFile("spec/fixtures/pause-pending-usage-v0.1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		ExplicitCredits struct {
+			HookCredits float64 `json:"hook_credits"`
+			Snapshot    PausedInteraction
+			Span        struct {
+				Provider     string
+				Model        string
+				ResponseID   string `json:"response_id"`
+				CallCount    int    `json:"call_count"`
+				InputTokens  int    `json:"input_tokens"`
+				OutputTokens int    `json:"output_tokens"`
+			}
+			Expected map[string]any
+		} `json:"explicit_credits"`
+	}
+	if err := json.Unmarshal(b, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	f := fixture.ExplicitCredits
+	r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) { return Ptr(f.HookCredits), nil }))
+	_, i := StartInteraction(context.Background(), InteractionOptions{Resume: &f.Snapshot})
+	s := f.Span
+	i.RecordCall(LLMCall{Integration: "tracing", Provider: s.Provider, Model: s.Model, ResponseID: s.ResponseID, CallCount: s.CallCount, InputTokens: s.InputTokens, OutputTokens: s.OutputTokens})
+	i.End(EndOptions{})
+	got := lastResponse(t, r)
+	for key, want := range f.Expected {
+		if mustJSON(got[key]) != mustJSON(want) {
+			t.Errorf("%s: got %v, want %v", key, got[key], want)
+		}
+	}
+}
+
 func TestResumeIgnoresRequestCookies(t *testing.T) {
 	r := setupAI(t)
 	_, first := StartInteraction(context.Background(), InteractionOptions{UserID: "a"})
@@ -1422,7 +1459,7 @@ func TestPausePreservesServerFieldsAndSegmentCompactions(t *testing.T) {
 	}
 }
 
-func TestCreditsCallbackCanPauseBeforeDuplicateRecheck(t *testing.T) {
+func TestCreditsCallbackPauseRefusedBeforeDuplicateRecheck(t *testing.T) {
 	var i *Interaction
 	r := setupAI(t, WithCredits(func(CreditCall) (*float64, error) {
 		call := pauseCall
@@ -1434,9 +1471,10 @@ func TestCreditsCallbackCanPauseBeforeDuplicateRecheck(t *testing.T) {
 	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
 	call := pauseCall
 	call.ResponseID = "same"
-	if i.RecordCall(call) || !i.Paused() {
+	if i.RecordCall(call) || i.Paused() {
 		t.Fatal("credits callback lost deduplication or pause state")
 	}
+	i.End(EndOptions{})
 	if p := lastResponse(t, r); p["total_credits"] != 2.0 || p["llm_call_count"] != 1 {
 		t.Fatal(p)
 	}

@@ -306,6 +306,7 @@ func (i *Interaction) filterSpanCallsLocked() {
 	}
 	for _, c := range before {
 		if skipped[c] {
+			c.answerFiltered = true
 			c.answerText = ""
 			c.content = nil
 			c.callEventPending = false
@@ -316,8 +317,15 @@ func (i *Interaction) filterSpanCallsLocked() {
 // Capture may record more calls or change the inferred answer. Reapply the rules
 // after each redaction and tool callback, keeping evidence until capture settles.
 // The caller holds mu; callbacks run unlocked and this returns with mu held.
-func (i *Interaction) captureResponseLocked(explicit string) (text string, ok bool) {
+func (i *Interaction) captureResponseLocked(explicit string, freeze bool) (text string, ok bool) {
+	leave := i.enterCallback(false)
+	defer leave()
+	i.filterSpanCallsLocked()
 	selected := first(explicit, i.spanAnswer)
+	var source *recordedCall
+	if explicit == "" {
+		source = i.spanAnswerSource
+	}
 	drained := 0
 	for {
 		captured := selected
@@ -336,6 +344,12 @@ func (i *Interaction) captureResponseLocked(explicit string) (text string, ok bo
 		}
 		i.filterSpanCallsLocked()
 		selected = first(explicit, i.spanAnswer)
+		// Only filtering the frozen answer's own call permits pause-time replacement.
+		if freeze && (source == nil || !source.answerFiltered) {
+			selected = captured
+		} else {
+			source = i.spanAnswerSource
+		}
 		if selected == captured {
 			break
 		}

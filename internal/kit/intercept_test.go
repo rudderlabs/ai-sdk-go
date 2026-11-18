@@ -824,6 +824,7 @@ func TestSSEParse(t *testing.T) {
 	b := &sseBody{h: &funcHandler{onEvent: func(e string, d []byte) { got = append(got, fmt.Sprintf("%s=%s", e, d)) }}}
 	for _, line := range []string{"event: ping\r\n", "\r\n", "data: a\n", "data:b\n", "retry: 10\n", "\n", "\n"} {
 		b.parse([]byte(line))
+		b.drainCallbacks()
 	}
 	if strings.Join(got, ";") != "ping=;=a\nb" {
 		t.Fatalf("events = %q", got)
@@ -835,6 +836,7 @@ func TestSSEParseOtherLines(t *testing.T) {
 	b := &sseBody{h: h}
 	for _, line := range []string{": comment\n", "id: 1\n", "retry: 5\n", `{"error":{"code":429}}` + "\n"} {
 		b.parse([]byte(line))
+		b.drainCallbacks()
 	}
 	if strings.Join(h.lines, ";") != `{"error":{"code":429}}` {
 		t.Fatalf("lines = %q", h.lines)

@@ -192,13 +192,15 @@ var servers = struct {
 }{m: newBoundedMap[*serverState](maxServers)}
 
 func stateFor(name string) *serverState {
+	var notices []func()
+	defer func() { deliverMapNotices(notices) }()
 	servers.Lock()
 	defer servers.Unlock()
 	st, ok := servers.m.get(name)
 	if !ok {
 		st = newServerState()
 	}
-	servers.m.set(name, st)
+	notices = append(notices, servers.m.setSilent(name, st))
 	return st
 }
 
@@ -455,6 +457,8 @@ func (rc *reqCtx) Succeeded(method string, discoverVersions []string) {
 
 // Initialized reports a successful initialize.
 func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, version string) {
+	var notices []func()
+	defer func() { deliverMapNotices(notices) }()
 	if knownClient(rc.initializeClient) {
 		client = rc.initializeClient
 	}
@@ -467,9 +471,9 @@ func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, versio
 			rc.st.Lock()
 			previous, ok := rc.st.clients.get(key)
 			if !ok || rc.sequence > previous.sequence {
-				rc.st.clients.set(key, rememberedClient{
+				notices = append(notices, rc.st.clients.setSilent(key, rememberedClient{
 					name: cleanClientText(client.Name), version: cleanClientText(client.Version), until: rc.received.Add(rc.opts.ClientSeenWindow), sequence: rc.sequence,
-				})
+				}))
 			}
 			rc.st.Unlock()
 		}
@@ -479,6 +483,8 @@ func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, versio
 }
 
 func (rc *reqCtx) clientSeen(client *mcpbridge.Client, caps []string) {
+	var notices []func()
+	defer func() { deliverMapNotices(notices) }()
 	var name, title, version string
 	if client != nil {
 		name, title, version = cleanClientText(client.Name), cleanClientText(client.Title), cleanClientText(client.Version)
@@ -491,7 +497,7 @@ func (rc *reqCtx) clientSeen(client *mcpbridge.Client, caps []string) {
 		rc.st.Unlock()
 		return
 	}
-	rc.st.clientSeen.set(key, now.Add(rc.opts.ClientSeenWindow))
+	notices = append(notices, rc.st.clientSeen.setSilent(key, now.Add(rc.opts.ClientSeenWindow)))
 	rc.st.Unlock()
 	p := map[string]any{}
 	put(p, "mcp_session_id", str(rc.base["mcp_session_id"]))
@@ -521,6 +527,8 @@ func (rc *reqCtx) clientSeen(client *mcpbridge.Client, caps []string) {
 
 // ToolCall records the start of a tools/call.
 func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progress bool, answers []mcpbridge.Answer, requestState string) (strip, capability bool) {
+	var notices []func()
+	defer func() { deliverMapNotices(notices) }()
 	opts := rc.opts
 	t := &toolState{props: map[string]any{}}
 	rc.tool = t
@@ -605,9 +613,9 @@ func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progres
 		key := rc.CallerKey(append(slices.Clone(rc.scopeParts), argumentsHash(rc.rawToolName, t.args))...)
 		n, _ := rc.st.retries.get(key)
 		t.props["retry_count"] = n
-		rc.st.retries.set(key, n+1)
+		notices = append(notices, rc.st.retries.setSilent(key, n+1))
 	}
-	rc.st.scopes.set(rc.scope, s)
+	notices = append(notices, rc.st.scopes.setSilent(rc.scope, s))
 	return strip, false
 }
 
@@ -758,18 +766,22 @@ func (rc *reqCtx) PromptName(name string) string {
 
 // RememberResources records resource names by URI from a resources/list.
 func (w *wrapped) RememberResources(byURI map[string]string) {
+	var notices []func()
+	defer func() { deliverMapNotices(notices) }()
 	st := w.state()
 	st.Lock()
 	defer st.Unlock()
 	for uri, name := range byURI {
 		if uri != "" && name != "" {
-			st.resources.set(uri, capID(name))
+			notices = append(notices, st.resources.setSilent(uri, capID(name)))
 		}
 	}
 }
 
 // RememberTemplates records URI templates from a resources/templates/list.
 func (w *wrapped) RememberTemplates(templates []string) {
+	var notices []func()
+	defer func() { deliverMapNotices(notices) }()
 	st := w.state()
 	st.Lock()
 	defer st.Unlock()
@@ -777,7 +789,7 @@ func (w *wrapped) RememberTemplates(templates []string) {
 		if _, ok := st.templates.get(t); t == "" || ok {
 			continue
 		}
-		st.templates.set(t, templateMatcher(t).MatchString)
+		notices = append(notices, st.templates.setSilent(t, templateMatcher(t).MatchString))
 	}
 }
 
@@ -1088,6 +1100,8 @@ func (rc *reqCtx) inputKey(key, requestState string) string {
 }
 
 func (rc *reqCtx) inputRequired(keys []string, requestState string) {
+	var notices []func()
+	defer func() { deliverMapNotices(notices) }()
 	var position map[string]any
 	if t := rc.tool; t != nil {
 		for _, k := range []string{"call_index", "ms_since_previous_call"} {
@@ -1102,9 +1116,9 @@ func (rc *reqCtx) inputRequired(keys []string, requestState string) {
 	rc.st.Lock()
 	defer rc.st.Unlock()
 	for _, key := range keys {
-		rc.st.inputRequired.set(rc.inputKey(key, requestState), pendingInput{
+		notices = append(notices, rc.st.inputRequired.setSilent(rc.inputKey(key, requestState), pendingInput{
 			start: time.Now(), requestID: rc.requestID, toolName: rc.toolName, position: position,
-		})
+		}))
 	}
 }
 

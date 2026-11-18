@@ -279,7 +279,7 @@ With `WithEmitSpans(true)`, a retained wrapper call carries `span_id`, matching 
 spans. Two invocations with the same response ID each emit a span; the deduplicated call event
 keeps the first invocation's ID. Overflow aggregates omit `span_id`.
 
-Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is recorded. Totals belong on `ai_response_received`; do not add these to it.
+Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is recorded. Totals belong on `ai_response_received`; do not add these to it. A call reported by both a wrapper and a span is sent once; when the other report arrives after the call's event was sent, totals and `usage_breakdown` merge it, but the sent event is not updated.
 
 ```json
 {
@@ -309,7 +309,10 @@ Also, when known: `agent_name`, `requested_model`, `reasoning_tokens`, `cache_wr
 - With both `WithLLMCallEvents(true)` and content capture (opt-in, personal data): `input_messages` (everything sent on the call: system prompt, history, tool results, in the OpenTelemetry GenAI `[{ role, parts }]` shape), `input_truncated`, `output_text` and `output_tool_calls` (`[{ name, arguments? }]`, JSON-string arguments parsed). Sent by every provider module and by `rudderotel` product-event spans; with `RecordCall` set `LLMCall.InputMessages`, `OutputText` and `OutputToolCalls`. A failed or cut-off call still sends its input and the output that arrived; the schema has no flag for a cut-off output.
 - Messages use roles `system`, `user`, `assistant` and `tool`; parts are `text`, `reasoning`, `tool_call` (`id`, `name`, `arguments`), `tool_call_response` (`id`, `response`), `uri` (`modality`, `uri`) and `file` (`modality`, `mime_type`?, `file_id`) and `blob` (`modality`, `mime_type`, never the bytes; `data:` URIs become blobs). Tool definitions are not sent.
 - Masking is the same as `prompt_text` (built-ins, then your redact hook) on every string in messages and tool arguments. A string over 32,000 code points is shortened first (`input_truncated` true); if the hook fails or drops a string, the whole field (`input_messages` with `input_truncated`, `output_text` or `output_tool_calls`) is left out.
-- Size: the event stays within 30,000 bytes. Over it, `output_text` and `output_tool_calls` that fit nowhere go first; then the oldest messages after the leading system messages are dropped (the last message always stays), then the longest string loses its tail; `input_truncated` is true. Calls folded past `MaxCallsPerInteraction` send no content. Tool results and media never carry bytes: byte arrays are removed, `data:` URIs become `data:<media type>` and base64 payloads of media objects are dropped; media is `image`, `audio`, `video` or `document`, with `file` parts for provider-held file IDs. A pending call in a pause snapshot keeps its `call_index`.
+- Size: the event stays within 30,000 bytes. Over it, `output_text` and `output_tool_calls` that fit nowhere go first; then the oldest messages after the leading system messages are dropped (the last message always stays), then the longest string loses its tail; `input_truncated` is true. Calls folded past `MaxCallsPerInteraction` send no content. Tool results and media remove native bytes: native byte buffers are removed from nested containers before serialization (including native object/model fields), except inside Go custom-marshaler output with spans off (SDK-6948); cyclic edges are omitted, `data:` URIs become `data:<media type>` and base64 payloads of media objects are dropped; media is `image`, `audio`, `video` or `document`, with `file` parts for provider-held file IDs. A pending call in a pause snapshot keeps its `call_index`.
+
+Go exception (SDK-6948): with `emit_spans` off, a value's own `MarshalJSON` or `MarshalText` output is stripped as plain data; bytes that the marshaler encodes as ordinary text, including base64, can reach per-call content. This preserves the app's chosen serialized representation; spans on inspects native fields first.
+
 
 ## Declared tool events
 
@@ -508,6 +511,8 @@ after USD pricing; return nil for unknown credits. `LLMCall.Credits` overrides t
 usage entries omit credits when any successful call has no credit price; cancelled calls add none.
 `TrackLimitReached(ctx, TrackLimitReachedOptions{LimitType: "credits", Feature: "chat"})` records an
 app-enforced usage limit. Provider rate limits remain model errors.
+
+The credits hook must be side-effect free and idempotent: it can run more than once for one call if usage or pricing metadata changes while it runs, through re-entrant enrichment inside the hook or concurrent enrichment from another thread/goroutine. After 3 attempts, continued changes omit the call's credits and report `credits_unstable` through the error hook (with `where: credits`), distinct from a throwing hook's `user_callback`.
 
 Every provider integration offers `WithCallPurpose`, `WithFallbackUsed`, and `WithBYOK`.
 `WithCallDetails` can scope metadata to calls made with a context. Manual `LLMCall` records accept

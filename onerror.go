@@ -15,6 +15,10 @@ const (
 	// KindUserCallback is a hook you configured (redact, identify, event rules, classifier,
 	// evaluator, trace ID) that failed or panicked; the SDK used its documented fallback.
 	KindUserCallback = "user_callback"
+	// KindCreditsUnstable means pricing changed during all three credits attempts.
+	KindCreditsUnstable = "credits_unstable"
+	// KindPauseRefused means Pause left the interaction unchanged.
+	KindPauseRefused = "pause_refused"
 	// KindLimitReached is a memory cap of [Limits] that was hit.
 	KindLimitReached = "limit_reached"
 	// KindRedactionTimeout is a redaction pattern that ran out of time; the field was sent as
@@ -35,6 +39,8 @@ type ErrorInfo struct {
 	Kind string
 	// Where names the SDK step or the hook that failed.
 	Where string
+	// Reason is in_callback or pricing_in_flight for pause_refused.
+	Reason string
 }
 
 // onErrorEvery rate-limits the hook: one call per kind in this window.
@@ -59,12 +65,16 @@ var reported = struct {
 }{last: map[string]time.Time{}}
 
 // report hands a contained error to the hook, or logs it. Never panics.
-func report(kind, where string, err error) {
+func report(kind, where string, err error, reasons ...string) {
 	defer func() { _ = recover() }()
 	debugf("contained an error", "kind", kind, "where", where, "error", err)
 	hook := cfg().onError
 	if hook == nil {
-		warnOnce("error:"+kind, fmt.Sprintf("%s error in %s (%T); set WithOnError or RUDDERSTACK_AI_DEBUG for details", kind, where, err), 0)
+		message := fmt.Sprintf("%s error in %s (%T); set WithOnError or RUDDERSTACK_AI_DEBUG for details", kind, where, err)
+		if kind == KindPauseRefused && len(reasons) > 0 {
+			message = fmt.Sprintf("pause refused: %s [pause_refused]; interaction unchanged", reasons[0])
+		}
+		warnOnce("error:"+kind, message, 0)
 		return
 	}
 	now := time.Now()
@@ -76,7 +86,11 @@ func report(kind, where string, err error) {
 	}
 	reported.mu.Unlock()
 	if again {
-		hook(err, ErrorInfo{Kind: kind, Where: where})
+		info := ErrorInfo{Kind: kind, Where: where}
+		if len(reasons) > 0 {
+			info.Reason = reasons[0]
+		}
+		outsideSDKCallbacks(func() { hook(err, info) })
 	}
 }
 

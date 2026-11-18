@@ -113,8 +113,8 @@ func TestFailedCallEventsBeforeEnd(t *testing.T) {
 					t.Fatalf("snapshot calls=%d, want 1", len(stored.PendingCalls))
 				}
 				call := stored.PendingCalls[0]
-				if call["usage_unknown"] != spans {
-					t.Errorf("snapshot usage_unknown=%v, want %v", call["usage_unknown"], spans)
+				if call["usage_known"] != !spans {
+					t.Errorf("snapshot usage_known=%v, want %v", call["usage_known"], !spans)
 				}
 				if !spans && call["call_event_pending"] != false {
 					t.Errorf("snapshot holds already emitted call: %v", call)

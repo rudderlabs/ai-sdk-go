@@ -140,6 +140,8 @@ Field reference for `LLMCall`, `ToolCall` and `ToolResult`: [integrations.md](in
 
 A run that waits for something outside it (an approval, a person's answer) pauses: `Pause` sends `ai_response_received` with `response_status: paused`, `pause_reason` and that segment's totals, and the next segment's totals start from zero. When the run ends, its final `ai_response_received` adds `pause_count` and `total_paused_ms`. Every event keeps the same `interaction_id`.
 
+`Pause` called from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError` (one warning without it). Credits/retries, analytics Enqueue, redactors, content serializers, and event rules are covered. It leaves the interaction unchanged and keeps credits; Pause never panics. Error handlers, application code, and callbacks for other interactions may pause normally. Another goroutine waits on a condition for pricing, including retries/capture, for an internal 5 s bound; expiry refuses with `Reason: pricing_in_flight`, and late credits stay in the open segment. Callback callers use the goroutine ID from the first runtime.Stack line; failed parsing falls back to waiting.
+
 ```go
 err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{TriggerSource: "queue", Resume: saved},
 	func(ctx context.Context, task *rudderstackai.Interaction) error {
@@ -159,6 +161,7 @@ err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{T
 - `RunInteraction` and `RunTask` leave a paused run paused when `fn` returns nil (an error still ends it). A paused run is off the open list: `Limits.InteractionTTL` and `Shutdown` never end it, and an abandoned one ends with its last `paused` event.
 - `PauseOptions`: `Reason` (default `PauseOther`), `ResponseText` (sent as `response_text` only with content capture on), `ExtraProperties`. Pausing again before a resume sends nothing and returns the same snapshot; after `End`, `ok` is false.
 - `End` while paused ends the run: the wait counts as paused time, and the final segment has no calls.
+- A call counted before a pause and reported again after the resume (a manual `RecordCall`, a late span) is deduplicated only when both reports carry the same response ID; otherwise it counts again, so counting is not exactly-once across a pause.
 
 ## Context values
 
@@ -282,6 +285,8 @@ err := rudderstackai.Configure(
 - `MaskText(text)` applies the same patterns to text you send yourself, such as free text a [declared tool event](events.md#declared-tool-events) rule's `Properties` returns: the SDK sends those as returned. It ignores `WithRedaction` and the hooks; `ok` is false for text over 32,000 code points, which you should not send.
 
 ## Pricing
+
+`WithCredits` prices each successful `CreditCall` in app credits after USD pricing. The credits hook must be side-effect free and idempotent: it can run more than once for one call if usage or pricing metadata changes while it runs, through re-entrant enrichment inside the hook or concurrent enrichment from another thread/goroutine. After 3 attempts, continued changes omit the call's credits and report `credits_unstable` through the error hook (with `where: credits`), distinct from a throwing hook's `user_callback`.
 
 No prices ship with the SDK: list prices change and many customers negotiate their own. Register the models you use; unpriced calls keep their tokens and have no cost ([rules](events.md#cost)).
 
@@ -424,6 +429,7 @@ Each contained error has an `ErrorInfo{Kind, Where}`. Kinds, identical in Node.j
 | ------------------- | ---------------------------------------------------------------------------------------------------- |
 | `internal`          | A panic in the SDK or an integration.                                                                |
 | `user_callback`     | A hook you configured (redact, identify, event rules, classifier, evaluator, trace ID, `MarshalJSON`) failed or panicked; its documented fallback was used. |
+| `pause_refused` | Pause left the interaction unchanged. `reason` (`Reason` in Go) is `in_callback` or `pricing_in_flight`; pricing waits are bounded at 5 s. |
 | `limit_reached`     | A memory cap was hit.                                                                                |
 | `redaction_timeout` | A masking pattern ran out of time; the field was sent as `[redaction timed out]`.                    |
 | `flush_timeout`     | `Flush`, `Shutdown` or a `RunTask` flush, or `CloseClient`, hit its deadline.                                           |

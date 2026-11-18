@@ -598,11 +598,27 @@ func (s *streamCall) endLocked(how kit.End, errorType string) {
 	if s.call.Span != nil && s.obs.Complete() {
 		how, errorType = kit.Completed, ""
 	}
-	safe(func() { s.obs.Finish(how, errorType) })
+	observer := s.obs
+	s.mu.Unlock()
+	defer s.mu.Lock()
+	safe(func() { observer.Finish(how, errorType) })
 }
 
 // observe sees each decoded event, or how decoding stopped.
 func (s *streamCall) observe(event smithy.Deserializable, err error) {
+	var notices []any
+	defer func() {
+		for _, r := range notices {
+			hook.Recovered(r, "safe")
+		}
+	}()
+	errorType := ""
+	if err != nil && !errors.Is(err, io.EOF) {
+		errorType = kit.ErrorTypeOfTransport(err)
+		if s.ctx.Err() != nil {
+			errorType = kit.ErrorTypeOfTransport(s.ctx.Err())
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.ended || s.obs == nil {
@@ -611,7 +627,9 @@ func (s *streamCall) observe(event smithy.Deserializable, err error) {
 	if err != nil {
 		// The app gets every event decoded before the stream stopped.
 		for _, e := range s.pending {
-			safe(func() { s.onEvent(e) })
+			if r := s.observeEventLocked(e); r != nil {
+				notices = append(notices, r)
+			}
 		}
 		s.pending = nil
 	}
@@ -620,20 +638,25 @@ func (s *streamCall) observe(event smithy.Deserializable, err error) {
 		s.endLocked(kit.Completed, "")
 		return
 	case err != nil:
-		t := kit.ErrorTypeOfTransport(err)
-		if s.ctx.Err() != nil {
-			t = kit.ErrorTypeOfTransport(s.ctx.Err())
-		}
-		kit.NoteCallError(s.call.Interaction, err, t)
-		s.endLocked(kit.Errored, t)
+		kit.NoteCallError(s.call.Interaction, err, errorType)
+		s.endLocked(kit.Errored, errorType)
 		return
 	}
 	s.pending = append(s.pending, event)
 	for len(s.pending) > readAhead {
 		e := s.pending[0]
 		s.pending = s.pending[1:]
-		safe(func() { s.onEvent(e) })
+		if r := s.observeEventLocked(e); r != nil {
+			notices = append(notices, r)
+		}
 	}
+}
+
+// observeEventLocked contains malformed events without invoking the error hook under mu.
+func (s *streamCall) observeEventLocked(event smithy.Deserializable) (failure any) {
+	defer func() { failure = recover() }()
+	s.onEvent(event)
+	return nil
 }
 
 func (s *streamCall) onEvent(event smithy.Deserializable) {

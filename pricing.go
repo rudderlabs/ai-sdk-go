@@ -335,6 +335,10 @@ func ReportedCost(v any) (float64, bool) {
 }
 
 // CreditCall is a successful call passed to the app's credit pricing hook after USD pricing.
+// The hook must be side-effect free and idempotent: re-entrant enrichment inside it or
+// concurrent enrichment from another goroutine can change usage/pricing metadata and run
+// it more than once per call. After 3 attempts credits are omitted and WithOnError receives
+// KindCreditsUnstable, where credits.
 type CreditCall struct {
 	Provider, Model                     string
 	InputTokens, OutputTokens           int
@@ -358,21 +362,38 @@ func creditsOf(v *float64) *float64 {
 	return nil
 }
 
-func priceCredits(fn CreditsFunc, call CreditCall) (amount *float64) {
+// copyCreditPointer isolates app hooks from retained usage and caller-owned flags.
+func copyCreditPointer[T any](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	return Ptr(*p)
+}
+
+func priceCredits(fn CreditsFunc, call CreditCall) *float64 {
+	amount, _ := priceCreditsAttempt(fn, call)
+	return amount
+}
+
+func priceCreditsAttempt(fn CreditsFunc, call CreditCall) (amount *float64, failed bool) {
+	call.ReasoningTokens = copyCreditPointer(call.ReasoningTokens)
+	call.CostUSD = copyCreditPointer(call.CostUSD)
+	call.FallbackUsed = copyCreditPointer(call.FallbackUsed)
+	call.BYOK = copyCreditPointer(call.BYOK)
 	defer func() {
 		if r := recover(); r != nil {
 			report(KindUserCallback, "credits", recovered(r))
-			amount = nil
+			amount, failed = nil, true
 		}
 	}()
 	v, err := fn(call)
 	if err != nil {
 		report(KindUserCallback, "credits", err)
-		return nil
+		return nil, true
 	}
 	if v != nil && !validRate(*v) {
 		report(KindUserCallback, "credits", errors.New("rudderstackai: credits must be finite and non-negative"))
-		return nil
+		return nil, true
 	}
-	return creditsOf(v)
+	return creditsOf(v), false
 }

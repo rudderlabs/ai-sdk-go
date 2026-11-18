@@ -1,6 +1,6 @@
 {
   "fixture_version": 1,
-  "description": "Credits follow the authoritative usage when a wrapper and a tracing product-event span report one call. Node and Python support this path; Go tracing emits spans without product-event twin merging.",
+  "description": "Credits follow the authoritative usage when a wrapper and a tracing product-event span report one call. Node and Python run these cases; Go also merges rudderotel product-event spans with their wrapper twins, but does not run this fixture.",
   "cases": [
     {
       "name": "span_then_adapter",
