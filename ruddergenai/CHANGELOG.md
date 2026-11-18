@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.0](https://github.com/rudderlabs/ai-sdk-go/compare/ruddergenai/v0.6.1...ruddergenai/v0.7.0) (2026-11-18)
+
+
+### Features
+
+* send one span per call with EmitSpans and the span processor ([#89](https://github.com/rudderlabs/ai-sdk-go/issues/89)) ([cb8abde](https://github.com/rudderlabs/ai-sdk-go/commit/cb8abde8f94ee771ba94063a750e9b59b944c59a))
+
+
+### Bug Fixes
+
+* **core:** honour marshalers when capturing content ([#104](https://github.com/rudderlabs/ai-sdk-go/issues/104)) ([b83922e](https://github.com/rudderlabs/ai-sdk-go/commit/b83922ee180d48fd2542d0d2612b6ad792c4a595))
+
+
+### Miscellaneous
+
+* add overhead benchmarks, a load test and fuzz tests ([#94](https://github.com/rudderlabs/ai-sdk-go/issues/94)) ([678a66c](https://github.com/rudderlabs/ai-sdk-go/commit/678a66c82f72fdc1936e613715b40b752f61a6f2))
+
 ## [0.6.1](https://github.com/rudderlabs/ai-sdk-go/compare/ruddergenai/v0.6.0...ruddergenai/v0.6.1) (2026-11-16)
 
 

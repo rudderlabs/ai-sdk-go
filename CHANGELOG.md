@@ -14,6 +14,33 @@
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
 - SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events.
 
+## [0.15.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.10.0...v0.15.0) (2026-11-18)
+
+
+### Features
+
+* **mcp:** name Claude-User, Codex, Copilot CLI and Devin from the User-Agent ([#90](https://github.com/rudderlabs/ai-sdk-go/issues/90)) ([fc1e4a7](https://github.com/rudderlabs/ai-sdk-go/commit/fc1e4a7f078e56b6504f64e09127b2f6560af252))
+* **mcp:** record the calling model on mcp_tool_called ([#87](https://github.com/rudderlabs/ai-sdk-go/issues/87)) ([4e8b59a](https://github.com/rudderlabs/ai-sdk-go/commit/4e8b59a151694ac1d8bd0730b87bcf1b82e7bec4))
+* send one span per call with EmitSpans and the span processor ([#89](https://github.com/rudderlabs/ai-sdk-go/issues/89)) ([cb8abde](https://github.com/rudderlabs/ai-sdk-go/commit/cb8abde8f94ee771ba94063a750e9b59b944c59a))
+
+
+### Bug Fixes
+
+* **core:** honour marshalers when capturing content ([#104](https://github.com/rudderlabs/ai-sdk-go/issues/104)) ([b83922e](https://github.com/rudderlabs/ai-sdk-go/commit/b83922ee180d48fd2542d0d2612b6ad792c4a595))
+* correct pause, overflow, twin and snapshot call accounting ([d0013cd](https://github.com/rudderlabs/ai-sdk-go/commit/d0013cd1dc1fb375efdf8b7ddba499ed533402ef))
+* count a tool a pause waits on once, in the resumed segment ([#96](https://github.com/rudderlabs/ai-sdk-go/issues/96)) ([b6a46f2](https://github.com/rudderlabs/ai-sdk-go/commit/b6a46f2861912ef93a4e800235fa221275dec56b))
+* **mcp:** read _meta.traceparent by the W3C rule ([#95](https://github.com/rudderlabs/ai-sdk-go/issues/95)) ([ed6d00d](https://github.com/rudderlabs/ai-sdk-go/commit/ed6d00d694e9f1daf4efb01879afd07d369ff47d))
+* **otel:** keep a product span's owner from span start ([#103](https://github.com/rudderlabs/ai-sdk-go/issues/103)) ([549da20](https://github.com/rudderlabs/ai-sdk-go/commit/549da20c2e5c6ea546d159ac34b767e4b0b169e4))
+* **rudderotel:** don't bill or mark successful a caller-cancelled Anthropic request or stream ([d0013cd](https://github.com/rudderlabs/ai-sdk-go/commit/d0013cd1dc1fb375efdf8b7ddba499ed533402ef))
+
+
+### Miscellaneous
+
+* add overhead benchmarks, a load test and fuzz tests ([#94](https://github.com/rudderlabs/ai-sdk-go/issues/94)) ([678a66c](https://github.com/rudderlabs/ai-sdk-go/commit/678a66c82f72fdc1936e613715b40b752f61a6f2))
+* **deps:** bump step-security/harden-runner from 2.22.3 to 2.22.4 in the github-actions-version group across 1 directory ([#68](https://github.com/rudderlabs/ai-sdk-go/issues/68)) ([0730d0d](https://github.com/rudderlabs/ai-sdk-go/commit/0730d0d0c8777736dbab8e77cfb7e57f5d0c75a2))
+* **mcp:** check error_message is omitted when the response write fails ([#100](https://github.com/rudderlabs/ai-sdk-go/issues/100)) ([15ece67](https://github.com/rudderlabs/ai-sdk-go/commit/15ece671c347c995404af9186c957363f2242947))
+* **spec:** copy the Google ADK AgentTool cassette and changelog entry ([#93](https://github.com/rudderlabs/ai-sdk-go/issues/93)) ([4f56171](https://github.com/rudderlabs/ai-sdk-go/commit/4f561715aee98f13105cf3539b35fefda6991ef6))
+
 ## [0.10.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.9.0...v0.10.0) (2026-11-16)
 
 

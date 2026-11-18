@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.7.0...cmd/aicheck/v0.8.0) (2026-11-18)
+
+
+### Features
+
+* **mcp:** record the calling model on mcp_tool_called ([#87](https://github.com/rudderlabs/ai-sdk-go/issues/87)) ([4e8b59a](https://github.com/rudderlabs/ai-sdk-go/commit/4e8b59a151694ac1d8bd0730b87bcf1b82e7bec4))
+
+
+### Bug Fixes
+
+* **mcp:** read _meta.traceparent by the W3C rule ([#95](https://github.com/rudderlabs/ai-sdk-go/issues/95)) ([ed6d00d](https://github.com/rudderlabs/ai-sdk-go/commit/ed6d00d694e9f1daf4efb01879afd07d369ff47d))
+
 ## [0.7.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.6.0...cmd/aicheck/v0.7.0) (2026-11-16)
 
 
