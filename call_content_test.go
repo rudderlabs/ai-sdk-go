@@ -345,7 +345,7 @@ func TestTypedMapKeys(t *testing.T) {
 		{"int8 keys", map[int8]any{2: secret, 3: "x"}, `"3":"x"`},
 		{"uint keys", map[uint16]string{7: "v"}, `"7":"v"`},
 		{"named string keys", map[textKey]string{"a": "v"}, `"a":"v"`},
-		{"text marshaler keys", map[textKeyPtr]string{{"b"}: "v"}, `"arguments":{}`},
+		{"text marshaler keys", map[textKeyPtr]string{{"b"}: "v"}, `"arguments":{"k-b":"v"}`},
 		{"unsupported float keys", map[float64][]byte{1.5: secret}, ``},
 		{"unsupported struct keys", map[badKey]string{{1}: "v"}, ``},
 		{"unsupported bool keys", map[bool]string{true: "v"}, ``},

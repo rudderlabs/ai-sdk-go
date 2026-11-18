@@ -25,6 +25,7 @@ import (
 func ObserveHTTP(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		responses := mcpbridge.NewResponses()
+		responses.CloseWhenDone(r.Context())
 		ow := &observedWriter{ResponseWriter: w, responses: responses}
 		defer func() {
 			safely(ow.finish)
@@ -64,6 +65,7 @@ type observedWriter struct {
 	decided   bool
 	keep      bool
 	body      []byte
+	envelope  mcpbridge.Envelope
 	line      mcpbridge.Lines
 	data      []byte
 	// events are complete SSE events, delivered once a flush commits them.
@@ -77,7 +79,7 @@ func (o *observedWriter) Write(p []byte) (int, error) {
 	safely(o.snapshot)
 	n, err := o.ResponseWriter.Write(p)
 	if err != nil {
-		o.fail()
+		safely(func() { o.fail(p) })
 		return n, err
 	}
 	safely(func() { o.observe(p[:n]) })
@@ -108,6 +110,7 @@ func (o *observedWriter) observe(p []byte) {
 		o.line.Feed(p, o.responses, o.sseLine)
 		return
 	}
+	o.envelope.Feed(p)
 	if o.keep {
 		if len(o.body)+len(p) > mcpbridge.MaxObserved {
 			o.keep, o.body = false, nil
@@ -134,12 +137,28 @@ func (o *observedWriter) sseLine(line []byte) {
 	}
 }
 
-// fail releases every waiter of this HTTP request without a response: a write or flush
-// failed, so the client may not get what was accepted.
-func (o *observedWriter) fail() {
+// fail reports the responses in the failed write, and those written but not yet flushed, as
+// failed, then releases every other waiter of this HTTP request without a response.
+func (o *observedWriter) fail(attempted []byte) {
 	o.mu.Lock()
+	var failed [][]byte
+	if !o.failed && o.decided {
+		switch {
+		case o.sse:
+			o.line.Feed(attempted, o.responses, o.sseLine)
+			failed = o.events
+		case o.keep:
+			failed = [][]byte{append(o.body, attempted...)}
+		default:
+			o.envelope.Feed(attempted)
+			failed = [][]byte{o.envelope.JSON()}
+		}
+	}
 	o.failed, o.body, o.events = true, nil, nil
 	o.mu.Unlock()
+	for _, response := range failed {
+		o.responses.FailJSON(response)
+	}
 	o.responses.Close()
 }
 
@@ -160,13 +179,16 @@ func (o *observedWriter) commit() {
 func (o *observedWriter) finish() {
 	o.mu.Lock()
 	failed, body, sse, pending := o.failed, o.body, o.sse, len(o.events) > 0
+	if !o.keep && !sse {
+		body = o.envelope.JSON()
+	}
 	o.mu.Unlock()
 	if failed {
 		return
 	}
 	if sse && pending {
 		if err := http.NewResponseController(o.ResponseWriter).Flush(); err != nil && !errors.Is(err, http.ErrNotSupported) {
-			o.fail()
+			o.fail(nil)
 			return
 		}
 	}
@@ -184,7 +206,7 @@ func (f flushingWriter) Flush() { _ = f.FlushError() }
 // delivers the flushed SSE events only when the flush succeeds.
 func (f flushingWriter) FlushError() error {
 	if err := http.NewResponseController(f.ResponseWriter).Flush(); err != nil {
-		f.fail()
+		safely(func() { f.fail(nil) })
 		return err
 	}
 	safely(f.commit)

@@ -167,7 +167,24 @@ func activeSDKSpan(ctx context.Context) *Span {
 	}
 	return nil
 }
-func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
+
+type spanContextCapture struct {
+	done  bool
+	value map[string]any
+}
+
+func (c *spanContextCapture) resolve(v map[string]any) map[string]any {
+	if !c.done {
+		c.value, _ = captureContent(v).(map[string]any)
+		c.done = true
+	}
+	return c.value
+}
+func newSDKSpan(ctx context.Context, i *Interaction, started time.Time, captured ...*spanContextCapture) *Span {
+	if i != nil {
+		leave := i.enterCallback(false)
+		defer leave()
+	}
 	if i != nil && i.Ended() {
 		i = nil
 	}
@@ -225,7 +242,11 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
 	} else if externalTrace == s.TraceID {
 		s.parentID, s.traceState = externalParent, externalState
 	}
-	s.msgContext, _ = stripBinary(msgContext).(map[string]any)
+	if len(captured) > 0 {
+		s.msgContext = captured[0].resolve(msgContext)
+	} else {
+		s.msgContext, _ = captureContent(msgContext).(map[string]any)
+	}
 	s.SpanID = randomSpanID(8)
 	s.seq = spanSeq.Add(1)
 	return s
@@ -235,7 +256,11 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
 // span a span processor saw start in this interaction, nested inside every active SDK span. The
 // first such call adopts the OTel span's trace, span and parent IDs, so RudderStack gets this
 // span in its place; later calls inside are its children. The app's span is never modified.
-func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time) *Span {
+func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time, captured *spanContextCapture) *Span {
+	if i != nil {
+		leave := i.enterCallback(false)
+		defer leave()
+	}
 	if hook.Tracing.AdoptOTelCall == nil || i == nil || i.Ended() {
 		return nil
 	}
@@ -254,12 +279,13 @@ func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time)
 	s.client, s.capture, s.llmCalls = i.analytics(), i.capture.Spans, i.capture.LLMCalls
 	msgContext := i.msgContext
 	i.mu.Unlock()
-	s.msgContext, _ = stripBinary(msgContext).(map[string]any)
+
 	// An SDK span that cannot be sent under the IDs it would take never replaces the OTel span:
 	// the processor keeps it. Measured before the OTel span is marked replaced.
 	childID := randomSpanID(8)
 	var core *analytics.Track
 	o, ok := hook.Tracing.AdoptOTelCall(ctx, i, activeSeq, func(o hook.OTelCall) (admitted bool) {
+		s.msgContext = captured.resolve(msgContext)
 		if o.Adopted {
 			core, admitted = s.admit(o.TraceID, o.SpanID, o.ParentID)
 		} else {
@@ -351,9 +377,10 @@ func beginWrapperSpan(ctx context.Context, i *Interaction, started time.Time) (c
 	if !cfg().emitSpans || isUntracked(ctx) || (i != nil && !i.Ended() && i.untracked) {
 		return ctx, nil
 	}
-	s := otelReplacementSpan(ctx, i, started)
+	captured := &spanContextCapture{}
+	s := otelReplacementSpan(ctx, i, started, captured)
 	if s == nil {
-		s = newSDKSpan(ctx, i, started)
+		s = newSDKSpan(ctx, i, started, captured)
 		s.call = true
 	}
 	ctx = context.WithValue(ctx, keyInteraction, s.interaction)
@@ -403,6 +430,10 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 	if s == nil {
 		return
 	}
+	if s.interaction != nil {
+		leave := s.interaction.enterCallback(false)
+		defer leave()
+	}
 	s.mu.Lock()
 	if s.ended || (pendingOnly && s.reporting > 0) {
 		s.mu.Unlock()
@@ -417,8 +448,11 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 	delete(pendingWrapperSpans.spans, s)
 	pendingWrapperSpans.mu.Unlock()
 	attrs := maps.Clone(s.attributes)
+	s.attributes = nil
 	s.mu.Unlock()
 	n := s.model(name, operation, source, attrs, a, err, ended)
+	// Resolve after copying under the lock, while the interaction callback guard is active.
+	n.Attributes = captureProperties(spanmodel.AdmitAttributes(n.Attributes, n.Scope.Name, s.capture))
 	safely(func() { s.send(n, masked) })
 }
 

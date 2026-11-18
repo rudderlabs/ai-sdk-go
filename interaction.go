@@ -471,6 +471,7 @@ type recordedTool struct {
 	errorType                                           string
 	duration                                            *time.Duration
 	args, result                                        any
+	argsContent, resultContent                          captureReport
 	hasResult, settled, fired                           bool
 	ruleOutcome                                         *toolRuleOutcome
 	// agentKey is its own agent, else the latest model call's when it was recorded: that agent's
@@ -1757,10 +1758,36 @@ func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
 }
 
 func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
+	leave := i.enterCallback(false)
+	defer leave()
 	if len(calls) == 0 {
 		return
 	}
 	safely(func() {
+		// Report snapshots are detached before taking the interaction lock. Originals remain
+		// available to the rules for as long as base retained them.
+		i.mu.Lock()
+		ended, captureOn := i.ended, i.capture.Any
+		// Rules fire on the recorded name: a report with only an ID uses the name stored for it.
+		names := make([]string, len(calls))
+		for n, call := range calls {
+			name, _ := normalizeTool(call.Name, call.MCPServer)
+			names[n] = first(call.Name, name)
+			if tool := i.toolsByID[call.ID]; names[n] == "" && call.ID != "" && tool != nil {
+				names[n] = first(tool.rawName, tool.name)
+			}
+		}
+		i.mu.Unlock()
+		if ended {
+			return
+		}
+		captured := make([]captureReport, len(calls))
+		for n, call := range calls {
+			_, rule := cfg().toolRules[names[n]]
+			if captureOn || rule {
+				captured[n] = captureValue(map[string]any{"args": call.Args, "result": call.Result})
+			}
+		}
 		var fire []*recordedTool
 		i.mu.Lock()
 		if i.ended {
@@ -1772,7 +1799,7 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 		} else {
 			i.resumeLocked()
 		}
-		for _, call := range calls {
+		for n, call := range calls {
 			name, server := normalizeTool(call.Name, call.MCPServer)
 			var tool *recordedTool
 			if call.ID != "" {
@@ -1832,6 +1859,12 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 			fillString(&tool.agentName, call.AgentName)
 			if tool.args == nil {
 				tool.args = call.Args
+				m, _ := captured[n].value.(map[string]any)
+				tool.argsContent = captureReport{value: m["args"], size: captured[n].sizes["args"], memo: captured[n].memo}
+			}
+			if call.Result != nil && !tool.hasResult {
+				m, _ := captured[n].value.(map[string]any)
+				tool.resultContent = captureReport{value: m["result"], size: captured[n].sizes["result"], memo: captured[n].memo}
 			}
 			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result}, call.Result != nil)
 			fire = append(fire, tool)
@@ -1867,6 +1900,8 @@ func (i *Interaction) RecordToolResult(id string, result ToolResult) {
 // name is Gemini's fallback for a forced candidate whose call and result omit IDs.
 // Ordinary id-less calls keep their existing outcome accounting.
 func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult bool, name ...string) {
+	leave := i.enterCallback(false)
+	defer leave()
 	safely(func() {
 		if id == "" && (len(name) == 0 || name[0] == "") {
 			return
@@ -1881,11 +1916,25 @@ func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult b
 				}
 			}
 		}
+		needed := false
+		if tool != nil && !i.ended && !tool.capped {
+			_, rule := cfg().toolRules[first(tool.rawName, tool.name)]
+			needed = i.capture.Any || rule
+		}
+		i.mu.Unlock()
+		var content captureReport
+		if needed && hasResult {
+			content = captureValue(result.Result)
+		}
+		i.mu.Lock()
 		if tool != nil && tool.capped {
 			// It ran: counted when it was recorded, its outcome and event dropped past the cap.
 			tool.settled = true
 		} else if tool != nil {
 			tool.resultSeen = true
+			if hasResult && !tool.hasResult {
+				tool.resultContent = content
+			}
 			mergeToolResult(tool, result, hasResult)
 		}
 		i.mu.Unlock()
@@ -1978,10 +2027,15 @@ func (i *Interaction) fireToolEvents(tools []*recordedTool, final bool) {
 	leave := i.enterCallback(false)
 	defer leave()
 	rules := cfg().toolRules
-	if len(rules) == 0 {
-		return
-	}
 	i.mu.Lock()
+	// Original rule inputs are needed only until their callback runs. A tool without a name yet
+	// keeps them: a later report may name it.
+	for _, tool := range tools {
+		name := first(tool.rawName, tool.name)
+		if _, needed := rules[name]; !needed && name != "" {
+			tool.args, tool.result = nil, nil
+		}
+	}
 	jobs := i.toolEventJobsLocked(tools, final)
 	i.mu.Unlock()
 	i.runToolEvents(jobs)
@@ -2048,18 +2102,13 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolv
 			}
 		}
 	}
-	// Encode outside the lock: an application MarshalJSON may re-enter the interaction.
+	// Rule callbacks see the originals above. Encoding sees their detached report snapshots.
+	properties := captureProperties(custom, captureSeed{memo: t.argsContent.memo}, captureSeed{memo: t.resultContent.memo})
 	resultSize := -1
 	if t.hasResult {
-		if text, ok := t.result.(string); ok {
-			resultSize = len(text)
-		} else if encoded, ok := encodeNow(t.result); ok {
-			resultSize = len(encoded.(json.RawMessage))
-		} else {
-			report(KindUserCallback, "MarshalJSON", errUnencodable)
-		}
+		resultSize = t.resultContent.size
 	}
-	return &toolRuleOutcome{properties: jsonSafeMap(custom), resultSize: resultSize}
+	return &toolRuleOutcome{properties: jsonSafeMap(properties), resultSize: resultSize}
 }
 
 // Freeze deferred rules after paused-event delivery. Callbacks and encoding run outside mu.
@@ -2103,6 +2152,7 @@ func (i *Interaction) preparePendingRules(settledOnly bool, done func()) {
 }
 
 func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool, original *recordedTool) {
+	defer func() { i.mu.Lock(); original.args, original.result = nil, nil; i.mu.Unlock() }()
 	leave := i.enterCallback(false)
 	defer leave()
 	outcome := t.ruleOutcome
@@ -3124,6 +3174,15 @@ func (i *Interaction) taskStarted() {
 
 // End sends the segment response. A paused end can resume; a final end is idempotent.
 func (i *Interaction) End(o EndOptions) {
+	// App serializers obey the same capture callback boundary as Pause.
+	if i != nil && captureRunning() {
+		i.callbackMu.Lock()
+		same := i.callbackCallers[callbackCaller()] > 0
+		i.callbackMu.Unlock()
+		if same {
+			return
+		}
+	}
 	safely(func() { i.end(o) })
 }
 

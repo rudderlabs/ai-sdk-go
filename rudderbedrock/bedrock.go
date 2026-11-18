@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -151,7 +152,23 @@ func tokens(u *types.TokenUsage) (input, output, cached, written int) {
 }
 
 // docValue is a smithy document as plain JSON values.
-func docValue(d document.Interface) any {
+type documentPass map[document.Interface]any
+
+func docValue(d document.Interface, passes ...documentPass) (out any) {
+	// A comparable type can still hold an unhashable value in an interface field.
+	if len(passes) > 0 && d != nil && reflect.ValueOf(d).Comparable() {
+		if value, seen := passes[0][d]; seen {
+			return copyJSON(value)
+		}
+		// Both callback maps and telemetry projections reuse this base Smithy decoding, each
+		// with its own copy, so a rule that changes its input never changes captured content.
+		defer func() { passes[0][d], out = out, copyJSON(out) }()
+	}
+	defer func() {
+		if recover() != nil {
+			out = nil
+		}
+	}()
 	if d == nil {
 		return nil
 	}
@@ -166,13 +183,31 @@ func docValue(d document.Interface) any {
 	return v
 }
 
+func copyJSON(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			out[k] = copyJSON(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for n, e := range x {
+			out[n] = copyJSON(e)
+		}
+		return out
+	}
+	return v
+}
+
 // toolOutcomeValue is a tool result as the tool rules and tool_breakdown see it: a single json
 // block is its value, a single text block parsed JSON or text. Unchanged by per-call content.
-func toolOutcomeValue(content []types.ToolResultContentBlock) any {
+func toolOutcomeValue(content []types.ToolResultContentBlock, passes ...documentPass) any {
 	if len(content) == 1 {
 		switch b := content[0].(type) {
 		case *types.ToolResultContentBlockMemberJson:
-			return docValue(b.Value)
+			return docValue(b.Value, passes...)
 		case *types.ToolResultContentBlockMemberText:
 			return kit.ParseToolValue(b.Value)
 		}
@@ -181,7 +216,7 @@ func toolOutcomeValue(content []types.ToolResultContentBlock) any {
 	for _, block := range content {
 		switch b := block.(type) {
 		case *types.ToolResultContentBlockMemberJson:
-			out = append(out, map[string]any{"json": docValue(b.Value)})
+			out = append(out, map[string]any{"json": docValue(b.Value, passes...)})
 		case *types.ToolResultContentBlockMemberText:
 			out = append(out, map[string]any{"text": b.Value})
 		}
@@ -191,17 +226,17 @@ func toolOutcomeValue(content []types.ToolResultContentBlock) any {
 
 // toolResultValue is a tool result as sent: a single json block is its value, text only is one
 // string, anything else the list of parts (media as blobs, never bytes).
-func toolResultValue(content []types.ToolResultContentBlock) any {
+func toolResultValue(content []types.ToolResultContentBlock, passes ...documentPass) any {
 	if len(content) == 1 {
 		if j, ok := content[0].(*types.ToolResultContentBlockMemberJson); ok {
-			return docValue(j.Value)
+			return docValue(j.Value, passes...)
 		}
 	}
 	var parts []rudderstackai.GenAIPart
 	for _, block := range content {
 		switch b := block.(type) {
 		case *types.ToolResultContentBlockMemberJson:
-			parts = append(parts, rudderstackai.GenAIPart{"type": "json", "content": docValue(b.Value)})
+			parts = append(parts, rudderstackai.GenAIPart{"type": "json", "content": docValue(b.Value, passes...)})
 		case *types.ToolResultContentBlockMemberText:
 			parts = append(parts, kit.TextPart(b.Value)...)
 		case *types.ToolResultContentBlockMemberImage:
@@ -218,7 +253,7 @@ func toolResultValue(content []types.ToolResultContentBlock) any {
 }
 
 // recordToolResults settles earlier tool calls from the toolResult blocks sent back.
-func recordToolResults(i *rudderstackai.Interaction, messages []types.Message) {
+func recordToolResults(i *rudderstackai.Interaction, messages []types.Message, passes ...documentPass) {
 	for _, m := range messages {
 		for _, block := range m.Content {
 			r, ok := block.(*types.ContentBlockMemberToolResult)
@@ -226,7 +261,7 @@ func recordToolResults(i *rudderstackai.Interaction, messages []types.Message) {
 				continue
 			}
 			failed := r.Value.Status == types.ToolResultStatusError
-			kit.RecordToolResult(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolOutcomeValue(r.Value.Content)}, len(r.Value.Content) > 0)
+			kit.RecordToolResult(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolOutcomeValue(r.Value.Content, passes...)}, len(r.Value.Content) > 0)
 		}
 	}
 }
@@ -279,16 +314,16 @@ func documentPart(b types.DocumentBlock) []rudderstackai.GenAIPart {
 
 // blockParts maps one Converse content block to GenAI parts, or returns a tool result to send as
 // its own tool message.
-func blockParts(block types.ContentBlock) (parts []rudderstackai.GenAIPart, response rudderstackai.GenAIPart) {
+func blockParts(block types.ContentBlock, passes ...documentPass) (parts []rudderstackai.GenAIPart, response rudderstackai.GenAIPart) {
 	switch b := block.(type) {
 	case *types.ContentBlockMemberText:
 		return kit.TextPart(b.Value), nil
 	case *types.ContentBlockMemberToolUse:
-		return kit.ToolCallPart(aws.ToString(b.Value.ToolUseId), aws.ToString(b.Value.Name), docValue(b.Value.Input)), nil
+		return kit.ToolCallPart(aws.ToString(b.Value.ToolUseId), aws.ToString(b.Value.Name), docValue(b.Value.Input, passes...)), nil
 	case *types.ContentBlockMemberToolResult:
 		var result any
 		if len(b.Value.Content) > 0 {
-			result = toolResultValue(b.Value.Content)
+			result = toolResultValue(b.Value.Content, passes...)
 		}
 		return nil, kit.ToolResponsePart(aws.ToString(b.Value.ToolUseId), result)
 	case *types.ContentBlockMemberReasoningContent:
@@ -308,7 +343,7 @@ func blockParts(block types.ContentBlock) (parts []rudderstackai.GenAIPart, resp
 
 // inputMessages is the conversation Converse was sent: system blocks first, then every message,
 // with each tool result as its own tool message, in order.
-func inputMessages(system []types.SystemContentBlock, messages []types.Message) []rudderstackai.GenAIMessage {
+func inputMessages(system []types.SystemContentBlock, messages []types.Message, passes ...documentPass) []rudderstackai.GenAIMessage {
 	var all []rudderstackai.GenAIMessage
 	if system != nil {
 		var parts []rudderstackai.GenAIPart
@@ -334,7 +369,7 @@ func inputMessages(system []types.SystemContentBlock, messages []types.Message) 
 			current = nil
 		}
 		for _, block := range m.Content {
-			parts, response := blockParts(block)
+			parts, response := blockParts(block, passes...)
 			if response != nil {
 				flush()
 				all = append(all, kit.Message("tool", response))
@@ -435,10 +470,11 @@ func (t *tracker) handle(ctx context.Context, in middleware.InitializeInput, cal
 	}
 	hook.Tracing.WrapperMetadata(c.Span, c.Provider, c.Model)
 	safe(func() {
+		passes := documentPass{}
 		if c.CapturesContent() {
-			c.InputMessages = inputMessages(system, messages)
+			c.InputMessages = inputMessages(system, messages, passes)
 		}
-		recordToolResults(i, messages)
+		recordToolResults(i, messages, passes)
 		kit.KeepMessages(i, plainMessages(messages))
 	})
 	var sc *streamCall

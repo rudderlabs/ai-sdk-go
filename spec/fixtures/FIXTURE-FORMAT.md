@@ -134,7 +134,7 @@ Each emitted event must also validate against `spec/ai-events-v0.4.schema.json` 
 1. **Gate.** Only with `emit_llm_calls` and `capture_content` both on (the interaction's own `capture_content` wins) and the interaction not ended or untracked: content is not built, and the `redact` hook not run, otherwise. Only `call_index` is sent without it. Streamed text is buffered only up to the 32,000 code-point cap.
 2. **`call_index`.** 1 plus the sum of `call_count` of every call reported earlier in the interaction (default `call_count` 1), across pauses; a pause snapshot carries it as `call_sequence` (written with `emit_llm_calls` when above 0; absent means a restored run restarts at 1). A report merged into an earlier report of the same call (wrapper and span twin) keeps the first report's index, and a twin with a larger `call_count` adds the difference to the counter. A call folded past `limits.max_calls_per_interaction` keeps the index of the first call it stands for and sends no content. A pending call in a pause snapshot carries its own `call_index` (written with `emit_llm_calls`), so it sends it after restoration.
 3. **Part shapes.** Modality is `image`, `audio` or `video` from the media type (`image/png`), else `document` (PDFs, text and any other file); the GenAI semconv names no document modality, so this is the SDK convention. Parts: `text`, `reasoning`, `tool_call`, `tool_call_response`, `uri` (`modality`, `uri`, `mime_type`?), `blob` (`modality`, `mime_type`?, never bytes) and `file` (`modality`, `mime_type`?, `file_id`: a file the provider holds by ID, e.g. an OpenAI `file_id` or an Anthropic `source.type: "file"`). Audio formats map to `audio/<format>` (`mp3` is `audio/mpeg`). An Anthropic `text` source is a `text` part, a `content` source maps its blocks. A part kind with no mapping is `{ "type": <provider type name> }`. A tool result's content blocks are mapped with the same rules: text only is one string, otherwise the list of parts; a single Bedrock `json` block is its value.
-4. **Binary content sanitization.** Go exception (SDK-6948): with `emit_spans` off, a value's own `MarshalJSON` or `MarshalText` output is stripped as plain data; bytes that the marshaler encodes as ordinary text, including base64, can reach per-call content. Before anything else, values are copied to plain JSON: a value that refers back to an object on its own path (a cycle) or sits deeper than 64 levels (counted from the messages or tool-calls list) is left out (its key or array element is dropped), a big integer becomes its decimal string, a date its ISO string, and functions, symbols and undefined are left out; if building a content field still fails, only that field is left out and the call is still sent. After mapping, every message part and tool argument goes through one sanitiser, whatever produced it: (a) a byte array is deleted from its object or array (native byte buffers, an object whose keys are all decimal integers with values 0 to 255, e.g. a JSON-serialised byte array, and `{ "type": "Buffer", "data": [0..255, ...] }`); (b) a string starting with a `data:` URI (`data:[<media type>][;params],`, any case) becomes `data:<media type>` (the payload is cut); (c) an object with a `mime_type`, `mimeType`, `media_type`, `mediaType` or `source_type` key, or whose `type` is `image`, `audio`, `video`, `document`, `file`, `media`, `blob`, `image-data`, `file-data`, `input_audio`, `input_image` or `input_file`, loses its `data`, `bytes`, `base64` and `b64_json` keys. Objects without those markers keep a `data` key. A `uri` part whose `uri` is a `data:` URI becomes a `blob` part (its `mime_type`, else the URI's media type), and a `blob` part loses its `content`.
+4. **Binary content sanitization.** With spans on and off, capture uses the app's own serializer (`toJSON` in Node, python-mode `model_dump` in Python, `MarshalJSON` / `MarshalText` with `encoding/json` precedence in Go) before content projection. Raw bytes in its result are stripped; serializer text, including base64, is sent as is under the existing masking and capture controls. A failing serializer becomes JSON `null` without walking its fields. See the serializer-capture fixture below for report lifetime and counter semantics. Before anything else, values are copied to plain JSON: a value that refers back to an object on its own path (a cycle) or sits deeper than 64 levels (counted from the messages or tool-calls list) is left out (its key or array element is dropped), a big integer becomes its decimal string, a date its ISO string, and functions, symbols and undefined are left out; if building a content field still fails, only that field is left out and the call is still sent. After mapping, every message part and tool argument goes through one sanitiser, whatever produced it: (a) a byte array is deleted from its object or array (native byte buffers, an object whose keys are all decimal integers with values 0 to 255, e.g. a JSON-serialised byte array, and `{ "type": "Buffer", "data": [0..255, ...] }`); (b) a string starting with a `data:` URI (`data:[<media type>][;params],`, any case) becomes `data:<media type>` (the payload is cut); (c) an object with a `mime_type`, `mimeType`, `media_type`, `mediaType` or `source_type` key, or whose `type` is `image`, `audio`, `video`, `document`, `file`, `media`, `blob`, `image-data`, `file-data`, `input_audio`, `input_image` or `input_file`, loses its `data`, `bytes`, `base64` and `b64_json` keys. Objects without those markers keep a `data` key. A `uri` part whose `uri` is a `data:` URI becomes a `blob` part (its `mime_type`, else the URI's media type), and a `blob` part loses its `content`.
 5. **Per-string cap.** Every string longer than 32,000 code points (`MAX_MASKED_CODE_POINTS`) is cut to its first 32,000 code points, and `input_truncated` is true. This runs before masking.
 6. **Masking.** Every string in messages and tool arguments goes through the same masking as `prompt_text` (built-ins, then the `redact` hook). If the hook fails or withholds one string, the whole field is left out (`input_messages` together with `input_truncated`, or `output_tool_calls`); `output_text` is left out on its own.
 7. **Tool arguments.** A JSON-string `arguments` is parsed to its JSON value; a string that is not valid JSON (a cut-off stream) stays a string. Calls without a name are skipped.
@@ -336,7 +336,7 @@ Steps: `record_call` (`provider`, `model`, `input_tokens`?, `started_ms`?, `ende
 
 ### Native content containers (SDK-6942)
 
-`conformance-v0.4.json.native_content_cases` extends the per-call binary cases with native values JSON cannot represent. Each case has `name`, `input`, and the common stripped `expected` value. A driver recursively constructs `input`: `binary` creates a native buffer (the spelling selects bytes, bytearray, memoryview, ArrayBuffer or DataView where supported); `construct_as` chooses each language's native object built from `fields`; `cycle: true` replaces its `nested` field with itself; `entries` builds a map with native keys; `set` builds a native collection. Ordinary arrays and objects recurse. Python v1 models run when installed; Node class/frozen instances and Go exported structs/pointers/embedded structs are the portable equivalents. The Python model cases include serializers that would expose bytes if invoked before stripping. With `emit_spans` off, Go calls a value's own `json.Marshaler` or `encoding.TextMarshaler` and strips its output as plain data, as main did (bytes encoded inside that output as ordinary text, including base64, can reach content; accepted trade-off SDK-6948), so those cases build plain Go structs. Drivers exercise per-call fields and span attributes/events, retaining safe fields and dropping binary/cyclic edges.
+`conformance-v0.4.json.native_content_cases` extends the per-call binary cases with native values JSON cannot represent. Each case has `name`, `input`, and the common stripped `expected` value. A driver recursively constructs `input`: `binary` creates a native buffer (the spelling selects bytes, bytearray, memoryview, ArrayBuffer or DataView where supported); `construct_as` chooses each language's native object built from `fields`; `cycle: true` replaces its `nested` field with itself; `entries` builds a map with native keys; `set` builds a native collection. Ordinary arrays and objects recurse. Python v1 models run when installed; Node class/frozen instances and Go exported structs/pointers/embedded structs are the portable equivalents. Native-container cases use plain models or structs when their expected output tests field traversal. Serializer-specific cases live in `serializer-capture-v0.1.json`: with spans on and off, resolve the app serializer before stripping raw bytes; keep serializer text under the existing masking and capture controls. Drivers exercise per-call fields and span attributes/events, retaining safe fields and dropping binary/cyclic edges.
 
 `pause-pending-usage-v0.1.json.cross_sdk.aggregate_report_order` (SDK-6942) uses the same snapshot/expected pattern for the aggregate + intervening-record variant. Its Python legacy snapshot omits optional `report_sequence`; all drivers restore it, merge `second` with the wrapper, then record `third` and compare primary model, outcome, call count and token sums. A reader must reconstruct report order independently of `call_count`.
 
@@ -348,3 +348,387 @@ Steps: `record_call` (`provider`, `model`, `input_tokens`?, `started_ms`?, `ende
 A JSON `pause` step may include `pending_call_overrides` (fields to replace in its single pending call after the JSON round trip) and `pending_call_omit` (keys to remove before restoration). Drivers assert exactly one pending call before applying either. These fields exercise stored snapshots that ordinary recording does not produce, including retained credits with `credits_explicit: false` and legacy calls without that marker. A cancelled repeat that adds metadata retains credits only when explicit; a legacy pending call with credits and no marker restores those credits as explicit. A failed repeat without new metadata ignores late credits and preserves its retained amount. `record_call` steps also accept `agent_name` and `fallback_used` for metadata enrichment.
 
 For Python/Go, `config.pricing_wait_ms` shortens the private 5 s test seam. The `pricing_wait` operation starts a `record_call` (its `provider`, `model`, `input_tokens`) on another thread/goroutine, parks its credits hook, calls pause until the bound expires, asserts refusal and no pause, then releases pricing and joins the worker. Its late credits must reach the still-open segment. This case declares `sdks: ["python", "go"]`; Node cannot have synchronous pricing in flight on another caller.
+
+
+## serializer-capture-v0.1.json (SDK-6948)
+
+This language-neutral fixture is shared byte for byte by Node, Python and Go.
+It describes the capture contract, not a change to event schemas. The top level
+has `version: "0.1"`, `description`, `cases`, `base_parity_guards` and
+`base_parity_guards_note`. Guard entries have `id`, `title` and
+`source_report_path`, relative to the SDK-6948 handover directory. Reviews run
+the parked accounting repros base-vs-head; they are not serializer cases and
+drivers need no handover files at runtime.
+
+Every driver must run every case whose `applies_to` includes its SDK and must
+fail on an unknown applicable case id. An unimplemented scenario, descriptor or
+expectation also fails. Do not silently skip a case because an optional adapter,
+dependency, GC facility or fixture handler is unavailable: supply the fixture's
+test environment or report a failing prerequisite. SDKs left out of a case must
+each have a nonempty one-line reason in `not_applicable`; applicable SDKs cannot
+also be marked not applicable. Case ids are unique. Groups are `P` (privacy),
+`S` (dispatch), `N` (counts), `M` (mutation), `I` (identity), `C`
+(classification), `B` (Bedrock), `H` (heap), `L` (lifecycle) and `D` (docs).
+
+### Case fields and observations
+
+Each case has `id`, `group`, `title`, `applies_to` (a nonempty subset of
+`["node", "python", "go"]`), `not_applicable`, `config`, `setup` and `expect`.
+`config` uses the existing snake_case fixture options, including
+`capture_content`, `emit_llm_calls`, `emit_spans`, `redact` and
+`max_calls_per_interaction` (mapped to the SDK's limits option). Each case starts
+with a fresh interaction, recorder and counters. Disable retries, classifiers,
+evaluators and credits unless the scenario explicitly needs them. Drain delivery
+before checking final events, without moving capture from its report point.
+
+`setup.scenario` names the operation the driver implements; other setup fields
+are its literal inputs. `value`, `fields`, `serialized`, `arguments`, `result`,
+`attributes` and `chunks` recursively materialize descriptors before being
+passed to SDK APIs. A driver must exercise the real capture/report path, not
+manufacture an expected event from a serialization helper. Runtime-specific
+scenario names describe capabilities, not implementation code shared between
+languages. `mode`/`callback_mode` selects the native synchronous or asynchronous
+equivalent (Go uses a coordinated goroutine); `stream` selects the stream path.
+The declared event named in setup must be installed as a real tool rule. Default
+mode is synchronous, default stream is false and default provider is OpenAI Chat.
+
+Optional `expect_by_sdk: { <sdk>: <expect overrides> }` shallowly overrides
+`expect` for the named SDK (`node`, `python`, `go`). Each supplied observation
+replaces its entire default value, including `decoded` or `serializer_calls`;
+all other default assertions remain required. Resolve overrides before running
+a scenario or comparing outputs.
+
+For `report_sinks`, optional `setup.sinks_by_sdk: { <sdk>: [<sink>, ...] }`
+replaces `setup.sinks` for that SDK. Check only those named sinks in
+`expect.decoded`; every other expectation still applies. Node and Python omit
+pause snapshot content and manual span events, and direct tool reports create
+no tool spans. Their drivers must assert that Pause runs no serializer; resume
+before checking an event for a tool the pause waits on. Go keeps its existing
+snapshot, tool span and span event checks.
+
+`expect` is a set of required assertions, not illustrative output. Drivers
+collect the following observations from real SDK outputs and callbacks:
+
+- `decoded`: exact JSON equality at the named observation, after decoding
+  compact JSON strings and OTLP AnyValues. `captured_value` is the value at the
+  tested site: a normalized message with `role` and `parts`, tool response, tool arguments, span attribute,
+  event attribute or MCP result. It is not the whole provider envelope.
+  Span expectations using `attributes` are subset assertions for SDK-generated
+  attributes, with exact equality of every listed value; other decoded objects
+  are exact. Never turn an absent field into null to make an assertion pass.
+- Sink names (`call_event`, `wrapper_span`, `otlp`, `tool_event_input`,
+  `tool_event_output`, `tool_span_input`, `tool_span_output`,
+  `rule_properties_input`, `rule_properties_output`, `span_attribute`,
+  `span_event`, `pause_snapshot`) extract the tested value from each actual
+  sink. Call/tool names in other cases extract the corresponding input,
+  output or arguments. `context.custom` extracts the custom span context.
+- `never_emitted`: every listed string must be absent from all assembled
+  product events, declared tool events, normalized spans, OTLP messages and
+  persisted snapshots, including their final analytics transport JSON. Check
+  the actual serialization, with the app's global prototype modifications
+  removed only after capture. `provider_never_received` checks provider request
+  bytes separately. App callbacks may receive hidden original values.
+- `absent_paths` and `snapshot_absent_paths`: listed fields must be absent,
+  including within every member of an array. `call`, `response`, `span`, `tool`
+  and `mcp` select the corresponding emitted payload; `span.content` means all
+  content attributes/events governed by the capture policy. A snapshot path is
+  checked on the real snapshot, without adding fixture-only fields.
+- `serializer_calls`: exact SDK-initiated invocation counts per named object,
+  field serializer or marshaler method. `before_write`, `after_write` and
+  `during_restore` are counts at those checkpoints; `after_write` is the total
+  capture count by write release. `serializer_keys`, `model_dump_modes`,
+  `hook_inputs` and `consumer_text` are ordered actual callback observations.
+  `result_size` is the emitted `result_size_bytes`, measured as UTF-8 text for
+  strings and compact JSON for other resolved values, before byte stripping
+  as base did; `{"public":"capture-1"}` is 22 bytes.
+- `event_counts` counts each named event exactly. `llm_call_count`,
+  `error_type`, `tool_status` and `response_status` read their actual emitted
+  fields. `matches_encoding_json` compares against a separate native Go JSON
+  serialization using fresh receiver counters.
+- `callbacks` selects only the current SDK's expected entry. Assert actual
+  object identity, class methods, decoded shapes and numeric runtime types;
+  never infer identity from JSON equality. `base_mcp_values` means the same
+  shape the released MCP API supplies (Python v1 JSON-mode, v2's base shape).
+  App identity flags, chunk counts, exception identity and `app_exception`
+  observe the app-facing call; null means no exception, not a null exception.
+- `pause_accepted`, `error_hook` and `interaction_ended_in_callback` check the
+  real lifecycle state and ordered error-hook observations.
+- `heap_growth_lt_mib` gives strict ceilings on post-GC live heap growth at
+  `before_end` and `after_end`; 1 MiB is 1,048,576 bytes. `alive_weak_refs` and
+  `retained_buffer_mib` are exact counts and amounts, never tolerances.
+- Documentation expectations count `unbacked_behavior_lines`,
+  `stale_claim_count` and `missing_required_contracts`; all must be zero.
+
+### Serializer descriptors
+
+Reuse the `$container` vocabulary above (`bytes`, `map`, `set`, `class`,
+`bigint`, `symbol`, `cycle`) and `native_content_cases` vocabulary (`binary`,
+`construct_as`, `fields`, `cycle`, `entries`, `set`). Ordinary arrays and
+objects recurse. Add these app-owned runtime values:
+
+- `throwing_serializer`: `fields` are private native fields. Its own `toJSON`,
+  `model_dump` or `MarshalJSON` throws/returns an error. Go `failure` may be
+  `error`, `panic`, `invalid_json`, `text_error` or `text_panic`; the latter two
+  use `MarshalText`. Failure produces JSON null and never walks `fields`.
+  `P2-throwing-serializer-placeholder` must decode span `input.value` to null
+  and must never emit `HIDDEN_CANARY`.
+- `hiding_serializer`: materialize `fields` on the native value; its serializer
+  returns `serialized`, ignoring all other fields. An exact string
+  `{field:text}` in the template reads the current native `text` field, so
+  mutation cases observe state at the report's capture point.
+- `counting_serializer`: like `hiding_serializer`, but increment a counter on
+  every SDK invocation and substitute `{n}` in `serialized` string leaves with
+  the decimal counter, starting at 1. A second call is visible as `capture-2`.
+  Objects use native identity (Go pointers); scenario `receiver: "by_value"`
+  instead constructs Go value receivers, including non-comparable fields.
+- `byte_field_serializer`: Python model `fields` include a native `binary`
+  field named by `field`. Its ordinary `@field_serializer` returns `serialized`
+  for that field. Do not exclude the field before python-mode `model_dump`.
+- `throwing_getter_output`: the native serializer returns `serialized` plus
+  a property named `throwing_key` whose access raises. The entire captured value
+  becomes null; no partial returned object or original fields are emitted.
+
+Go marshaler descriptors encode `serialized` to valid JSON (or text for Text
+scenarios); the marshaler's transport `[]byte` is JSON, not captured raw content.
+For a raw-byte **result** test Go emits the existing serialized Buffer shape
+`{"type":"Buffer","data":[byte,...]}` for a byte descriptor; it cannot return a
+native byte object from `MarshalJSON`. A Go marshaler that encodes bytes to an
+ordinary base64 string preserves that text. Node checks native buffers before
+`Buffer.toJSON`; Python strips native bytes/views after serialization. These
+descriptors and their counters never appear on the wire.
+
+### Counter semantics and capture lifetime
+
+Count once per value in each report, across every sink of that report: call
+event, wrapper span, OTLP, tool event, `result_size`, rule-returned properties
+and pause snapshot. A report is a provider call, tool call, tool result, manual
+span or MCP response. The same app object in a later report runs again, even
+within one interaction or in an ignored repeat/twin report. Both twin arrival
+orders therefore have two capture passes for two reports and one accounted
+provider call. `report_values` observes each pass at its capture point (a
+test-only observer may read detached report output); it does not require both
+values to be emitted in a deduplicated event. Consumers of one report must all
+reuse that report's result.
+
+The pass memo is local to that report; shared objects within it run once.
+Go pointers, maps and slices have identity; Go by-value receivers run once per
+occurrence, like `encoding/json`, even if two copies have equal fields.
+Serializer calls made by app serializers themselves (nested Pydantic dumps,
+`json.Marshal` inside `MarshalJSON`, or a `toJSON` calling another `toJSON`) are
+outside the SDK invocation count. There is no interaction-wide identity cache.
+Re-entry while a serializer is running produces null. No SDK lock may be held
+while an app serializer executes; capture enters the existing callback guard.
+
+Capture happens where base reports content, before the app can mutate it and
+before a retained slot can keep its raw receiver. Manual attributes/events are
+captured at span End; context at span start. Only payload builders read the
+detached output. Request controls, rules, classifiers for errors, stream chunks,
+app results and OTel hooks keep their base inputs. Capture off still resolves a
+value when base needs size or classifier/evaluator text, but stores no content.
+OTel attributes admitted by native validation contain primitives rather than
+app serializer objects; hand-built tracing reports exercise the report path,
+not a claim that native OTel setters admit arbitrary objects.
+
+Pause/JSON restore reuses detached data that base already persists, including
+pending tool rule output. It does not add provider per-call content to snapshots:
+that content remains omitted as in the existing pause contract. In-process
+pause retains detached content; JSON restore tests compare persisted pending
+tool values and already emitted content, with zero new serializer invocations.
+
+### Named scenario operations
+
+`capture_site` embeds `value` at `site`, records through that public API/adapter,
+then ends the scope and reads the corresponding output. Provider message sites
+test whole-message serialization before projection; history tool results test
+the serialized output rather than raw `output` fields. Responses custom tools
+and Agents fallbacks extract `input` only from the resolved value. Tool sites
+install a `lookup` rule and use `looked_up` where requested. Span attributes and
+events place the value under `input.value`; context uses `custom`. MCP uses a
+successful write release before capture. `manual_span` supplies the exact span,
+clock and ids from setup. `framework_report` sends one framework-native report
+through its normal hook. `redaction_hook` records its incoming masked string;
+`turn_consumers` records classifier/evaluator text. `exporter_hook` with
+`hook: "span_error_type"` calls the built-in error mapper on the original span;
+it does not install a custom hook. Original exporter callback identity is
+covered by I4.
+
+`node_json_key` positions a fresh serializer at root, object field `value`,
+array index 0 or tool `arguments`, returning `{ "key": key }`; a non-string key
+throws. `node_prototype_serializer` temporarily installs the specified prototype
+method and restores it in a finally block. `go_marshaler_precedence` creates a
+value Text receiver and pointer JSON receiver; pointer struct/array fields and
+slice elements are addressable, while unaddressable struct/array values are not.
+`go_time` captures native `time.Time`. `python_field_serializer` nests under
+`child` when requested; `python_duck_model_dump` uses a non-Pydantic object with
+a python-mode `model_dump` method.
+
+`report_sinks` uses the **same instance** at each requested site in a single
+report, including a rule returning that instance. `tool_result_size` reports
+one result and reads its emitted size and rule properties. `separate_tool_reports`
+uses one instance in a tool call, result and subsequent provider report, giving
+three independent counts; Go callbacks retain their base decoded input even
+when setup's rule explicitly returns the original instance from its closure.
+`shared_value` places two references/occurrences inside one report, using the
+specified receiver/container shape. `serializer_reentry` captures the running
+value in a nested manual report. `twin_reports` and `repeat_reports` use matching
+response ids, observing capture outputs before normal admission/merge.
+
+`mcp_write` holds a transport write and samples the SDK counter before and after
+successful release or failure. Success, error-content and error-structured-content
+paths are separate. Counters exclude serialization done by the transport itself;
+use a write observer/transport that records messages without invoking serializers
+to measure SDK timing. Failed writes have no captured result content. Native MCP
+adapters must also preserve base rule/classification shapes.
+`python_mcp_v1_rules` preserves the base pre-write JSON-mode conversion of
+datetime and bytes for callbacks. `setup.base_conversion: "pre_write_json_mode"`
+declares that conversion separately from capture: `expect.base_serializer_calls`
+counts base calls before/after the write, while `expect.serializer_calls` counts
+only additional telemetry calls. `expect.model_dump_modes` lists the base dump
+modes in invocation order. Capture uses the delivered wire message and adds no
+post-write serializer call.
+An explicit `adapter` selects that SDK's MCP v1/v2 or Go SDK/mcp-go integration.
+`python_nested_dumps` reports a parent model that dumps its child internally,
+then reports the same child separately, distinguishing app-internal invocations
+from SDK-initiated ones.
+
+`mutation` performs setup steps in order; both the request list and app fields
+are mutable, but captured output is detached. `provider_tool_rules` tests the
+provider's tool-argument callback and result-class method `getOrder`, using
+identity/class filters where base supplies native objects and map filters where
+base supplies decoded maps. `mcp_callback_inputs` checks `when`, `properties`
+or `classifyToolError`; the Node original has id 7 even though its serializer
+hides it. `app_result_identity`, `vercel_stream_identity`, `agents_hook_identity`
+and `exporter_hook` assert native identity through the app-facing APIs.
+
+`vercel_stream_error` delivers native APICallError/AbortError error parts, with
+the real-provider/replacement-middleware sibling when specified.
+`native_error_classification` constructs the SDK's native provider exception
+for the requested category, with classification metadata on its prototype or
+non-enumerable/native fields. `mcp_classification` uses `isError`,
+`_meta["com.rudderstack/http_status"]` or structured `status`/`statusCode` from
+the original input; `is_error` alone has no HTTP status. The serializer hides
+that signal. `function_tool_classification` reports original `successful:false`.
+
+`bedrock_document` uses a real Smithy document serializer in Go, preserving
+`document:"-"` for arguments, results, nested/pointer structures, multi-block
+results and ConverseStream history. `captured_value` selects the tested JSON
+block, including within a nested result or among multiple blocks.
+`bedrock_callback_shapes` constructs the native equivalent of the requested
+result shape (plain maps where the SDK has no typed Smithy document), invokes
+the rule with `quantity:3` and `{ "ok": true }`, and asserts one event/no panic.
+
+`receiver_heap` records the specified fresh receivers/buffers, retains the
+interaction, forces GC at both checkpoints and measures live memory. For
+`keep_app_values:true`, measure bytes strongly reachable from SDK retained
+roots, excluding only app-owned paths, not bytes also retained by the SDK;
+use the runtime heap profiler/retainer graph or a cycle-safe reachability walk
+of quiescent SDK roots. Do not subtract all caller buffers
+blindly, which would hide the leak. `keep_app_values:false` drops all caller
+references and measures ordinary live heap growth from a post-GC baseline.
+Go weak pointers/finalizers and Node/Python weak refs supply liveness assertions.
+`serializer_output_heap` produces a new object with a 1 MiB raw buffer inside
+each serializer; retain its receiver, but only weak refs to output objects.
+Go uses byte-containing serialized output buffers and weak/finalizer probes
+at the serializer return boundary. Strip before storing; no output buffer
+may survive capture. Ensure allocation/GC helpers do not keep accidental locals.
+
+`late_provider_response` starts a held provider request, ends its interaction
+and then releases the response. The Google typed config and OpenAI typed/dict
+tool choices use native control values; they must not initialize telemetry
+capture before the provider request. A late wrapper span preserves answer,
+response id, finish reason and usage. `late_manual_span` ends the interaction
+before its already-open manual span. `pause_restore` pauses and resumes the
+real interaction in process or from JSON; inspect persisted tool output as
+described above. `serializer_pause`/`serializer_end` invoke the lifecycle action
+inside the serializer and check the existing callback behavior: Python permits
+End while still capturing the outstanding manual span; Pause remains refused.
+For `request_control_timing`, `setup.serializer_calls_scope: "telemetry"`
+restricts `serializer_calls.sdk_before_provider` and
+`pause_accepted_before_provider` to telemetry capture. Existing request-control
+reads (including Python's typed `tool_choice` conversion) are outside this
+count and keep their existing callback behavior.
+
+`cancelled_stream`
+reads one chunk then cancels without a tracing twin; parked twin/credit
+accounting belongs exclusively to `base_parity_guards`.
+
+`documentation_contract` audits serializer behaviour lines in the listed
+existing documents (recursing under `docs/`). Each positive behaviour claim
+must have an applicable executable case with a corresponding assertion;
+cross-SDK statements may reference the applicable dispatch cases from each SDK.
+The contract named by setup must be documented somewhere in that document set,
+not repeated in every file. Known limits must state app-internal serializer
+invocations and, in Go docs, Go by-value occurrence semantics. Reject claims of spans-on
+field walking, pre-serializer byte exclusion, interaction-wide once-only caches,
+serializer-failure omission or pre-write MCP capture. Missing optional document
+paths are ignored only if the required contract is documented elsewhere. These
+are expectations for the later documentation task, not SDK code in this fixture.
+
+Go marshalers can return only JSON or text, so base64 text a marshaler emits is
+sent as text under the existing masking and capture controls. The P3 raw-bytes
+cases wrap payloads in media-shaped objects (`mime_type` plus `data`) so all
+SDKs check the existing media sanitiser, including Go's JSON boundary.
+
+
+### Round-1 capture boundaries and schema validity
+
+`schema_omission` reports a failing serializer (`setup.value`) as the top-level
+call field named by `setup.field` (`input_messages`, `output_text` or
+`output_tool_calls`). Its schema disallows null, so `expect.absent_paths` checks
+omission. Report `setup.nested_value` alongside the failed root in the same call: use
+input_messages[0].parts[0].response when output_tool_calls fails, otherwise
+output_tool_calls[0].arguments. Also report it through a declared tool rule
+returning `{nested: result}`. `expect.decoded.nested_null` reads the call sibling
+and must be JSON null; the declared rule must preserve null too.
+`expect.invalid_event_count` counts events rejected by the unchanged schemas.
+The call, wrapper span and declared tool event must survive both failures.
+
+`request_handoff` passes the serializer-bearing `setup.value` as an OpenAI Chat
+request's user content. `mode` and `stream` select real native return/stream
+paths. Sample `expect.provider_input` at provider entry without invoking its
+serializer. After sending, mutate the value's `text` to `setup.mutation` before
+completion or stream consumption (inside the provider before returning for a
+synchronous call). `decoded.call_input`, `wrapper_input` and `otlp_input` extract
+the captured user text from actual events/spans. All keep the handoff value,
+and the serializer counter remains one. One provider report includes request
+capture at handoff and response capture at completion; repeated references to
+the same value across those boundaries reuse one serializer result, as fixed
+by N1-provider-call-spans-{false,true}.
+
+`mcp_delivered` uses `setup.adapter` and a native write path. Middleware replaces
+`setup.original` with `setup.replacement` before delivery. `setup.outcome` is
+`result` (structured result value) or `error` (isError content text).
+`decoded.delivered` reads the client's actual wire message; `decoded.captured`
+reads the declared rule's result property or the MCP event's error message.
+Both must equal the replacement. Callback/classification inputs retain their
+base identities; captured callback return values must map to delivered content.
+Adapter-specific cases state reasons for other SDKs and have native siblings.
+
+`mcp_handler_duration` uses a controlled epoch-millisecond `setup.clock` with
+`start_ms`, `handler_ms`, `write_ms`, `serializer_ms` and `following_wait_ms`.
+Complete the first handler after `handler_ms`, delay its write by `write_ms`,
+and optionally delay wire serialization by `serializer_ms`. Start the next
+call after `following_wait_ms` and finish it after `handler_ms`. Outcomes are
+`success`, `error` and `slow_serializer`. `expect.duration_ms`, `timestamp_ms`
+and `declared_timestamp_ms` read the first MCP event and declared event;
+`ms_since_previous_call` reads the second MCP event. Handler completion fixes
+both timestamps and duration; write/serialization time belongs to the gap.
+
+`python_mcp_v1_callback_conversion` materializes a v1 model with a JSON-only
+serializer returning `setup.json_only_value`, while python mode returns
+`setup.python_mode_value`. `consumer` selects `when`, `properties` or
+`classify_tool_error`; `signal` selects `status`, `statusCode` or `meta` with
+`setup.status` (401). Preserve base pre-write JSON conversion, callback
+`decoded.callback_value`, delivered `decoded.captured_value`, and auth_error
+classification. Count base conversion separately from telemetry as above.
+Slow JSON conversion is also covered by the Python-v1 handler-duration case.
+
+Documentation cases accept `setup.documents_by_sdk`, `case_ids_by_sdk` and
+`claims_by_sdk`. These map SDK names to document paths, executable backing ids
+and required regular-expression strings, respectively, replacing the default
+fields for that SDK. Audit each SDK's own claims; the behavior changelog is
+`spec/CHANGELOG.md`, since root CHANGELOG.md is release-please generated.
+Python JSON restoration of a pending tool deliberately omits its arguments:
+the L3 Python override expects the base callback's null after JSON restore;
+in-process resume retains the original value. Restore must still roundtrip JSON,
+check the snapshot omissions and invoke no serializer while restoring.

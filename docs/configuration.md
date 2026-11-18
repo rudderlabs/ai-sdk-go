@@ -224,6 +224,12 @@ err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID)
 
 ## Content capture
 
+Captured content honours `MarshalJSON` and `MarshalText` with `encoding/json` precedence, with spans on or off. The SDK resolves each value once per report, at its existing capture point, and stores a detached snapshot. Events, spans, sizes and rule-returned properties reuse that output; sizes count serializer output as `encoding/json` writes it, HTML escapes included. In-process resume reuses stored content; JSON restore currently drops the content of deferred call events. A later report captures the value again. Native raw bytes are stripped; ordinary text returned by a serializer, including base64, remains subject to masking and capture controls.
+
+A serializer error, panic, invalid JSON or re-entry produces JSON `null`; its fields are never walked and the event still arrives. A top-level event field that does not allow null is omitted to keep the event valid. MCP tool results reuse the written wire message after a successful write; a failed write captures no result, and its event keeps the handler's outcome and size. Transports without a write observer keep their existing release point, as do results whose response the observer never sees (closed first, timed out or a reused request id). Span context is captured at span start even with content capture off; admitted manual attributes are captured at End. Disabled content attributes run no serializers. Handler duration and completion time stay fixed at handler completion while MCP capture waits for the write. An oversized observed MCP message keeps no body: its result is captured from the handler's value after the write, with the written result size. OTel attributes keep their existing byte stripping.
+
+App callbacks, rules, classifiers, request controls and return values keep their previous inputs. Serializers an app serializer calls itself are outside the SDK's count. Go by-value receivers run once per occurrence because they have no identity.
+
 Content capture is off by default: no prompt, answer, feedback or failure text is sent. `WithCaptureContent(true)` turns every kind on. `ContentCapture` turns kinds on one at a time; a nil key takes `Default`, then the level above:
 
 ```go
@@ -284,7 +290,7 @@ err := rudderstackai.Configure(
 
 - Patterns catch fixed shapes only: names, postal addresses and free-form IDs are not caught, and some order numbers look like phone numbers. Use the hook, or leave capture off.
 - Fail closed: a hook that returns an error or panics drops the field. Text over 32,000 code points is withheld rather than masked.
-- One rule: `WithRedaction(false)` sends captured text unmasked and does not run the hook; MCP `Options.DisableRedaction` does the same for `Redact`. The patterns are shared with the Node.js and Python SDKs ([`spec/fixtures/redaction-v0.1.json`](../spec/fixtures/redaction-v0.1.json)).
+- One rule: `WithRedaction(false)` sends captured text unmasked and does not run the hook; MCP `Options.DisableRedaction` does the same for `Redact`. The patterns are defined in [`spec/fixtures/redaction-v0.1.json`](../spec/fixtures/redaction-v0.1.json).
 - `MaskText(text)` applies the same patterns to text you send yourself, such as free text a [declared tool event](events.md#declared-tool-events) rule's `Properties` returns: the SDK sends those as returned. It ignores `WithRedaction` and the hooks; `ok` is false for text over 32,000 code points, which you should not send.
 
 ## Pricing
@@ -401,7 +407,7 @@ err := rudderstackai.Configure(rudderstackai.WithSampleRates(map[string]float64{
 }))
 ```
 
-- **What is kept.** An event with a rate below 1 is sent for that share of interactions. The draw is a hash of `interaction_id` (the same in the Go, Node.js and Python SDKs), so every sampled event of one interaction is kept or dropped together, and an interaction kept at a lower rate is also kept at every higher one. An event without an `interaction_id` (`mcp_client_seen`) is drawn at random.
+- **What is kept.** An event with a rate below 1 is sent for that share of interactions. The draw is a hash of `interaction_id`, so every sampled event of one interaction is kept or dropped together, and an interaction kept at a lower rate is also kept at every higher one. An event without an `interaction_id` (`mcp_client_seen`) is drawn at random.
 - **The stamp.** A kept event carries `sample_rate` (`0.1`); weight each row by `1 / sample_rate` to estimate totals. Events without a rate below 1 carry none.
 - **The default.** Events you do not list are all sent. Leave `ai_response_received` out: cost totals, answer counts and the client/server gap need every answer, and its `llm_call_count`, `tool_call_count` and token totals still count the calls whose own events were sampled out. You can list it; then every metric built on it is an estimate.
 - **Pauses and resumes.** Every paused and final answer is sent by default. When you sample `ai_response_received`, each segment uses the same interaction ID draw and kept segments carry the configured `sample_rate`, including after JSON snapshot restore. Configure the same rates in every worker that resumes the run.
@@ -411,7 +417,7 @@ Sampling runs before the event reaches your analytics-go client, so it works wit
 
 ## Limits
 
-`WithLimits(Limits{...})` bounds what the SDK holds in memory, whatever the traffic. Defaults are identical in Node.js and Python; reaching a cap is reported as `limit_reached` ([errors](#errors)).
+`WithLimits(Limits{...})` bounds what the SDK holds in memory, whatever the traffic. Reaching a cap is reported as `limit_reached` ([errors](#errors)).
 
 | Field                    | Default  | At the cap                                                                                                                        |
 | ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
@@ -424,9 +430,9 @@ Captured text is masked with a 100 ms budget per pattern; a text that runs out o
 
 ## Errors
 
-Tracking never panics into your code: a panic in the SDK, in an integration (including the AWS SDK's stream-decoding goroutine) or in a hook you configured is contained, and your call's own result or error is returned unchanged. Event values are encoded before they reach the RudderStack client, so a `MarshalJSON` that panics or fails drops that property, never the process.
+Tracking never panics into your code: a panic in the SDK, in an integration (including the AWS SDK's stream-decoding goroutine) or in a hook you configured is contained, and your call's own result or error is returned unchanged. Event values are encoded before they reach the RudderStack client, so serializer failures never reach your app. Content serializers follow the null and field omission rules above; a failed serializer on other extra event properties drops that property.
 
-Each contained error has an `ErrorInfo{Kind, Where}`. Kinds, identical in Node.js and Python:
+Each contained error has an `ErrorInfo{Kind, Where}`. Kinds:
 
 | Kind                | Meaning                                                                                              |
 | ------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -443,7 +449,7 @@ Each contained error has an `ErrorInfo{Kind, Where}`. Kinds, identical in Node.j
 
 ## Logging
 
-Warnings (a missing client, a failed `Enqueue`, an invalid status or surface, a dropped `TrackAction` / `TrackScore`, the first classifier failure) go to the default `log/slog` logger, prefixed `[rudderstack-ai]`, mostly once per process. Everything tracking drops or ignores is logged at debug level, errors by type only, never event payloads or captured text. Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value, read on every log call, as in Node.js and Python) to write it through the default slog handler whatever its level, or `slog.SetLogLoggerLevel(slog.LevelDebug)` to show it.
+Warnings (a missing client, a failed `Enqueue`, an invalid status or surface, a dropped `TrackAction` / `TrackScore`, the first classifier failure) go to the default `log/slog` logger, prefixed `[rudderstack-ai]`, mostly once per process. Everything tracking drops or ignores is logged at debug level, errors by type only, never event payloads or captured text. Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value, read on every log call) to write it through the default slog handler whatever its level, or `slog.SetLogLoggerLevel(slog.LevelDebug)` to show it.
 
 ## Warehouse column types
 

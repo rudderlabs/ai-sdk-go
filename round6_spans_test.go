@@ -67,7 +67,7 @@ func TestWalkerCountsPointerAndEmbeddedStructHops(t *testing.T) {
 	}
 }
 
-func TestWalkerDepthMatchesMainBoundary(t *testing.T) {
+func TestWalkerJSONEmbeddingAndPointerDepth(t *testing.T) {
 	type Node struct {
 		*Node
 		Value string `json:",omitempty"`
@@ -76,8 +76,9 @@ func TestWalkerDepthMatchesMainBoundary(t *testing.T) {
 	for range 60 {
 		leaf = &Node{Node: leaf}
 	}
-	if got := stripBinary(leaf).(map[string]any)["Value"]; got != "within main's limit" {
-		t.Fatalf("embedded hops differ from main: %v", got)
+	// encoding/json selects the shallowest Value. Omitting it must not promote deeper values.
+	if got := stripBinary(leaf).(map[string]any)["Value"]; got != nil {
+		t.Fatalf("recursive embedding bypassed JSON field selection: %v", got)
 	}
 	var value any = "past main's limit"
 	for range 40 {

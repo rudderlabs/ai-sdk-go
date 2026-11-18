@@ -146,11 +146,11 @@ func TestSDK6942CustomMarshalersKeepTheirRepresentation(t *testing.T) {
 		{"map of byte slices drops its bytes", map[string][]byte{"raw": []byte("PRIVATE")}, map[string]any{}},
 		{"marshaler hiding a field keeps it hidden", sdk6942Hidden{Visible: "ok", Secret: "PRIVATE"}, map[string]any{"visible": "ok"}},
 		{"pointer to a hiding marshaler", &sdk6942Hidden{Visible: "ok", Secret: "PRIVATE"}, map[string]any{"visible": "ok"}},
-		{"failing marshaler drops the value", map[string]any{"keep": "ok", "bad": sdk6942Failing{Value: "PRIVATE"}}, map[string]any{"keep": "ok"}},
+		{"failing marshaler becomes null", map[string]any{"keep": "ok", "bad": sdk6942Failing{Value: "PRIVATE"}}, map[string]any{"keep": "ok", "bad": nil}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := stripBinary(tc.in); !reflect.DeepEqual(got, tc.want) {
-				t.Fatalf("stripBinary() = %#v, want %#v", got, tc.want)
+			if got := captureValue(tc.in).value; !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("captureValue() = %#v, want %#v", got, tc.want)
 			}
 		})
 	}

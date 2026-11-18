@@ -666,6 +666,28 @@ func (t *tracked) onSuccess(ctx context.Context, _ any, method mcp.MCPMethod, me
 }
 
 func (t *tracked) succeeded(ctx context.Context, c *call, result any) {
+	if c.method == "tools/call" {
+		c.c.Succeeded(c.method, nil)
+		if c.capability {
+			return
+		}
+		o := mcpbridge.Outcome{Result: result, ContextCancelled: errors.Is(ctx.Err(), context.Canceled)}
+		if r, ok := result.(*mcp.CallToolResult); ok && r != nil && r.IsError && o.ContextCancelled {
+			o.Cancelled = true
+		}
+		if r, ok := result.(*mcp.CallToolResult); ok && r != nil && r.IsError && c.classify != nil {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						hook.Report(rudderstackai.KindUserCallback, "Options.ClassifyToolError", fmt.Errorf("panic: %v", r))
+					}
+				}()
+				o.ClassifiedError = c.classify(c.name, r)
+			}()
+		}
+		c.c.ToolDone(o)
+		return
+	}
 	var res map[string]any
 	if b, err := json.Marshal(result); err == nil {
 		_ = json.Unmarshal(b, &res)
@@ -710,35 +732,6 @@ func (t *tracked) succeeded(ctx context.Context, c *call, result any) {
 			}
 		}
 		t.srv.RememberTemplates(templates)
-	case "tools/call":
-		if c.capability {
-			return
-		}
-		o := mcpbridge.Outcome{Result: result}
-		if r, ok := result.(*mcp.CallToolResult); ok && r != nil && r.IsError && c.classify != nil {
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						hook.Report(rudderstackai.KindUserCallback, "Options.ClassifyToolError", fmt.Errorf("panic: %v", r))
-					}
-				}()
-				o.ClassifiedError = c.classify(c.name, r)
-			}()
-		}
-		if reqs, ok := res["inputRequests"].(map[string]any); ok {
-			o.InputRequired = true
-			o.RequestState, _ = res["requestState"].(string)
-			for key, v := range reqs {
-				if m, _ := v.(map[string]any); m["method"] == "elicitation/create" {
-					o.InputKeys = append(o.InputKeys, key)
-				}
-			}
-		} else if res == nil {
-			o.Result = nil
-		} else if isError, _ := res["isError"].(bool); isError && ctx.Err() != nil && errors.Is(ctx.Err(), context.Canceled) {
-			o.Cancelled = true
-		}
-		c.c.ToolDone(o)
 	case "resources/read", "prompts/get":
 		b, _ := json.Marshal(result)
 		c.c.Finished(c.method, c.name, len(b), "")

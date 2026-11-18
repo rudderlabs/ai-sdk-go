@@ -398,8 +398,16 @@ func TestMCPErrorMessageNoWriteWait(t *testing.T) {
 			release := sync.OnceFunc(func() { close(writer.release) })
 			defer release()
 			rc := <-calls
-			if rc.held != nil || responses.Waiting() {
-				t.Error("hold/response observer/timer registered")
+			resultHeld := !strings.HasSuffix(mode, "rpc")
+			if resultHeld {
+				if rc.held == nil || !responses.Waiting() || len(r.named("mcp_tool_called")) != 0 {
+					t.Error("result must wait for successful write even with content off")
+				}
+				release()
+				<-done
+				r.wait(t, "mcp_tool_called", 1)
+			} else if rc.held != nil || responses.Waiting() {
+				t.Error("protocol error unexpectedly held")
 			}
 			deadline, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
@@ -421,7 +429,9 @@ func TestMCPErrorMessageNoWriteWait(t *testing.T) {
 			// The client call is still blocked by the response write.
 			select {
 			case <-done:
-				t.Error("response write completed before release")
+				if !resultHeld {
+					t.Error("response write completed before release")
+				}
 			default:
 			}
 			release()

@@ -563,13 +563,18 @@ func TestMCPGoErrorMessageNoWriteWait(t *testing.T) {
 				case <-time.After(2 * time.Second):
 					t.Fatal("handler never returned")
 				}
-				if <-waiting {
-					t.Error("response observer/timer registered")
+				resultHeld := !strings.HasSuffix(mode, "rpc")
+				if got := <-waiting; got != resultHeld {
+					t.Errorf("waiting=%v want=%v", got, resultHeld)
 				}
 				select {
 				case <-writer.started:
 				case <-time.After(2 * time.Second):
 					t.Fatal("write never started")
+				}
+				if resultHeld {
+					release()
+					<-done
 				}
 				deadline, stop := context.WithTimeout(context.Background(), time.Second)
 				defer stop()
@@ -589,7 +594,9 @@ func TestMCPGoErrorMessageNoWriteWait(t *testing.T) {
 				}
 				select {
 				case <-done:
-					t.Error("write completed before release")
+					if !resultHeld {
+						t.Error("write completed before release")
+					}
 				default:
 				}
 				// Join before the next test changes the global configuration.
@@ -727,7 +734,9 @@ func TestMCPGoHeldFieldSnapshot(t *testing.T) {
 			case "classifier.output":
 				classification = "auth_error"
 			case "invalid_arguments", "declared.when", "declared.properties":
-				liveArgs["value"].(map[string]any)["valid"] = true
+				if liveArgs != nil {
+					t.Fatal("rule ran before successful write")
+				}
 			case "declared.content":
 				result.Content[0] = mcp.TextContent{Type: "text", Text: `{"label":"auth_error","message":"second failure"}`}
 			case "declared.output":
@@ -735,6 +744,7 @@ func TestMCPGoHeldFieldSnapshot(t *testing.T) {
 			case "request.identity":
 				copy(request, []byte(strings.Replace(string(request), `"id":1`, `"id":2`, 1)))
 			}
+
 			close(w.release)
 			if err := <-done; err != nil {
 				t.Fatal(err)
@@ -751,13 +761,24 @@ func TestMCPGoHeldFieldSnapshot(t *testing.T) {
 			if field == "declared.content" {
 				wantMessage = `{"label":"rate_limit","message":"first failure"}`
 			}
-			if p["request_id"] != "1" || p["tool_status"] != "error" || p["error_type"] != wantKind || p["error_message"] != wantMessage {
+			wantStatus := "error"
+
+			if field == "meta.status" || field == "structured.status" || field == "structured.statusCode" {
+				wantKind = "rate_limit"
+			}
+			kind, _ := p["error_type"].(string)
+			message, _ := p["error_message"].(string)
+			if p["request_id"] != "1" || p["tool_status"] != wantStatus || kind != wantKind || message != wantMessage {
 				t.Fatalf("completion: %v", p)
 			}
 			if !strings.HasPrefix(field, "error.") && (p["result_size_bytes"] != size || p["result_tokens_estimate"] != size/4 || p["is_error_result"] != true || p["result_paginated"] != strings.HasPrefix(field, "structured.next")) {
 				t.Fatalf("stats: %v", p)
 			}
-			if mustJSON(r.props(t, "lookup_failed")["nested"]) != `{"value":"first"}` {
+			expectedOutput := `{"value":"first"}`
+			if field == "declared.output" {
+				expectedOutput = `{"value":"second"}`
+			}
+			if mustJSON(r.props(t, "lookup_failed")["nested"]) != expectedOutput {
 				t.Fatalf("declared: %v", r.props(t, "lookup_failed"))
 			}
 		})
@@ -884,7 +905,7 @@ func TestMCPGoObserverPreservesSerializerOrder(t *testing.T) {
 					var received map[string]any
 					handle := func(ctx context.Context, out io.Writer) {
 						response := s.HandleMessage(ctx, []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"lookup","arguments":{}}}`))
-						want := 2 // Main's onSuccess copy and ToolDone stats each marshal once.
+						want := 0 // Telemetry waits until the response write succeeds.
 						if outcome == "rpc" {
 							want = 0
 							rpc := response.(mcp.JSONRPCError)
@@ -910,8 +931,10 @@ func TestMCPGoObserverPreservesSerializerOrder(t *testing.T) {
 						if _, err := out.Write(append(body, '\n')); err != nil {
 							t.Fatal(err)
 						}
-						if calls != want+1 {
-							t.Fatalf("observer reserialized: %d", calls)
+						writtenCalls := 1
+
+						if calls != writtenCalls {
+							t.Fatalf("post-write calls=%d want=%d", calls, writtenCalls)
 						}
 					}
 					if transport == "stdio" {
@@ -929,7 +952,7 @@ func TestMCPGoObserverPreservesSerializerOrder(t *testing.T) {
 						})).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/mcp", nil))
 					}
 					var data map[string]any
-					want := float64(3)
+					want := float64(1)
 					if outcome == "rpc" {
 						data = received["error"].(map[string]any)["data"].(map[string]any)
 						want = 1

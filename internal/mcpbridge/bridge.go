@@ -105,6 +105,8 @@ type Outcome struct {
 	ErrorType string
 	// Cancelled reports a call the client cancelled.
 	Cancelled bool
+	// ContextCancelled preserves the base cancellation check after decoding the result.
+	ContextCancelled bool
 	// InputRequired reports a 2026-07-28 input_required result; InputKeys are its elicitation
 	// keys.
 	InputRequired bool

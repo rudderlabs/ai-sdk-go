@@ -48,9 +48,11 @@ Pause timestamps use the wall clock so cross-process waits can be measured; nega
 
 With `emitSpans`, snapshots preserve an internal `sdk_trace_id` independently of application `trace_id`, and pending calls preserve `span_id`. JSON restore publishes pending product events with their join IDs without replaying spans. Overflow calls omit span IDs.
 
-Per-call content follows the binary sanitization rules in `fixtures/FIXTURE-FORMAT.md`. Go exception (SDK-6948): with `emit_spans` off, a value's own `MarshalJSON` or `MarshalText` output is stripped as plain data; bytes that the marshaler encodes as ordinary text, including base64, can reach per-call content. Pause snapshots still omit captured per-call content.
+Per-call content follows the binary sanitization rules in `fixtures/FIXTURE-FORMAT.md`. With spans on and off, captured content uses the app's own serializer before stripping binary data; a failing serializer becomes JSON `null` without walking its fields. Go marshaler output that encodes bytes as ordinary text, including base64, is sent as text under the existing masking and capture controls. Node and Python pause snapshots omit captured per-call content; Go in-process snapshots retain detached captures.
 
 ## Known limits
+
+- JSON restore drops captured content of calls still waiting for a twin in all three SDKs; call counts, tokens and cost remain correct.
 
 - Go and Python only: when a cancelled wrapper call restored from a snapshot carries explicit credits and its span twin later reports different explicit credits, Go and Python keep the wrapper's credits; Node takes the twin's.
 - Corrupt snapshots: Node accepts some non-RFC3339 timestamp strings that `Date.parse` understands (for example `"2026-11-17"`); Python and Go reject the snapshot.

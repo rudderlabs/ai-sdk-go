@@ -31,7 +31,7 @@ func TestManualSpanSetupFailureStillRunsWork(t *testing.T) {
 
 type uncopyableSpanMapping map[string]any
 
-func (uncopyableSpanMapping) MarshalJSON() ([]byte, error) { panic("must not serialize") }
+func (uncopyableSpanMapping) MarshalJSON() ([]byte, error) { panic("serializer failed") }
 
 func TestManualSpanContextSafelyCopiesMapping(t *testing.T) {
 	r := setupAI(t, WithEmitSpans(true))
@@ -44,9 +44,8 @@ func TestManualSpanContextSafelyCopiesMapping(t *testing.T) {
 	if len(events) != 1 || events[0].UserId != "alice" {
 		t.Fatal("mapping prevented span completion")
 	}
-	traits := events[0].Context.Extra["traits"].(map[string]any)
-	if traits["label"] != "before" || traits["binary"] != nil {
-		t.Fatalf("unsafe snapshot: %v", traits)
+	if traits, exists := events[0].Context.Extra["traits"]; !exists || traits != nil {
+		t.Fatalf("failing serializer must have a null snapshot: %v", traits)
 	}
 }
 
