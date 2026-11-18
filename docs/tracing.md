@@ -102,7 +102,7 @@ With `WithLLMCallEvents(true)`, retained call events carry the wrapper's `span_i
 pending events preserve it through pause/JSON restoration. Overflow aggregates omit it. Two
 separate invocations returning the same response ID or reusing an error value emit two spans and the single call event
 keeps the first invocation's ID. Span content follows `WithCaptureContent` even with call events
-off, and captured call content is masked once. With spans on, typed containers and structs are walked directly before binary payloads can be encoded. With spans off, values implementing `json.Marshaler` or `encoding.TextMarshaler` use their own serializer; its output is stripped as plain data, so bytes encoded as ordinary text, including base64, can reach content (SDK-6948). Other values are walked directly. Numeric maps are preserved, primitive map keys become strings, other keys are dropped, cycles are dropped, and other unrepresentable list entries keep null placeholders.
+off, and captured call content is masked once. With spans on or off, content honours `MarshalJSON` / `MarshalText` before inspecting fields, once per report. Each span reads the report's detached output; serializer failures become null without walking hidden fields. Native bytes are stripped. Bytes an app serializer has already encoded as ordinary text, including base64, remain subject to masking and capture controls. Numeric maps are preserved, map keys honour `MarshalText` with Go JSON precedence; other primitive keys become strings and unsupported keys are dropped, cycles are dropped, and other unrepresentable list entries keep null placeholders.
 
 ### One span per call with the span processor
 
@@ -245,33 +245,26 @@ record their Go concrete type, and error text follows the content policy. Raw re
 middleware cannot map finish only their span with HTTP status, without parsed usage or content
 or an invented product call. Raw access to a mapped JSON response still supplies the usage and
 content the middleware parses. Invalid JSON, JSON `null` and response extraction failures finish
-with error status while preserving product-event behavior. Normal wrapper completion
-uses the same attribute set as Node.
+with error status while preserving product-event behavior. Normal wrapper completion records the request, response and usage attributes described above.
 
 ## Go platform limits
 
-- SDK span parents propagate through explicit `context.Context`, rather than Node's ambient
-  asynchronous context. Pass the context returned by `StartSpan` to nested work.
+- SDK span parents propagate through explicit `context.Context`. Pass the context returned by `StartSpan` to nested work.
 - OpenAI and Anthropic integrations run at HTTP middleware, below SDK response decoding.
-  Wrapper failures carry the normalized error category, matching Node; the provider SDK
+  Wrapper failures carry the normalized error category; the provider SDK
   constructs its Go error after middleware returns. Decoding failures after a successful HTTP
   response cannot change the already completed HTTP span, except invalid JSON and JSON `null`
   are detected by the middleware and finish with error status.
-- Google GenAI's Go SDK does not execute Node's automatic function calling (AFC) callback loop or
-  expose its `automaticFunctionCallingHistory`. Each Go `GenerateContent`/stream request emits
-  one span. Node AFC emits one span per outer request, joining only the last call. Applications
+- Each Google GenAI `GenerateContent`/stream request emits one span. Applications
   managing a Go tool loop make separate requests; pass the manual span context explicitly to
   tools and subsequent requests.
 - LangChain, OpenAI Agents SDK, Claude Agent SDK and Vercel AI SDK framework integrations have
-  no Go wrapper. Node supports all four; Python supports the first three. Their integration
-  fixture cases are explicitly skipped in Go. Bound-stream completion APIs also have no Go wrapper.
-- HTTP middleware has no hook for the outer SDK method's promise settlement. Retry grouping uses
+  no Go wrapper. Their integration fixture cases are explicitly skipped in Go. Bound-stream completion APIs also have no Go wrapper.
+- HTTP middleware has no hook for the outer SDK method's completion. Retry grouping uses
   per-invocation request identity, retry headers and response-body probes. With spans enabled,
   every failed attempt has a bounded one-second retry grace, even without context cancellation.
   This settles calls with no configured retries or an exhausted retry budget. Ending an interaction
-  while an attempt is held, or a retry arriving after that grace, can split spans. These boundary
-  cases cannot reproduce Node's
-  outer-method duration and late-settlement behavior from HTTP middleware alone.
+  while an attempt is held, or a retry arriving after that grace, can split spans. HTTP middleware measures individual requests and response consumption.
 - Go has no native tuple or set type; portable tuple/set fixtures use arrays/slices. Foreign
   runtime exception class fixtures use native Go errors. `MaxTurnsExceededError`,
   `LengthFinishReasonError` and `ContentFilterFinishReasonError` have no existing Go Agent SDK or
@@ -357,7 +350,7 @@ and also offers `ForceFlush(context.Context) error`. Constants expose `DefaultEv
 The default AI-span filter keeps any span with a `gen_ai.*` attribute,
 `openinference.span.kind`, `traceloop.span.kind = "tool"`, or legacy `ai.operationId`. Custom export filtering does not change
 which spans count as product calls. Older OpenLLMetry spans with only `llm.request.type` can
-count as product calls while failing the default export filter, matching Node and Python.
+count as product calls while failing the default export filter.
 
 ## Identity and joins
 
@@ -369,7 +362,7 @@ no personal identity from parent spans.
 
 Identity stays off non-AI spans, so other exporters see the original HTTP/database spans. It is
 held aside for AI descendants. If instrumentation adds its AI attributes after Start, RudderStack
-uses a tagged copy of the ended snapshot, following Python's behavior. Go OTel's OnEnd supplies
+uses a tagged copy of the ended snapshot. Go OTel's OnEnd supplies
 an immutable snapshot. The processor retains active span state until End; a bounded cache
 (`Limits.MaxMapEntries`) holds ended-parent identity without retaining span objects.
 
@@ -400,7 +393,7 @@ interaction.End(rudderstackai.EndOptions{})
 
 Spans must name an open interaction through `rudderstack.interaction_id`. Spans outside one,
 or ending after its final End, do not produce product events. An in-flight span retains its owner
-if the interaction pauses before the span ends, and accepted work resumes it, following Python.
+if the interaction pauses before the span ends, and accepted work resumes it.
 The interaction's explicit/context client wins; otherwise it adopts tracing's client.
 When the live ambient (context) interaction's ID matches the ID present at span start,
 that interaction owns the span, even if other live interactions share the ID. Otherwise,
@@ -424,7 +417,7 @@ record failed calls: HTTP status, `error.type`, or the last exception type deter
 category. Tool attributes supply ID, name, MCP server, parent, measured duration, and outcome.
 Arguments/results only reach declared tool-rule callbacks.
 
-Span mapping rules (SDK-6898; shared cases in [`tracing-product-events-v0.1.json`](../spec/fixtures/tracing-product-events-v0.1.json)):
+Span mapping rules (shared cases in [`tracing-product-events-v0.1.json`](../spec/fixtures/tracing-product-events-v0.1.json)):
 
 - Nested model calls: skip a model-call span only when a retained descendant model-call span in the same trace carries a response ID or usage attributes, and either has a response ID or shares any exact response/request model name with an overlapping time window (inclusive endpoints). The parent must have no response ID or the same response ID as that descendant; different response IDs keep both calls even when the model and time window match. A descendant with no usage attributes and no response ID never suppresses its richer parent; explicit zero token counts are usage evidence. A failed parent is skipped only for a failed descendant with the same model and overlapping window; a successful fallback never removes its failure. Keep the descendant. This includes ADK Go `generate_content` with a direct `anthropic.messages.create` child and descendants through non-model spans. Nesting alone is insufficient: different or unknown models without a response ID remain separate calls.
 - OpenInference prep spans: skip an `openinference.span.kind = "LLM"` model-call span only if it has no token-usage attributes in any supported convention (including input, output and cache counts; zero counts are usage), no response ID, no output messages or text (including tool-only output), and status other than `ERROR`; another unrelated model-call span with usage (neither ancestor nor descendant) must share its interaction and trace and start between this span's start minus **1 ms** and the interaction end, inclusive. This covers overlapping calls and later LlamaIndex `_prepare_chat_with_tools` / `achat` root siblings in either end order. A lone span, a failed span, or usage in another trace/interaction cannot trigger this rule.
@@ -440,7 +433,7 @@ OpenLLMetry Anthropic instrumentation 0.63.0 can overcount streamed output befor
 
 The core merges wrapper/span calls with the same provider response ID, or the closest overlapping
 call from the other source with matching provider/model, preserving wrapper usage. A tool span
-without an ID settles a pending matching named wrapper tool, following Node's behavior. Span-only
+without an ID settles a pending matching named wrapper tool. Span-only
 tool executions still count individually. Opt-in captured response text comes from the last
 successful model span when End supplies no `ResponseText`; prompts never come from spans.
 
@@ -460,10 +453,9 @@ plus `agent.session.title` and `agent.channel.delivery.input` on spans from its 
 `metadata` and `gen_ai.agent.description` are written by your app and exported as they are.
 It drops `gen_ai.choice`,
 `gen_ai.client.inference.operation.details`, and `gen_ai.<role>.message` events. Other events keep
-their non-content attributes. These lists match Node's tracing constants. Go also strips error
+their non-content attributes. The exporter also strips error
 text: span status descriptions (including the summary `status_message`) and `exception.message`
 and `exception.stacktrace` attributes on exception events. Exception types and status codes remain.
-Node/Python error-text protections follow in SDK-6802.
 
 With capture enabled, content strings and string arrays, and all string attributes of content
 events, plus error text, pass through the core's redaction and custom hook. Withheld values are
@@ -473,8 +465,6 @@ URL/path/query attributes are always stripped from span, resource, scope, link, 
 `http.route` and identity attributes remain. `ai.response.providerMetadata` counts as content.
 
 Content stripping and redaction apply to span, resource, scope, link, and event attributes.
-Go deliberately goes beyond Node/Python parity here: their resource, scope, and link attributes
-currently bypass these privacy protections.
 
 Oversized events repeatedly shorten the longest OTLP attribute string in resource, span, event,
 then link traversal order. Cuts preserve UTF-8, retain at least 256 bytes before the

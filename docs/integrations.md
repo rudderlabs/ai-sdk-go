@@ -12,7 +12,7 @@ How each integration attaches, what it records, and its edge cases. Event fields
 - [Retries](#retries)
 - [Classifier clients](#classifier-clients)
 - [Manual](#manual)
-- [Limits and differences from Node.js](#limits-and-differences-from-nodejs)
+- [Go platform limits](#go-platform-limits)
 
 ## How integrations work
 
@@ -194,7 +194,7 @@ Tool calls streamed before a failure still count. A provider that reports usage 
 
 ## Retries
 
-openai-go and anthropic-sdk-go retry inside the client, below the tracking middleware. As in Node.js and Python, one SDK method call is one model call, priced once: an attempt the client retries is not recorded, and the final attempt's outcome is. When retries run out, the answer has one failed call. When the context ends while the client waits to retry, the call is recorded as `cancelled` or `timeout`.
+openai-go and anthropic-sdk-go retry inside the client, below the tracking middleware. One SDK method call is one model call, priced once: an attempt the client retries is not recorded, and the final attempt's outcome is. When retries run out, the answer has one failed call. When the context ends while the client waits to retry, the call is recorded as `cancelled` or `timeout`.
 
 With `WithEmitSpans(true)`, Google GenAI retries and connection-error retries also retain one
 invocation span. Failed attempts settle after a bounded one-second retry grace even if their
@@ -254,17 +254,15 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 
 An agent that calls MCP servers can join each `mcp_tool_called` to its answer by sending `in.ID()` as `com.rudderstack/interaction_id` in the request `_meta` ([mcp.md](mcp.md#joining-the-calling-agent)); no Go integration adds it for you.
 
-## Limits and differences from Node.js
+## Go platform limits
 
 - Provider integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients. Go has no LangChain,
-  LangGraph, OpenAI Agents SDK, Claude Agent SDK or Vercel AI SDK integrations. The framework
-  integration spans added under `emitSpans` in Node are therefore unavailable in Go; this is a
-  platform limit. Enable `WithEmitSpans(true)` and use manual `invoke_agent`, `execute_tool` and
+  LangGraph, OpenAI Agents SDK, Claude Agent SDK or Vercel AI SDK integrations. Use manual spans for framework operations. Enable `WithEmitSpans(true)` and use manual `invoke_agent`, `execute_tool` and
   `retrieval` spans with wrapped model calls to build the same tree. Pass each returned context
   into nested calls, goroutines and streams; wait for workers before ending their parents.
   See the [manual agent/tool/stream example](tracing.md#framework-trees-with-manual-spans).
   The optional `rudderotel` module also provides an OpenTelemetry span processor and exporter.
-- genai retries are recorded per attempt, as are openai-go and anthropic-sdk-go connection-error retries outside an interaction ([Retries](#retries)). Node.js wraps the SDK method and sees one call.
+- genai retries are recorded per attempt, as are openai-go and anthropic-sdk-go connection-error retries outside an interaction ([Retries](#retries)).
 - Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `EndOptions`; `client_disconnected` also by [`Middleware`](configuration.md#context-values).
 - Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
 - `Flush` sends analytics-go's queue (v4.5.1, the minimum, has `Flush(ctx)`); a custom client without a flush method is reported as `client_outdated`, so close it before exiting. There is no exit hook: call `Flush` or `Shutdown` yourself. `Shutdown` never closes clients; afterwards, call `CloseClient(ctx, client)` for each client you own.

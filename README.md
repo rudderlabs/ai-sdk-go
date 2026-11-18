@@ -14,7 +14,9 @@ AI client ─ MCP ─ your MCP server (go-sdk or mcp-go) ─ wrapped ─ analyti
 
 This is product analytics, not observability: it puts AI usage next to the rest of your customer data and complements your tracing tool. It is private by default: no prompt, answer, tool argument or result text is sent unless you turn content capture on, and captured text is masked.
 
-The Node.js ([`@rudderstack/ai`](https://github.com/rudderlabs/ai-sdk-node)) and Python ([`rudderstack-ai`](https://github.com/rudderlabs/ai-sdk-python)) SDKs send the same events with the same properties.
+Captured content honours Go app serializers with spans on or off, once per value per report. Events, spans, sizes and pause snapshots reuse detached output; failures become JSON null without walking hidden fields. MCP tool results reuse the written wire message after a successful response write. Serializers an app serializer calls itself are outside the SDK count; by-value receivers run once per occurrence. Details: [content capture](docs/configuration.md#content-capture).
+
+Other language SDKs: [Node.js](https://github.com/rudderlabs/ai-sdk-node) and [Python](https://github.com/rudderlabs/ai-sdk-python).
 
 ## Install
 
@@ -92,7 +94,7 @@ Every integration records the model, tokens (input always includes cached and ca
 - One interaction per user turn, not per conversation or process. Pass your chat or thread ID as `ConversationID` so turns group into a conversation. A one-shot feature with no thread (a Generate button, a suggested fix) sets `OneShot: true`: without an explicit or context conversation ID, `conversation_id` is the interaction's ID. The default still mints a separate conversation ID. Resending the history each turn is fine: each turn reports only its own calls.
 - Read streams inside the `RunInteraction` function: a stream still open when the interaction ends is recorded as a cancelled call.
 - The last call decides the status: a failed final call fails the answer even if your code handled the error; a failed call followed by a successful retry is a success.
-- Provider SDK retries (openai-go, anthropic-sdk-go) count as one call, priced once, as in Node.js and Python ([Retries](docs/integrations.md#retries)).
+- Provider SDK retries (openai-go, anthropic-sdk-go) count as one call, priced once ([Retries](docs/integrations.md#retries)).
 
 ### Other clients
 
@@ -277,7 +279,7 @@ Sent by default: IDs, models, token counts, latency, cost, status, tool names. N
 - `WithRedactHook` adds your own masking after the built-ins; a hook that fails or panics drops the field. Text over 32,000 code points is withheld rather than masked. Names and postal addresses are not caught.
 - One rule: `WithRedaction(false)` turns redaction off, the built-ins and the hook alike; MCP `Options.DisableRedaction` does the same for `Redact`.
 - `MaskText(text)` applies the built-ins to text you send yourself, such as a declared tool event's `Properties`, which are sent as returned.
-- MCP servers follow the global setting unless their own `Options.CaptureContent` or `ContentCapture` says otherwise. Per kind: [Content capture](docs/configuration.md#content-capture). Patterns are shared with Node.js and Python ([`spec/fixtures/redaction-v0.1.json`](spec/fixtures/redaction-v0.1.json)); details: [docs/configuration.md](docs/configuration.md#privacy-and-masking).
+- MCP servers follow the global setting unless their own `Options.CaptureContent` or `ContentCapture` says otherwise. Per kind: [Content capture](docs/configuration.md#content-capture). Patterns are defined in [`spec/fixtures/redaction-v0.1.json`](spec/fixtures/redaction-v0.1.json); details: [docs/configuration.md](docs/configuration.md#privacy-and-masking).
 
 ## Serverless and workers
 
@@ -386,7 +388,7 @@ aicheck ai-off.jsonl --no-ai-events --expect-legacy chatTurnCompleted
 aicheck what-changes ai-off.jsonl events.jsonl  # redacted before/after diff for the PR
 ```
 
-The check validates every event against the spec this version emits (and client copies against the client-event schema), and checks that legacy events keep sending (`--expect-legacy`) or stop when their switch is off (`--absent`, counted by provenance: events without an AI SDK's `context.wrapperLibrary`, so an AI event with the same name does not count), that no AI event is sent with the AI switch off (`--no-ai-events`), client/server joins in both directions (`--expect-joins`, feedback copies per action type included, honouring `--client-opt-out client_prompt|client_response|client_feedback|server_feedback`, `--feedback-endpoint` and `--client-surface` for surfaces with a browser client), that app-caught failures are not reported as success (`--failed-interaction <id>`), plus identity (`--user-id`, `--expect-session`, and `--mcp-user-id` or `--mcp-anonymous` for MCP servers), content capture and MCP flags (`aicheck --help`). Exit code 0 passes, 1 fails, 2 is bad usage or an unreadable file. The Node.js (`npx @rudderstack/ai check`) and Python (`python -m rudderstack.ai.check`) SDKs ship the same check, with the same output.
+The check validates every event against the spec this version emits (and client copies against the client-event schema), and checks that legacy events keep sending (`--expect-legacy`) or stop when their switch is off (`--absent`, counted by provenance: events without an AI SDK's `context.wrapperLibrary`, so an AI event with the same name does not count), that no AI event is sent with the AI switch off (`--no-ai-events`), client/server joins in both directions (`--expect-joins`, feedback copies per action type included, honouring `--client-opt-out client_prompt|client_response|client_feedback|server_feedback`, `--feedback-endpoint` and `--client-surface` for surfaces with a browser client), that app-caught failures are not reported as success (`--failed-interaction <id>`), plus identity (`--user-id`, `--expect-session`, and `--mcp-user-id` or `--mcp-anonymous` for MCP servers), content capture and MCP flags (`aicheck --help`). Exit code 0 passes, 1 fails, 2 is bad usage or an unreadable file.
 
 ## Troubleshooting
 
@@ -415,16 +417,16 @@ Each module requires the oldest version it supports, so adding it never upgrades
 | `.../rudderbedrock`                           | `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` v1.63.1   | v1.63.4          |
 | `.../rudderotel`                              | `go.opentelemetry.io/otel` / `trace` / `sdk` v1.47.0           |                  |
 
-Every module runs the shared cross-SDK fixtures in [`spec/fixtures/`](spec/fixtures) with the Node.js and Python SDKs.
+Every Go module runs the applicable shared fixtures in [`spec/fixtures/`](spec/fixtures).
 
 ## Upgrading to AI events spec v0.4
 
 Events carry `specVersion` `0.4.0`. The server schema and conformance fixture are now `ai-events-v0.4.schema.json` and `conformance-v0.4.json`. The client schema remains `ai-client-events-v0.2.schema.json`, following the v0.3 release precedent. The migration checker accepts both 0.3.0 and 0.4.0 captures.
 
-- **One-shot and client events (SDK-5989)**: opt into `OneShot` for interactions without a thread. Shared client schemas cover prompts, suggestions, feedback, exports, conversation and agent controls, limits and declared tools on web and mobile.
-- **Server fields (SDK-5990)**: blocked answers, denied tools, confidence, credits, per-call timing and purpose, fallback and BYOK flags, agent versions, variants, MCP result sizes, compaction and `context_limit` errors.
-- **Sampling (SDK-5992)**: `WithSampleRates` controls each event; kept events carry `sample_rate`. Events of one interaction share a stable draw. Answers are unsampled by default.
-- **Pause/resume (SDK-5991)**: paused and final answer segments share an interaction ID, including after JSON restore. Final answers carry pause counts and total paused time. Optional `ai_task_started` fires once per new background run.
+- **One-shot and client events**: opt into `OneShot` for interactions without a thread. Shared client schemas cover prompts, suggestions, feedback, exports, conversation and agent controls, limits and declared tools on web and mobile.
+- **Server fields**: blocked answers, denied tools, confidence, credits, per-call timing and purpose, fallback and BYOK flags, agent versions, variants, MCP result sizes, compaction and `context_limit` errors.
+- **Sampling**: `WithSampleRates` controls each event; kept events carry `sample_rate`. Events of one interaction share a stable draw. Answers are unsampled by default.
+- **Pause/resume**: paused and final answer segments share an interaction ID, including after JSON restore. Final answers carry pause counts and total paused time. Optional `ai_task_started` fires once per new background run.
 
 ## Upgrading to 0.3.0
 

@@ -22,7 +22,7 @@ The overhead is the median (p50) of the same call with and without the SDK. "CI"
 | `WithEmitSpans`, added per streamed chunk                              | ≤ +1.5 µs                   | +0.6 µs             | under 1 µs          |
 | `WithCaptureContent` with `WithLLMCallEvents`, 8 KB of prompt and answer | ≤ 8 ms                    | 3.7 ms              | 3.3 ms              |
 
-On CI the MCP round trip's p50 did not change measurably (the go-sdk in-memory round trip alone takes 118 µs and varies more than that), while process CPU, which counts every goroutine, rose by about 131 µs per call; that row therefore has a CPU budget too. Masking captured text is the slowest step, in the `regexp2` engine; SDK-6932 tracks making it faster, after which the content budget will tighten.
+On CI the MCP round trip's p50 did not change measurably (the go-sdk in-memory round trip alone takes 118 µs and varies more than that), while process CPU, which counts every goroutine, rose by about 131 µs per call; that row therefore has a CPU budget too. Masking captured text is the slowest step, in the `regexp2` engine.
 
 Extra allocations per call repeat exactly from run to run and are gated in CI: about 300 for an interaction with one wrapped call, 315 for an MCP call, 48 per streamed chunk and 700 with content capture. Each must stay within `internal/benchreport/alloc_budget.json`, set at the measurement plus 25%. Timings are a published target, not a CI gate.
 
@@ -40,7 +40,7 @@ Extra allocations per call repeat exactly from run to run and are gated in CI: a
 | `interaction/openai-stream+spans` | `interaction/openai-stream` with `WithEmitSpans`                                                       |
 | `mcp/tools-call`                  | One `tools/call` through `WrapMCPServer`, over in-memory transports                                    |
 
-Each benchmark reports, beside `ns/op`, `B/op` and `allocs/op`, the p50 and p99 of one call (`p50-ns`, `p99-ns`), process CPU per call (`cpu-ns/op`, from `getrusage`, so it includes other goroutines) and garbage collections per 10,000 calls (`gc/10k-op`). The Node.js and Python SDKs run the same scenario IDs. The raw output goes to `bench-results/go.txt`, the table's data to `bench-results/go.json`.
+Each benchmark reports, beside `ns/op`, `B/op` and `allocs/op`, the p50 and p99 of one call (`p50-ns`, `p99-ns`), process CPU per call (`cpu-ns/op`, from `getrusage`, so it includes other goroutines) and garbage collections per 10,000 calls (`gc/10k-op`). The raw output goes to `bench-results/go.txt`, the table's data to `bench-results/go.json`.
 
 ## Load
 
@@ -57,14 +57,14 @@ On the laptop, 5,000 interactions per second (about 15,000 events per second) we
 | Open interactions                                    | 10,000                                                                                                                                           | `WithLimits(Limits{MaxOpenInteractions: ...})` ([details](configuration.md#limits)) |
 | Interaction lifetime                                 | 1 hour                                                                                                                                           | `InteractionTTL`                                                                    |
 | Model and tool calls kept one by one per interaction | 1,000 each; tool calls still awaiting an outcome may keep up to that many more records, identity only (name, ID, agent, MCP server, parent tool) | `MaxCallsPerInteraction`                                                            |
-| Entries per in-memory map (MCP and integrations) | 10,000; MCP server names and resource templates per server: 1,000 each, fixed (SDK-6944) | `MaxMapEntries` |
+| Entries per in-memory map (MCP and integrations) | 10,000; MCP server names and resource templates per server: 1,000 each, fixed | `MaxMapEntries` |
 | Event properties                                     | 30,000 serialized bytes                                                                                                                          | fixed ([details](events.md))                                                        |
 
 What happens at each cap is in [Limits](configuration.md#limits); an event over the size budget loses its captured text first ([events](events.md)). Nothing panics into your code. An interaction leaves nothing behind once it ends; MCP keeps a few entries per session or interaction (call positions and argument hashes for `retry_count`), up to `MaxMapEntries` per map.
 
 ## Fuzz tests
 
-Go's native fuzzing covers the parsers the Node.js and Python SDKs check with property tests. Every `go test` runs the seed inputs; a weekly CI job fuzzes each target for 60 seconds and uploads any failing input.
+Go's native fuzzing covers the protocol and content parsers. Every `go test` runs the seed inputs; a weekly CI job fuzzes each target for 60 seconds and uploads any failing input.
 
 | Target | Package | Checks |
 | --- | --- | --- |
