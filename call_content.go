@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding"
 	"encoding/json"
+	"fmt"
 	"math"
 	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -129,8 +131,13 @@ func maskPlainValue(v any) (any, bool) {
 		return out, true
 	case map[string]any:
 		out := make(map[string]any, len(x))
-		for k, e := range x {
-			m, ok := maskPlainValue(e)
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			m, ok := maskPlainValue(x[k])
 			if !ok {
 				return nil, false
 			}
@@ -230,10 +237,16 @@ type visit struct {
 // walk is one traversal of a value: the containers on the current path (to drop a cycle) and the
 // depth reached.
 type walk struct {
-	path    map[visit]bool
-	depth   int
-	omitted bool
-	legacy  bool
+	path           map[visit]bool
+	depth          int
+	omitted        bool
+	legacy         bool
+	resolve        bool
+	preserve       bool
+	serializers    bool
+	usedSerializer bool
+	incomplete     bool
+	memo           map[visit]any
 }
 
 // enter marks a pointer, map or slice as on the path; false when it is already there (a cycle) or
@@ -293,13 +306,16 @@ func normalizeSpanValue(v any) (any, bool) {
 func (w *walk) strip(v any) (out any, keep bool) {
 	switch x := v.(type) {
 	case string:
-		if m := dataURIPrefix.FindStringSubmatch(x); m != nil {
+		if m := dataURIPrefix.FindStringSubmatch(x); !w.resolve && m != nil {
 			return "data:" + m[1], true
 		}
 		return x, true
 	case nil, bool, int, int64, float64, json.Number:
 		return v, true
 	case []byte:
+		if w.resolve {
+			return append([]byte(nil), x...), true
+		}
 		return nil, false
 	}
 	// Plain containers and typed values alike go through the reflective walk; it never panics.
@@ -332,23 +348,427 @@ var (
 	marshalerType  = reflect.TypeFor[json.Marshaler]()
 )
 
-// customJSON marshals a value whose type (or addressable pointer) implements json.Marshaler or
-// encoding.TextMarshaler; custom is false for every other value.
-func customJSON(rv reflect.Value) (b []byte, custom bool, err error) {
+// customTarget follows encoding/json's addressability and JSON-before-Text precedence.
+func customTarget(rv reflect.Value) (reflect.Value, bool) {
 	t := rv.Type()
-	target := rv
 	switch {
-	case t.Implements(marshalerType) || t.Implements(textType):
-	case rv.CanAddr() && (reflect.PointerTo(t).Implements(marshalerType) || reflect.PointerTo(t).Implements(textType)):
-		target = rv.Addr()
-	default:
-		return nil, false, nil
+	case t.Kind() != reflect.Pointer && rv.CanAddr() && reflect.PointerTo(t).Implements(marshalerType):
+		return rv.Addr(), true
+	case t.Implements(marshalerType):
+		return rv, true
+	case t.Kind() != reflect.Pointer && rv.CanAddr() && reflect.PointerTo(t).Implements(textType):
+		return rv.Addr(), true
+	case t.Implements(textType):
+		return rv, true
 	}
-	if (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) && rv.IsNil() {
-		return []byte("null"), true, nil
+	return reflect.Value{}, false
+}
+
+// captureReport owns only detached content and the size measured before byte stripping.
+type captureSeed struct {
+	original, captured any
+	memo               map[visit]any
+}
+
+type captureReport struct {
+	value any
+	size  int
+	sizes map[string]int
+	memo  map[visit]any
+}
+
+// The recursion guard contains only identities while app code is on the current stack. It
+// never caches an output or receiver, and concurrent goroutines never wait on one another.
+var captureActive = struct {
+	sync.Mutex
+	callers map[uint64]map[visit]int
+	passes  map[uint64]int
+}{callers: map[uint64]map[visit]int{}, passes: map[uint64]int{}}
+
+func captureRunning() bool {
+	id := callbackCaller()
+	captureActive.Lock()
+	defer captureActive.Unlock()
+	return captureActive.passes[id] > 0
+}
+
+func captureValue(v any, seeds ...captureSeed) captureReport {
+	return captureResolved(v, nil, seeds...)
+}
+
+// enterCapture marks a capture pass on this goroutine, so an app serializer it runs is refused
+// pause and end like any callback.
+func enterCapture() (leave func()) {
+	id := callbackCaller()
+	captureActive.Lock()
+	captureActive.passes[id]++
+	captureActive.Unlock()
+	return func() {
+		captureActive.Lock()
+		captureActive.passes[id]--
+		if captureActive.passes[id] == 0 {
+			delete(captureActive.passes, id)
+		}
+		captureActive.Unlock()
 	}
-	b, err = json.Marshal(target.Interface())
-	return b, true, err
+}
+
+// captureEncoded is base's encoding of a report value that stores no content, such as an MCP
+// result without a declared rule: one serializer run, for classification and size only.
+func captureEncoded(v any) (b []byte, err error) {
+	defer enterCapture()()
+	defer func() {
+		if r := recover(); r != nil {
+			b, err = nil, fmt.Errorf("panic: %v", r)
+		}
+	}()
+	return compactJSON(v)
+}
+
+func resolveCapture(v any, seeds []captureSeed) (any, *walk) {
+	w := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, resolve: true, serializers: true, memo: map[visit]any{}}
+	for _, seed := range seeds {
+		w.seed(reflect.ValueOf(seed.original), seed.captured, 0)
+		if len(seed.memo) > 0 {
+			w.usedSerializer = true
+		}
+		for key, value := range seed.memo {
+			w.memo[key] = value
+		}
+	}
+	resolved, _ := w.strip(v)
+	return resolved, w
+}
+
+// captureProperties captures event properties or attributes in one pass. The map only holds
+// them: each value is stripped on its own, so the map's own shape never drops them all.
+func captureProperties(p map[string]any, seeds ...captureSeed) map[string]any {
+	out := make(map[string]any, len(p))
+	strip := func(m map[string]any) {
+		for k, value := range m {
+			if v, keep := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(value); keep {
+				out[k] = v
+			}
+		}
+	}
+	// Plain values run no app code; the rest resolve in one pass.
+	var typed map[string]any
+	plain := make(map[string]any, len(p))
+	for k, value := range p {
+		switch value.(type) {
+		case nil, string, bool, int, int64, float64:
+			plain[k] = value
+		default:
+			if typed == nil {
+				typed = map[string]any{}
+			}
+			typed[k] = value
+		}
+	}
+	strip(plain)
+	if typed != nil {
+		defer enterCapture()()
+		resolved, _ := resolveCapture(typed, seeds)
+		m, _ := resolved.(map[string]any)
+		strip(m)
+	}
+	return out
+}
+
+// captureContent is the detached snapshot of a report that needs no sizes and seeds no later
+// capture, such as call content or span context.
+func captureContent(v any) any {
+	defer enterCapture()()
+	resolved, _ := resolveCapture(v, nil)
+	out, _ := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(resolved)
+	return out
+}
+
+// consume reads the resolved tree synchronously, for base wire-shaped callback inputs. The
+// report stores only the stripped snapshot; neither this tree nor its bytes survive the pass.
+func captureResolved(v any, consume func(any), seeds ...captureSeed) captureReport {
+	defer enterCapture()()
+	resolved, w := resolveCapture(v, seeds)
+	if consume != nil {
+		consume(resolved)
+	}
+	sizes := map[string]int{}
+	var size int
+	if !w.usedSerializer && !w.incomplete {
+		// The complete walk proved that no serializer can run. Measure the base JSON encoding,
+		// preserving float32 precision, struct tags and encoding failures without another app call.
+		size = captureSize(v)
+		if m, ok := v.(map[string]any); ok {
+			for k, value := range m {
+				sizes[k] = captureSize(value)
+			}
+		}
+	} else {
+		size = resolvedSize(v, resolved)
+		if m, ok := resolved.(map[string]any); ok {
+			original, _ := v.(map[string]any)
+			for k, value := range m {
+				sizes[k] = resolvedSize(original[k], value)
+			}
+		}
+	}
+	out, _ := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(resolved)
+	memo := make(map[visit]any, len(w.memo))
+	for key, value := range w.memo {
+		memo[key], _ = (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(value)
+	}
+	return captureReport{value: out, size: size, sizes: sizes, memo: memo}
+}
+
+// resolvedSize is base's encoded size: serializer output counts as the bytes encoding/json
+// wrote for it, HTML escapes included.
+func resolvedSize(original, resolved any) int {
+	if _, ok := original.(string); ok {
+		return captureSize(resolved)
+	}
+	if b, err := compactJSON(resolved); err == nil {
+		return len(b)
+	}
+	return -1
+}
+
+// serialized is a serializer's output inside a resolved tree: its decoded value, and the bytes
+// encoding/json wrote for it, which only sizes read. Stripping unwraps it.
+type serialized struct {
+	value any
+	raw   []byte
+}
+
+func (s serialized) MarshalJSON() ([]byte, error) { return s.raw, nil }
+
+var serializedType = reflect.TypeFor[serialized]()
+
+func captureSize(v any) int {
+	if text, ok := v.(string); ok {
+		return len(text)
+	}
+	if b, err := compactJSON(v); err == nil {
+		return len(b)
+	}
+	return -1
+}
+
+// Seeds pair base-retained rule inputs with their report snapshots. They are inspected only
+// during this pass, and are never added to retained capture state.
+func (w *walk) seed(rv reflect.Value, captured any, depth int) {
+	if !rv.IsValid() || depth >= maxWalkDepth {
+		return
+	}
+	if target, custom := customTarget(rv); custom {
+		w.usedSerializer = true
+		if key, stable := serializerMemoIdentity(rv, target); stable {
+			if _, seen := w.memo[key]; !seen {
+				w.memo[key] = captured
+			}
+		}
+		return
+	}
+	if rv.Kind() == reflect.Interface {
+		if !rv.IsNil() {
+			w.seed(rv.Elem(), captured, depth+1)
+		}
+		return
+	}
+	if key, stable := serializerIdentity(rv); stable {
+		if _, seen := w.memo[key]; seen {
+			return
+		}
+		w.memo[key] = captured
+	}
+	switch rv.Kind() {
+	case reflect.Pointer:
+		if !rv.IsNil() {
+			w.seed(rv.Elem(), captured, depth+1)
+		}
+	case reflect.Map:
+		if m, ok := captured.(map[string]any); ok {
+			for it := rv.MapRange(); it.Next(); {
+				// Only keys named without app code; a missing entry is never seeded as null.
+				if name, ok := jsonKeyName(it.Key()); ok {
+					if child, present := m[name]; present {
+						w.seed(it.Value(), child, depth+1)
+					}
+				}
+			}
+		}
+	case reflect.Struct:
+		if m, ok := captured.(map[string]any); ok {
+			for _, f := range cachedJSONFields(rv.Type()) {
+				if fv, ok := jsonFieldValue(rv, f); ok {
+					w.seed(fv, m[f.name], depth+1)
+				}
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		if list, ok := captured.([]any); ok {
+			for n := 0; n < min(rv.Len(), len(list)); n++ {
+				w.seed(rv.Index(n), list[n], depth+1)
+			}
+		}
+	}
+}
+
+func serializerIdentity(rv reflect.Value) (visit, bool) {
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Slice:
+		if rv.IsNil() {
+			return visit{}, false
+		}
+		key := visit{ptr: rv.Pointer(), typ: rv.Type()}
+		if rv.Kind() == reflect.Slice {
+			key.n = rv.Len()
+		}
+		return key, true
+	}
+	return visit{}, false
+}
+
+type staticTextProbe struct{}
+
+func (staticTextProbe) MarshalJSON() ([]byte, error) { return []byte(`"json"`), nil }
+func (staticTextProbe) MarshalText() ([]byte, error) { return []byte("text"), nil }
+
+// staticText is whether the running encoding/json encodes a field typed encoding.TextMarshaler
+// with MarshalText even when its value has MarshalJSON: Go 1.26 does, Go 1.27's encoder uses the
+// value's MarshalJSON.
+var staticText = sync.OnceValue(func() bool {
+	b, _ := json.Marshal(struct{ F encoding.TextMarshaler }{staticTextProbe{}})
+	return string(b) == `{"F":"text"}`
+})
+
+// textByStaticType is whether encoding/json encodes target, an interface-typed value whose type
+// has no MarshalJSON, with MarshalText although its value may have one.
+func textByStaticType(target reflect.Value) bool {
+	return target.Kind() == reflect.Interface && !target.Type().Implements(marshalerType) && staticText()
+}
+
+// jsonKeyName is encoding/json's name for a map key that needs no MarshalText call.
+func jsonKeyName(k reflect.Value) (string, bool) {
+	switch {
+	case k.Kind() == reflect.String:
+		return k.String(), true
+	case k.Type().Implements(textType):
+		return "", false
+	case k.CanInt():
+		return strconv.FormatInt(k.Int(), 10), true
+	case k.CanUint():
+		return strconv.FormatUint(k.Uint(), 10), true
+	}
+	return "", false
+}
+
+// Addressable pointer receivers have identity; promoted by-value methods do not.
+func serializerMemoIdentity(rv, target reflect.Value) (visit, bool) {
+	if target.Kind() == reflect.Interface {
+		// A pointer behind an interface-typed field keeps its identity. A text selection on a
+		// value that also has MarshalJSON gets its own key, so the two outputs never mix.
+		if target.IsNil() {
+			return visit{}, false
+		}
+		elem := target.Elem()
+		key, stable := serializerIdentity(elem)
+		if stable && textByStaticType(target) && elem.Type().Implements(marshalerType) {
+			key.n = -1
+		}
+		return key, stable
+	}
+	key, stable := serializerIdentity(target)
+	if rv.Kind() != reflect.Pointer {
+		valueReceiver := rv.Type().Implements(marshalerType)
+		if !target.Type().Implements(marshalerType) {
+			valueReceiver = rv.Type().Implements(textType)
+		}
+		if valueReceiver && rv.Kind() != reflect.Map && rv.Kind() != reflect.Slice {
+			stable = false
+		}
+	}
+	return key, stable
+}
+
+// decodeSerializer runs the method encoding/json selects for target and returns its decoded
+// output and the bytes encoding/json writes for it. Failure is null, including panic or invalid
+// JSON; never walk the receiver's fields.
+func decodeSerializer(target reflect.Value) (decoded any, raw []byte) {
+	defer func() {
+		if recover() != nil {
+			decoded, raw = nil, nil
+		}
+	}()
+	var err error
+	if textByStaticType(target) {
+		var text []byte
+		if text, err = target.Interface().(encoding.TextMarshaler).MarshalText(); err == nil {
+			raw, err = compactJSON(string(text))
+		}
+	} else {
+		raw, err = compactJSON(target.Interface())
+	}
+	if err != nil {
+		return nil, nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if dec.Decode(&decoded) != nil {
+		return nil, nil
+	}
+	return decoded, raw
+}
+
+func (w *walk) custom(rv reflect.Value) (any, bool) {
+	target, ok := customTarget(rv)
+	if !ok {
+		return nil, false
+	}
+	w.usedSerializer = true
+	if target.Kind() == reflect.Pointer && target.IsNil() {
+		return nil, true
+	}
+	key, stable := serializerMemoIdentity(rv, target)
+	if stable {
+		if value, seen := w.memo[key]; seen {
+			return value, true
+		}
+		w.memo[key] = nil
+	}
+	id := callbackCaller()
+	runningKey := key
+	if !stable {
+		runningKey = visit{typ: target.Type()}
+	}
+	captureActive.Lock()
+	running := captureActive.callers[id]
+	if running == nil {
+		running = map[visit]int{}
+		captureActive.callers[id] = running
+	}
+	if running[runningKey] > 0 {
+		captureActive.Unlock()
+		return nil, true
+	}
+	running[runningKey]++
+	captureActive.Unlock()
+	defer func() {
+		captureActive.Lock()
+		delete(running, runningKey)
+		if len(running) == 0 {
+			delete(captureActive.callers, id)
+		}
+		captureActive.Unlock()
+	}()
+	decoded, raw := decodeSerializer(target)
+	out, _ := w.strip(decoded)
+	if w.resolve && raw != nil {
+		out = serialized{value: out, raw: raw}
+	}
+	if stable {
+		w.memo[key] = out
+	}
+	return out, true
 }
 
 // Primitive map keys use Node String() conventions; other keys are dropped.
@@ -417,7 +837,24 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		return nil, true
 	}
 	w.omitted = false
+	if w.serializers {
+		if key, stable := serializerIdentity(rv); stable {
+			if value, seen := w.memo[key]; seen {
+				return value, true
+			}
+		}
+	}
 	t := rv.Type()
+	if t == serializedType {
+		return w.strip(rv.Interface().(serialized).value)
+	}
+	if w.serializers {
+		if t == reflect.TypeFor[time.Time]() || t == reflect.TypeFor[*time.Time]() {
+			if out, custom := w.custom(rv); custom {
+				return out, true
+			}
+		}
+	}
 	if t == reflect.TypeFor[time.Time]() {
 		if w.legacy {
 			return jsonSafe(rv.Interface())
@@ -431,28 +868,25 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		}
 		return w.strip(decoded)
 	}
-	// Without spans, as on main, a type's own JSON or text form is the app's chosen
-	// representation: call it and strip its output as plain data. Other values are walked.
-	if w.legacy {
-		if b, custom, err := customJSON(rv); custom {
-			if err != nil {
-				return nil, false
-			}
-			var decoded any
-			dec := json.NewDecoder(bytes.NewReader(b))
-			dec.UseNumber()
-			if dec.Decode(&decoded) != nil {
-				return nil, false
-			}
-			return w.strip(decoded)
+	if w.serializers {
+		if out, custom := w.custom(rv); custom {
+			return out, true
 		}
 	}
 	key, ok := w.enter(rv)
 	if !ok {
 		w.omitted = true
+		w.incomplete = true
 		return nil, false
 	}
 	defer w.leave(key)
+	if w.serializers && key.ptr != 0 {
+		defer func() {
+			if keep {
+				w.memo[key] = out
+			}
+		}()
+	}
 	switch rv.Kind() {
 	case reflect.Pointer, reflect.Interface:
 		if rv.IsNil() {
@@ -468,14 +902,28 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	case reflect.Bool:
 		return rv.Bool(), true
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if w.resolve || w.preserve {
+			return rv.Interface(), true
+		}
 		return rv.Int(), true
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if w.resolve || w.preserve {
+			return rv.Interface(), true
+		}
 		return rv.Uint(), true
 	case reflect.Float32, reflect.Float64:
 		f := rv.Float()
+		if (w.resolve || w.preserve) && !math.IsNaN(f) && !math.IsInf(f, 0) {
+			return rv.Interface(), true
+		}
 		return f, !w.legacy || (!math.IsNaN(f) && !math.IsInf(f, 0))
 	case reflect.Slice, reflect.Array:
 		if t.Elem().Kind() == reflect.Uint8 {
+			if w.resolve {
+				b := make([]byte, rv.Len())
+				reflect.Copy(reflect.ValueOf(b), rv)
+				return b, true
+			}
 			return nil, false
 		}
 		if rv.Kind() == reflect.Slice && rv.IsNil() {
@@ -488,7 +936,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 			if item.Kind() == reflect.Interface && !item.IsNil() {
 				item = item.Elem()
 			}
-			if (item.Kind() == reflect.Slice || item.Kind() == reflect.Array) && item.Type().Elem().Kind() == reflect.Uint8 {
+			if !w.resolve && (item.Kind() == reflect.Slice || item.Kind() == reflect.Array) && item.Type().Elem().Kind() == reflect.Uint8 {
 				continue
 			}
 			e, ok := w.typed(rv.Index(n))
@@ -507,9 +955,18 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 			return nil, true
 		}
 		m := make(map[string]any, rv.Len())
+		// Resolve key names before visiting values, as encoding/json does.
+		type entry struct {
+			name  string
+			value reflect.Value
+		}
+		entries := make([]entry, 0, rv.Len())
 		for it := rv.MapRange(); it.Next(); {
 			name, ok := mapKey(it.Key())
-			if w.legacy {
+			if w.serializers && legacyValidMapKey(it.Key().Type()) {
+				if it.Key().Kind() != reflect.String && it.Key().Type().Implements(textType) {
+					w.usedSerializer = true
+				}
 				name, ok = legacyMapKey(it.Key())
 			}
 			if !ok {
@@ -518,27 +975,37 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 				}
 				continue
 			}
-			if e, ok := w.typed(it.Value()); ok && !w.isBytes(e) {
-				m[name] = e
+			entries = append(entries, entry{name, it.Value()})
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
+		for _, entry := range entries {
+			if e, ok := w.typed(entry.value); ok && !w.isBytes(e) {
+				m[entry.name] = e
 			}
 		}
-		if !w.legacy && isBytes(m) {
+		if !w.resolve && !w.legacy && isBytes(m) {
 			w.omitted = true
 			return nil, false
 		}
-		if !w.legacy {
+		if !w.resolve && !w.legacy {
 			m = inlineFree(m)
+		}
+		if w.resolve {
+			return m, true
 		}
 		return stripMap(m), true
 	case reflect.Struct:
 		m := map[string]any{}
 		w.structFields(rv, m)
-		if !w.legacy && isBytes(m) {
+		if !w.resolve && !w.legacy && isBytes(m) {
 			w.omitted = true
 			return nil, false
 		}
-		if !w.legacy {
+		if !w.resolve && !w.legacy {
 			m = inlineFree(m)
+		}
+		if w.resolve {
+			return m, true
 		}
 		return stripMap(m), true
 	}
@@ -546,46 +1013,25 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	return nil, false
 }
 
-// structFields adds a struct's exported fields as encoding/json names them; an untagged embedded
-// struct is flattened into the same object.
+// structFields follows encoding/json selection, promotion, conflicts and omission rules.
 func (w *walk) structFields(rv reflect.Value, m map[string]any) {
-	t := rv.Type()
-	for n := 0; n < t.NumField(); n++ {
-		f := t.Field(n)
-		name, opts, _ := strings.Cut(f.Tag.Get("json"), ",")
-		if name == "-" && opts == "" {
+	for _, f := range cachedJSONFields(rv.Type()) {
+		fv, ok := jsonFieldValue(rv, f)
+		if !ok {
 			continue
 		}
-		fv := rv.Field(n)
-		if f.Anonymous && name == "" {
-			ev := fv
-			if ev.Kind() == reflect.Pointer {
-				if ev.IsNil() {
-					continue
-				}
-				ev = ev.Elem()
-			}
-			if ev.Kind() == reflect.Struct {
-				key, ok := w.enter(fv)
-				if ok {
-					w.structFields(ev, m)
-					w.leave(key)
-				}
-				continue
+		e, ok := w.typed(fv)
+		if !ok || w.isBytes(e) {
+			continue
+		}
+		// encoding/json ignores ,string on fields with custom JSON/Text encoders.
+		_, custom := customTarget(fv)
+		if f.quoted && !custom && e != nil {
+			if b, err := json.Marshal(e); err == nil {
+				e = string(b)
 			}
 		}
-		if !f.IsExported() {
-			continue
-		}
-		if name == "" {
-			name = f.Name
-		}
-		if strings.Contains(opts, "omitempty") && fv.IsZero() {
-			continue
-		}
-		if e, ok := w.typed(fv); ok && !w.isBytes(e) {
-			m[name] = e
-		}
+		m[f.name] = e
 	}
 }
 
@@ -615,6 +1061,45 @@ func genAIMessagesValue(messages []GenAIMessage) []any {
 // shortened, then every string masked like prompt_text. A field with a withheld string (hook
 // failure) is left out whole. Nil when nothing is left.
 func captureCallContent(inputMessages []GenAIMessage, outputText string, outputToolCalls []GenAIToolCall) *callContent {
+	// Resolve the whole report in one pass, before masking or projection.
+	rawCalls := make([]GenAIToolCall, len(outputToolCalls))
+	copy(rawCalls, outputToolCalls)
+	for n := range rawCalls {
+		original := rawCalls[n].Arguments
+		rawCalls[n].Arguments = parseToolArguments(original)
+		if original != nil && rawCalls[n].Arguments == nil {
+			rawCalls[n].Arguments = json.RawMessage("null")
+		}
+	}
+	resolved, _ := captureContent(map[string]any{"messages": inputMessages, "calls": rawCalls}).(map[string]any)
+	inputMessages = nil
+	if messages, ok := resolved["messages"].([]any); ok {
+		for _, value := range messages {
+			m, _ := value.(map[string]any)
+			role, _ := m["role"].(string)
+			message := GenAIMessage{Role: role}
+			if parts, ok := m["parts"].([]any); ok {
+				for _, value := range parts {
+					if p, ok := value.(map[string]any); ok {
+						message.Parts = append(message.Parts, GenAIPart(p))
+					}
+				}
+			}
+			inputMessages = append(inputMessages, message)
+		}
+	}
+	outputToolCalls = nil
+	if calls, ok := resolved["calls"].([]any); ok {
+		for _, value := range calls {
+			m, _ := value.(map[string]any)
+			name, _ := m["name"].(string)
+			args, present := m["arguments"]
+			if present && args == nil {
+				args = json.RawMessage("null")
+			}
+			outputToolCalls = append(outputToolCalls, GenAIToolCall{Name: name, Arguments: args})
+		}
+	}
 	content := &callContent{}
 	has := false
 	if messages := genAIMessagesValue(inputMessages); len(messages) > 0 {
@@ -638,14 +1123,29 @@ func captureCallContent(inputMessages []GenAIMessage, outputText string, outputT
 		}
 		call := map[string]any{"name": t.Name}
 		if t.Arguments != nil {
-			call["arguments"] = stripBinary(parseToolArguments(t.Arguments))
+			call["arguments"] = stripBinary(t.Arguments)
 		}
 		calls = append(calls, call)
 	}
 	if len(calls) > 0 {
 		hit := false
-		if masked, ok := maskValue(capStrings(calls, &hit)); ok {
-			content.outputToolCalls = masked.([]any)
+		keep := true
+		for _, value := range calls {
+			call := value.(map[string]any)
+			// Tool-call fields follow GenAIToolCall's order: name, then arguments.
+			masked, ok := maskValue(capStrings([]any{call["name"], call["arguments"]}, &hit))
+			if !ok {
+				keep = false
+				break
+			}
+			fields := masked.([]any)
+			call["name"] = fields[0]
+			if _, present := call["arguments"]; present {
+				call["arguments"] = fields[1]
+			}
+		}
+		if keep {
+			content.outputToolCalls = calls
 			has = true
 		}
 	}
@@ -790,6 +1290,9 @@ func trimInputMessages(messages []any, over int) ([]any, bool) {
 
 // Legacy product normalization remains exactly as before emitSpans was introduced.
 func (w *walk) isBytes(v any) bool {
+	if w.resolve {
+		return false
+	}
 	if isBytes(v) {
 		return true
 	}
