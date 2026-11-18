@@ -96,6 +96,22 @@ func TestSpansOffOriginMainDifferential(t *testing.T) {
 				if err := json.Unmarshal(want, &mainEvents); err != nil {
 					t.Fatal(err)
 				}
+				// SDK-6948 intentionally replaces the old omitted serializer failure with JSON null.
+				// Keep the origin recording unchanged and adjust only this documented content leaf.
+				if edge == "content_marshaler_throws" {
+					for _, event := range mainEvents {
+						if event["event"] == "ai_llm_response_received" {
+							props := event["properties"].(map[string]any)
+							messages := props["input_messages"].([]any)
+							parts := messages[0].(map[string]any)["parts"].([]any)
+							parts[0].(map[string]any)["content"] = nil
+						}
+					}
+					want, err = json.Marshal(mainEvents)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
 				mainBeforeEnd := []obj{}
 				for _, event := range mainEvents {
 					if event["event"] != "ai_response_received" {

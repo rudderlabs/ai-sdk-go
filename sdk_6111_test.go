@@ -1671,7 +1671,7 @@ func TestSDK6111Review137CustomMarshalerOutputException(t *testing.T) {
 				response := parts[1].(map[string]any)["response"]
 				for _, got := range []any{out, arguments, response} {
 					encoded := "Y3VzdG9tZXItYmluYXJ5LVMzY3IzdA=="
-					if !spans && kind == "text" {
+					if kind == "text" {
 						if got != encoded {
 							t.Fatal(got)
 						}
@@ -1680,11 +1680,7 @@ func TestSDK6111Review137CustomMarshalerOutputException(t *testing.T) {
 						if !ok || m["keep"] != "ok" {
 							t.Fatal(got)
 						}
-						if spans {
-							if _, exists := m["body"]; exists {
-								t.Fatal(got)
-							}
-						} else if m["body"] != encoded {
+						if m["body"] != encoded {
 							t.Fatal(got)
 						}
 					}
