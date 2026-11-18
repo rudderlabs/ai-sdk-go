@@ -66,6 +66,7 @@
   "packages": {
     ".": {
       "package-name": "ai-sdk-go",
+      "release-as": "0.15.0",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {
