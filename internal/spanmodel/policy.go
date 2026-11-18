@@ -180,3 +180,29 @@ func OutputAttribute(key string) bool {
 	}
 	return false
 }
+
+// AdmitAttributes applies capture admission before an app serializer can run.
+// Masking and value normalization remain in the payload mapper.
+func AdmitAttributes(a map[string]any, scope string, kinds capture.Spans) map[string]any {
+	out := make(map[string]any, len(a))
+	tool := toolSpan(a)
+	for k, v := range a {
+		if slices.Contains(strippedKeys, k) || hasPrefix(k, strippedPrefixes) {
+			if kinds.HTTP && slices.Contains(httpKeys, k) {
+				out[k] = v
+			}
+			continue
+		}
+		if contentAttribute(k, scope) {
+			enabled := kinds.Messages
+			if slices.Contains(toolCallKeys, k) || tool && !slices.Contains(errorKeys, k) {
+				enabled = kinds.ToolCalls
+			}
+			if !enabled {
+				continue
+			}
+		}
+		out[k] = v
+	}
+	return out
+}
