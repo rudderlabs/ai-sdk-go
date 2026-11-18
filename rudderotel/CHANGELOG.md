@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderotel/v0.4.0...rudderotel/v0.5.0) (2026-11-18)
+
+
+### Features
+
+* send one span per call with EmitSpans and the span processor ([#89](https://github.com/rudderlabs/ai-sdk-go/issues/89)) ([cb8abde](https://github.com/rudderlabs/ai-sdk-go/commit/cb8abde8f94ee771ba94063a750e9b59b944c59a))
+
+
+### Bug Fixes
+
+* **core:** honour marshalers when capturing content ([#104](https://github.com/rudderlabs/ai-sdk-go/issues/104)) ([b83922e](https://github.com/rudderlabs/ai-sdk-go/commit/b83922ee180d48fd2542d0d2612b6ad792c4a595))
+* correct pause, overflow, twin and snapshot call accounting ([d0013cd](https://github.com/rudderlabs/ai-sdk-go/commit/d0013cd1dc1fb375efdf8b7ddba499ed533402ef))
+* **otel:** keep a product span's owner from span start ([#103](https://github.com/rudderlabs/ai-sdk-go/issues/103)) ([549da20](https://github.com/rudderlabs/ai-sdk-go/commit/549da20c2e5c6ea546d159ac34b767e4b0b169e4))
+* **rudderotel:** don't bill or mark successful a caller-cancelled Anthropic request or stream ([d0013cd](https://github.com/rudderlabs/ai-sdk-go/commit/d0013cd1dc1fb375efdf8b7ddba499ed533402ef))
+
 ## [0.4.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderotel/v0.3.0...rudderotel/v0.4.0) (2026-11-16)
 
 
