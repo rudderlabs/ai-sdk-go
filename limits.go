@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"weak"
 )
 
 // Limits caps the memory the SDK holds. A zero field keeps its default. Identical defaults in
@@ -66,13 +67,25 @@ func limitReached(name string) {
 	report(KindLimitReached, name, fmt.Errorf("rudderstackai: %s reached", name))
 }
 
+// pausedSlot identifies a counted run without retaining its interaction. A restore
+// must match the run's identity, not just an application-chosen interaction ID.
+type pausedSlot struct {
+	id, conversationID, userID, anonymousID string
+	order                                   uint64
+}
+
+func slotFor(i *Interaction) pausedSlot {
+	return pausedSlot{i.id, i.conversationID, i.userID, i.anonymousID, i.ownerOrder}
+}
+
 // open holds the open interactions, oldest first, for MaxOpenInteractions and the TTL sweep.
 var open = struct {
 	mu        sync.Mutex
 	list      *list.List
-	paused    map[string]struct{} // IDs of paused runs, which hold a slot until they end
+	paused    map[weak.Pointer[Interaction]]pausedSlot // One slot per object, without retaining it.
+	nextOrder uint64
 	lastSweep time.Time
-}{list: list.New(), paused: map[string]struct{}{}}
+}{list: list.New(), paused: map[weak.Pointer[Interaction]]pausedSlot{}}
 
 // register opens i; false when MaxOpenInteractions is reached. A restore of a run that holds a
 // slot here (paused in this process) takes it over; any other restore is admitted like a new run.
@@ -93,6 +106,8 @@ func opened(i *Interaction, limit int) bool {
 	if open.list.Len()+len(open.paused) >= limit {
 		return false
 	}
+	open.nextOrder++
+	i.ownerOrder = open.nextOrder
 	i.opened = time.Now()
 	i.elem = open.list.PushBack(i)
 	return true
@@ -106,7 +121,7 @@ func unregister(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	delete(open.paused, i.id)
+	delete(open.paused, weak.Make(i))
 }
 
 // holdPausedSlot keeps a paused run counted toward MaxOpenInteractions, off the TTL list. The
@@ -118,21 +133,35 @@ func holdPausedSlot(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	open.paused[i.id] = struct{}{}
+	open.paused[weak.Make(i)] = slotFor(i)
 }
 
-// takePausedSlot moves a paused run's slot to i; false when this process holds none for its ID.
+// takePausedSlot transfers a counted slot only when the restored identity has a
+// unique match. Ambiguous matches leave every original registered and go through
+// ordinary admission, just like a snapshot from another process.
 func takePausedSlot(i *Interaction) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	if _, held := open.paused[i.id]; !held {
+	var match weak.Pointer[Interaction]
+	var matchedSlot pausedSlot
+	found := false
+	for ref, slot := range open.paused {
+		if slot.id != i.id || slot.conversationID != i.conversationID ||
+			slot.userID != i.userID || slot.anonymousID != i.anonymousID {
+			continue
+		}
+		if found {
+			return false
+		}
+		match, matchedSlot, found = ref, slot, true
+	}
+	if !found {
 		return false
 	}
-	delete(open.paused, i.id)
-	if i.elem == nil {
-		i.opened = time.Now()
-		i.elem = open.list.PushBack(i)
-	}
+	delete(open.paused, match)
+	i.ownerOrder = matchedSlot.order
+	i.opened = time.Now()
+	i.elem = open.list.PushBack(i)
 	return true
 }
 
@@ -141,7 +170,7 @@ func takePausedSlot(i *Interaction) bool {
 func reopen(i *Interaction) {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	delete(open.paused, i.id)
+	delete(open.paused, weak.Make(i))
 	if i.elem == nil {
 		i.opened = time.Now()
 		i.elem = open.list.PushBack(i)
@@ -210,8 +239,9 @@ func resetOpenForTest() {
 	defer open.mu.Unlock()
 	// A new list: interactions of earlier tests that end later are not on it.
 	open.list = list.New()
-	open.paused = map[string]struct{}{}
+	open.paused = map[weak.Pointer[Interaction]]pausedSlot{}
 	open.lastSweep = time.Time{}
+	open.nextOrder = 0
 }
 
 func ttlSelected(i *Interaction) bool {

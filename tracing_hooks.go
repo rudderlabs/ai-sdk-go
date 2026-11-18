@@ -31,13 +31,57 @@ func init() {
 	hook.Tracing.Open = func(id string) any {
 		open.mu.Lock()
 		defer open.mu.Unlock()
+		// Registration order spans both registries. Resuming a pinned older
+		// owner must not displace a newer run that reused its ID.
+		var owner *Interaction
+		var order uint64
 		for e := open.list.Front(); e != nil; e = e.Next() {
 			i := e.Value.(*Interaction)
-			if i.id == id {
-				return i
+			if i.id == id && i.ownerOrder > order {
+				owner, order = i, i.ownerOrder
 			}
 		}
-		return nil
+		for ref, slot := range open.paused {
+			if slot.id == id && slot.order > order {
+				if i := ref.Value(); i != nil {
+					owner, order = i, slot.order
+				}
+			}
+		}
+		return owner
+	}
+	hook.Tracing.ProductOwner = func(id string, ambient any) any {
+		if i, ok := ambient.(*Interaction); ok && i != nil && i.ID() == id {
+			if i.Ended() {
+				return nil
+			}
+			return i
+		}
+		open.mu.Lock()
+		defer open.mu.Unlock()
+		var owner *Interaction
+		for e := open.list.Front(); e != nil; e = e.Next() {
+			i := e.Value.(*Interaction)
+			if i.id != id {
+				continue
+			}
+			if owner != nil && owner != i {
+				return nil
+			}
+			owner = i
+		}
+		for ref, slot := range open.paused {
+			if slot.id != id {
+				continue
+			}
+			if i := ref.Value(); i != nil {
+				if owner != nil && owner != i {
+					return nil
+				}
+				owner = i
+			}
+		}
+		return owner
 	}
 	hook.Tracing.AdoptAnalytics = func(i any, c analytics.Client) { i.(*Interaction).adoptAnalytics(c) }
 	hook.Tracing.RecordTool = func(i, call any) { i.(*Interaction).recordToolCalls(true, call.(ToolCall)) }
