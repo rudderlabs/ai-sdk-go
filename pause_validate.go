@@ -41,7 +41,7 @@ var pendingCallKinds = map[string]string{
 	"started_at": "f", "ended_at": "f", "last": "b", "last_ok": "b", "history_only": "b", "unpriced": "b", "fees_unknown": "b",
 }
 var pendingToolKinds = map[string]string{
-	"tool_name": "s", "raw_name": "s", "tool_call_id": "s", "agent_name": "s", "mcp_server": "s", "parent_tool": "s",
+	"tool_name": "s", "raw_name": "s", "tool_call_id": "s", "agent_name": "s", "agent_key": "s", "mcp_server": "s", "parent_tool": "s",
 	"call_count": "i", "error": "b", "error_type": "s", "duration_ms": "f", "settled": "b", "fired": "b",
 	"structured_candidate": "b", "result_seen": "b", "tool_event_emitted": "b", "overflow": "b",
 }

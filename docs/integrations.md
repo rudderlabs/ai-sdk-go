@@ -166,6 +166,8 @@ client := openai.NewClient(
 
 ## Streaming and cancellation
 
+Go detects a streaming response from its `Content-Type` header, so behind a transport or proxy that strips that header the wrapper reads the whole stream before returning it.
+
 Read a stream inside the `RunInteraction` function (or before `End`): when the interaction ends with a stream still open, that call is recorded as cancelled. There is no way to bind a stream to an interaction after the function returned.
 
 ```go

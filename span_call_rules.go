@@ -259,6 +259,18 @@ func (i *Interaction) filterSpanCallsLocked() {
 	i.callSeq -= removed
 	i.callCount -= len(skipped)
 	i.calls = slices.DeleteFunc(i.calls, func(c *recordedCall) bool { return skipped[c] })
+	// A filtered report cannot settle an approval wait. Preserve surviving call orders,
+	// including folded calls, so genuine later model calls still settle their tools.
+	clear(i.agentCalls)
+	i.lastAgent = ""
+	latestOrder := 0
+	for _, c := range append(slices.Clone(i.calls), i.overflow...) {
+		i.agentCalls[c.agentName] = max(i.agentCalls[c.agentName], c.order)
+		if c.order > latestOrder {
+			latestOrder = c.order
+			i.lastAgent = c.agentName
+		}
+	}
 	index := before[0].callIndex
 	for _, c := range i.calls {
 		c.reportSequence -= removedBefore(c.reportSequence)

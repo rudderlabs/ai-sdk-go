@@ -53,7 +53,8 @@ func TestPauseRedactorAddedToolsEmitBeforeResponse(t *testing.T) {
 	r := setupAI(t, WithCaptureContent(true), WithToolBreakdown(true),
 		WithEventRules(EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "lookup_done"}}}),
 		WithRedactHook(func(text string) (string, error) {
-			i.RecordToolCalls(ToolCall{ID: "redactor-tool", Name: "lookup"})
+			// With an ID the pause would wait on it (SDK-6017); without one it is counted now.
+			i.RecordToolCalls(ToolCall{Name: "lookup"})
 			return text, nil
 		}))
 	_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
@@ -73,8 +74,9 @@ func TestPauseToolCallbacksAddedToolsEmitBeforeResponse(t *testing.T) {
 	for _, source := range []string{"when", "properties"} {
 		t.Run(source, func(t *testing.T) {
 			var i *Interaction
+			// No IDs: the pause does not wait on these tools (SDK-6017), so it counts them now.
 			addTool := func() {
-				i.RecordToolCalls(ToolCall{ID: "callback-tool", Name: "tool_b"})
+				i.RecordToolCalls(ToolCall{Name: "tool_b"})
 			}
 			rule := ToolEventRule{Event: "tool_a_declared"}
 			if source == "when" {
@@ -88,7 +90,7 @@ func TestPauseToolCallbacksAddedToolsEmitBeforeResponse(t *testing.T) {
 					"tool_b": {Event: "tool_b_declared"},
 				}}),
 				WithRedactHook(func(text string) (string, error) {
-					i.RecordToolCalls(ToolCall{ID: "redactor-tool", Name: "tool_a"})
+					i.RecordToolCalls(ToolCall{Name: "tool_a"})
 					return text, nil
 				}))
 			_, i = StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
@@ -1132,7 +1134,8 @@ func TestAllCallbackTypesReleaseLockAndAllowLifecycleReentry(t *testing.T) {
 			call := pauseCall
 			call.ResponseID = "initial"
 			i.RecordCall(call)
-			i.RecordToolCalls(ToolCall{ID: "tool", Name: "lookup"})
+			// No ID: the pause does not wait on it (SDK-6017), so its rules run at pause.
+			i.RecordToolCalls(ToolCall{Name: "lookup"})
 			i.onBeforeEnd(func() {
 				if source == "finalizer" {
 					reenter()
@@ -1500,7 +1503,7 @@ func TestPendingEventOnlyRuleKeepsResultSize(t *testing.T) {
 	i.pausing, i.pausedAt = true, time.Now() // paused-response delivery in progress
 	i.mu.Unlock()
 	i.RecordToolCalls(ToolCall{Name: "late", Result: "abcdef"})
-	i.preparePendingRules(func() {})
+	i.preparePendingRules(false, func() {})
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if len(i.tools) != 1 || i.tools[0].ruleOutcome == nil || i.tools[0].ruleOutcome.resultSize != 6 {

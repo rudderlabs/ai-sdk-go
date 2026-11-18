@@ -40,9 +40,13 @@ type pauseSegmentsStep struct {
 	OutputText           string              `json:"output_text"`
 	SpanID               string              `json:"span_id"`
 	ParentSpan           string              `json:"parent_span_id"`
+	ID                   string              `json:"id"`
+	Result               any                 `json:"result"`
+	Error                *bool               `json:"error"`
 	Event                string              `json:"event"`
 	Steps                []pauseSegmentsStep `json:"steps"`
 	JSON                 bool                `json:"json"`
+	Status               string              `json:"status"`
 	Calls                []struct {
 		ID        string   `json:"id"`
 		Name      string   `json:"name"`
@@ -50,6 +54,7 @@ type pauseSegmentsStep struct {
 		Result    any      `json:"result"`
 		Error     *bool    `json:"error"`
 		AgentName string   `json:"agent_name"`
+		ErrorType string   `json:"error_type"`
 	} `json:"calls"`
 }
 
@@ -115,6 +120,8 @@ func TestPauseSegmentsFixture(t *testing.T) {
 					BYOKMultiplier float64               `json:"byok_multiplier"`
 					OnHook         [][]pauseSegmentsStep `json:"on_hook"`
 				} `json:"credits"`
+				ToolBreakdown  bool `json:"tool_breakdown"`
+				EmitSpans      bool `json:"emit_spans"`
 				EmitLLMCalls   bool `json:"emit_llm_calls"`
 				CaptureContent bool `json:"capture_content"`
 				MaxCalls       int  `json:"max_calls_per_interaction"`
@@ -139,7 +146,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 	}
 	for _, tc := range fixture.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			opts := []ConfigOption{WithLLMCallEvents(tc.Config.EmitLLMCalls), WithCaptureContent(tc.Config.CaptureContent)}
+			opts := []ConfigOption{WithLLMCallEvents(tc.Config.EmitLLMCalls), WithEmitSpans(tc.Config.EmitSpans), WithCaptureContent(tc.Config.CaptureContent), WithToolBreakdown(tc.Config.ToolBreakdown)}
 			if tc.Config.MaxCalls > 0 {
 				opts = append(opts, WithLimits(Limits{MaxCallsPerInteraction: tc.Config.MaxCalls}))
 			}
@@ -232,9 +239,11 @@ func TestPauseSegmentsFixture(t *testing.T) {
 					case "record_tool_call":
 						calls := make([]ToolCall, 0, len(step.Calls))
 						for _, c := range step.Calls {
-							calls = append(calls, ToolCall{ID: c.ID, Name: c.Name, AgentName: c.AgentName, Result: c.Result, Error: c.Error})
+							calls = append(calls, ToolCall{ID: c.ID, Name: c.Name, AgentName: c.AgentName, Result: c.Result, Error: c.Error, ErrorType: c.ErrorType})
 						}
 						i.RecordToolCalls(calls...)
+					case "record_tool_result":
+						i.RecordToolResult(step.ID, ToolResult{Result: step.Result, Error: step.Error, ErrorType: step.ErrorType})
 					case "on_event":
 						client.mu.Lock()
 						client.hooks = append(client.hooks, pauseSegmentsHook{step.Event, step.Steps})
@@ -267,7 +276,7 @@ func TestPauseSegmentsFixture(t *testing.T) {
 					case "resume":
 						i.Resume()
 					case "end":
-						i.End(EndOptions{})
+						i.End(EndOptions{Status: ResponseStatus(step.Status)})
 					default:
 						t.Fatalf("unknown op %q", step.Op)
 					}
