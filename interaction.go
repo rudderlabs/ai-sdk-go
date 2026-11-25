@@ -34,7 +34,8 @@ type InteractionOptions struct {
 	ConversationID string
 	// OneShot uses the interaction ID when no explicit or context conversation ID exists. Since v0.4; default false.
 	OneShot bool
-	// InteractionID replaces the generated UUID.
+	// InteractionID replaces the generated UUID. To join MCP server events through
+	// com.rudderstack/interaction_id, use a UUID or 32 hex digits: MCP servers ignore other shapes.
 	InteractionID string
 	// Feature is the AI feature, for example "support_bot".
 	Feature string
@@ -44,6 +45,7 @@ type InteractionOptions struct {
 	Intent string
 	// TraceID links the interaction to a trace (Langfuse, LangSmith, OpenTelemetry). Defaults to
 	// what [WithTraceIDFrom] finds in the context, such as the active OpenTelemetry span's trace.
+	// MCP servers keep it from com.rudderstack/trace_id only as a UUID or 32 hex digits.
 	TraceID string
 	// Trigger is TriggerUser (the default) or TriggerSystem for app-initiated runs.
 	Trigger Trigger

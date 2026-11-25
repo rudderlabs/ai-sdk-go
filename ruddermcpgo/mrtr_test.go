@@ -32,7 +32,7 @@ func TestInputRequired2026(t *testing.T) {
 	if got := cs.InitializeResult().ProtocolVersion; got != "2026-07-28" {
 		t.Fatalf("negotiated %s", got)
 	}
-	res := callTool(t, cs, "confirm", map[string]any{}, sdk.Meta{metaInteractionID: "int_2026"})
+	res := callTool(t, cs, "confirm", map[string]any{}, sdk.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e26"})
 	if text := res.Content[0].(*sdk.TextContent).Text; text != "done: decline" {
 		t.Fatalf("result = %s", text)
 	}
@@ -44,7 +44,7 @@ func TestInputRequired2026(t *testing.T) {
 		t.Error("retry_count on the retry that answers the server")
 	}
 	p := r.props(t, "mcp_elicitation_completed")
-	if p["elicitation_action"] != "decline" || p["tool_name"] != "confirm" || p["interaction_id"] != "int_2026" || p["duration_ms"] == nil {
+	if p["elicitation_action"] != "decline" || p["tool_name"] != "confirm" || p["interaction_id"] != "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e26" || p["duration_ms"] == nil {
 		t.Errorf("elicitation = %v", p)
 	}
 	if p["request_id"] == nil || p["request_id"] == calls[0].Properties["request_id"] {

@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	analytics "github.com/rudderlabs/analytics-go/v4"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 
@@ -285,6 +286,12 @@ func Find(msgs []dataplane.Message, key string, value any) map[string]any {
 		}
 	}
 	return map[string]any{}
+}
+
+// InteractionID is the interaction ID an MCP check's client sends for name: a UUID, since a
+// server keeps a client's interaction_id only when it is a UUID or 32 hex digits.
+func InteractionID(name string) string {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(name)).String()
 }
 
 // Counts checks how many of each event arrived.

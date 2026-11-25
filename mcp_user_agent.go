@@ -24,7 +24,8 @@ var userAgentClients = map[string]string{
 // Products whose User-Agent version is their own, not the clientInfo version of the name they map to.
 var userAgentVersionless = map[string]bool{"devin-mcp-client": true}
 
-var userAgentVersion = regexp.MustCompile(`^[0-9][0-9A-Za-z.+-]{0,31}$`)
+// versionPattern is the shape of every client_version (spec/fixtures/mcp-client-info-v0.1.json).
+var versionPattern = regexp.MustCompile(`^[0-9][0-9A-Za-z.+-]{0,31}$`)
 
 // clientFromUserAgent is the last HTTP client fallback: the first product token names a
 // known client, else other. Only the mapped name and a version-shaped version leave here.
@@ -48,7 +49,7 @@ func clientFromUserAgent(userAgent string) *mcpbridge.Client {
 		return &mcpbridge.Client{Name: "other"}
 	}
 	client := &mcpbridge.Client{Name: name}
-	if !userAgentVersionless[key] && userAgentVersion.MatchString(version) {
+	if !userAgentVersionless[key] && versionPattern.MatchString(version) {
 		client.Version = version
 	}
 	return client

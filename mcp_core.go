@@ -76,6 +76,7 @@ var owned = map[string]bool{
 func init() {
 	mcpbridge.ErrorType = errorType
 	mcpbridge.CallerModel = callerModel
+	mcpbridge.CleanClient = cleanClient
 	mcpbridge.Wrap = func(name, version string, opts any) (mcpbridge.Server, error) {
 		o, _ := opts.(Options)
 		n, err := normalizeOptions(o)
@@ -301,8 +302,9 @@ func clientFromMeta(v any) *mcpbridge.Client {
 	return &mcpbridge.Client{Name: str(m["name"]), Title: str(m["title"]), Version: str(m["version"])}
 }
 
+// knownClient reports a checked client with a name or version: one with neither is skipped.
 func knownClient(client *mcpbridge.Client) bool {
-	return client != nil && (cleanClientText(client.Name) != "" || cleanClientText(client.Version) != "")
+	return client != nil && (client.Name != "" || client.Version != "")
 }
 
 // Begin starts a request.
@@ -328,12 +330,14 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 			r.ProtocolVersion = version
 		}
 	}
-	metaClient := clientFromMeta(r.Meta[metaClientInfo])
+	// Each source is checked once (r.Client and remembered clients when stored).
+	metaClient := cleanClient(clientFromMeta(r.Meta[metaClientInfo]))
+	initializeClient := cleanClient(r.InitializeClient)
 	requestClient := metaClient
-	if r.InitializeClient != nil {
-		requestClient = r.InitializeClient
+	if initializeClient != nil {
+		requestClient = initializeClient
 	}
-	client := r.InitializeClient
+	client := initializeClient
 	if !knownClient(client) {
 		client = metaClient
 	}
@@ -343,7 +347,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	if !knownClient(client) && opts.ClientInfo != nil {
 		var name, version string
 		if callback("Options.ClientInfo", func() error { name, version = opts.ClientInfo(r.Ctx, tok); return nil }) {
-			client = &mcpbridge.Client{Name: name, Version: version}
+			client = cleanClient(&mcpbridge.Client{Name: name, Version: version})
 		}
 	}
 	// Remembered details enrich request events only; client-seen keeps its existing sources.
@@ -364,14 +368,14 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	if !knownClient(client) && opts.ClientInfoFallback != nil {
 		var name, version string
 		if callback("Options.ClientInfoFallback", func() error { name, version = opts.ClientInfoFallback(r.Ctx, tok); return nil }) {
-			client = &mcpbridge.Client{Name: name, Version: version}
+			client = cleanClient(&mcpbridge.Client{Name: name, Version: version})
 			// Like ClientInfo, the fallback supplies client-seen as well as request events.
 			seenClient = client
 		}
 	}
 	if !knownClient(client) && r.HTTP {
 		// The raw header never becomes an event property.
-		if uaClient := clientFromUserAgent(r.UserAgent); uaClient != nil {
+		if uaClient := cleanClient(clientFromUserAgent(r.UserAgent)); uaClient != nil {
 			client = uaClient
 			seenClient = client
 		}
@@ -393,8 +397,8 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	put(base, "oauth_client_id", id.OAuthClientID)
 	put(base, "auth_method", id.AuthMethod)
 	if client != nil {
-		put(base, "client_name", cleanClientText(client.Name))
-		put(base, "client_version", cleanClientText(client.Version))
+		put(base, "client_name", client.Name)
+		put(base, "client_version", client.Version)
 	}
 	version := str(r.Meta[metaProtocolVersion])
 	if version == "" {
@@ -409,7 +413,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	rc := &reqCtx{interaction: FromContext(r.Ctx),
 		w: w, st: st, opts: opts, base: base, who: who{id.UserID, id.AnonymousID}, identity: id,
 		client: seenClient, requestID: safeRequestID(r.RequestID), rawID: r.RequestID, responses: r.Responses, http: r.HTTP, meta: map[string]any{}, start: time.Now(),
-		initializeClient: r.InitializeClient, received: received, sequence: sequence, registeredTools: r.RegisteredTools, registeredPrompts: r.RegisteredPrompts,
+		initializeClient: initializeClient, received: received, sequence: sequence, registeredTools: r.RegisteredTools, registeredPrompts: r.RegisteredPrompts,
 	}
 	rc.callerModel = caller
 	// A copy: the SDK may remove the protocol keys from _meta while it handles the request.
@@ -418,7 +422,8 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 			rc.meta[k] = v
 		}
 	}
-	// Raw values: a capped or trimmed key would merge callers that differ only past the cap.
+	// Raw values: a capped or trimmed key would merge callers that differ only past the cap. An
+	// interaction ID that failed the check scopes nothing, as if absent.
 	switch {
 	case r.SessionID != "":
 		rc.scopeParts = []string{"session", r.SessionID}
@@ -465,6 +470,8 @@ func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, versio
 	defer func() { deliverMapNotices(notices) }()
 	if knownClient(rc.initializeClient) {
 		client = rc.initializeClient
+	} else {
+		client = cleanClient(client)
 	}
 	put(rc.base, "protocol_version", protocolVersion(version))
 	if rc.client == nil {
@@ -476,7 +483,7 @@ func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, versio
 			previous, ok := rc.st.clients.get(key)
 			if !ok || rc.sequence > previous.sequence {
 				notices = append(notices, rc.st.clients.setSilent(key, rememberedClient{
-					name: cleanClientText(client.Name), version: cleanClientText(client.Version), until: rc.received.Add(rc.opts.ClientSeenWindow), sequence: rc.sequence,
+					name: client.Name, version: client.Version, until: rc.received.Add(rc.opts.ClientSeenWindow), sequence: rc.sequence,
 				}))
 			}
 			rc.st.Unlock()
@@ -490,8 +497,8 @@ func (rc *reqCtx) clientSeen(client *mcpbridge.Client, caps []string) {
 	var notices []func()
 	defer func() { deliverMapNotices(notices) }()
 	var name, title, version string
-	if client != nil {
-		name, title, version = cleanClientText(client.Name), cleanClientText(client.Title), cleanClientText(client.Version)
+	if client != nil { // checked already
+		name, title, version = client.Name, client.Title, client.Version
 	}
 	key := callerStateKey(rc.identity.stateAccountID, rc.identity.stateUserID, rc.identity.stateAnonymousID, name, rc.identity.OAuthClientID)
 	now := time.Now()
@@ -641,11 +648,51 @@ func (rc *reqCtx) reportedContext(v any) map[string]any {
 		out["user_sentiment"] = s
 	}
 	if reason, ok := m["call_reason"].(string); ok && opts.capture().CallReason {
-		if masked, ok := opts.mask(strings.TrimSpace(reason)); ok && masked != "" {
-			out["call_reason"] = capText(masked, maxTextLength)
+		if text := opts.maskedText(reason, maxTextLength); text != "" {
+			out["call_reason"] = text
 		}
 	}
 	return out
+}
+
+// maskedText is call_reason, capability_detail or feedback_text as sent: trimmed, masked and cut
+// to limit code points; "" when masking fails or leaves a built-in pattern, before or after the cut.
+func (o *options) maskedText(text string, limit int) string {
+	text = trimJS(text)
+	if overMaskCap(text) {
+		return ""
+	}
+	masked, ok := o.mask(text)
+	if !ok || masked == "" || masked == redactionTimedOut {
+		return ""
+	}
+	// DisableRedaction turns masking off, not this check (spec/fixtures/mcp-agent-text-v0.1.json).
+	if hasSensitive(masked) {
+		return ""
+	}
+	return cutUnexposed(masked, limit)
+}
+
+// trimJS trims as JS String.prototype.trim does: BOM included, NEL (U+0085) excluded.
+func trimJS(text string) string {
+	return strings.TrimFunc(text, func(r rune) bool {
+		return r == '\ufeff' || (r != '\u0085' && unicode.IsSpace(r))
+	})
+}
+
+// overMaskCap: text over the masking cap is withheld without scanning, with redaction on or off.
+func overMaskCap(text string) bool {
+	return len(text) > maxMaskedCodePoints && utf8.RuneCountInString(text) > maxMaskedCodePoints
+}
+
+// cutUnexposed cuts masked text to limit code points; "" when the cut leaves a built-in pattern
+// that the removed text had kept from matching (`... 415-555-0100-9` cut to `... 415-555-0100`).
+func cutUnexposed(masked string, limit int) string {
+	cut := capText(masked, limit)
+	if len(cut) < len(masked) && hasSensitive(cut) {
+		return ""
+	}
+	return cut
 }
 
 // Capability records a request_capability call and returns the reply.
@@ -664,9 +711,8 @@ func (rc *reqCtx) Capability(args map[string]json.RawMessage) string {
 	p["capability"] = capability
 	var detail string
 	if json.Unmarshal(args["detail"], &detail) == nil && capability == "other" && rc.opts.capture().FeedbackText {
-		// Withheld, not sent, when it still looks sensitive after masking.
-		if masked, ok := rc.opts.mask(strings.TrimSpace(detail)); ok && masked != "" && (rc.opts.DisableRedaction || !hasSensitive(masked)) {
-			p["capability_detail"] = capText(masked, maxTextLength)
+		if text := rc.opts.maskedText(detail, maxTextLength); text != "" {
+			p["capability_detail"] = text
 		}
 	}
 	emit(rc.opts.Analytics, "mcp_capability_requested", rc.who, p)
@@ -728,8 +774,8 @@ func (rc *reqCtx) Feedback(args map[string]json.RawMessage) (string, bool) {
 		p["capability"] = capability
 	}
 	if feedback {
-		if masked, ok := rc.opts.mask(strings.TrimSpace(values["feedback"])); ok && masked != "" && (rc.opts.DisableRedaction || !hasSensitive(masked)) {
-			p["feedback_text"] = capText(masked, feedbackMaxLength)
+		if text := rc.opts.maskedText(values["feedback"], feedbackMaxLength); text != "" {
+			p["feedback_text"] = text
 		}
 	}
 	emit(rc.opts.Analytics, "mcp_feedback_submitted", rc.who, p)
@@ -1184,9 +1230,11 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string, captured .
 					}
 				case "toolname":
 					p["tool_name"] = rc.toolName
-				case "clientname", "clienttitle", "clientversion":
-					if value := cleanClientText(str(v)); value != "" {
-						p["client_"+strings.TrimPrefix(canon, "client")] = value
+				case "clientname", "clientversion":
+					// Reserved: the event carries the request's own client, even when it has none.
+				case "clienttitle":
+					if value := clientText(str(v)); value != "" {
+						p["client_title"] = value
 					}
 				default:
 					if !owned[propertyName(k)] {
@@ -1201,7 +1249,7 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string, captured .
 		seeds = append(seeds, captureSeed{memo: captured[0].memo})
 	}
 	sdk := map[string]any{}
-	for _, key := range []string{"argument_keys", "invalid_arguments", "request_id", "tool_name", "client_name", "client_title", "client_version"} {
+	for _, key := range []string{"argument_keys", "invalid_arguments", "request_id", "tool_name", "client_title"} {
 		if value, ok := p[key]; ok {
 			sdk[key] = value
 			delete(p, key)
@@ -1520,7 +1568,46 @@ func callerStateKey(account, user, anonymous string, parts ...string) string {
 	return string(b)
 }
 
-func cleanClientText(value string) string { return mcpbridge.CleanClientText(value) }
+// maxClientChars bounds client_name and client_title.
+const maxClientChars = 64
+
+// clientText is a client_name or client_title as sent (spec/fixtures/mcp-client-info-v0.1.json):
+// tidied, masked with the built-in rules only (never Redact, whatever DisableRedaction says), then
+// cut; "" when masking withholds it or leaves a match, before or after the cut.
+func clientText(value string) string {
+	value = tidyText(value)
+	if value == "" {
+		return ""
+	}
+	masked, ok := MaskText(value)
+	if !ok || masked == redactionTimedOut || hasSensitive(masked) {
+		return ""
+	}
+	// A copy: the cut or the tidied text can share the raw value's memory, and sessions keep the result.
+	return strings.Clone(cutUnexposed(masked, maxClientChars))
+}
+
+// clientVersion is a client_version as sent: tidied, version-shaped and untouched by the built-in
+// rules, else "".
+func clientVersion(value string) string {
+	value = tidyText(value)
+	if !versionPattern.MatchString(value) || hasSensitive(value) {
+		return ""
+	}
+	return strings.Clone(value)
+}
+
+// tidyText removes Cc first, so a tab or newline joins its neighbors, then turns each run of
+// Unicode White_Space into one space and trims.
+func tidyText(value string) string {
+	value = strings.Map(func(r rune) rune {
+		if unicode.Is(unicode.Cc, r) {
+			return -1
+		}
+		return r
+	}, value)
+	return strings.Join(strings.Fields(value), " ")
+}
 
 // maxSafeInteger is the largest integer every JSON implementation reads exactly.
 const maxSafeInteger = 9007199254740991
@@ -1598,11 +1685,51 @@ func protocolVersion(v string) string {
 
 var protocolVersionRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
 
-func cleanClient(client *mcpbridge.Client) *mcpbridge.Client { return mcpbridge.CleanClient(client) }
+// cleanClient checks a client's details where they are read; remembered clients keep the result,
+// as a second check could change a cut value.
+func cleanClient(client *mcpbridge.Client) *mcpbridge.Client {
+	if client == nil {
+		return nil
+	}
+	checkedClients.Lock()
+	cached, ok := checkedClients.byRaw[*client]
+	checkedClients.Unlock()
+	if ok {
+		return &cached
+	}
+	checked := mcpbridge.Client{Name: clientText(client.Name), Title: clientText(client.Title), Version: clientVersion(client.Version)}
+	// Keep only results with nothing withheld, so a masking timeout is never reused, and only short raw values.
+	kept := (client.Name == "" || checked.Name != "") && (client.Title == "" || checked.Title != "") &&
+		(client.Version == "" || checked.Version != "")
+	if kept && len(client.Name)+len(client.Title)+len(client.Version) <= maxCheckedClientBytes {
+		checkedClients.Lock()
+		if len(checkedClients.byRaw) >= maxCheckedClients {
+			clear(checkedClients.byRaw)
+		}
+		// Copies: the raw values can be substrings of a much larger string (a User-Agent header).
+		key := mcpbridge.Client{Name: strings.Clone(client.Name), Title: strings.Clone(client.Title), Version: strings.Clone(client.Version)}
+		checkedClients.byRaw[key] = checked
+		checkedClients.Unlock()
+	}
+	return &checked
+}
+
+// checkedClients memoizes cleanClient: clients resend clientInfo in _meta on every 2026-07-28 request,
+// and masking allocates.
+var checkedClients = struct {
+	sync.Mutex
+	byRaw map[mcpbridge.Client]mcpbridge.Client
+}{byRaw: map[mcpbridge.Client]mcpbridge.Client{}}
+
+const (
+	maxCheckedClients     = 256
+	maxCheckedClientBytes = 1024
+)
 
 // errorMessage reads an explicit {result} or {error} source as described by
 // spec/fixtures/mcp-error-message-v0.1.json: mask before capping,
-// and withhold empty text, failed masking and anything still matching a built-in pattern.
+// and withhold empty text, failed masking and anything still matching a built-in pattern, before or
+// after the cap.
 func errorMessage(failure map[string]any, mask func(string) (string, bool)) string {
 	var text string
 	if rpc, ok := failure["error"].(map[string]any); ok {
@@ -1620,18 +1747,15 @@ func errorMessage(failure map[string]any, mask func(string) (string, bool)) stri
 		}
 		text = strings.Join(blocks, "\n")
 	}
-	// JS String.prototype.trim includes BOM but excludes NEL (U+0085).
-	text = strings.TrimFunc(text, func(r rune) bool {
-		return r == '\ufeff' || (r != '\u0085' && unicode.IsSpace(r))
-	})
-	if text == "" {
+	text = trimJS(text)
+	if text == "" || overMaskCap(text) {
 		return ""
 	}
 	masked, ok := mask(text)
 	if !ok || masked == "" || masked == redactionTimedOut || hasSensitive(masked) {
 		return ""
 	}
-	return capText(masked, maxTextLength)
+	return cutUnexposed(masked, maxTextLength)
 }
 
 func mcpWireErrorType(code int) string {

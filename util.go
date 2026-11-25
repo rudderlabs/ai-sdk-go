@@ -65,7 +65,8 @@ func callerModel(meta map[string]any) map[string]any {
 		lower := strings.ToLower(value)
 		if len(value) > maxLabelLength || !callerModelPattern.MatchString(value) ||
 			slices.ContainsFunc(callerModelUnknownPrefixes, func(prefix string) bool { return strings.HasPrefix(lower, prefix) }) ||
-			slices.ContainsFunc(callerModelUnknownExtensions, func(extension string) bool { return strings.HasSuffix(lower, extension) }) {
+			slices.ContainsFunc(callerModelUnknownExtensions, func(extension string) bool { return strings.HasSuffix(lower, extension) }) ||
+			hasSensitive(value) {
 			value = "unknown"
 		}
 		return map[string]any{"caller_model": value, "caller_model_source": "client_metadata"}
@@ -94,8 +95,18 @@ func str(v any) string {
 	return s
 }
 
-// opaque reads a _meta value as an opaque, length-capped string.
-func opaque(v any) string { return capID(str(v)) }
+// clientIDPattern is a UUID (any version) or 32 hex digits, in either case.
+var clientIDPattern = regexp.MustCompile(`^(?:[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}|[0-9A-Fa-f]{32})$`)
+
+// clientID reads a client-supplied _meta ID (spec/fixtures/mcp-traceparent-v0.1.json): trimmed,
+// and kept only when it is a UUID or 32 hex digits, not all zeros, so free text never becomes one.
+func clientID(v any) string {
+	s := strings.TrimSpace(str(v))
+	if !clientIDPattern.MatchString(s) || strings.Trim(s, "0-") == "" {
+		return ""
+	}
+	return s
+}
 
 // capID trims and caps an ID or name read off the wire or from Identify.
 func capID(s string) string { return capText(strings.TrimSpace(s), maxMetaLength) }
@@ -125,10 +136,10 @@ func joinIDs(meta map[string]any) (interactionID, traceID string) {
 	if meta == nil {
 		return "", ""
 	}
-	interactionID = opaque(meta[metaInteractionID])
+	interactionID = clientID(meta[metaInteractionID])
 	traceID = traceIDFromTraceparent(meta[metaTraceparent])
 	if traceID == "" {
-		traceID = opaque(meta[metaTraceID])
+		traceID = clientID(meta[metaTraceID])
 	}
 	return interactionID, traceID
 }

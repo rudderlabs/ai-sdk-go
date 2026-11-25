@@ -68,7 +68,14 @@ func TestMCPPrivacyRequestIDs(t *testing.T) {
 }
 
 func TestMCPPrivacyClientFields(t *testing.T) {
-	for _, tc := range []struct{ value, want string }{{"\u0007bad\n  name", "bad name"}, {strings.Repeat("é", 100), strings.Repeat("é", 64)}, {"\u0000  \t", ""}, {" a\u0085b\u2003 c ", "ab c"}} {
+	// The same value as name, title and version: only version-shaped text is a client_version.
+	for _, tc := range []struct{ value, want, version string }{
+		{"\u0007bad\n  name", "bad name", ""},
+		{strings.Repeat("é", 100), strings.Repeat("é", 64), ""},
+		{"\u0000  \t", "", ""},
+		{" a\u0085b\u2003 c ", "ab c", ""},
+		{" 1.2\u0000.3\t", "1.2.3", "1.2.3"},
+	} {
 		t.Run(tc.value, func(t *testing.T) {
 			s := workspaceServer("privacy-client", nil)
 			r := wrap(t, s, Options{Identify: func(context.Context, *auth.TokenInfo) (Identity, error) {
@@ -86,12 +93,16 @@ func TestMCPPrivacyClientFields(t *testing.T) {
 					if event == "mcp_tool_called" && key == "client_title" {
 						continue
 					}
+					want := tc.want
+					if key == "client_version" {
+						want = tc.version
+					}
 					got, ok := r.props(t, event)[key]
-					if tc.want == "" {
+					if want == "" {
 						if ok {
 							t.Errorf("%s %s = %v", event, key, got)
 						}
-					} else if got != tc.want {
+					} else if got != want {
 						t.Errorf("%s %s = %v", event, key, got)
 					}
 				}
@@ -115,7 +126,7 @@ func TestMCPPrivacyCallerCounters(t *testing.T) {
 				case "session":
 					req.SessionID = "shared"
 				case "interaction":
-					req.Meta = map[string]any{metaInteractionID: "shared"}
+					req.Meta = map[string]any{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e40"}
 				case "connection":
 					req.Connection = "shared"
 				}

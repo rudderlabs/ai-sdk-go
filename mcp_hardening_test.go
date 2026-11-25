@@ -173,7 +173,7 @@ func TestDeclaredPropertiesAreCleanedWhateverTheirSpelling(t *testing.T) {
 	r := wrap(t, s, Options{EventRules: EventRules{Tools: map[string]ToolEventRule{"probe": {Event: "performed", Properties: func(map[string]any, any) map[string]any {
 		return map[string]any{
 			"argumentKeys": []string{"z", "evil", "a"}, "Invalid-Arguments": "evil", "REQUEST_ID": "forged", "clientTitle": "\u0007bad\n  title",
-			"client-version": "  1.0 \t beta ", "toolName": "forged", "clientName": "\u0000",
+			"client-version": "  1.0\t-beta ", "toolName": "forged", "clientName": "\u0000",
 		}
 	}}}}})
 	w, _ := instances.get(s)
@@ -185,11 +185,13 @@ func TestDeclaredPropertiesAreCleanedWhateverTheirSpelling(t *testing.T) {
 	if !slices.Equal(p["argument_keys"].([]string), []string{"a", "unknown", "z"}) || !slices.Equal(p["invalid_arguments"].([]string), []string{"unknown"}) {
 		t.Errorf("lists = %v / %v", p["argument_keys"], p["invalid_arguments"])
 	}
-	if p["request_id"] != "sha256:9773879a094d490e" || p["client_title"] != "bad title" || p["client_version"] != "1.0 beta" || p["tool_name"] != "probe" {
+	if p["request_id"] != "sha256:9773879a094d490e" || p["client_title"] != "bad title" || p["tool_name"] != "probe" {
 		t.Errorf("properties = %v", p)
 	}
-	if _, ok := p["client_name"]; ok {
-		t.Errorf("empty client_name kept: %v", p)
+	_, name := p["client_name"]
+	_, version := p["client_version"]
+	if name || version {
+		t.Errorf("rule's client_name or client_version kept: %v", p)
 	}
 	for k := range p {
 		if k != strings.ToLower(k) || strings.ContainsAny(k, "-A") {
@@ -213,7 +215,7 @@ func TestLongIdentitiesKeepSeparateState(t *testing.T) {
 	}{
 		{"session", func(id Identity) mcpbridge.Request { return mcpbridge.Request{SessionID: "shared"} }},
 		{"interaction", func(id Identity) mcpbridge.Request {
-			return mcpbridge.Request{Meta: map[string]any{metaInteractionID: prefix + "x"}}
+			return mcpbridge.Request{Meta: map[string]any{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e41"}}
 		}},
 		{"connection", func(id Identity) mcpbridge.Request { return mcpbridge.Request{Connection: "c1"} }},
 	} {
@@ -362,7 +364,7 @@ func TestKnownUserSharesStateAcrossAnonymousIDs(t *testing.T) {
 	client := &mcpbridge.Client{Name: "agent"}
 	for _, anon := range []string{"anon-a", "anon-b"} {
 		ctx := context.WithValue(context.Background(), privacyIdentityKey{}, Identity{UserID: "u1", AccountID: "acct", AnonymousID: anon})
-		rc := w.begin(mcpbridge.Request{Ctx: ctx, InitializeClient: client, Meta: map[string]any{metaInteractionID: "shared"}})
+		rc := w.begin(mcpbridge.Request{Ctx: ctx, InitializeClient: client, Meta: map[string]any{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e42"}})
 		rc.Initialized(client, nil, "2025-06-18")
 		rc.ToolCall("list_destinations", nil, false, nil, "")
 		rc.ToolDone(mcpbridge.Outcome{Result: map[string]any{}})
@@ -387,5 +389,19 @@ func TestTitleOnlyClientKeepsTitle(t *testing.T) {
 	rc.Initialized(client, nil, "2025-06-18")
 	if got := r.props(t, "mcp_client_seen")["client_title"]; got != "Only A Title" {
 		t.Errorf("client_title = %v", got)
+	}
+}
+
+// call_reason, capability_detail and feedback_text: the text past the cut kept the phone from matching.
+func TestAgentTextCutNeverExposesAPattern(t *testing.T) {
+	o := &options{}
+	for _, limit := range []int{maxTextLength, feedbackMaxLength} {
+		head := strings.Repeat("x", limit-13)
+		if got := o.maskedText(head+" 415-555-0100-9", limit); got != "" {
+			t.Errorf("limit %d: cut sent as %q", limit, got[len(head):])
+		}
+		if got := o.maskedText(head+" 415-555-0100", limit+10); got != head+" [phone]" {
+			t.Errorf("limit %d: got %q", limit, got)
+		}
 	}
 }

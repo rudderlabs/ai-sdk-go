@@ -474,3 +474,17 @@ func TestPausedSharedIDOwnersRemainWeakAndRestoreAfterGC(t *testing.T) {
 		t.Fatal("restores changed the total number of counted slots")
 	}
 }
+
+// A masking timeout gives the placeholder; agent-written MCP text withholds it (spec/fixtures/mcp-agent-text-v0.1.json).
+func TestAgentTextWithheldOnMaskingTimeout(t *testing.T) {
+	setupAI(t, WithOnError(func(error, ErrorInfo) {}))
+	slow := regexp2.MustCompile(`(a+)+$`, regexp2.None)
+	slow.MatchTimeout = time.Millisecond
+	saved := compiledRules[0]
+	compiledRules[0] = slow
+	t.Cleanup(func() { compiledRules[0] = saved })
+	o := &options{}
+	if got := o.maskedText(strings.Repeat("a", 40)+"!", maxTextLength); got != "" {
+		t.Fatalf("maskedText = %q, want it withheld", got)
+	}
+}

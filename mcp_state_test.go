@@ -38,7 +38,7 @@ func freshState(t *testing.T) {
 func TestStateIsPerServerName(t *testing.T) {
 	first, second := workspaceServer("same-name", nil), workspaceServer("same-name", nil)
 	r1, r2 := wrap(t, first, Options{}), wrap(t, second, Options{})
-	meta := mcp.Meta{metaInteractionID: "int_shared"}
+	meta := mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e31"}
 	for _, server := range []*mcp.Server{first, second} {
 		cs := connect(t, server, "2025-06-18", nil)
 		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, meta)
@@ -55,7 +55,7 @@ func TestStateIsPerServerName(t *testing.T) {
 func TestDifferentNamesAreSeparate(t *testing.T) {
 	first, second := workspaceServer("name-a", nil), workspaceServer("name-b", nil)
 	r1, r2 := wrap(t, first, Options{}), wrap(t, second, Options{})
-	meta := mcp.Meta{metaInteractionID: "int_same"}
+	meta := mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e32"}
 	for _, server := range []*mcp.Server{first, second} {
 		cs := connect(t, server, "2025-06-18", nil)
 		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, meta)
@@ -92,7 +92,7 @@ func TestPerRequestServersKeepCounting(t *testing.T) {
 	}
 	defer cs.Close()
 	for range 3 {
-		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, mcp.Meta{metaInteractionID: "int_per_request"})
+		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e33"})
 	}
 	calls := r.named("mcp_tool_called")
 	if len(calls) != 3 {
@@ -118,7 +118,7 @@ func TestRewrapKeepsState(t *testing.T) {
 	server := workspaceServer("rewrap-mcp", nil)
 	wrap(t, server, Options{})
 	cs := connect(t, server, "2025-06-18", nil)
-	meta := mcp.Meta{metaInteractionID: "int_rewrap"}
+	meta := mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e34"}
 	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, meta)
 	second := wrap(t, server, Options{})
 	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, meta)
