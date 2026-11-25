@@ -9,15 +9,16 @@ on:
     - cron: '23 3 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   example:
     name: ${{ matrix.example }}
-    runs-on: ubuntu-latest
+    runs-on: arc-amd64
     timeout-minutes: 10
     environment: live-examples
+    permissions:
+      contents: read # actions/checkout
     strategy:
       fail-fast: false
       matrix:

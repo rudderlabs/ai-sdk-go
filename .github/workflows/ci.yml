@@ -11,8 +11,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 env:
   # Must match GOLANGCI_LINT_VERSION and GOVULNCHECK_VERSION in the Makefile.
@@ -22,11 +21,14 @@ env:
   # Every module of go.work (./... alone covers only the root module). Keep in sync with the Makefile.
   PKGS: ./... ./rudderopenai/... ./rudderanthropic/... ./ruddergenai/... ./rudderbedrock/... ./rudderotel/... ./cmd/aicheck/... ./internal/conformance/... ./examples/...
 
+# The repo is public: fork PRs run on GitHub-hosted runners, never on ARC.
 jobs:
   lint:
     name: Format, vet and lint
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
     timeout-minutes: 10
+    permissions:
+      contents: read # actions/checkout
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -57,13 +59,15 @@ jobs:
 
   test:
     name: Unit tests (Go ${{ matrix.go }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
     timeout-minutes: 15
+    permissions:
+      contents: read # actions/checkout
     strategy:
       fail-fast: false
       matrix:
-        # The minimum in go.mod and the supported Go releases.
-        go: ['1.26.x', '1.27.x']
+        # The minimum in go.mod and the supported Go releases; PRs test the latest only.
+        go: ${{ fromJSON((github.event_name != 'pull_request' || startsWith(github.head_ref, 'release-please--branches--main')) && '["1.26.x", "1.27.x"]' || '["1.27.x"]') }}
     steps:
       - name: Harden the runner (Audit all outbound calls)
         uses: step-security/harden-runner@1d88384fd173af6ecb012dfd0264a306b711241a # v2.22.4
@@ -102,8 +106,12 @@ jobs:
 
   mcpgo-latest:
     name: mcp-go v1.1.1 (latest)
-    runs-on: ubuntu-latest
+    # Release PRs, main and manual runs only.
+    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'release-please--branches--main')
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
     timeout-minutes: 10
+    permissions:
+      contents: read # actions/checkout
     # -modfile needs module mode.
     env:
       GOWORK: 'off'
@@ -143,8 +151,10 @@ jobs:
 
   module:
     name: Module ${{ matrix.module }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
     timeout-minutes: 10
+    permissions:
+      contents: read # actions/checkout
     strategy:
       fail-fast: false
       matrix:
@@ -180,18 +190,22 @@ jobs:
       # example openai-go v3.70.0, mcp-go v0.55.1); the unit-test job covers the latest the
       # examples module pins.
       - name: Test against the go.mod minimums
-        if: matrix.module != 'examples'
+        # Release PRs, main and manual runs only.
+        if: matrix.module != 'examples' && (github.event_name != 'pull_request' || startsWith(github.head_ref, 'release-please--branches--main'))
         working-directory: ${{ matrix.module }}
         run: go test -race ./...
 
   vulncheck:
     name: Vulnerability scan ${{ matrix.module.dir }} (Go ${{ matrix.toolchain }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
     timeout-minutes: 10
+    permissions:
+      contents: read # actions/checkout
     strategy:
       fail-fast: false
       matrix:
-        toolchain: [minimum, stable]
+        # PRs scan with the latest toolchain only.
+        toolchain: ${{ fromJSON((github.event_name != 'pull_request' || startsWith(github.head_ref, 'release-please--branches--main')) && '["minimum", "stable"]' || '["stable"]') }}
         module:
           - dir: '.'
             go-version-file: go.mod
@@ -243,8 +257,10 @@ jobs:
 
   example:
     name: Example ${{ matrix.example }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
     timeout-minutes: 10
+    permissions:
+      contents: read # actions/checkout
     strategy:
       fail-fast: false
       matrix:
