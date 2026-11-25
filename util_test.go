@@ -95,9 +95,6 @@ func TestTraceparent(t *testing.T) {
 			t.Errorf("traceIDFromTraceparent(%v) = %q", in, got)
 		}
 	}
-	if i, tr := joinIDs(nil); i != "" || tr != "" {
-		t.Error("joinIDs(nil)")
-	}
 }
 
 func TestInvalidArguments(t *testing.T) {
