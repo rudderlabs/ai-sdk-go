@@ -823,17 +823,18 @@ func TestManagedAgentsRecordsABorrowedAnswersWorkAsItArrivesSoTheCallersPauseHol
 	if _, ok := i.Pause(rudderstackai.PauseOptions{}); !ok {
 		t.Fatal("not paused")
 	}
+	// The custom tool waits on the app: it counts in the segment that resumes the pause.
 	got := rec.events(t)["ai_response_received"]
 	if len(got) != 1 || got[0]["response_status"] != "paused" || got[0]["llm_call_count"] != float64(1) ||
-		got[0]["tool_call_count"] != float64(1) || got[0]["total_input_tokens"] != float64(30) || got[0]["total_output_tokens"] != float64(8) {
+		got[0]["tool_call_count"] != float64(0) || got[0]["total_input_tokens"] != float64(30) || got[0]["total_output_tokens"] != float64(8) {
 		t.Fatalf("%v", got)
 	}
-	// The paused segment holds the work; the resumed one counts nothing twice.
+	// The paused segment holds the call; the resumed one counts nothing twice.
 	_ = events.Close()
 	i.Resume()
 	i.End(rudderstackai.EndOptions{Status: rudderstackai.StatusSuccess})
 	got = rec.events(t)["ai_response_received"]
-	if len(got) != 2 || got[1]["llm_call_count"] != float64(0) || got[1]["tool_call_count"] != float64(0) || got[1]["total_input_tokens"] != float64(0) {
+	if len(got) != 2 || got[1]["llm_call_count"] != float64(0) || got[1]["tool_call_count"] != float64(1) || got[1]["total_input_tokens"] != float64(0) {
 		t.Fatalf("%v", got)
 	}
 }
@@ -1525,7 +1526,6 @@ func TestManagedAgentsKeepsAResumedSegmentsLatencyWhenHistoryIsReadBackToBack(t 
 }
 
 func TestManagedAgentsKeepsAToolsOutcomeAcrossTheCallersOwnPauseAndResume(t *testing.T) {
-	t.Skip("depends on the edge-cases D2 core change (pending tools across a caller's pause); remove this skip when D2 lands")
 	_, rec := setup(t, rudderstackai.WithToolBreakdown(true))
 	resetMA(t)
 	at := func(ms int) string {
@@ -1772,16 +1772,16 @@ func TestManagedAgentsTimesAnOutcomeGraderCycleFromItsStartEvent(t *testing.T) {
 	}
 }
 
-// The tool is in the core before the pause: its outcome after the pause needs the edge-cases D2
-// core change (pending tools across a pause). It passes, and this marker goes, when D2 lands.
+// The tool is in the core before the pause; its result after the pause still settles it there.
 func TestManagedAgentsCarriesAToolAlreadyRecordedAtTheCallCapWhenAPauseNamesIt(t *testing.T) {
 	_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{MaxCallsPerInteraction: 2, MaxMapEntries: 1}))
 	resetMA(t)
 	first := maEvents(t,
 		`{"id":"sevt_rec_u","type":"user.message","content":[],`+maAt(0)+`}`,
-		`{"id":"sevt_rec_h","type":"agent.tool_use","name":"held","input":{},`+maAt(50)+`}`,
-		`{"id":"sevt_rec_t","type":"agent.tool_use","name":"bash","input":{},`+maAt(100)+`}`,
-		`{"id":"sevt_rec_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},`+maAt(150)+`}`,
+		// A request's tool uses follow its end, as the session stream sends them.
+		`{"id":"sevt_rec_c","type":"span.model_request_end","is_error":false,"model_usage":{"input_tokens":1,"output_tokens":1},`+maAt(50)+`}`,
+		`{"id":"sevt_rec_h","type":"agent.tool_use","name":"held","input":{},`+maAt(100)+`}`,
+		`{"id":"sevt_rec_t","type":"agent.tool_use","name":"bash","input":{},`+maAt(150)+`}`,
 		`{"id":"sevt_rec_i","type":"session.status_idle","stop_reason":{"type":"requires_action","event_ids":["sevt_rec_t"]},`+maAt(200)+`}`,
 	)
 	second := maEvents(t,
@@ -1805,10 +1805,9 @@ func TestManagedAgentsCarriesAToolAlreadyRecordedAtTheCallCapWhenAPauseNamesIt(t
 		}
 	}
 	// Counted once across the segments, with its outcome.
-	if calls == 1 && errors == 1 {
-		t.Fatal("passes now: remove the expected-failure marker")
+	if calls != 1 || errors != 1 {
+		t.Fatalf("bash call_count %v, error_count %v", calls, errors)
 	}
-	t.Logf("expected to fail until D2: bash call_count %v, error_count %v", calls, errors)
 }
 
 func TestManagedAgentsCountsTheDenialOfAToolWithoutAnID(t *testing.T) {
