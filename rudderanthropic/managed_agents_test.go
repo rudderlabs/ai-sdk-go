@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -50,7 +51,12 @@ type maExpected struct {
 }
 
 type maScenario struct {
-	Name    string `json:"name"`
+	Name string `json:"name"`
+	// Warn-once keys the scenario must warn under, once each, with a fragment of the warning's text.
+	Warnings []struct {
+		Key  string `json:"key"`
+		Text string `json:"text"`
+	} `json:"warnings"`
 	Options struct {
 		ToolBreakdown  bool            `json:"tool_breakdown"`
 		CaptureContent bool            `json:"capture_content"`
@@ -300,6 +306,13 @@ func TestManagedAgentsFixture(t *testing.T) {
 			if string(sc.Options.Session) != "null" {
 				opts = append(opts, rudderanthropic.WithSession(rawJSON(f.Session)))
 			}
+			// setup re-arms every warn-once key; the scenario's warnings go to a buffer.
+			var logged bytes.Buffer
+			if len(sc.Warnings) > 0 {
+				prev := slog.Default()
+				slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+				t.Cleanup(func() { slog.SetDefault(prev) })
+			}
 			ctx := context.Background()
 			if sc.Options.Caller == "interaction" {
 				consumeCallerMA(ctx, t, f, sc, opts)
@@ -309,6 +322,11 @@ func TestManagedAgentsFixture(t *testing.T) {
 				}
 			}
 			rudderstackai.Flush(ctx)
+			for _, w := range sc.Warnings {
+				if n := strings.Count(logged.String(), w.Text); n != 1 {
+					t.Errorf("warning %s logged %d times, want once", w.Key, n)
+				}
+			}
 			rec.mu.Lock()
 			msgs := slicesClone(rec.msgs)
 			rec.mu.Unlock()

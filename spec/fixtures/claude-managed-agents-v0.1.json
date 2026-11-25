@@ -2453,10 +2453,16 @@
     },
     {
       "name": "no_session",
-      "description": "Without session or model the calls have no model and stay unpriced; the conversation ID is minted once for the stream.",
+      "description": "Without session or model the calls have no model and stay unpriced, with one warning however many calls (each has its model request start); the conversation ID is minted once for the stream.",
       "options": {
         "session": null
       },
+      "warnings": [
+        {
+          "key": "claude-managed-agents-model",
+          "text": "calls are unpriced without a model"
+        }
+      ],
       "streams": [
         {
           "events": [

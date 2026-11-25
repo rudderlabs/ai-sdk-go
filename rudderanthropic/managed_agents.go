@@ -1054,7 +1054,9 @@ func (s *sessionTracker) call(t *turn, e map[string]any, at msTime) {
 	model, agent := s.cfg.model, s.cfg.agentName
 	if hasStart {
 		model, agent = start.model, start.agent
-	} else if model == "" {
+	}
+	// A call without a model is unpriced, whether or not its request's start was read.
+	if model == "" {
 		kit.WarnOnce("claude-managed-agents-model", "claude-managed-agents: pass WithSession or WithSessionModel to TrackSessionEvents; calls are unpriced without a model")
 	}
 	t.state.requestSeen = true
