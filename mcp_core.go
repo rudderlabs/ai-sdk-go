@@ -663,7 +663,7 @@ func (o *options) maskedText(text string, limit int) string {
 		return ""
 	}
 	masked, ok := o.mask(text)
-	if !ok || masked == "" {
+	if !ok || masked == "" || masked == redactionTimedOut {
 		return ""
 	}
 	// DisableRedaction turns masking off, not this check (spec/fixtures/mcp-agent-text-v0.1.json).
