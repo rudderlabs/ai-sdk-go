@@ -97,13 +97,14 @@ func TestAnOversizedEventNeverReachesTheClientLog(t *testing.T) {
 	}
 }
 
-func FuzzQuotedBytesMatchesMarshal(f *testing.F) {
+// quotedBytes may overcount (Go 1.27 writes invalid UTF-8 as a raw U+FFFD); it must never undercount.
+func FuzzQuotedBytesBoundsMarshal(f *testing.F) {
 	for _, s := range []string{"", "plain", `q"b\s`, "<a>&</a>", "\n\t\x01\x7f", "界  ", "\xff\xfe bad", "🙂"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		if b, _ := json.Marshal(s); quotedBytes(s) != len(b) {
-			t.Fatalf("quotedBytes(%q) = %d, json.Marshal = %d", s, quotedBytes(s), len(b))
+		if b, _ := json.Marshal(s); quotedBytes(s) < len(b) {
+			t.Fatalf("quotedBytes(%q) = %d, below json.Marshal's %d", s, quotedBytes(s), len(b))
 		}
 	})
 }
