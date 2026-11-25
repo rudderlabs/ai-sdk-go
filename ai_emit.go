@@ -212,13 +212,17 @@ func fitMessage(event string, msg *analytics.Track) bool {
 		rest.Properties = nil
 		free := maxMessageBytes - clientBytes(rest) - len(`,"properties":`)
 		room := free
-		for range 4 {
+		for range 16 { // ends sooner: each pass must shrink the room
 			msg.Properties = analytics.Properties(fitPropertiesWithin(event, msg.Properties, room))
 			escaped := clientBytes(*msg) - (maxMessageBytes - free)
 			if escaped <= free {
 				return true
 			}
-			room = propertiesBytes(msg.Properties)*free/escaped - 1
+			next := propertiesBytes(msg.Properties)*free/escaped - 1
+			if next >= room {
+				return false
+			}
+			room = next
 		}
 		return false
 	}
@@ -386,6 +390,19 @@ func escapes(s string) int {
 	return strings.Count(s, "<") + strings.Count(s, ">") + strings.Count(s, "&") + strings.Count(s, "\u2028") + strings.Count(s, "\u2029")
 }
 
+// escapedBytes is v's size under json.Marshal: the zero-allocation bound when it is low enough,
+// else an exact count.
+func escapedBytes(v map[string]any) int {
+	if n, ok := marshalBytes(v); ok && n <= maxMessageBytes-envelopeBytes {
+		return n
+	}
+	var n byteCount
+	if err := json.NewEncoder(&n).Encode(v); err != nil {
+		return 0 // left to the client, as before
+	}
+	return int(n) - 1
+}
+
 // idPlaceholder stands in for the UUIDs Enqueue generates.
 const idPlaceholder = "00000000-0000-0000-0000-000000000000"
 
@@ -401,7 +418,8 @@ func (n *byteCount) Write(p []byte) (int, error) {
 // Properties panics. fitProperties has nothing of its own to trim on these events.
 func fitToolEventProperties(event string, properties map[string]any, custom []string, rates map[string]float64) map[string]any {
 	properties = sampleProperties(event, properties, rates)
-	if propertiesBytes(properties) <= maxPropertiesBytes {
+	// Also over when the client's escaping (<, > and &) leaves no message these properties fit in.
+	if propertiesBytes(properties) <= maxPropertiesBytes && escapedBytes(properties) <= maxMessageBytes-envelopeBytes {
 		return properties
 	}
 	p := make(map[string]any, len(properties))

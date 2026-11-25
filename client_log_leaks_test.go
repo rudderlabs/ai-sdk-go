@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -133,5 +134,54 @@ func TestBoundBytesIsNeverBelowWhatTheClientMeasures(t *testing.T) {
 		if exact := clientBytes(msg); !ok || bound < exact {
 			t.Errorf("%s: bound %d (ok %v) below the client's %d", name, bound, ok, exact)
 		}
+	}
+}
+
+// The two cases where escaping, not size, put an event over: each is trimmed and sent.
+func TestHTMLHeavyEventsAreTrimmedNotDropped(t *testing.T) {
+	ctx := context.Background()
+	cases := map[string]struct {
+		event string
+		opts  []ConfigOption
+		run   func()
+	}{
+		"declared tool property": {"looked_up", []ConfigOption{WithEventRules(EventRules{Tools: map[string]ToolEventRule{"lookup": {
+			Event:      "looked_up",
+			Properties: func(map[string]any, any) map[string]any { return map[string]any{"html": strings.Repeat("<", 6000)} },
+		}}})}, func() {
+			_, i := StartInteraction(ctx, InteractionOptions{UserID: "u"})
+			i.RecordToolCalls(ToolCall{ID: "t", Name: "lookup", Result: "ok"})
+			i.End(EndOptions{})
+		}},
+		"mixed HTML and ASCII input": {"ai_llm_response_received", []ConfigOption{WithLLMCallEvents(true)}, func() {
+			_, i := StartInteraction(ctx, InteractionOptions{UserID: "u"})
+			i.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4o", InputMessages: []GenAIMessage{
+				{Role: "user", Parts: []GenAIPart{{"type": "text", "content": strings.Repeat("<", 4000) + strings.Repeat("a", 18000)}}},
+			}})
+			i.End(EndOptions{})
+		}},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			dp := dataplane.Start()
+			defer dp.Close()
+			log := &clientLog{}
+			client, err := analytics.NewWithConfig("write-key", analytics.Config{DataPlaneUrl: dp.URL, BatchSize: 1, NoProxySupport: true, Interval: 10 * time.Millisecond, Logger: log})
+			if err != nil {
+				t.Fatal(err)
+			}
+			setupAI(t, append([]ConfigOption{WithAnalytics(client), WithCaptureContent(true)}, c.opts...)...)
+			c.run()
+			if err := client.Close(); err != nil {
+				t.Fatal(err)
+			}
+			var sent []string
+			for _, m := range dp.Messages() {
+				sent = append(sent, m.Event)
+			}
+			if !slices.Contains(sent, c.event) || strings.Contains(log.b.String(), "exceeds") {
+				t.Fatalf("%s not sent (%v); client log: %.200s", c.event, sent, log.b.String())
+			}
+		})
 	}
 }
