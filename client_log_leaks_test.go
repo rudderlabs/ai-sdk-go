@@ -45,6 +45,17 @@ func TestAnOversizedEventNeverReachesTheClientLog(t *testing.T) {
 		{"user ID", "ai_user_action", "dropped", func() {
 			TrackAction(ctx, TrackActionOptions{ActionType: ActionCopiedResponse, InteractionID: "i", ConversationID: "c", UserID: strings.Repeat(secret, 1300)})
 		}},
+		{"HTML-heavy prompt text", "ai_user_prompt_created", "sent", func() { // small until the client escapes it
+			_, i := StartInteraction(ctx, InteractionOptions{UserID: "u", PromptText: strings.Repeat("<", 6000) + secret})
+			i.End(EndOptions{})
+		}},
+		{"invalid json.Number", "ai_user_action", "sent", func() { // without the number
+			TrackAction(ctx, TrackActionOptions{ActionType: ActionFeedbackGiven, InteractionID: "i", ConversationID: "c", ActionDetails: map[string]any{"feedback_value": json.Number("4.5 stars"), "feedback_text": secret}})
+		}},
+		{"text that fits once the context goes", "ai_response_received", "sent", func() { // keeps its text
+			_, i := StartInteraction(ctx, InteractionOptions{UserID: "u", Context: map[string]any{"traits": map[string]any{"bio": strings.Repeat(secret, 1200)}}})
+			i.End(EndOptions{ResponseText: strings.Repeat("a", 8000)})
+		}},
 		{"prompt text and context", "ai_user_prompt_created", "sent", func() { // without prompt_text
 			_, i := StartInteraction(ctx, InteractionOptions{UserID: "u", PromptText: strings.Repeat(secret, 1100), Context: map[string]any{"traits": map[string]any{"plan": strings.Repeat(secret, 120)}}})
 			i.End(EndOptions{})
@@ -72,6 +83,9 @@ func TestAnOversizedEventNeverReachesTheClientLog(t *testing.T) {
 			var sent []string
 			for _, m := range dp.Messages() {
 				sent = append(sent, m.Event)
+				if c.name == "text that fits once the context goes" && m.Event == c.event && m.Properties["response_text"] == nil {
+					t.Fatal("response_text trimmed although it fits without the context")
+				}
 			}
 			switch {
 			case c.outcome == "sent" && !strings.Contains(strings.Join(sent, ","), c.event):
@@ -95,15 +109,22 @@ func FuzzQuotedBytesMatchesMarshal(f *testing.F) {
 }
 
 func TestBoundBytesIsNeverBelowWhatTheClientMeasures(t *testing.T) {
+	nils := map[string]any{}
+	for i := range 40 {
+		nils[fmt.Sprint(i)] = []string(nil)
+		nils[fmt.Sprint("m", i)] = map[string]any(nil)
+	}
 	tricky := strings.Repeat("<&> 界\xff\"\\\n", 50)
 	raw, _ := encodeNow(struct{ A string }{tricky})
 	for name, msg := range map[string]analytics.Track{
-		"empty": {OriginalTimestamp: time.Now(), Properties: analytics.Properties{}, Context: &analytics.Context{Extra: map[string]any{}}},
+		"empty":          {OriginalTimestamp: time.Now(), Properties: analytics.Properties{}, Context: &analytics.Context{Extra: map[string]any{}}},
+		"nil containers": {OriginalTimestamp: time.Now(), Properties: analytics.Properties(jsonSafeMap(nils)), Context: &analytics.Context{Extra: map[string]any{}}},
 		"tricky": {Event: tricky, UserId: tricky, OriginalTimestamp: time.Now(),
 			Properties: analytics.Properties(jsonSafeMap(map[string]any{
 				"s": tricky, "n": -1.2345678901234567e-308, "i": int64(-1 << 63), "b": true, "nil": nil,
 				"list": []any{tricky, 1, map[string]any{tricky: []string{tricky}}}, "maps": []map[string]any{{"k": tricky}},
 				"num": json.Number("12345"), "raw": raw,
+				"nilStrings": []string(nil), "nilList": []any(nil), "nilMaps": []map[string]any(nil), "nilMap": map[string]any(nil),
 			})),
 			Context: &analytics.Context{Extra: map[string]any{"traits": map[string]any{tricky: tricky}, "wrapperLibrary": map[string]any{"name": "x"}}}},
 	} {

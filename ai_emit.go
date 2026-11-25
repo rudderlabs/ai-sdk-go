@@ -205,23 +205,30 @@ func fitMessage(event string, msg *analytics.Track) bool {
 	if n, ok := boundBytes(*msg); ok && n <= maxMessageBytes {
 		return true // the common case: no encoding, no allocation
 	}
-	fits := func() bool { return clientBytes(*msg) <= maxMessageBytes }
-	refit := func() {
+	// free is what the rest leaves for properties, as the client measures them. fitPropertiesWithin
+	// counts them unescaped, so its room scales by how much the client's escaping of <, > and & adds.
+	refit := func() bool {
 		rest := *msg
-		rest.Properties = analytics.Properties{}
-		room := maxMessageBytes - (clientBytes(rest) - len("{}"))
-		msg.Properties = analytics.Properties(fitPropertiesWithin(event, msg.Properties, room))
+		rest.Properties = nil
+		free := maxMessageBytes - clientBytes(rest) - len(`,"properties":`)
+		room := free
+		for range 4 {
+			msg.Properties = analytics.Properties(fitPropertiesWithin(event, msg.Properties, room))
+			escaped := clientBytes(*msg) - (maxMessageBytes - free)
+			if escaped <= free {
+				return true
+			}
+			room = propertiesBytes(msg.Properties)*free/escaped - 1
+		}
+		return false
 	}
-	if fits() {
-		return true
-	}
-	refit()
-	if fits() {
+	untrimmed := msg.Properties
+	if clientBytes(*msg) <= maxMessageBytes || refit() {
 		return true
 	}
 	msg.Context = &analytics.Context{Extra: map[string]any{"wrapperLibrary": msg.Context.Extra["wrapperLibrary"]}}
-	refit()
-	if fits() {
+	msg.Properties = untrimmed // the context's room may fit what was trimmed for it
+	if refit() {
 		return true
 	}
 	warnOnce("event-dropped-too-large", event+" was over 32 KiB after trimming; dropped it", 0)
@@ -244,7 +251,7 @@ func clientBytes(msg analytics.Track) int {
 	msg.Context = &c
 	var n byteCount
 	if err := json.NewEncoder(&n).Encode(msg); err != nil {
-		return 0 // left to the client, as before
+		return 1 << 30 // the client would log it: never fits
 	}
 	return int(n) - 1 // Encode's newline
 }
@@ -274,6 +281,9 @@ var envelopeBytes = clientBytes(analytics.Track{
 
 // marshalBytes is v's exact size under json.Marshal for the values jsonSafe leaves (numbers bounded).
 func marshalBytes(v any) (int, bool) {
+	if isNilContainer(v) {
+		return len("null"), true
+	}
 	switch x := v.(type) {
 	case nil:
 		return len("null"), true
@@ -306,7 +316,10 @@ func marshalBytes(v any) (int, bool) {
 	case []map[string]any:
 		n := 2 + max(len(x)-1, 0)
 		for _, e := range x {
-			b, _ := marshalBytes(e)
+			b, ok := marshalBytes(e)
+			if !ok {
+				return 0, false
+			}
 			n += b
 		}
 		return n, true
@@ -322,6 +335,21 @@ func marshalBytes(v any) (int, bool) {
 		return n, true
 	}
 	return 0, false
+}
+
+// isNilContainer reports a nil slice or map, which encodes as null.
+func isNilContainer(v any) bool {
+	switch x := v.(type) {
+	case []string:
+		return x == nil
+	case []any:
+		return x == nil
+	case []map[string]any:
+		return x == nil
+	case map[string]any:
+		return x == nil
+	}
+	return false
 }
 
 // quotedBytes is the size of s as a JSON string under json.Marshal (HTML escaped).
