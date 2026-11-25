@@ -1653,8 +1653,38 @@ func cleanClient(client *mcpbridge.Client) *mcpbridge.Client {
 	if client == nil {
 		return nil
 	}
-	return &mcpbridge.Client{Name: clientText(client.Name), Title: clientText(client.Title), Version: clientVersion(client.Version)}
+	checkedClients.Lock()
+	cached, ok := checkedClients.byRaw[*client]
+	checkedClients.Unlock()
+	if ok {
+		return &cached
+	}
+	checked := mcpbridge.Client{Name: clientText(client.Name), Title: clientText(client.Title), Version: clientVersion(client.Version)}
+	// Keep only results with nothing withheld, so a masking timeout is never reused, and only short raw values.
+	kept := (client.Name == "" || checked.Name != "") && (client.Title == "" || checked.Title != "") &&
+		(client.Version == "" || checked.Version != "")
+	if kept && len(client.Name)+len(client.Title)+len(client.Version) <= maxCheckedClientBytes {
+		checkedClients.Lock()
+		if len(checkedClients.byRaw) >= maxCheckedClients {
+			clear(checkedClients.byRaw)
+		}
+		checkedClients.byRaw[*client] = checked
+		checkedClients.Unlock()
+	}
+	return &checked
 }
+
+// checkedClients memoizes cleanClient: clients resend clientInfo in _meta on every 2026-07-28 request,
+// and masking allocates.
+var checkedClients = struct {
+	sync.Mutex
+	byRaw map[mcpbridge.Client]mcpbridge.Client
+}{byRaw: map[mcpbridge.Client]mcpbridge.Client{}}
+
+const (
+	maxCheckedClients     = 256
+	maxCheckedClientBytes = 1024
+)
 
 // errorMessage reads an explicit {result} or {error} source as described by
 // spec/fixtures/mcp-error-message-v0.1.json: mask before capping,

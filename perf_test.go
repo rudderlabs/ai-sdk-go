@@ -108,10 +108,10 @@ func BenchmarkOverhead(b *testing.B) {
 	call := func(cs *mcp.ClientSession) func(context.Context) error {
 		return func(ctx context.Context) error {
 			n++
-			// A new interaction ID per call, as from an agent answering many users.
+			// A new interaction ID per call, as from an agent answering many users; the server keeps only UUIDs.
 			_, err := cs.CallTool(ctx, &mcp.CallToolParams{
 				Name: "lookup_order", Arguments: map[string]any{"order": "A-1"},
-				Meta: mcp.Meta{"com.rudderstack/interaction_id": fmt.Sprintf("bench-%d", n)},
+				Meta: mcp.Meta{"com.rudderstack/interaction_id": fmt.Sprintf("00000000-0000-4000-8000-%012d", n)},
 			})
 			return err
 		}
