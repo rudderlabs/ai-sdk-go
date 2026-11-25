@@ -10,6 +10,7 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
@@ -170,5 +171,60 @@ func TestToolOutputFailureSurvivesPause(t *testing.T) {
 			i.End(rudderstackai.EndOptions{})
 			want(t, rec.props(t, "lookup_done"), map[string]any{"tool_status": "error", "error_type": "api_error"})
 		})
+	}
+}
+
+// One call reported by a span and a wrapper: the first category wins, and a pause freezes only
+// the vendor one.
+func TestToolOutputPrecedenceAcrossPause(t *testing.T) {
+	timeout := func(i *rudderstackai.Interaction) {
+		hook.Tracing.RecordTool(i, rudderstackai.ToolCall{ID: "call-1", Name: "lookup", Error: rudderstackai.Ptr(true), ErrorType: "timeout"}, false)
+	}
+	vendor := func(i *rudderstackai.Interaction) {
+		RecordToolOutput(i, "call-1", rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Result: map[string]any{"successful": false}}, true, DecodedOutput)
+	}
+	for _, c := range []struct {
+		name      string
+		order     []func(*rudderstackai.Interaction)
+		errorType any
+		types     string
+	}{
+		{"timeout first", []func(*rudderstackai.Interaction){timeout, vendor}, nil, `{"timeout":1}`},
+		{"vendor first", []func(*rudderstackai.Interaction){vendor, timeout}, "api_error", `{"api_error":1}`},
+	} {
+		for _, restore := range []bool{false, true} {
+			t.Run(fmt.Sprint(c.name, "/", restore), func(t *testing.T) {
+				rec := newRecorder(t)
+				toolOutputRules(t)
+				client := &pauseClient{recorder: rec}
+				_, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u1", Analytics: client})
+				id := i.ID()
+				client.reenter = func() {
+					i.RecordToolCalls(rudderstackai.ToolCall{ID: "call-1", Name: "lookup"})
+					for _, record := range c.order {
+						record(i)
+					}
+				}
+				s, _ := i.Pause(rudderstackai.PauseOptions{})
+				if restore {
+					var stored rudderstackai.PausedInteraction
+					if err := json.Unmarshal([]byte(jsonText(s)), &stored); err != nil {
+						t.Fatal(err)
+					}
+					if _, i = rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{Resume: &stored, Analytics: rec}); i.ID() != id {
+						t.Fatalf("snapshot rejected: %s", jsonText(s))
+					}
+				} else {
+					i.Resume()
+				}
+				i.End(rudderstackai.EndOptions{})
+				want(t, rec.props(t, "lookup_done"), map[string]any{"tool_status": "error", "error_type": c.errorType})
+				responses := rec.named("ai_response_received")
+				breakdown := responses[len(responses)-1].Properties["tool_breakdown"].([]map[string]any)
+				if len(breakdown) != 1 || jsonText(breakdown[0]["error_types"]) != c.types {
+					t.Errorf("tool_breakdown %s", jsonText(breakdown))
+				}
+			})
+		}
 	}
 }
