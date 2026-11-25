@@ -6694,6 +6694,148 @@
           }
         }
       ]
+    },
+    {
+      "name": "system_message_before_prompt",
+      "description": "System context sent with a prompt reaches the stream before it. The system message opens no turn, so the prompt event keeps its text; content capture on.",
+      "options": {
+        "capture_content": true
+      },
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_systemprompt_01",
+              "processed_at": "2026-11-16T10:00:00.005000Z",
+              "type": "system.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Answer briefly."
+                }
+              ]
+            },
+            {
+              "id": "sevt_systemprompt_02",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_systemprompt_03",
+              "processed_at": "2026-11-16T10:00:00.020000Z",
+              "type": "session.thread_status_running",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary"
+            },
+            {
+              "id": "sevt_systemprompt_04",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hi there"
+                }
+              ]
+            },
+            {
+              "id": "sevt_systemprompt_05",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_systemprompt_06",
+              "processed_at": "2026-11-16T10:00:00.500000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello!"
+                }
+              ]
+            },
+            {
+              "id": "sevt_systemprompt_07",
+              "processed_at": "2026-11-16T10:00:00.550000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_systemprompt_05",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 20,
+                "output_tokens": 4,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_systemprompt_08",
+              "processed_at": "2026-11-16T10:00:00.700000Z",
+              "type": "session.thread_status_idle",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            },
+            {
+              "id": "sevt_systemprompt_09",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "prompt_text": "Hi there"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 20,
+            "total_output_tokens": 4,
+            "total_tokens": 24,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000004,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 20,
+                "output_tokens": 4,
+                "total_tokens": 24,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000004
+              }
+            ],
+            "response_text": "Hello!"
+          }
+        }
+      ]
     }
   ]
 }

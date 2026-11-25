@@ -605,8 +605,14 @@ func (s *sessionTracker) observe(raw string) {
 		} else if !s.isRunning() && s.hasCarriedState() {
 			s.running(at)
 		}
-	case "agent.thinking", "agent.thread_message_received", "agent.thread_message_sent", "span.outcome_evaluation_ongoing", "system.message":
+	case "agent.thinking", "agent.thread_message_received", "agent.thread_message_sent", "span.outcome_evaluation_ongoing":
 		s.open(kind, at)
+	// System context goes with the turn it is sent with and reaches the stream before that turn's
+	// prompt: it advances an open turn but opens none.
+	case "system.message":
+		if s.turn != nil {
+			s.open(kind, at)
+		}
 	case "span.outcome_evaluation_start":
 		t := s.open(kind, at)
 		if id != "" {

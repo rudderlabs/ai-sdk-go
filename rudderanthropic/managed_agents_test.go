@@ -3585,6 +3585,70 @@ func TestManagedAgentsBlockingResultsAfterAJSONRestore(t *testing.T) {
 	}
 }
 
+const maSystemMessage = `{"type":"system.message","id":"system","content":[{"type":"text","text":"Answer briefly."}]}`
+
+// System context goes with the turn it is sent with and reaches the stream before that turn's prompt:
+// it opens no turn, so the prompt keeps its text.
+func TestManagedAgentsBlockingSystemMessageBeforeThePrompt(t *testing.T) {
+	for _, first := range []bool{true, false} {
+		t.Run(fmt.Sprintf("before_running=%v", first), func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}), rudderstackai.WithCaptureContent(true))
+			resetMA(t)
+			recorded := maRecorded("session.thread_status_running", "one")
+			raw := []string{recorded[0], recorded[1], maSystemMessage}
+			if first {
+				raw = []string{maSystemMessage, recorded[0], recorded[1]}
+			}
+			maDrain(maBlockingStream(context.Background(), t, append(append(raw, recorded[2:]...), maEndTurn("one"))))
+			all := rec.events(t)
+			prompts, responses := all["ai_user_prompt_created"], all["ai_response_received"]
+			if len(prompts) != 1 || prompts[0]["prompt_text"] != "one prompt" || len(responses) != 1 || responses[0]["response_status"] != "success" {
+				t.Fatalf("prompts %v, responses %v", prompts, responses)
+			}
+		})
+	}
+}
+
+func TestManagedAgentsBlockingSystemMessageAloneOpensNoAnswer(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+	resetMA(t)
+	maDrain(maBlockingStream(context.Background(), t, []string{maSystemMessage}))
+	if all := rec.events(t); len(all) != 0 {
+		t.Fatalf("events: %v", all)
+	}
+}
+
+func TestManagedAgentsBlockingSystemMessageBeforeAPromptAfterAPause(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}), rudderstackai.WithCaptureContent(true))
+	resetMA(t)
+	maDrain(maBlockingStream(context.Background(), t, maBlockingOpening("custom")))
+	maDrain(maBlockingStream(context.Background(), t, append(append([]string{maSystemMessage}, maRecorded("session.thread_status_running", "two")...), maEndTurn("two"))))
+	all := rec.events(t)
+	ids := map[any]bool{}
+	var statuses []string
+	for _, response := range all["ai_response_received"] {
+		ids[response["interaction_id"]] = true
+		statuses = append(statuses, fmt.Sprint(response["response_status"]))
+	}
+	prompts := all["ai_user_prompt_created"]
+	if !slices.Equal(statuses, []string{"paused", "cancelled", "success"}) || len(ids) != 2 || len(prompts) != 2 || prompts[1]["prompt_text"] != "two prompt" {
+		t.Fatalf("statuses %v, ids %d, prompts %v", statuses, len(ids), prompts)
+	}
+}
+
+// While the session waits, system context trails a tool result in the same request.
+func TestManagedAgentsBlockingSystemMessageThatTrailsAToolResult(t *testing.T) {
+	_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+	resetMA(t)
+	maDrain(maBlockingStream(context.Background(), t, maBlockingOpening("custom")))
+	maDrain(maBlockingStream(context.Background(), t, []string{maBlockingReply("custom", "tool-0"), maSystemMessage, `{"type":"session.status_running","id":"two-running"}`,
+		`{"type":"span.model_request_end","id":"two-model","model_usage":{"input_tokens":10,"output_tokens":2}}`, maEndTurn("two")}))
+	maBlockingStatuses(t, rec, "paused", "success")
+	if prompts := rec.events(t)["ai_user_prompt_created"]; len(prompts) != 1 {
+		t.Fatalf("prompts: %v", prompts)
+	}
+}
+
 // A subagent's call can arrive after the idle that lists it: it is the call the session waits on, not
 // evidence that it runs again, and the pause takes its reason.
 func TestManagedAgentsBlockingLateCallKeepsTheWait(t *testing.T) {
