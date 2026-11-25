@@ -6425,6 +6425,275 @@
           }
         }
       ]
+    },
+    {
+      "name": "late_cross_posted_call",
+      "description": "A subagent's approval call is cross-posted after the idle that lists it, as the session-threads docs allow, and the stream ends there. The call is what the session waits on, not evidence that it runs again: the answer pauses with pause_reason approval, and the next stream resumes it as the same answer, with no second prompt.",
+      "options": {
+        "tool_breakdown": true
+      },
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_latecall_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_latecall_02",
+              "processed_at": "2026-11-16T10:00:00.020000Z",
+              "type": "session.thread_status_running",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary"
+            },
+            {
+              "id": "sevt_latecall_03",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Ship it"
+                }
+              ]
+            },
+            {
+              "id": "sevt_latecall_04",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_latecall_05",
+              "processed_at": "2026-11-16T10:00:00.550000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_latecall_04",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_latecall_06",
+              "processed_at": "2026-11-16T10:00:00.600000Z",
+              "type": "session.thread_created",
+              "agent_name": "deployer",
+              "session_thread_id": "sthr_fixture_child"
+            },
+            {
+              "id": "sevt_latecall_07",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "session.thread_status_running",
+              "agent_name": "deployer",
+              "session_thread_id": "sthr_fixture_child"
+            },
+            {
+              "id": "sevt_latecall_08",
+              "processed_at": "2026-11-16T10:00:00.700000Z",
+              "type": "session.thread_status_idle",
+              "agent_name": "deployer",
+              "session_thread_id": "sthr_fixture_child",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_latecall_10"
+                ]
+              }
+            },
+            {
+              "id": "sevt_latecall_09",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_latecall_10"
+                ]
+              }
+            },
+            {
+              "id": "sevt_latecall_10",
+              "processed_at": "2026-11-16T10:00:00.720000Z",
+              "type": "agent.tool_use",
+              "name": "deploy",
+              "input": {},
+              "evaluated_permission": "ask",
+              "session_thread_id": "sthr_fixture_child"
+            }
+          ]
+        },
+        {
+          "events": [
+            {
+              "id": "sevt_latecall_11",
+              "processed_at": "2026-11-16T10:00:01.000000Z",
+              "type": "user.tool_confirmation",
+              "tool_use_id": "sevt_latecall_10",
+              "result": "allow"
+            },
+            {
+              "id": "sevt_latecall_12",
+              "processed_at": "2026-11-16T10:00:01.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_latecall_13",
+              "processed_at": "2026-11-16T10:00:01.020000Z",
+              "type": "session.thread_status_running",
+              "agent_name": "deployer",
+              "session_thread_id": "sthr_fixture_child"
+            },
+            {
+              "id": "sevt_latecall_14",
+              "processed_at": "2026-11-16T10:00:01.300000Z",
+              "type": "agent.thread_message_received",
+              "from_agent_name": "deployer",
+              "from_session_thread_id": "sthr_fixture_child",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Deployed"
+                }
+              ]
+            },
+            {
+              "id": "sevt_latecall_15",
+              "processed_at": "2026-11-16T10:00:01.310000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_latecall_16",
+              "processed_at": "2026-11-16T10:00:01.600000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Shipped"
+                }
+              ]
+            },
+            {
+              "id": "sevt_latecall_17",
+              "processed_at": "2026-11-16T10:00:01.650000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_latecall_15",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_latecall_18",
+              "processed_at": "2026-11-16T10:00:01.700000Z",
+              "type": "session.thread_status_idle",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            },
+            {
+              "id": "sevt_latecall_19",
+              "processed_at": "2026-11-16T10:00:01.710000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "paused",
+            "pause_reason": "approval",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ]
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 12,
+            "total_output_tokens": 3,
+            "total_tokens": 15,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0000027,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "total_tokens": 15,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.0000027
+              }
+            ],
+            "pause_count": 1
+          }
+        }
+      ]
     }
   ]
 }

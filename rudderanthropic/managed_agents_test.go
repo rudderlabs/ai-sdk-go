@@ -3585,6 +3585,60 @@ func TestManagedAgentsBlockingResultsAfterAJSONRestore(t *testing.T) {
 	}
 }
 
+// A subagent's call can arrive after the idle that lists it: it is the call the session waits on, not
+// evidence that it runs again, and the pause takes its reason.
+func TestManagedAgentsBlockingLateCallKeepsTheWait(t *testing.T) {
+	for _, owner := range []string{"adapter", "interaction"} {
+		for _, kind := range []string{"confirmation", "custom", "mcp"} {
+			for _, end := range []string{"clean", "closed", "failed"} {
+				t.Run(owner+"/"+kind+"/"+end, func(t *testing.T) {
+					_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+					resetMA(t)
+					call := `{"type":"agent.custom_tool_use","id":"late","name":"late_tool","session_thread_id":"child"}`
+					reply := `{"type":"user.custom_tool_result","id":"late-reply","custom_tool_use_id":"late"}`
+					reason := "deferred_tool"
+					if kind != "custom" {
+						typ := "agent.tool_use"
+						if kind == "mcp" {
+							typ = "agent.mcp_tool_use"
+						}
+						call = fmt.Sprintf(`{"type":%q,"id":"late","name":"late_tool","evaluated_permission":"ask","session_thread_id":"child"}`, typ)
+						reply = `{"type":"user.tool_confirmation","id":"late-reply","tool_use_id":"late","result":"allow"}`
+						reason = "approval"
+					}
+					maBlockingOwned(t, owner, func(ctx context.Context) {
+						first := append(maRecorded("session.thread_status_running", "one"),
+							`{"type":"session.thread_created","id":"child-created","session_thread_id":"child"}`,
+							`{"type":"session.thread_status_idle","id":"child-idle","session_thread_id":"child","stop_reason":{"type":"requires_action","event_ids":["late"]}}`,
+							maWholeIdle("requires_action", "late"), call)
+						_, state := maBlockingRead(ctx, t, first, end)
+						maBlockingWait(t, state, reason, "late")
+						maDrain(maBlockingStream(ctx, t, []string{reply, `{"type":"session.status_running","id":"two-running"}`,
+							`{"type":"span.model_request_end","id":"two-model","model_usage":{"input_tokens":10,"output_tokens":2}}`, maEndTurn("two")}))
+					})
+					all := rec.events(t)
+					ids := map[any]bool{}
+					var got []string
+					var calls float64
+					for _, response := range all["ai_response_received"] {
+						ids[response["interaction_id"]] = true
+						got = append(got, fmt.Sprint(response["response_status"], "/", response["pause_reason"]))
+						n, _ := response["llm_call_count"].(float64)
+						calls += n
+					}
+					want := []string{"success/<nil>"}
+					if owner == "adapter" {
+						want = []string{"paused/" + reason, "success/<nil>"}
+					}
+					if len(ids) != 1 || !slices.Equal(got, want) || calls != 2 || len(all["ai_user_prompt_created"]) != 1 {
+						t.Fatalf("responses %v (want %v), calls %v, prompts %d", got, want, calls, len(all["ai_user_prompt_created"]))
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestManagedAgentsBlockingOutstandingReplies(t *testing.T) {
 	for _, owner := range []string{"adapter", "interaction"} {
 		for _, a := range maReplyKinds {

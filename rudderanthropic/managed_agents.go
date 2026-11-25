@@ -549,28 +549,32 @@ func (s *sessionTracker) observe(raw string) {
 		// Cross-posted from a subagent thread (agent events, a known child's requests), or aimed at
 		// one: not this thread's work. An unknown thread's request counts here, once.
 		// Child work advances the primary session and its clock without recording its calls here.
+		call := ""
+		if id != "" && strings.HasPrefix(kind, "agent.") && strings.HasSuffix(kind, "tool_use") {
+			call = id
+		}
 		var t *turn
 		if s.turn != nil || s.hasCarriedState() || s.isRunning() {
-			t = s.open(kind, at)
+			t = s.open(kind, at, call)
 		}
 		if answered != "" && t != nil {
 			s.answered(t, answered)
 			t.state.blocking.delete(answered)
 		}
-		if id != "" && strings.HasPrefix(kind, "agent.") && strings.HasSuffix(kind, "tool_use") {
-			childTools.add(s.scope + id)
+		if call != "" {
+			childTools.add(s.scope + call)
 		}
 		if id != "" && (kind == "agent.custom_tool_use" || e["evaluated_permission"] == "ask") {
 			if s.turn == nil && (s.hasCarriedState() || s.isRunning()) {
-				s.open(kind, at)
+				s.open(kind, at, call)
 			}
 			if s.turn == nil {
 				return
 			}
 			if kind == "agent.custom_tool_use" {
-				s.turn.state.blocking.set(id, rudderstackai.PauseDeferredTool)
-			} else if e["evaluated_permission"] == "ask" {
-				s.turn.state.blocking.set(id, rudderstackai.PauseApproval)
+				s.blocks(s.turn, id, rudderstackai.PauseDeferredTool)
+			} else {
+				s.blocks(s.turn, id, rudderstackai.PauseApproval)
 			}
 		}
 		return
@@ -661,7 +665,7 @@ func (s *sessionTracker) observe(raw string) {
 			t.state.requestText += text
 		}
 	case "agent.tool_use", "agent.mcp_tool_use", "agent.custom_tool_use":
-		s.tool(s.open(kind, at), kind, e, id, at)
+		s.tool(s.open(kind, at, id), kind, e, id, at)
 	case "agent.tool_result":
 		s.settle(s.open(kind, at), str(e["tool_use_id"]), e, at, "")
 	case "agent.mcp_tool_result":
@@ -794,7 +798,8 @@ func (s *sessionTracker) ending(kind string, at msTime) *turn {
 	return t
 }
 
-func (s *sessionTracker) open(kind string, at msTime) *turn {
+// open opens or continues the turn an event belongs to; call is the ID of a tool call event.
+func (s *sessionTracker) open(kind string, at msTime, call ...string) *turn {
 	t := s.turn
 	running := s.isRunning()
 	if t == nil {
@@ -856,9 +861,14 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 			s.sendPrompt(t)
 		}
 	}
-	// App replies settle only their own ID; agent work shows the session resumed.
+	// App replies settle only their own ID; agent work shows the session resumed, but a call the
+	// session waits on does not: its event can arrive after the idle that lists it.
+	awaited := false
+	if len(call) > 0 && call[0] != "" {
+		_, awaited = t.state.outstanding.get(call[0])
+	}
 	if running || kind == "session.status_running" || kind == "session.status_rescheduled" ||
-		strings.HasPrefix(kind, "agent.") || kind == "span.model_request_start" {
+		(strings.HasPrefix(kind, "agent.") && !awaited) || kind == "span.model_request_start" {
 		s.resuming(t)
 	}
 	if at.ok {
@@ -880,6 +890,17 @@ func answeredCall(e map[string]any, kind string) string {
 }
 
 // answered releases only the call named by this reply.
+// blocks marks a call that waits on the app; one an idle already listed (its event came late) sets
+// the pause reason.
+func (s *sessionTracker) blocks(t *turn, id string, reason rudderstackai.PauseReason) {
+	t.state.blocking.set(id, reason)
+	if _, ok := t.state.outstanding.get(id); !ok {
+		return
+	}
+	t.state.outstanding.set(id, reason)
+	s.waitingReason(t)
+}
+
 func (s *sessionTracker) answered(t *turn, id string) {
 	if _, ok := t.state.outstanding.get(id); id != "" && ok {
 		t.state.outstanding.delete(id)
@@ -1120,9 +1141,9 @@ func (s *sessionTracker) tool(t *turn, kind string, e map[string]any, id string,
 	case e["evaluated_permission"] == "deny":
 		tool.err, tool.errorType, tool.settled = rudderstackai.Ptr(true), "denied", true
 	case id != "" && kind == "agent.custom_tool_use":
-		t.state.blocking.set(id, rudderstackai.PauseDeferredTool)
+		s.blocks(t, id, rudderstackai.PauseDeferredTool)
 	case id != "" && e["evaluated_permission"] == "ask":
-		t.state.blocking.set(id, rudderstackai.PauseApproval)
+		s.blocks(t, id, rudderstackai.PauseApproval)
 	}
 	key := id
 	if key == "" {
