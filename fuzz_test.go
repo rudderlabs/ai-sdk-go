@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 	"unicode"
-	"unicode/utf8"
 )
 
 // Fuzz tests for the MCP _meta join, the only request data the server wrapper reads. The seed
@@ -19,6 +18,7 @@ func FuzzJoinIDs(f *testing.F) {
 		`{}`,
 		`{"com.rudderstack/interaction_id":"abc","traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}`,
 		`{"com.rudderstack/interaction_id":"  spaced  ","com.rudderstack/trace_id":"t-1"}`,
+		`{"com.rudderstack/interaction_id":" 3f2c8a9e-5b1d-4c7a-9e2f-6a8b0c1d2e3f ","com.rudderstack/trace_id":"0AF7651916CD43DD8448EB211C80319C"}`,
 		`{"com.rudderstack/interaction_id":12,"com.rudderstack/trace_id":null,"traceparent":["x"]}`,
 		`{"traceparent":"ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01","com.rudderstack/trace_id":"fallback"}`,
 		`{"com.rudderstack/interaction_id":"` + strings.Repeat("é", 300) + `"}`,
@@ -32,8 +32,8 @@ func FuzzJoinIDs(f *testing.F) {
 		}
 		interactionID, traceID := joinIDs(meta)
 		for _, v := range []string{interactionID, traceID} {
-			if utf8.RuneCountInString(v) > maxMetaLength {
-				t.Errorf("unbounded ID %q", v)
+			if v != "" && !clientIDPattern.MatchString(v) {
+				t.Errorf("ID %q is not a UUID or 32 hex digits", v)
 			}
 		}
 		// A valid traceparent wins over com.rudderstack/trace_id.

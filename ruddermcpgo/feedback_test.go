@@ -113,13 +113,13 @@ func TestFeedbackRequests(t *testing.T) {
 							t.Fatal("missing feedback accepted or emitted an event")
 						}
 					}
-					res := callTool(t, cs, feedbackTool, valid, sdk.Meta{metaInteractionID: "int_feedback"})
+					res := callTool(t, cs, feedbackTool, valid, sdk.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e35"})
 					if res.IsError || res.Content[0].(*sdk.TextContent).Text != "Sent to the server owner. Tell the user it was sent; nobody replies." {
 						t.Fatalf("reply = %s", mustJSON(res))
 					}
 					events := r.named("mcp_feedback_submitted")
 					p := events[0].Properties
-					if p["feedback_category"] != "feature_request" || p["feedback_tool_name"] != "list_destinations" || p["capability"] != "export" || p["interaction_id"] != "int_feedback" {
+					if p["feedback_category"] != "feature_request" || p["feedback_tool_name"] != "list_destinations" || p["capability"] != "export" || p["interaction_id"] != "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e35" {
 						t.Fatalf("event = %s", mustJSON(p))
 					}
 					// Stateless 2025 requests carry no client; older mcp-go minimums cannot negotiate 2026-07-28.

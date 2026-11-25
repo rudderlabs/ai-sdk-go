@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- SDK-6943: MCP events drop a client-supplied `_meta` `interaction_id` or `trace_id` that is not a UUID or 32 hex digits (the server mints its own `interaction_id`; send a UUID or 32-hex ID to join a client's interaction to the server's events), mask `client_name` and `client_title` with the built-in rules, and omit a `client_version` that does not match the version pattern or that the built-in masking would change (an IP, SSN, card number or phone).
+
 - SDK-6798: send `call_index` on every `ai_llm_response_received` and, with `WithLLMCallEvents` and content capture, `input_messages`, `input_truncated`, `output_text` and `output_tool_calls` from the OpenAI, Anthropic, Google GenAI and Bedrock modules, `rudderotel` product events and `RecordCall` (`LLMCall.InputMessages`, `OutputToolCalls`). Content is masked like `prompt_text` and trimmed to the 30,000-byte event cap. Pause snapshots carry an optional `call_sequence`.
 
 - SDK-6791: keep MCP tool, prompt, capability and argument names tied to the server's current registry (mcp-go task and session tools included), allow only `YYYY-MM-DD` protocol versions, encode request IDs uniformly (decimal integers, hashed strings, `unknown` otherwise), clean declared tool event properties and client labels, and key per-caller state, pending elicitations (one-hour expiry) and client windows by raw account, user and session or interaction in both Go MCP wrappers.

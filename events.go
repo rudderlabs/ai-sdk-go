@@ -182,7 +182,7 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 	}
 	put(p, "failure_reason", capLabel(change.FailureReason))
 	put(p, "mcp_session_id", capID(change.SessionID))
-	put(p, "client_name", cleanClientText(change.ClientName))
+	put(p, "client_name", clientText(change.ClientName))
 	for k, v := range base {
 		p[k] = v
 	}

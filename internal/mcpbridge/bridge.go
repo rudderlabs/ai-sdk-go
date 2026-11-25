@@ -19,6 +19,8 @@ var (
 	ErrorType func(err error) string
 	// CallerModel reads caller_model and its source from a request's _meta, or nil.
 	CallerModel func(meta map[string]any) map[string]any
+	// CleanClient checks a client's name, title and version before an adapter remembers them.
+	CleanClient func(client *Client) *Client
 )
 
 // Request is what an adapter knows about one incoming request.
@@ -33,7 +35,7 @@ type Request struct {
 	// Connection scopes the call counters when there is no session ID and no caller
 	// interaction_id, for a stdio or in-memory connection. Empty for HTTP.
 	Connection string
-	// Client is the client the session initialized with, if known.
+	// Client is the client the session initialized with, if known, as CleanClient returned it.
 	Client *Client
 	// ClientFor resolves session details for the identified caller.
 	ClientFor func(account, user, anonymous string) (*Client, string)

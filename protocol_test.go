@@ -55,7 +55,7 @@ func TestElicitation2025(t *testing.T) {
 	server := confirmServer("confirm-mcp", 0)
 	r := wrap(t, server, Options{})
 	cs := connect(t, server, "2025-06-18", elicitingClient("accept"))
-	callTool(t, cs, "ask_legacy", map[string]any{}, mcp.Meta{metaInteractionID: "int_e"})
+	callTool(t, cs, "ask_legacy", map[string]any{}, mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e0e"})
 	callTool(t, cs, "confirm", map[string]any{}, nil)
 	got := r.named("mcp_elicitation_completed")
 	if len(got) != 2 {
@@ -71,7 +71,7 @@ func TestElicitation2025(t *testing.T) {
 			t.Errorf("elicitation %d = %v", i, p)
 		}
 	}
-	if got[0].Properties["interaction_id"] != "int_e" {
+	if got[0].Properties["interaction_id"] != "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e0e" {
 		t.Errorf("interaction_id = %v", got[0].Properties["interaction_id"])
 	}
 	if all := mustJSON(r.all()); strings.Contains(all, "secret") || strings.Contains(all, "private answer") {
@@ -150,7 +150,7 @@ func TestInputRequired2026(t *testing.T) {
 	server := confirmServer("confirm-mcp", 0)
 	r := wrap(t, server, Options{})
 	cs := connect(t, server, "", elicitingClient("decline"))
-	res := callTool(t, cs, "confirm", map[string]any{}, mcp.Meta{metaInteractionID: "int_2026"})
+	res := callTool(t, cs, "confirm", map[string]any{}, mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e26"})
 	if text := res.Content[0].(*mcp.TextContent).Text; text != "done: decline" {
 		t.Fatalf("result = %s", text)
 	}
@@ -166,7 +166,7 @@ func TestInputRequired2026(t *testing.T) {
 		t.Errorf("call_index = %v, want 0", calls[0].Properties["call_index"])
 	}
 	p := r.props(t, "mcp_elicitation_completed")
-	if p["elicitation_action"] != "decline" || p["tool_name"] != "confirm" || p["interaction_id"] != "int_2026" || p["protocol_version"] != protocol2026 {
+	if p["elicitation_action"] != "decline" || p["tool_name"] != "confirm" || p["interaction_id"] != "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e26" || p["protocol_version"] != protocol2026 {
 		t.Errorf("elicitation = %v", p)
 	}
 	if p["request_id"] == calls[0].Properties["request_id"] || p["request_id"] == nil {
@@ -271,7 +271,7 @@ func TestStreamableHTTPStateless2026(t *testing.T) {
 	r := wrap(t, server, Options{Identify: identifyFromToken})
 	cs := connectHTTP(t, httpServer(t, server, &mcp.StreamableHTTPOptions{Stateless: true}), "")
 	for range 2 {
-		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, mcp.Meta{metaInteractionID: "int_h"})
+		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e11"})
 	}
 	seen := r.props(t, "mcp_client_seen")
 	if seen["protocol_version"] != protocol2026 || seen["transport"] != "streamable_http" || seen["client_name"] != "test-client" {

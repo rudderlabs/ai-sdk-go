@@ -3,7 +3,6 @@ package ruddermcpgo
 import (
 	"context"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -100,16 +99,15 @@ func TestWireIDEdgeCases(t *testing.T) {
 	}
 }
 
-func TestLongCallerIDsKeepSeparateCounters(t *testing.T) {
-	prefix := strings.Repeat("u", 300)
+func TestCallerIDsKeepSeparateCounters(t *testing.T) {
 	s := workspaceServer("mcpgo-hardening-long", nil)
 	r := wrap(t, s, Options{})
 	cs := connectStdio(t, s, "2025-06-18", nil)
-	// Same connection, interaction ids equal for 300 characters.
-	for _, suffix := range []string{"one", "two"} {
-		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, sdk.Meta{"com.rudderstack/interaction_id": prefix + suffix})
+	// Same connection, interaction ids equal but for their last digit.
+	for _, id := range []string{"3f2c8a9e-5b1d-4c7a-9e2f-6a8b0c1d2e3e", "3f2c8a9e-5b1d-4c7a-9e2f-6a8b0c1d2e3f"} {
+		callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, sdk.Meta{"com.rudderstack/interaction_id": id})
 		if got := lastToolProps(t, r)["call_index"]; got != 0 {
-			t.Errorf("interaction %s: call_index = %v, want 0", suffix, got)
+			t.Errorf("interaction %s: call_index = %v, want 0", id, got)
 		}
 	}
 }

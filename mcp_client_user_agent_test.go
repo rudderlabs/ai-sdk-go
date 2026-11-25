@@ -114,7 +114,7 @@ func TestClientFromUserAgent(t *testing.T) {
 	if !reflect.DeepEqual(userAgentClients, fixture.Products) {
 		t.Fatal("product table differs from shared fixture")
 	}
-	if userAgentVersion.String() != fixture.VersionPattern {
+	if versionPattern.String() != fixture.VersionPattern {
 		t.Fatal("version pattern differs from shared fixture")
 	}
 	versionless := map[string]bool{}

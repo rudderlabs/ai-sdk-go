@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/dataplane"
@@ -62,6 +63,9 @@ func TestFieldsAndCounts(t *testing.T) {
 	by := ByEvent([]dataplane.Message{{Event: "x"}, {Event: "x"}})
 	if Counts(by, map[string]int{"x": 2}) != nil || Counts(by, map[string]int{"y": 1}) == nil {
 		t.Error("counts")
+	}
+	if a, b := InteractionID("a"), InteractionID("b"); a != InteractionID("a") || a == b || uuid.Validate(a) != nil || len(a) != 36 {
+		t.Errorf("InteractionID = %q, %q", a, b)
 	}
 }
 

@@ -114,12 +114,12 @@ func TestToolCalledJoinsCallerAndCountsInScope(t *testing.T) {
 	server := workspaceServer("workspace-mcp", nil)
 	r := wrap(t, server, Options{})
 	cs := connect(t, server, "2025-06-18", nil)
-	meta := mcp.Meta{metaInteractionID: "int_1", metaTraceparent: traceparent, "other": "never copied"}
+	meta := mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e01", metaTraceparent: traceparent, "other": "never copied"}
 	args := map[string]any{"workspace_id": "w"}
 	callTool(t, cs, "list_destinations", args, meta)
 	callTool(t, cs, "list_destinations", args, meta)
 	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "x"}, meta)
-	callTool(t, cs, "list_destinations", args, mcp.Meta{metaInteractionID: "int_2"})
+	callTool(t, cs, "list_destinations", args, mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e02"})
 	got := r.named("mcp_tool_called")
 	type pos struct{ index, retry any }
 	want := []pos{{0, 0}, {1, 1}, {2, 0}, {0, 0}}
@@ -135,7 +135,7 @@ func TestToolCalledJoinsCallerAndCountsInScope(t *testing.T) {
 		}
 	}
 	p := got[0].Properties
-	if p["interaction_id"] != "int_1" || p["trace_id"] != "4bf92f3577b34da6a3ce929d0e0e4736" {
+	if p["interaction_id"] != "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e01" || p["trace_id"] != "4bf92f3577b34da6a3ce929d0e0e4736" {
 		t.Errorf("join ids: %v", p)
 	}
 	if strings.Contains(mustJSON(r.all()), "never copied") {
@@ -143,19 +143,20 @@ func TestToolCalledJoinsCallerAndCountsInScope(t *testing.T) {
 	}
 }
 
-func TestTraceIDFallbackAndCaps(t *testing.T) {
+// The fallback trace_id is kept when it is an ID; a long interaction_id is not one, so it is minted.
+func TestTraceIDFallbackAndClientIDs(t *testing.T) {
 	server := workspaceServer("workspace-mcp", nil)
 	r := wrap(t, server, Options{})
 	cs := connect(t, server, "2025-06-18", nil)
 	long := strings.Repeat("é", 300)
 	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"},
-		mcp.Meta{metaInteractionID: long, metaTraceID: "trace-7", metaTraceparent: "00-00000000000000000000000000000000-00f067aa0ba902b7-01"})
+		mcp.Meta{metaInteractionID: long, metaTraceID: " 0AF7651916CD43DD8448EB211C80319C\t", metaTraceparent: "00-00000000000000000000000000000000-00f067aa0ba902b7-01"})
 	p := r.props(t, "mcp_tool_called")
-	if p["trace_id"] != "trace-7" {
+	if p["trace_id"] != "0AF7651916CD43DD8448EB211C80319C" {
 		t.Errorf("trace_id = %v", p["trace_id"])
 	}
-	if id := p["interaction_id"].(string); id != strings.Repeat("é", 256) {
-		t.Errorf("interaction_id not capped to 256 code points: %d", len([]rune(id)))
+	if id := p["interaction_id"]; !minted(id) {
+		t.Errorf("interaction_id = %v, want a minted UUID", id)
 	}
 }
 
@@ -627,11 +628,11 @@ func TestDeclaredToolEvent(t *testing.T) {
 		"list_destinations": {Event: "destinations_listed"},
 	}}})
 	cs := connect(t, server, "2025-06-18", nil)
-	callTool(t, cs, "create_audience", map[string]any{"name": "vip", "type": "computed"}, mcp.Meta{metaInteractionID: "int_5"})
+	callTool(t, cs, "create_audience", map[string]any{"name": "vip", "type": "computed"}, mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e05"})
 	callTool(t, cs, "create_audience", map[string]any{"name": "skip"}, nil)
 	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
 	p := r.props(t, "audience_created")
-	if p["audience_type"] != "computed" || p["tool_name"] != "create_audience" || p["tool_status"] != "success" || p["has_name"] != true || p["interaction_id"] != "int_5" {
+	if p["audience_type"] != "computed" || p["tool_name"] != "create_audience" || p["tool_status"] != "success" || p["has_name"] != true || p["interaction_id"] != "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e05" {
 		t.Errorf("declared event = %v", p)
 	}
 	if len(r.named("destinations_listed")) != 1 {
@@ -738,13 +739,13 @@ func TestCapabilityRequests(t *testing.T) {
 	if _, ok := props["detail"]; ok {
 		t.Error("detail offered without content capture")
 	}
-	res := callTool(t, cs, capabilityTool, map[string]any{"capability": "bulk_export", "detail": "export all"}, mcp.Meta{metaInteractionID: "int_9"})
+	res := callTool(t, cs, capabilityTool, map[string]any{"capability": "bulk_export", "detail": "export all"}, mcp.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e09"})
 	if res.IsError {
 		t.Error("request_capability failed")
 	}
 	callTool(t, cs, capabilityTool, map[string]any{"capability": "teleport"}, nil)
 	got := r.named("mcp_capability_requested")
-	if len(got) != 2 || got[0].Properties["capability"] != "bulk_export" || got[0].Properties["interaction_id"] != "int_9" ||
+	if len(got) != 2 || got[0].Properties["capability"] != "bulk_export" || got[0].Properties["interaction_id"] != "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e09" ||
 		got[0].Properties["client_name"] != "test-client" || got[1].Properties["capability"] != "other" {
 		t.Errorf("events = %v", mustJSON(got))
 	}

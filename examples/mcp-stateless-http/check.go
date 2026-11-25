@@ -92,7 +92,7 @@ func agent(url, name, action, want string) error {
 	}
 	res, err := cs.CallTool(ctx, &mcp.CallToolParams{
 		Name: "delete_audience", Arguments: map[string]any{"audience_id": "aud_42"},
-		Meta: mcp.Meta{"com.rudderstack/interaction_id": "int_" + name},
+		Meta: mcp.Meta{"com.rudderstack/interaction_id": harness.InteractionID(name)},
 	})
 	if err != nil {
 		return err
@@ -125,12 +125,12 @@ func expectEvents(msgs []dataplane.Message, client, action string) error {
 	}{
 		{"mcp_client_seen", seen, map[string]any{"server_version": "2.0.0", "transport": "streamable_http", "auth_method": "none"}},
 		{"mcp_tool_called", call, map[string]any{
-			"tool_name": "delete_audience", "tool_status": "success", "interaction_id": "int_" + client,
+			"tool_name": "delete_audience", "tool_status": "success", "interaction_id": harness.InteractionID(client),
 			"argument_keys": []string{"audience_id"}, "call_index": 0, "retry_count": harness.Absent,
 			"is_error_result": false, "request_id": harness.Present, "duration_ms": harness.Present,
 		}},
 		{"mcp_elicitation_completed", answer, map[string]any{
-			"elicitation_action": action, "tool_name": "delete_audience", "interaction_id": "int_" + client,
+			"elicitation_action": action, "tool_name": "delete_audience", "interaction_id": harness.InteractionID(client),
 			"duration_ms": harness.Present, "request_id": harness.Present, "error_type": harness.Absent,
 		}},
 	}

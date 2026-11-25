@@ -252,7 +252,7 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 
 `ToolCall`: `ID` (merges repeated reports), `Name` (flat `mcp__server__tool` names are split), `MCPServer`, `ParentTool`, `AgentName`, `Error` (`*bool`), `ErrorType`, `Duration` (`*time.Duration`, measured only), `Args` and `Result` (given to declared tool rules, never sent). `ToolResult`: `Error`, `ErrorType`, `Duration`, `Result`. A failure from any report sticks; the first measured duration and the first result win.
 
-An agent that calls MCP servers can join each `mcp_tool_called` to its answer by sending `in.ID()` as `com.rudderstack/interaction_id` in the request `_meta` ([mcp.md](mcp.md#joining-the-calling-agent)); no Go integration adds it for you.
+An agent that calls MCP servers can join each `mcp_tool_called` to its answer by sending `in.ID()` as `com.rudderstack/interaction_id` in the request `_meta` ([mcp.md](mcp.md#joining-the-calling-agent)); no Go integration adds it for you. The server keeps it only when it is a UUID or 32 hex digits, as `in.ID()` is unless you set `InteractionID` to something else.
 
 ## Go platform limits
 

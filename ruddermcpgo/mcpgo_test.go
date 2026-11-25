@@ -155,7 +155,7 @@ func exercise(t *testing.T, cs *sdk.ClientSession) {
 		t.Fatal("request_capability not offered")
 	}
 	assertCapabilityMetadata(t, capability)
-	meta := sdk.Meta{metaInteractionID: "int_1", "traceparent": traceparent, "other": "never copied"}
+	meta := sdk.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e01", "traceparent": traceparent, "other": "never copied"}
 	callTool(t, cs, "list_destinations", map[string]any{
 		"workspace_id": "ws_private_42", requestContext: map[string]any{"intent": "debug_delivery", "user_sentiment": "negative"},
 	}, meta)
@@ -222,7 +222,7 @@ func check(t *testing.T, r *recorder, name, transport, protocol string, seen *ha
 	first := calls[0].Properties
 	for k, v := range map[string]any{
 		"tool_name": "list_destinations", "tool_status": "success", "is_error_result": false, "intent": "debug_delivery",
-		"user_sentiment": "negative", "interaction_id": "int_1", "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+		"user_sentiment": "negative", "interaction_id": "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e01", "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
 		"client_name": "test-client", "protocol_version": protocol, "call_index": 0, "retry_count": 0, "result_paginated": true,
 	} {
 		if first[k] != v {
@@ -252,7 +252,7 @@ func check(t *testing.T, r *recorder, name, transport, protocol string, seen *ha
 		t.Errorf("audience_created = %v", p)
 	}
 	caps := r.named("mcp_capability_requested")
-	if len(caps) != 2 || caps[0].Properties["capability"] != "other" || caps[1].Properties["capability"] != "bulk_export" || caps[0].Properties["interaction_id"] != "int_1" {
+	if len(caps) != 2 || caps[0].Properties["capability"] != "other" || caps[1].Properties["capability"] != "bulk_export" || caps[0].Properties["interaction_id"] != "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e01" {
 		t.Errorf("mcp_capability_requested = %s", mustJSON(caps))
 	}
 	var names []any
@@ -330,7 +330,7 @@ func TestStreamableHTTP(t *testing.T) {
 func TestStateIsPerServerName(t *testing.T) {
 	first, second := workspaceServer("shared-mcp", nil), workspaceServer("shared-mcp", nil)
 	r1, r2 := wrap(t, first, Options{}), wrap(t, second, Options{})
-	meta := sdk.Meta{metaInteractionID: "int_shared"}
+	meta := sdk.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e31"}
 	for _, s := range []*server.MCPServer{first, second} {
 		callTool(t, connectStdio(t, s, "2025-06-18", nil), "list_destinations", map[string]any{"workspace_id": "w"}, meta)
 	}
@@ -350,7 +350,7 @@ func TestStateIsPerServerName(t *testing.T) {
 
 func TestPerRequestServersKeepCounting(t *testing.T) {
 	r := newRecorder(t)
-	meta := sdk.Meta{metaInteractionID: "int_per_request"}
+	meta := sdk.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e33"}
 	for range 3 {
 		s := workspaceServer("per-request-mcp", nil)
 		if err := WrapServer(s, Options{Analytics: r}); err != nil {
@@ -485,10 +485,10 @@ func TestRequestElicitation(t *testing.T) {
 	cs := connectStdio(t, s, "2025-06-18", &sdk.ClientOptions{ElicitationHandler: func(context.Context, *sdk.ElicitRequest) (*sdk.ElicitResult, error) {
 		return &sdk.ElicitResult{Action: "accept", Content: map[string]any{}}, nil
 	}})
-	callTool(t, cs, "ask", map[string]any{}, sdk.Meta{metaInteractionID: "int_e"})
+	callTool(t, cs, "ask", map[string]any{}, sdk.Meta{metaInteractionID: "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e0e"})
 	p := r.props(t, "mcp_elicitation_completed")
 	call := r.props(t, "mcp_tool_called")
-	if p["elicitation_action"] != "accept" || p["tool_name"] != "ask" || p["request_id"] != call["request_id"] || p["interaction_id"] != "int_e" || p["duration_ms"] == nil {
+	if p["elicitation_action"] != "accept" || p["tool_name"] != "ask" || p["request_id"] != call["request_id"] || p["interaction_id"] != "7d0c4f2e-1b3a-4c5d-8e6f-0a1b2c3d4e0e" || p["duration_ms"] == nil {
 		t.Errorf("elicitation = %v", p)
 	}
 	if strings.Contains(mustJSON(r.all()), "secret") {

@@ -68,7 +68,7 @@ func exercise(ctx context.Context, cs *sdk.ClientSession, clientName string) err
 	if !slices.ContainsFunc(tools.Tools, func(t *sdk.Tool) bool { return t.Name == "submit_feedback" }) {
 		return fmt.Errorf("submit_feedback not offered")
 	}
-	meta := sdk.Meta{"com.rudderstack/interaction_id": "int_" + clientName, "traceparent": traceparent}
+	meta := sdk.Meta{"com.rudderstack/interaction_id": harness.InteractionID(clientName), "traceparent": traceparent}
 	calls := []*sdk.CallToolParams{
 		{Name: "list_destinations", Meta: meta, Arguments: map[string]any{
 			"workspace_id": "ws_1", "request_context": map[string]any{"intent": "debug_delivery", "user_sentiment": "negative"},
@@ -148,7 +148,7 @@ func expectEvents(msgs []dataplane.Message, stdio bool, clientName, protocol str
 	if stdio {
 		transport = "stdio"
 	}
-	interaction := "int_" + clientName
+	interaction := harness.InteractionID(clientName)
 	list := harness.Find(byEvent["mcp_tool_called"], "tool_name", "list_destinations")
 	// Every event, mcp_client_seen included, is for the session the calls ran in; stdio and
 	// stateless 2026-07-28 requests have none.
