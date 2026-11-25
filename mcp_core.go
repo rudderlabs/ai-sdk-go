@@ -1546,7 +1546,8 @@ func clientText(value string) string {
 	if !ok || masked == redactionTimedOut || hasSensitive(masked) {
 		return ""
 	}
-	return capText(masked, maxClientChars)
+	// A copy: the cut or the tidied text can share the raw value's memory, and sessions keep the result.
+	return strings.Clone(capText(masked, maxClientChars))
 }
 
 // clientVersion is a client_version as sent: tidied, version-shaped and untouched by the built-in
@@ -1556,7 +1557,7 @@ func clientVersion(value string) string {
 	if !versionPattern.MatchString(value) || hasSensitive(value) {
 		return ""
 	}
-	return value
+	return strings.Clone(value)
 }
 
 // tidyText removes Cc first, so a tab or newline joins its neighbors, then turns each run of

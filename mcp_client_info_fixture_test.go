@@ -3,7 +3,9 @@ package rudderstackai
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
@@ -61,5 +63,22 @@ func TestCleanClientRepeatsAreCheap(t *testing.T) {
 	first.Name = "changed"
 	if again := cleanClient(&sent); again.Name != "agent for [email]" || again.Version != "2.1.322" {
 		t.Fatalf("repeat = %+v, want the checked client, unaffected by changes to an earlier result", *again)
+	}
+}
+
+// Sessions and remembered clients keep checked labels: a cut label must not pin the raw value's memory.
+func TestClientLabelsDoNotShareTheRawValue(t *testing.T) {
+	for _, tc := range []struct {
+		raw   string
+		check func(string) string
+	}{
+		{strings.Repeat("a", 4096), clientText},
+		{"1.2.3" + strings.Repeat(" ", 4096), clientVersion},
+	} {
+		got := tc.check(tc.raw)
+		start, at := uintptr(unsafe.Pointer(unsafe.StringData(tc.raw))), uintptr(unsafe.Pointer(unsafe.StringData(got)))
+		if got == "" || (at >= start && at < start+uintptr(len(tc.raw))) {
+			t.Fatalf("%.10q shares the raw value's memory", got)
+		}
 	}
 }
