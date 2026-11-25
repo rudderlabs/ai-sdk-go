@@ -79,7 +79,7 @@ func TestStructuredOutputLifecycle(t *testing.T) {
 				i.RecordToolCalls(call)
 			}
 			if c.ResultBeforePause {
-				i.recordToolResult(c.Tool.ID, ToolResult{Result: c.Result}, true, c.ResultName)
+				i.recordToolResult(c.Tool.ID, ToolResult{Result: c.Result}, true, false, c.ResultName)
 			}
 			if c.Pause {
 				snapshot, ok := i.Pause(PauseOptions{Reason: PauseApproval})
@@ -123,7 +123,7 @@ func TestStructuredOutputLifecycle(t *testing.T) {
 				i.RecordToolResult(c.Tool.ID, ToolResult{})
 			}
 			if c.Result != nil && !c.ResultBeforePause {
-				i.recordToolResult(c.Tool.ID, ToolResult{Result: c.Result}, true, c.ResultName)
+				i.recordToolResult(c.Tool.ID, ToolResult{Result: c.Result}, true, false, c.ResultName)
 			}
 			i.End(EndOptions{})
 			i.End(EndOptions{})
@@ -208,7 +208,7 @@ func TestStructuredOutputOutcomeBeforeCandidate(t *testing.T) {
 				case "empty result":
 					i.RecordToolResult(call.ID, ToolResult{})
 				case "execution span":
-					i.recordToolCalls(true, call)
+					i.recordToolCalls(true, false, call)
 				case "inline result":
 					outcome := call
 					outcome.Result = map[string]any{"ok": true}

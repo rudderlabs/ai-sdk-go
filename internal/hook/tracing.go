@@ -28,7 +28,7 @@ var Tracing struct {
 	Identity                 func(context.Context, string) (attributes map[string]string, system, suppressed bool, owner any)
 	Open                     func(string) any
 	AdoptAnalytics           func(any, analytics.Client)
-	RecordTool               func(any, any)
+	RecordTool               func(any, any, bool)
 	Analytics                func() analytics.Client
 	CaptureLevel             func() *capture.Policy
 	Redact                   func(string) (string, bool)

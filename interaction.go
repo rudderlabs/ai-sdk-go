@@ -488,6 +488,8 @@ type recordedTool struct {
 	capped bool
 	// unkeyed: restored from a snapshot written before agent_key, so keyed by its own agent.
 	unkeyed bool
+	// outputFailure: the vendor output convention failed the call (api_error).
+	outputFailure bool
 }
 
 type pendingEvent struct {
@@ -1756,10 +1758,11 @@ func mergeCallTwin(kept, later *recordedCall) {
 func (i *Interaction) RecordToolCalls(calls ...ToolCall) {
 	leave := i.enterCallback(false)
 	defer leave()
-	i.recordToolCalls(false, calls...)
+	i.recordToolCalls(false, false, calls...)
 }
 
-func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
+// outputFailure: an integration failed the calls under the vendor output convention.
+func (i *Interaction) recordToolCalls(fromSpan, outputFailure bool, calls ...ToolCall) {
 	leave := i.enterCallback(false)
 	defer leave()
 	if len(calls) == 0 {
@@ -1868,7 +1871,7 @@ func (i *Interaction) recordToolCalls(fromSpan bool, calls ...ToolCall) {
 				m, _ := captured[n].value.(map[string]any)
 				tool.resultContent = captureReport{value: m["result"], size: captured[n].sizes["result"], memo: captured[n].memo}
 			}
-			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result}, call.Result != nil)
+			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result}, call.Result != nil, outputFailure)
 			fire = append(fire, tool)
 		}
 		i.unlock()
@@ -1896,12 +1899,12 @@ func (i *Interaction) RecordToolCallCount(n int) {
 func (i *Interaction) RecordToolResult(id string, result ToolResult) {
 	leave := i.enterCallback(false)
 	defer leave()
-	i.recordToolResult(id, result, result.Result != nil)
+	i.recordToolResult(id, result, result.Result != nil, false)
 }
 
 // name is Gemini's fallback for a forced candidate whose call and result omit IDs.
 // Ordinary id-less calls keep their existing outcome accounting.
-func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult bool, name ...string) {
+func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult, outputFailure bool, name ...string) {
 	leave := i.enterCallback(false)
 	defer leave()
 	safely(func() {
@@ -1937,7 +1940,7 @@ func (i *Interaction) recordToolResult(id string, result ToolResult, hasResult b
 			if hasResult && !tool.hasResult {
 				tool.resultContent = content
 			}
-			mergeToolResult(tool, result, hasResult)
+			mergeToolResult(tool, result, hasResult, outputFailure)
 		}
 		i.mu.Unlock()
 		if tool != nil {
@@ -1966,7 +1969,8 @@ func normalizeTool(name, server string) (string, string) {
 }
 
 // mergeToolResult: a failure from any source sticks; the first measured duration and output win.
-func mergeToolResult(tool *recordedTool, r ToolResult, hasResult bool) {
+func mergeToolResult(tool *recordedTool, r ToolResult, hasResult, outputFailure bool) {
+	tool.outputFailure = tool.outputFailure || outputFailure
 	if r.Error != nil {
 		failed := (tool.err != nil && *tool.err) || *r.Error
 		tool.err = &failed
@@ -2082,15 +2086,21 @@ type toolRuleOutcome struct {
 	suppressed bool
 	properties map[string]any
 	resultSize int
+	// errorType keeps the vendor output failure's category once pause discards the raw output.
+	errorType string
 }
 
 func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolved) *toolRuleOutcome {
+	var errorType string
+	if t.outputFailure && t.errorType == "api_error" {
+		errorType = t.errorType
+	}
 	args, _ := t.args.(map[string]any)
 	if rule.When != nil {
 		send := false
 		callback("ToolEventRule.When", func() error { send = rule.When(args, t.result); return nil })
 		if !send {
-			return &toolRuleOutcome{suppressed: true, properties: map[string]any{}, resultSize: -1}
+			return &toolRuleOutcome{suppressed: true, properties: map[string]any{}, resultSize: -1, errorType: errorType}
 		}
 	}
 	custom := map[string]any{}
@@ -2110,7 +2120,7 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolv
 	if t.hasResult {
 		resultSize = t.resultContent.size
 	}
-	return &toolRuleOutcome{properties: jsonSafeMap(properties), resultSize: resultSize}
+	return &toolRuleOutcome{properties: jsonSafeMap(properties), resultSize: resultSize, errorType: errorType}
 }
 
 // Freeze deferred rules after paused-event delivery. Callbacks and encoding run outside mu.
@@ -2177,6 +2187,7 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool, original *re
 		p["tool_status"] = toolStatus(t.err)
 	}
 	put(p, "mcp_server", t.mcpServer)
+	put(p, "error_type", outcome.errorType)
 	if resultSize >= 0 {
 		p["result_size_bytes"] = resultSize
 	}
@@ -2903,6 +2914,9 @@ func pendingTool(c *recordedTool) map[string]any {
 		if c.ruleOutcome.resultSize >= 0 {
 			outcome["result_size_bytes"] = c.ruleOutcome.resultSize
 		}
+		if c.ruleOutcome.errorType != "" {
+			outcome["error_type"] = c.ruleOutcome.errorType
+		}
 		p["rule_outcome"] = outcome
 	}
 	// Seen without an outcome (a duration-only result) still ends a wait: restore needs it.
@@ -3131,6 +3145,7 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 			if _, ok := outcome["result_size_bytes"]; ok {
 				c.ruleOutcome.resultSize = int(pendingNumber(outcome, "result_size_bytes"))
 			}
+			c.ruleOutcome.errorType, _ = outcome["error_type"].(string)
 		}
 		if pendingBool(p, "overflow") {
 			// An overflow record with an ID that never ran was kept past the cap, in case a pause waits on it.

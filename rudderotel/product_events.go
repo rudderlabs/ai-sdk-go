@@ -299,7 +299,7 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 				for _, part := range message.Parts {
 					if part["type"] == "tool_call_response" {
 						id, _ := part["id"].(string)
-						kit.RecordToolResult(i, id, rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Result: part["response"]}, true)
+						kit.RecordToolOutput(i, id, rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Result: part["response"]}, true, kit.RawOutput)
 					}
 				}
 			}
@@ -327,8 +327,12 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 		StartedAt: s.StartTime(),
 		Args:      toolValue(a, "gen_ai.tool.call.arguments", "input.value", "traceloop.entity.input"), Result: toolValue(a, "gen_ai.tool.call.result", "output.value", "traceloop.entity.output"),
 	}
-	if failed {
+	outputFailed := !failed && kit.ToolOutputFailed(call.Result, kit.DecodedOutput)
+	switch {
+	case failed:
 		call.ErrorType = spanErrorType(s)
+	case outputFailed:
+		call.Error, call.ErrorType = rudderstackai.Ptr(true), "api_error"
 	}
-	hook.Tracing.RecordTool(i, call)
+	hook.Tracing.RecordTool(i, call, outputFailed)
 }
