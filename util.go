@@ -65,7 +65,8 @@ func callerModel(meta map[string]any) map[string]any {
 		lower := strings.ToLower(value)
 		if len(value) > maxLabelLength || !callerModelPattern.MatchString(value) ||
 			slices.ContainsFunc(callerModelUnknownPrefixes, func(prefix string) bool { return strings.HasPrefix(lower, prefix) }) ||
-			slices.ContainsFunc(callerModelUnknownExtensions, func(extension string) bool { return strings.HasSuffix(lower, extension) }) {
+			slices.ContainsFunc(callerModelUnknownExtensions, func(extension string) bool { return strings.HasSuffix(lower, extension) }) ||
+			hasSensitive(value) {
 			value = "unknown"
 		}
 		return map[string]any{"caller_model": value, "caller_model_source": "client_metadata"}

@@ -8,6 +8,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
 
 // Client-supplied IDs and client details through the go-sdk wrapper
@@ -112,21 +114,24 @@ func TestMCPClientInfoFailingSourceIsSkipped(t *testing.T) {
 	}
 }
 
-// Declared-event and subscription client_* properties follow the same rules, never the app's Redact.
+// Declared-event and subscription client_* properties follow the same rules, never the app's Redact;
+// a rule's client_name and client_version are reserved.
 func TestMCPAppClientPropertiesChecked(t *testing.T) {
 	s := workspaceServer(t.Name(), nil)
 	r := wrap(t, s, Options{
 		MCPEvents: true,
 		Redact:    func(string) (string, error) { return "app-redacted", nil },
 		EventRules: EventRules{Tools: map[string]ToolEventRule{"list_destinations": {Event: "destinations_listed", Properties: func(map[string]any, any) map[string]any {
-			return map[string]any{"client_name": "agent for jane.doe@example.com", "client_title": "\tJane Doe ", "client_version": "v1.2.3"}
+			return map[string]any{"client_name": "rule-agent", "client_title": "\tJane Doe ", "client_version": "9.9.9"}
 		}}}},
 	})
-	// No name or version at initialize, so the base leaves the declared values in place.
+	// No name or version at initialize: the rule's still never reach the event.
 	cs := connectAs(t, s, &mcp.Implementation{})
 	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
 	p := r.props(t, "destinations_listed")
-	if _, ok := p["client_version"]; ok || p["client_name"] != "agent for [email]" || p["client_title"] != "Jane Doe" {
+	_, name := p["client_name"]
+	_, version := p["client_version"]
+	if name || version || p["client_title"] != "Jane Doe" {
 		t.Errorf("declared event = %v", p)
 	}
 	for _, tc := range []struct{ name, want string }{{"agent for jane.doe@example.com", "agent for [email]"}, {strings.Repeat("a", 32_001), ""}} {
@@ -136,5 +141,71 @@ func TestMCPAppClientPropertiesChecked(t *testing.T) {
 		if (tc.want == "" && ok) || (tc.want != "" && got != tc.want) {
 			t.Errorf("subscription client_name = %v, want %q", got, tc.want)
 		}
+	}
+}
+
+// Every client source is checked where it is read: a masked name and a version that is not
+// version-shaped never reach an event raw.
+func TestMCPClientSourcesChecked(t *testing.T) {
+	const name, version = "agent for jane.doe@example.com", "v1.2.3"
+	given := func(context.Context, *auth.TokenInfo) (string, string) { return name, version }
+	for _, tc := range []struct {
+		name string
+		opts Options
+		req  mcpbridge.Request
+		want string
+	}{
+		{"meta_client_info", Options{}, mcpbridge.Request{Meta: map[string]any{metaClientInfo: map[string]any{"name": name, "version": version}}}, "agent for [email]"},
+		{"client_info", Options{ClientInfo: given}, mcpbridge.Request{}, "agent for [email]"},
+		{"client_info_fallback", Options{ClientInfoFallback: given}, mcpbridge.Request{}, "agent for [email]"},
+		{"user_agent", Options{}, mcpbridge.Request{HTTP: true, UserAgent: "Cursor/10.0.0.12"}, "Cursor"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := workspaceServer(t.Name(), nil)
+			r := wrap(t, s, tc.opts)
+			w, _ := instances.get(s)
+			tc.req.Ctx = context.Background()
+			rc := w.begin(tc.req)
+			rc.ToolCall("list_destinations", nil, false, nil, "")
+			rc.ToolDone(mcpbridge.Outcome{Result: map[string]any{}})
+			p := r.props(t, "mcp_tool_called")
+			if _, ok := p["client_version"]; ok || p["client_name"] != tc.want {
+				t.Errorf("client_name %v, client_version %v, want %q and none", p["client_name"], p["client_version"], tc.want)
+			}
+		})
+	}
+}
+
+// The client an initialize result reports is checked before it is remembered for later requests.
+func TestMCPInitializedClientCheckedBeforeRemembered(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		initialize *mcpbridge.Client // what the initialize request carried
+		want       string
+	}{
+		{"request_without_client_info", nil, "agent for [email]"},
+		// The name's cut exposes a phone and the version is not version-shaped: nothing is left.
+		{"client_info_failing_every_check", &mcpbridge.Client{Name: strings.Repeat("x", 51) + " 415-555-0100-9", Version: "v1.2.3"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := workspaceServer(t.Name(), nil)
+			r := wrap(t, s, Options{Identify: func(context.Context, *auth.TokenInfo) (Identity, error) {
+				return Identity{UserID: "u", OAuthClientID: "app"}, nil
+			}})
+			w, _ := instances.get(s)
+			reported := &mcpbridge.Client{Name: "agent for jane.doe@example.com", Version: "v1.2.3"}
+			if tc.initialize != nil {
+				reported = tc.initialize
+			}
+			w.begin(mcpbridge.Request{Ctx: context.Background(), Initialize: true, InitializeClient: tc.initialize}).Initialized(reported, nil, "2025-06-18")
+			rc := w.begin(mcpbridge.Request{Ctx: context.Background()})
+			rc.ToolCall("list_destinations", nil, false, nil, "")
+			rc.ToolDone(mcpbridge.Outcome{Result: map[string]any{}})
+			p := r.props(t, "mcp_tool_called")
+			got, named := p["client_name"]
+			if _, ok := p["client_version"]; ok || (tc.want == "" && named) || (tc.want != "" && got != tc.want) {
+				t.Errorf("client_name %v, client_version %v, want %q and none", got, p["client_version"], tc.want)
+			}
+		})
 	}
 }

@@ -185,11 +185,13 @@ func TestDeclaredPropertiesAreCleanedWhateverTheirSpelling(t *testing.T) {
 	if !slices.Equal(p["argument_keys"].([]string), []string{"a", "unknown", "z"}) || !slices.Equal(p["invalid_arguments"].([]string), []string{"unknown"}) {
 		t.Errorf("lists = %v / %v", p["argument_keys"], p["invalid_arguments"])
 	}
-	if p["request_id"] != "sha256:9773879a094d490e" || p["client_title"] != "bad title" || p["client_version"] != "1.0-beta" || p["tool_name"] != "probe" {
+	if p["request_id"] != "sha256:9773879a094d490e" || p["client_title"] != "bad title" || p["tool_name"] != "probe" {
 		t.Errorf("properties = %v", p)
 	}
-	if _, ok := p["client_name"]; ok {
-		t.Errorf("empty client_name kept: %v", p)
+	_, name := p["client_name"]
+	_, version := p["client_version"]
+	if name || version {
+		t.Errorf("rule's client_name or client_version kept: %v", p)
 	}
 	for k := range p {
 		if k != strings.ToLower(k) || strings.ContainsAny(k, "-A") {
@@ -387,5 +389,19 @@ func TestTitleOnlyClientKeepsTitle(t *testing.T) {
 	rc.Initialized(client, nil, "2025-06-18")
 	if got := r.props(t, "mcp_client_seen")["client_title"]; got != "Only A Title" {
 		t.Errorf("client_title = %v", got)
+	}
+}
+
+// call_reason, capability_detail and feedback_text: the text past the cut kept the phone from matching.
+func TestAgentTextCutNeverExposesAPattern(t *testing.T) {
+	o := &options{}
+	for _, limit := range []int{maxTextLength, feedbackMaxLength} {
+		head := strings.Repeat("x", limit-13)
+		if got := o.maskedText(head+" 415-555-0100-9", limit); got != "" {
+			t.Errorf("limit %d: cut sent as %q", limit, got[len(head):])
+		}
+		if got := o.maskedText(head+" 415-555-0100", limit+10); got != head+" [phone]" {
+			t.Errorf("limit %d: got %q", limit, got)
+		}
 	}
 }

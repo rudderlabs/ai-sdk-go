@@ -648,11 +648,37 @@ func (rc *reqCtx) reportedContext(v any) map[string]any {
 		out["user_sentiment"] = s
 	}
 	if reason, ok := m["call_reason"].(string); ok && opts.capture().CallReason {
-		if masked, ok := opts.mask(strings.TrimSpace(reason)); ok && masked != "" {
-			out["call_reason"] = capText(masked, maxTextLength)
+		if text := opts.maskedText(reason, maxTextLength); text != "" {
+			out["call_reason"] = text
 		}
 	}
 	return out
+}
+
+// maskedText is call_reason, capability_detail or feedback_text as sent: trimmed, masked and cut
+// to limit code points; "" when masking fails or leaves a built-in pattern, before or after the cut.
+func (o *options) maskedText(text string, limit int) string {
+	masked, ok := o.mask(strings.TrimSpace(text))
+	if !ok || masked == "" {
+		return ""
+	}
+	if o.DisableRedaction {
+		return capText(masked, limit)
+	}
+	if hasSensitive(masked) {
+		return ""
+	}
+	return cutUnexposed(masked, limit)
+}
+
+// cutUnexposed cuts masked text to limit code points; "" when the cut leaves a built-in pattern
+// that the removed text had kept from matching (`... 415-555-0100-9` cut to `... 415-555-0100`).
+func cutUnexposed(masked string, limit int) string {
+	cut := capText(masked, limit)
+	if len(cut) < len(masked) && hasSensitive(cut) {
+		return ""
+	}
+	return cut
 }
 
 // Capability records a request_capability call and returns the reply.
@@ -671,9 +697,8 @@ func (rc *reqCtx) Capability(args map[string]json.RawMessage) string {
 	p["capability"] = capability
 	var detail string
 	if json.Unmarshal(args["detail"], &detail) == nil && capability == "other" && rc.opts.capture().FeedbackText {
-		// Withheld, not sent, when it still looks sensitive after masking.
-		if masked, ok := rc.opts.mask(strings.TrimSpace(detail)); ok && masked != "" && (rc.opts.DisableRedaction || !hasSensitive(masked)) {
-			p["capability_detail"] = capText(masked, maxTextLength)
+		if text := rc.opts.maskedText(detail, maxTextLength); text != "" {
+			p["capability_detail"] = text
 		}
 	}
 	emit(rc.opts.Analytics, "mcp_capability_requested", rc.who, p)
@@ -735,8 +760,8 @@ func (rc *reqCtx) Feedback(args map[string]json.RawMessage) (string, bool) {
 		p["capability"] = capability
 	}
 	if feedback {
-		if masked, ok := rc.opts.mask(strings.TrimSpace(values["feedback"])); ok && masked != "" && (rc.opts.DisableRedaction || !hasSensitive(masked)) {
-			p["feedback_text"] = capText(masked, feedbackMaxLength)
+		if text := rc.opts.maskedText(values["feedback"], feedbackMaxLength); text != "" {
+			p["feedback_text"] = text
 		}
 	}
 	emit(rc.opts.Analytics, "mcp_feedback_submitted", rc.who, p)
@@ -1191,13 +1216,11 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string, captured .
 					}
 				case "toolname":
 					p["tool_name"] = rc.toolName
-				case "clientname", "clienttitle":
+				case "clientname", "clientversion":
+					// Reserved: the event carries the request's own client, even when it has none.
+				case "clienttitle":
 					if value := clientText(str(v)); value != "" {
-						p["client_"+strings.TrimPrefix(canon, "client")] = value
-					}
-				case "clientversion":
-					if value := clientVersion(str(v)); value != "" {
-						p["client_version"] = value
+						p["client_title"] = value
 					}
 				default:
 					if !owned[propertyName(k)] {
@@ -1212,7 +1235,7 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string, captured .
 		seeds = append(seeds, captureSeed{memo: captured[0].memo})
 	}
 	sdk := map[string]any{}
-	for _, key := range []string{"argument_keys", "invalid_arguments", "request_id", "tool_name", "client_name", "client_title", "client_version"} {
+	for _, key := range []string{"argument_keys", "invalid_arguments", "request_id", "tool_name", "client_title"} {
 		if value, ok := p[key]; ok {
 			sdk[key] = value
 			delete(p, key)
@@ -1536,7 +1559,7 @@ const maxClientChars = 64
 
 // clientText is a client_name or client_title as sent (spec/fixtures/mcp-client-info-v0.1.json):
 // tidied, masked with the built-in rules only (never Redact, whatever DisableRedaction says), then
-// cut; "" when masking withholds it or leaves a match.
+// cut; "" when masking withholds it or leaves a match, before or after the cut.
 func clientText(value string) string {
 	value = tidyText(value)
 	if value == "" {
@@ -1547,7 +1570,7 @@ func clientText(value string) string {
 		return ""
 	}
 	// A copy: the cut or the tidied text can share the raw value's memory, and sessions keep the result.
-	return strings.Clone(capText(masked, maxClientChars))
+	return strings.Clone(cutUnexposed(masked, maxClientChars))
 }
 
 // clientVersion is a client_version as sent: tidied, version-shaped and untouched by the built-in
@@ -1689,7 +1712,8 @@ const (
 
 // errorMessage reads an explicit {result} or {error} source as described by
 // spec/fixtures/mcp-error-message-v0.1.json: mask before capping,
-// and withhold empty text, failed masking and anything still matching a built-in pattern.
+// and withhold empty text, failed masking and anything still matching a built-in pattern, before or
+// after the cap.
 func errorMessage(failure map[string]any, mask func(string) (string, bool)) string {
 	var text string
 	if rpc, ok := failure["error"].(map[string]any); ok {
@@ -1718,7 +1742,7 @@ func errorMessage(failure map[string]any, mask func(string) (string, bool)) stri
 	if !ok || masked == "" || masked == redactionTimedOut || hasSensitive(masked) {
 		return ""
 	}
-	return capText(masked, maxTextLength)
+	return cutUnexposed(masked, maxTextLength)
 }
 
 func mcpWireErrorType(code int) string {
