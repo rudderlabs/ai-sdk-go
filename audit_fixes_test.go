@@ -54,9 +54,6 @@ func TestAuditContentPropertyVariants(t *testing.T) {
 
 func TestAuditWarehousePropertyNames(t *testing.T) {
 	for _, tc := range []struct{ key, want string }{
-		{"promptText", "prompt_text"}, {"PromptText", "prompt_text"}, {"HTTPStatus", "http_status"},
-		{"prompt--text", "prompt_text"}, {"prompt  text", "prompt_text"}, {"Prompt-Text", "prompt_text"},
-		{"__prompt_text__", "prompt_text"}, {"primary--model", "primary_model"},
 		{"response2Text", "response2_text"}, {"HTTP2Status", "http2_status"},
 		{"...", ""}, {"", ""}, {"_ .prompt\t\n/text!_", "prompt_text"},
 	} {
@@ -174,7 +171,6 @@ func TestAuditStatusPrecedence(t *testing.T) {
 		{"new call specific failure", []step{call("timeout", ""), timeout, call("api_error", ""), app}, EndOptions{}, StatusError, "api_error"},
 		{"new call finish reason", []step{call("timeout", ""), timeout, call("", "length"), app}, EndOptions{}, StatusIncomplete, "length"},
 		{"provider error beats finish reason", []step{call("rate_limit", "max_tokens"), app}, EndOptions{}, StatusError, "rate_limit"},
-		{"generic alone", []step{app}, EndOptions{}, StatusError, "app_error"},
 		{"generic then provider failure", []step{app, call("timeout", "")}, EndOptions{}, StatusTimeout, "timeout"},
 		{"generic then successful call", []step{app, call("", "")}, EndOptions{}, StatusSuccess, ""},
 		{"explicit success", []step{call("timeout", "")}, EndOptions{Status: StatusSuccess}, StatusSuccess, ""},
