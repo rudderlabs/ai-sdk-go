@@ -3386,6 +3386,61 @@ func TestManagedAgentsBlockingThreadStatusResumes(t *testing.T) {
 	}
 }
 
+// maRecorded is a turn's start in the recorded order: the session's running status, the primary
+// thread's, then the prompt.
+func maRecorded(kind, p string) []string {
+	return []string{
+		fmt.Sprintf(`{"type":"session.status_running","id":"%s-running"}`, p),
+		fmt.Sprintf(`{"type":%q,"id":"%s-thread","session_thread_id":"sthr_main"}`, kind, p),
+		fmt.Sprintf(`{"type":"user.message","id":"%s-prompt","content":[{"type":"text","text":"%s prompt"}]}`, p, p),
+		fmt.Sprintf(`{"type":"span.model_request_end","id":"%s-model","model_usage":{"input_tokens":10,"output_tokens":2}}`, p),
+	}
+}
+
+func maEndTurn(p string) string {
+	return fmt.Sprintf(`{"type":"session.status_idle","id":"%s-done","stop_reason":{"type":"end_turn"}}`, p)
+}
+
+func TestManagedAgentsBlockingThreadStatusLeavesThePromptToTheEvaluator(t *testing.T) {
+	for _, kind := range []string{"session.thread_status_running", "session.thread_status_rescheduled"} {
+		t.Run(kind, func(t *testing.T) {
+			prompts := make(chan string, 4)
+			setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}), rudderstackai.WithEvaluator(func(_ context.Context, turn rudderstackai.EvaluationTurn) ([]rudderstackai.Score, error) {
+				prompts <- turn.Prompt
+				return nil, nil
+			}))
+			t.Cleanup(func() { _ = rudderstackai.Configure(rudderstackai.WithEvaluator(nil)) })
+			resetMA(t)
+			maDrain(maBlockingStream(context.Background(), t, append(maRecorded(kind, "one"), maEndTurn("one"))))
+			select {
+			case got := <-prompts:
+				if got != "one prompt" {
+					t.Fatalf("prompt: %q", got)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("evaluator never ran")
+			}
+		})
+	}
+}
+
+func TestManagedAgentsBlockingThreadStatusLeavesACancelledCallerTurnBehind(t *testing.T) {
+	for _, kind := range []string{"session.thread_status_running", "session.thread_status_rescheduled"} {
+		t.Run(kind, func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+			resetMA(t)
+			maBlockingOwned(t, "interaction", func(ctx context.Context) {
+				maDrain(maBlockingStream(ctx, t, append(maRecorded(kind, "one"), `{"type":"user.interrupt","id":"one-interrupt"}`, maEndTurn("one"))))
+				maDrain(maBlockingStream(ctx, t, append(maRecorded(kind, "two"), maEndTurn("two"))))
+			})
+			responses := rec.events(t)["ai_response_received"]
+			if len(responses) != 1 || responses[0]["response_status"] != "success" || responses[0]["llm_call_count"] != float64(2) {
+				t.Fatalf("responses: %v", responses)
+			}
+		})
+	}
+}
+
 func TestManagedAgentsBlockingOutstandingReplies(t *testing.T) {
 	for _, owner := range []string{"adapter", "interaction"} {
 		for _, a := range maReplyKinds {

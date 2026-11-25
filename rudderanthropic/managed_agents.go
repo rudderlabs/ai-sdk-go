@@ -590,11 +590,16 @@ func (s *sessionTracker) observe(raw string) {
 		} else if !s.isRunning() {
 			s.running(at)
 		}
-	// A thread running again resumes the session's turn (a reconnect can miss the session's own
-	// status), but never starts one: a child can run outside the primary's turns.
+	// A thread running again resumes a waiting turn as the session's status does (a reconnect can
+	// miss that one), but opens none: the turn opens with its next event, such as its prompt.
 	case "session.thread_status_running", "session.thread_status_rescheduled":
-		if s.turn != nil || s.hasCarriedState() || s.isRunning() {
-			s.open(kind, at)
+		if s.turn != nil {
+			s.resuming(s.turn)
+			if at.ok {
+				s.turn.lastAt = at
+			}
+		} else if !s.isRunning() && s.hasCarriedState() {
+			s.running(at)
 		}
 	case "agent.thinking", "agent.thread_message_received", "agent.thread_message_sent", "span.outcome_evaluation_ongoing", "system.message":
 		s.open(kind, at)
@@ -853,7 +858,6 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 	}
 	// App replies settle only their own ID; agent work shows the session resumed.
 	if running || kind == "session.status_running" || kind == "session.status_rescheduled" ||
-		kind == "session.thread_status_running" || kind == "session.thread_status_rescheduled" ||
 		strings.HasPrefix(kind, "agent.") || kind == "span.model_request_start" {
 		s.resuming(t)
 	}

@@ -5414,6 +5414,536 @@
           }
         }
       ]
+    },
+    {
+      "name": "thread_status_before_prompt",
+      "description": "Two turns in the recorded order: the session's running status, the primary thread's running status, then the prompt (a user.message, then a user.define_outcome). The thread status never opens the turn ahead of its prompt: each prompt event keeps its text; content capture on.",
+      "options": {
+        "capture_content": true
+      },
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_tsprompt_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_tsprompt_02",
+              "processed_at": "2026-11-16T10:00:00.020000Z",
+              "type": "session.thread_status_running",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary"
+            },
+            {
+              "id": "sevt_tsprompt_03",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hi there"
+                }
+              ]
+            },
+            {
+              "id": "sevt_tsprompt_04",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_tsprompt_05",
+              "processed_at": "2026-11-16T10:00:00.560000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hello!"
+                }
+              ]
+            },
+            {
+              "id": "sevt_tsprompt_06",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_tsprompt_04",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 20,
+                "output_tokens": 4,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_tsprompt_07",
+              "processed_at": "2026-11-16T10:00:00.700000Z",
+              "type": "session.thread_status_idle",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            },
+            {
+              "id": "sevt_tsprompt_08",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            },
+            {
+              "id": "sevt_tsprompt_09",
+              "processed_at": "2026-11-16T10:00:01.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_tsprompt_10",
+              "processed_at": "2026-11-16T10:00:01.020000Z",
+              "type": "session.thread_status_running",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary"
+            },
+            {
+              "id": "sevt_tsprompt_11",
+              "processed_at": "2026-11-16T10:00:01.110000Z",
+              "type": "user.define_outcome",
+              "description": "Write a haiku",
+              "max_iterations": null,
+              "outcome_id": "outc_fixture",
+              "rubric": {
+                "type": "text",
+                "content": "Five, seven, five syllables."
+              }
+            },
+            {
+              "id": "sevt_tsprompt_12",
+              "processed_at": "2026-11-16T10:00:01.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_tsprompt_13",
+              "processed_at": "2026-11-16T10:00:01.560000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "A haiku"
+                }
+              ]
+            },
+            {
+              "id": "sevt_tsprompt_14",
+              "processed_at": "2026-11-16T10:00:01.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_tsprompt_12",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_tsprompt_15",
+              "processed_at": "2026-11-16T10:00:01.700000Z",
+              "type": "session.thread_status_idle",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            },
+            {
+              "id": "sevt_tsprompt_16",
+              "processed_at": "2026-11-16T10:00:01.710000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "prompt_text": "Hi there"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 20,
+            "total_output_tokens": 4,
+            "total_tokens": 24,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000004,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 20,
+                "output_tokens": 4,
+                "total_tokens": 24,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000004
+              }
+            ],
+            "response_text": "Hello!"
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "B",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "prompt_text": "Write a haiku"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "B",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 12,
+            "total_output_tokens": 3,
+            "total_tokens": 15,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0000027,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "total_tokens": 15,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.0000027
+              }
+            ],
+            "response_text": "A haiku"
+          }
+        }
+      ]
+    },
+    {
+      "name": "prompt_after_pause_thread_status",
+      "description": "As prompt_after_pause, in the recorded order: the next stream starts with the session's running status and the primary thread's running status before the new prompt. The paused answer still ends cancelled and the prompt opens a new answer.",
+      "options": {
+        "tool_breakdown": true
+      },
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_tspause_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_tspause_02",
+              "processed_at": "2026-11-16T10:00:00.020000Z",
+              "type": "session.thread_status_running",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary"
+            },
+            {
+              "id": "sevt_tspause_03",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Weather?"
+                }
+              ]
+            },
+            {
+              "id": "sevt_tspause_04",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_tspause_05",
+              "processed_at": "2026-11-16T10:00:00.560000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Checking"
+                }
+              ]
+            },
+            {
+              "id": "sevt_tspause_06",
+              "processed_at": "2026-11-16T10:00:00.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_tspause_04",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_tspause_07",
+              "processed_at": "2026-11-16T10:00:00.650000Z",
+              "type": "agent.custom_tool_use",
+              "name": "get_weather",
+              "input": {
+                "city": "Paris"
+              }
+            },
+            {
+              "id": "sevt_tspause_08",
+              "processed_at": "2026-11-16T10:00:00.700000Z",
+              "type": "session.thread_status_idle",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_tspause_07"
+                ]
+              }
+            },
+            {
+              "id": "sevt_tspause_09",
+              "processed_at": "2026-11-16T10:00:00.710000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_tspause_07"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "events": [
+            {
+              "id": "sevt_tspause_10",
+              "processed_at": "2026-11-16T10:00:01.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_tspause_11",
+              "processed_at": "2026-11-16T10:00:01.020000Z",
+              "type": "session.thread_status_running",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary"
+            },
+            {
+              "id": "sevt_tspause_12",
+              "processed_at": "2026-11-16T10:00:01.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Next question"
+                }
+              ]
+            },
+            {
+              "id": "sevt_tspause_13",
+              "processed_at": "2026-11-16T10:00:01.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_tspause_14",
+              "processed_at": "2026-11-16T10:00:01.560000Z",
+              "type": "agent.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Answer"
+                }
+              ]
+            },
+            {
+              "id": "sevt_tspause_15",
+              "processed_at": "2026-11-16T10:00:01.610000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_tspause_13",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_tspause_16",
+              "processed_at": "2026-11-16T10:00:01.700000Z",
+              "type": "session.thread_status_idle",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            },
+            {
+              "id": "sevt_tspause_17",
+              "processed_at": "2026-11-16T10:00:01.710000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "end_turn"
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "paused",
+            "pause_reason": "deferred_tool",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ]
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "llm_call_count": 0,
+            "tool_call_count": 1,
+            "error_type": "cancelled",
+            "tool_breakdown": [
+              {
+                "tool_name": "get_weather",
+                "call_count": 1
+              }
+            ],
+            "pause_count": 1
+          }
+        },
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "B",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "B",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "success",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 0,
+            "total_input_tokens": 12,
+            "total_output_tokens": 3,
+            "total_tokens": 15,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.0000027,
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 12,
+                "output_tokens": 3,
+                "total_tokens": 15,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.0000027
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }
