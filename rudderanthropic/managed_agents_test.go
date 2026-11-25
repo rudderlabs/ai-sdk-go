@@ -3649,6 +3649,73 @@ func TestManagedAgentsBlockingSystemMessageThatTrailsAToolResult(t *testing.T) {
 	}
 }
 
+// An app can answer a call as soon as its event arrives; the idle that lists it still follows, and
+// waits on nothing that was answered.
+func TestManagedAgentsBlockingCallAnsweredBeforeItsIdle(t *testing.T) {
+	for _, owner := range []string{"adapter", "interaction"} {
+		for _, kind := range maReplyKinds {
+			for _, thread := range []string{"primary", "child"} {
+				for _, end := range []string{"clean", "closed", "failed"} {
+					t.Run(strings.Join([]string{owner, kind, thread, end}, "/"), func(t *testing.T) {
+						_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+						resetMA(t)
+						raw := maBlockingOpening(kind)
+						if thread == "child" {
+							raw = maBlockingChild(raw)
+						}
+						listed := raw[len(raw)-1]
+						raw = append(raw[:len(raw)-1:len(raw)-1], maBlockingReply(kind, "tool-0"), listed)
+						var events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]
+						maBlockingOwned(t, owner, func(ctx context.Context) {
+							var state reflect.Value
+							events, state = maBlockingRead(ctx, t, raw, end)
+							maBlockingWait(t, state, "")
+						})
+						if _, paused, _ := rudderanthropic.InspectManagedAgents(events, "blocking-regression"); paused {
+							t.Fatal("an answered turn paused")
+						}
+						for _, response := range rec.events(t)["ai_response_received"] {
+							if response["response_status"] == "paused" {
+								t.Fatalf("responses: %v", rec.events(t)["ai_response_received"])
+							}
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
+func TestManagedAgentsBlockingIdleWaitsOnTheUnansweredCall(t *testing.T) {
+	setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+	resetMA(t)
+	raw := maBlockingOpening("custom", "confirmation")
+	listed := raw[len(raw)-1]
+	raw = append(raw[:len(raw)-1:len(raw)-1], maBlockingReply("custom", "tool-0"), listed)
+	events := maBlockingStream(context.Background(), t, raw)
+	for range raw {
+		if !events.Next() {
+			t.Fatal("early EOF")
+		}
+	}
+	maBlockingWait(t, maPreviewState(t, events), "approval", "tool-1")
+	_ = events.Close()
+}
+
+func TestManagedAgentsBlockingIdleWithoutCallsStillWaits(t *testing.T) {
+	setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+	resetMA(t)
+	raw := []string{`{"type":"user.message","id":"prompt"}`, maWholeIdle("requires_action")}
+	events := maBlockingStream(context.Background(), t, raw)
+	for range raw {
+		if !events.Next() {
+			t.Fatal("early EOF")
+		}
+	}
+	maBlockingWait(t, maPreviewState(t, events), "other")
+	_ = events.Close()
+}
+
 // A subagent's call can arrive after the idle that lists it: it is the call the session waits on, not
 // evidence that it runs again, and the pause takes its reason.
 func TestManagedAgentsBlockingLateCallKeepsTheWait(t *testing.T) {
@@ -4008,7 +4075,8 @@ func maCheckOutstandingBounds(t *testing.T) {
 			t.Fatal("early EOF")
 		}
 	}
-	maBlockingWait(t, maPreviewState(t, events), "other", "middle", "last")
+	// The reply answered middle, so the later idle that lists it again does not wait on it.
+	maBlockingWait(t, maPreviewState(t, events), "other", "newest", "last")
 	if !events.Next() {
 		t.Fatal("missing resumption")
 	}

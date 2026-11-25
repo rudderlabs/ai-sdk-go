@@ -85,6 +85,7 @@ func CheckManagedAgentsBounds(t *testing.T) {
 	checkManagedAgentsMap(t, state.starts, requestStart{})
 	checkManagedAgentsMap(t, state.recorded, msTime{})
 	checkManagedAgentsMap(t, state.blocking, rudderstackai.PauseApproval)
+	checkManagedAgentsMap(t, state.answered, true)
 	checkManagedAgentsMap(t, state.tools, (*turnTool)(nil))
 	tracker.close(nil)
 	ResetManagedAgents()

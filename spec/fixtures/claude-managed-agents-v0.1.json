@@ -6836,6 +6836,163 @@
           }
         }
       ]
+    },
+    {
+      "name": "custom_result_before_idle",
+      "description": "The app answers a custom tool call as soon as it arrives, before the requires_action idle that lists it, and the stream ends after that idle. The answered call is not waited on, so the answer is not paused: it ends cancelled, as any turn whose stream stops mid-turn, with the tool's outcome.",
+      "options": {
+        "tool_breakdown": true
+      },
+      "streams": [
+        {
+          "events": [
+            {
+              "id": "sevt_earlyresult_01",
+              "processed_at": "2026-11-16T10:00:00.010000Z",
+              "type": "session.status_running"
+            },
+            {
+              "id": "sevt_earlyresult_02",
+              "processed_at": "2026-11-16T10:00:00.020000Z",
+              "type": "session.thread_status_running",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary"
+            },
+            {
+              "id": "sevt_earlyresult_03",
+              "processed_at": "2026-11-16T10:00:00.110000Z",
+              "type": "user.message",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Weather?"
+                }
+              ]
+            },
+            {
+              "id": "sevt_earlyresult_04",
+              "processed_at": "2026-11-16T10:00:00.210000Z",
+              "type": "span.model_request_start"
+            },
+            {
+              "id": "sevt_earlyresult_05",
+              "processed_at": "2026-11-16T10:00:00.550000Z",
+              "type": "span.model_request_end",
+              "is_error": false,
+              "model_request_start_id": "sevt_earlyresult_04",
+              "model_usage": {
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "speed": "standard"
+              }
+            },
+            {
+              "id": "sevt_earlyresult_06",
+              "processed_at": "2026-11-16T10:00:00.600000Z",
+              "type": "agent.custom_tool_use",
+              "name": "get_weather",
+              "input": {
+                "city": "Paris"
+              }
+            },
+            {
+              "id": "sevt_earlyresult_07",
+              "processed_at": "2026-11-16T10:00:00.900000Z",
+              "type": "user.custom_tool_result",
+              "custom_tool_use_id": "sevt_earlyresult_06",
+              "is_error": false,
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Sunny"
+                }
+              ]
+            },
+            {
+              "id": "sevt_earlyresult_08",
+              "processed_at": "2026-11-16T10:00:00.950000Z",
+              "type": "session.thread_status_idle",
+              "agent_name": "fixture-agent",
+              "session_thread_id": "sthr_fixture_primary",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_earlyresult_06"
+                ]
+              }
+            },
+            {
+              "id": "sevt_earlyresult_09",
+              "processed_at": "2026-11-16T10:00:00.960000Z",
+              "type": "session.status_idle",
+              "stop_details": null,
+              "stop_reason": {
+                "type": "requires_action",
+                "event_ids": [
+                  "sevt_earlyresult_06"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "expected": [
+        {
+          "event": "ai_user_prompt_created",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture"
+          }
+        },
+        {
+          "event": "ai_response_received",
+          "interaction": "A",
+          "properties": {
+            "conversation_id": "sesn_fixture",
+            "response_status": "cancelled",
+            "trigger": "user",
+            "primary_model": "claude-haiku-5-5",
+            "primary_provider": "anthropic",
+            "llm_call_count": 1,
+            "tool_call_count": 1,
+            "total_input_tokens": 30,
+            "total_output_tokens": 8,
+            "total_tokens": 38,
+            "total_cached_input_tokens": 0,
+            "total_cache_write_tokens": 0,
+            "total_cost_usd": 0.000007,
+            "error_type": "cancelled",
+            "usage_breakdown": [
+              {
+                "provider": "anthropic",
+                "model": "claude-haiku-5-5",
+                "call_count": 1,
+                "input_tokens": 30,
+                "output_tokens": 8,
+                "total_tokens": 38,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "service_tier": "standard",
+                "error_count": 0,
+                "cost_usd": 0.000007
+              }
+            ],
+            "tool_breakdown": [
+              {
+                "tool_name": "get_weather",
+                "call_count": 1,
+                "error_count": 0,
+                "duration_ms": 300,
+                "measured_count": 1,
+                "max_duration_ms": 300
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

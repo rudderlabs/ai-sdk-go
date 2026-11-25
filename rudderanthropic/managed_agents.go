@@ -364,6 +364,7 @@ type turnState struct {
 	recorded     *boundedMap[msTime]
 	waiting      rudderstackai.PauseReason              // requires_action persists across stream boundaries
 	outstanding  *boundedMap[rudderstackai.PauseReason] // call ID -> reason until its answer or resumption
+	answered     *boundedMap[bool]                      // calls the app answered: an idle that lists one later does not wait on it
 	blocking     *boundedMap[rudderstackai.PauseReason]
 	answer       string
 	interrupted  bool
@@ -839,6 +840,7 @@ func (s *sessionTracker) open(kind string, at msTime, call ...string) *turn {
 				recorded:     newBoundedMap[msTime]("claude-managed-agents tools"),
 				blocking:     newBoundedMap[rudderstackai.PauseReason]("claude-managed-agents blocking"),
 				outstanding:  newBoundedMap[rudderstackai.PauseReason]("claude-managed-agents outstanding"),
+				answered:     newBoundedMap[bool]("claude-managed-agents answered"),
 			},
 		}
 		s.turn = t
@@ -907,8 +909,13 @@ func (s *sessionTracker) blocks(t *turn, id string, reason rudderstackai.PauseRe
 	s.waitingReason(t)
 }
 
+// answered releases only the reply's own call, also one an idle lists after the reply.
 func (s *sessionTracker) answered(t *turn, id string) {
-	if _, ok := t.state.outstanding.get(id); id != "" && ok {
+	if id == "" {
+		return
+	}
+	t.state.answered.set(id, true)
+	if _, ok := t.state.outstanding.get(id); ok {
 		t.state.outstanding.delete(id)
 		s.waitingReason(t)
 	}
@@ -1263,6 +1270,10 @@ func (s *sessionTracker) idle(e map[string]any, at msTime) {
 		// Mark every named tool and retain earlier outstanding calls across later idles.
 		for _, id := range ids {
 			key := str(id)
+			// The app can answer a call before the idle lists it: nothing to wait on then.
+			if _, done := t.state.answered.get(key); done {
+				continue
+			}
 			_, open := t.state.tools.get(key)
 			if _, recorded := t.state.recorded.get(key); open || recorded {
 				if _, blocked := t.state.blocking.get(key); !blocked {
@@ -1277,7 +1288,7 @@ func (s *sessionTracker) idle(e map[string]any, at msTime) {
 		}
 		s.waitingReason(t)
 		// An idle without listed calls still waits on the app until resumption evidence.
-		if t.state.waiting == "" {
+		if len(ids) == 0 && t.state.waiting == "" {
 			t.state.waiting = rudderstackai.PauseOther
 		}
 		if at.ok {
