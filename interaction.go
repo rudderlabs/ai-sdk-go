@@ -674,7 +674,7 @@ func surfaceOf(s Surface) Surface {
 	if surfaces[s] {
 		return s
 	}
-	warnOnce("invalid-surface", fmt.Sprintf("invalid surface %q; not sent", s), 0)
+	warnOnce("invalid-surface", fmt.Sprintf("invalid surface of type %T; not sent", s), 0)
 	return ""
 }
 
@@ -3291,7 +3291,7 @@ func (i *Interaction) end(o EndOptions) {
 	}
 
 	if o.Status != "" && !responseStatuses[o.Status] {
-		warnOnce("invalid-status", fmt.Sprintf("End: invalid status %q; using the status derived from the calls", o.Status), 0)
+		warnOnce("invalid-status", fmt.Sprintf("End: invalid status of type %T; using the status derived from the calls", o.Status), 0)
 		o.Status = ""
 	}
 	i.mu.Lock()
@@ -3485,7 +3485,7 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	p["response_status"] = string(status)
 	if status == StatusPaused {
 		if pauseReason != "" && !pauseReasons[pauseReason] {
-			warnOnce("invalid-pause-reason", fmt.Sprintf("invalid pause reason %q", pauseReason), 0)
+			warnOnce("invalid-pause-reason", fmt.Sprintf("invalid pause reason of type %T", pauseReason), 0)
 			pauseReason = ""
 		}
 		p["pause_reason"] = string(cmp.Or(pauseReason, PauseOther))
@@ -3493,7 +3493,7 @@ func (i *Interaction) buildLocked(o EndOptions, responseText string, responseOK,
 	if status == StatusBlocked {
 		reason := o.BlockReason
 		if reason != "" && !blockReasons[reason] {
-			warnOnce("invalid-block-reason", fmt.Sprintf("invalid block reason %q", reason), 0)
+			warnOnce("invalid-block-reason", fmt.Sprintf("invalid block reason of type %T", reason), 0)
 			reason = ""
 		}
 		p["block_reason"] = string(cmp.Or(reason, BlockOther))
@@ -3996,7 +3996,7 @@ func (i *Interaction) finishErrorLocked(c *recordedCall) string {
 // SetConfidence sets the app's confidence; invalid levels are ignored with a warning.
 func (i *Interaction) SetConfidence(level Confidence) {
 	if level != "" && !confidences[level] {
-		warnOnce("invalid-confidence", fmt.Sprintf("invalid confidence %q", level), 0)
+		warnOnce("invalid-confidence", fmt.Sprintf("invalid confidence of type %T", level), 0)
 		return
 	}
 	i.mu.Lock()
