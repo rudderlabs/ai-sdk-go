@@ -165,7 +165,8 @@ func TestFeedbackMasking(t *testing.T) {
 		{name: "sensitive", redact: func(string) (string, error) { return "ann@example.com", nil }, text: "problem"},
 		{name: "cap", redact: func(string) (string, error) { return strings.Repeat("é", 2001), nil }, text: "problem", want: strings.Repeat("é", 2000)},
 		{name: "unicode", text: strings.Repeat("é", 2000), want: strings.Repeat("é", 2000)},
-		{name: "disabled", disable: true, text: "ann@example.com", want: "ann@example.com"},
+		{name: "disabled withholds a match", disable: true, text: "ann@example.com"},
+		{name: "disabled", disable: true, text: "the export was slow", want: "the export was slow"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := workspaceServer("feedback-mask-mcp", nil)

@@ -662,9 +662,7 @@ func (o *options) maskedText(text string, limit int) string {
 	if !ok || masked == "" {
 		return ""
 	}
-	if o.DisableRedaction {
-		return capText(masked, limit)
-	}
+	// DisableRedaction turns masking off, not this check (spec/fixtures/mcp-agent-text-v0.1.json).
 	if hasSensitive(masked) {
 		return ""
 	}

@@ -870,16 +870,18 @@ func TestResourcesAndPrompts(t *testing.T) {
 
 func TestRedactOptions(t *testing.T) {
 	cases := []struct {
-		name string
-		opts Options
-		want any
+		name   string
+		opts   Options
+		want   any
+		reason string
 	}{
-		{"built-in", Options{}, "mail [email] now"},
-		{"hook after masking", Options{Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "now", "[time]"), nil }}, "mail [email] [time]"},
-		{"masking off", Options{DisableRedaction: true}, "mail ann@example.com now"},
-		{"redaction off skips the hook", Options{DisableRedaction: true, Redact: func(string) (string, error) { return "", errors.New("x") }}, "mail ann@example.com now"},
-		{"failing hook drops", Options{Redact: func(string) (string, error) { return "", errors.New("x") }}, nil},
-		{"panicking hook drops", Options{Redact: func(string) (string, error) { panic("x") }}, nil},
+		{"built-in", Options{}, "mail [email] now", ""},
+		{"hook after masking", Options{Redact: func(s string) (string, error) { return strings.ReplaceAll(s, "now", "[time]"), nil }}, "mail [email] [time]", ""},
+		// Redaction off turns masking off, not the check that withholds what still matches a built-in rule.
+		{"masking off withholds a match", Options{DisableRedaction: true}, nil, ""},
+		{"redaction off skips the hook", Options{DisableRedaction: true, Redact: func(string) (string, error) { return "", errors.New("x") }}, "look up the order", "look up the order"},
+		{"failing hook drops", Options{Redact: func(string) (string, error) { return "", errors.New("x") }}, nil, ""},
+		{"panicking hook drops", Options{Redact: func(string) (string, error) { panic("x") }}, nil, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -888,7 +890,11 @@ func TestRedactOptions(t *testing.T) {
 			c.opts.RequestContext.Enabled = true
 			r := wrap(t, server, c.opts)
 			cs := connect(t, server, "2025-06-18", nil)
-			callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w", requestContext: map[string]any{"call_reason": "mail ann@example.com now"}}, nil)
+			reason := c.reason
+			if reason == "" {
+				reason = "mail ann@example.com now"
+			}
+			callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w", requestContext: map[string]any{"call_reason": reason}}, nil)
 			if got := r.props(t, "mcp_tool_called")["call_reason"]; got != c.want {
 				t.Errorf("call_reason = %v, want %v", got, c.want)
 			}
