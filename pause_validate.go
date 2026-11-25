@@ -140,9 +140,6 @@ func validPendingRecords(records []map[string]any, kinds map[string]string, call
 			if v, exists := outcome["result_size_bytes"]; exists && !validSnapshotInteger(v) {
 				return false
 			}
-			if v, ok := outcome["error_type"]; ok && v != "api_error" {
-				return false
-			}
 		}
 	}
 	return true
