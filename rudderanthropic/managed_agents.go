@@ -590,6 +590,12 @@ func (s *sessionTracker) observe(raw string) {
 		} else if !s.isRunning() {
 			s.running(at)
 		}
+	// A thread running again resumes the session's turn (a reconnect can miss the session's own
+	// status), but never starts one: a child can run outside the primary's turns.
+	case "session.thread_status_running", "session.thread_status_rescheduled":
+		if s.turn != nil || s.hasCarriedState() || s.isRunning() {
+			s.open(kind, at)
+		}
 	case "agent.thinking", "agent.thread_message_received", "agent.thread_message_sent", "span.outcome_evaluation_ongoing", "system.message":
 		s.open(kind, at)
 	case "span.outcome_evaluation_start":
@@ -847,6 +853,7 @@ func (s *sessionTracker) open(kind string, at msTime) *turn {
 	}
 	// App replies settle only their own ID; agent work shows the session resumed.
 	if running || kind == "session.status_running" || kind == "session.status_rescheduled" ||
+		kind == "session.thread_status_running" || kind == "session.thread_status_rescheduled" ||
 		strings.HasPrefix(kind, "agent.") || kind == "span.model_request_start" {
 		s.resuming(t)
 	}
@@ -1368,14 +1375,13 @@ func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime, unfinished bool
 	if end.status != rudderstackai.StatusPaused {
 		s.resuming(t)
 	}
-	// Tools still waiting on the app carry over to the segment that resumes the pause.
+	// Tools still waiting on the app or on their result (an approved call runs after the pause)
+	// carry over to the segment that resumes the pause, where that result settles them.
 	keep := map[string]bool{}
 	if end.status == rudderstackai.StatusPaused && t.borrowed == nil {
 		for _, entry := range t.state.tools.entries() {
-			key, tool := entry.key, entry.value
-			_, ok := t.state.blocking.get(key)
-			if ok && !tool.settled {
-				keep[key] = true
+			if !entry.value.settled && entry.value.id != "" {
+				keep[entry.key] = true
 			}
 		}
 	}

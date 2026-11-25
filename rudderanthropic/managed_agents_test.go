@@ -3279,6 +3279,113 @@ func TestManagedAgentsBlockingSplitReplies(t *testing.T) {
 	}
 }
 
+func maTimed(raw string, ms int) string { return strings.TrimSuffix(raw, "}") + "," + maAt(ms) + "}" }
+
+// An approved call runs only after the reconnect: its result there keeps its outcome and time,
+// as an app reply does.
+func TestManagedAgentsBlockingSplitResultsKeepOutcome(t *testing.T) {
+	for _, owner := range []string{"adapter", "interaction"} {
+		for _, a := range maReplyKinds {
+			for _, b := range maReplyKinds {
+				for _, order := range []string{"forward", "reverse"} {
+					for _, end := range []string{"clean", "closed", "failed"} {
+						t.Run(strings.Join([]string{owner, a + "+" + b, order, end}, "/"), func(t *testing.T) {
+							_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{}))
+							resetMA(t)
+							kinds, first, second := []string{a, b}, 0, 1
+							if order == "reverse" {
+								first, second = 1, 0
+							}
+							// An app reply is the call's error result; a confirmation lets the agent run it later.
+							answer := func(n, ms int) string {
+								reply := maBlockingReply(kinds[n], fmt.Sprintf("tool-%d", n))
+								if kinds[n] != "confirmation" {
+									reply = strings.TrimSuffix(reply, "}") + `,"is_error":true}`
+								}
+								return maTimed(reply, ms)
+							}
+							var ran []string
+							for n, kind := range kinds {
+								if kind == "confirmation" {
+									ran = append(ran, maTimed(fmt.Sprintf(`{"type":"agent.tool_result","id":"ran-%d","tool_use_id":"tool-%d","is_error":true}`, n, n), 1500))
+								}
+							}
+							maBlockingOwned(t, owner, func(ctx context.Context) {
+								var initial []string
+								for _, raw := range maBlockingOpening(kinds...) {
+									ms := 0
+									if strings.Contains(raw, `tool_use"`) {
+										ms = 100
+									}
+									initial = append(initial, maTimed(raw, ms))
+								}
+								maBlockingRead(ctx, t, append(initial, answer(first, 600)), end)
+								second := append([]string{answer(second, 1000), maTimed(`{"type":"session.status_running","id":"running"}`, 1100)}, ran...)
+								maDrain(maBlockingStream(ctx, t, append(second, maTimed(`{"type":"session.status_idle","id":"done","stop_reason":{"type":"end_turn"}}`, 1600))))
+							})
+							maBlockingCountedOnce(t, rec, 2)
+							for n := range kinds {
+								var got []map[string]any
+								for _, response := range rec.events(t)["ai_response_received"] {
+									breakdown, _ := response["tool_breakdown"].([]any)
+									for _, e := range breakdown {
+										if entry := e.(map[string]any); entry["tool_name"] == fmt.Sprintf("tool_%d", n) {
+											got = append(got, entry)
+										}
+									}
+								}
+								want := 1000
+								if n == first {
+									want = 600
+								}
+								if kinds[n] == "confirmation" {
+									want = 1500
+								}
+								if len(got) != 1 || got[0]["call_count"] != float64(1) || got[0]["error_count"] != float64(1) || got[0]["duration_ms"] != float64(want-100) {
+									t.Errorf("tool_%d: %v", n, got)
+								}
+							}
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+// A reconnect that missed the session-wide transition still reads the threads' own statuses.
+func TestManagedAgentsBlockingThreadStatusResumes(t *testing.T) {
+	for _, owner := range []string{"adapter", "interaction"} {
+		for _, kind := range []string{"session.thread_status_running", "session.thread_status_rescheduled"} {
+			for _, thread := range []string{"child", "primary"} {
+				t.Run(owner+"/"+kind+"/"+thread, func(t *testing.T) {
+					_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{}))
+					resetMA(t)
+					threadID := "sthr_main"
+					if thread == "child" {
+						threadID = "child"
+					}
+					var events *rudderanthropic.SessionEvents[anthropic.BetaManagedAgentsStreamSessionEventsUnion]
+					maBlockingOwned(t, owner, func(ctx context.Context) {
+						maBlockingRead(ctx, t, append(maBlockingChild(maBlockingOpening("custom", "custom")), maBlockingReply("custom", "tool-0")), "clean")
+						// tool-1 was answered while disconnected; the session went on running.
+						events = maBlockingStream(ctx, t, []string{fmt.Sprintf(`{"type":%q,"id":"thread-status","session_thread_id":%q}`, kind, threadID)})
+						maDrain(events)
+					})
+					if _, paused, _ := rudderanthropic.InspectManagedAgents(events, "blocking-regression"); paused {
+						t.Fatal("still paused")
+					}
+					if owner == "adapter" {
+						maBlockingStatuses(t, rec, "paused", "cancelled")
+					} else {
+						maBlockingStatuses(t, rec, "cancelled")
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestManagedAgentsBlockingOutstandingReplies(t *testing.T) {
 	for _, owner := range []string{"adapter", "interaction"} {
 		for _, a := range maReplyKinds {
@@ -3395,7 +3502,7 @@ func maBlockingStatuses(t *testing.T, rec *recorder, want ...string) {
 }
 
 func TestManagedAgentsBlockingResumptionOnReconnect(t *testing.T) {
-	for _, kind := range []string{"session.status_running", "session.status_rescheduled", "agent.thinking", "span.model_request_start", "event_start"} {
+	for _, kind := range []string{"session.status_running", "session.status_rescheduled", "session.thread_status_running", "session.thread_status_rescheduled", "agent.thinking", "span.model_request_start", "event_start"} {
 		t.Run(kind, func(t *testing.T) {
 			_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
 			resetMA(t)
@@ -3407,6 +3514,9 @@ func TestManagedAgentsBlockingResumptionOnReconnect(t *testing.T) {
 			raw := []string{maWholeEvent(kind)}
 			if kind == "event_start" {
 				raw[0] = `{"type":"event_start","event":{"id":"preview","type":"agent.message"}}`
+			}
+			if strings.HasPrefix(kind, "session.thread_") {
+				raw[0] = fmt.Sprintf(`{"type":%q,"session_thread_id":"sthr_main"}`, kind)
 			}
 			// Running may defer opening to the next event.
 			raw = append(raw, maBlockingReply("custom", "unknown"))
@@ -3473,7 +3583,7 @@ func TestManagedAgentsBlockingNonResumptionPreservesCalls(t *testing.T) {
 
 func TestManagedAgentsBlockingChildResumption(t *testing.T) {
 	for _, kind := range maReplyKinds {
-		for _, evidence := range []string{"agent.tool_use", "agent.thinking", "span.model_request_start", "event_start"} {
+		for _, evidence := range []string{"agent.tool_use", "agent.thinking", "span.model_request_start", "event_start", "session.thread_status_running", "session.thread_status_rescheduled"} {
 			t.Run(kind+"/"+evidence, func(t *testing.T) {
 				_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
 				resetMA(t)
