@@ -38,9 +38,9 @@ func jsonText(v any) string {
 // checkToolOutcome checks lookup_done and the one-call tool_breakdown for a success or a vendor failure.
 func checkToolOutcome(t *testing.T, rec *recorder, failed bool) {
 	t.Helper()
-	event, breakdown := map[string]any{"tool_status": "success", "error_type": nil}, `[{"call_count":1,"error_count":0,"tool_name":"lookup"}]`
+	event, breakdown := map[string]any{"tool_status": "success", "error_type": nil, "tool_call_id": "call-1"}, `[{"call_count":1,"error_count":0,"tool_name":"lookup"}]`
 	if failed {
-		event = map[string]any{"tool_status": "error", "error_type": "api_error"}
+		event = map[string]any{"tool_status": "error", "error_type": "api_error", "tool_call_id": "call-1"}
 		breakdown = `[{"call_count":1,"error_count":1,"error_types":{"api_error":1},"tool_name":"lookup"}]`
 	}
 	want(t, rec.props(t, "lookup_done"), event)

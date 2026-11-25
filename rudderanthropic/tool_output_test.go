@@ -45,6 +45,7 @@ func TestToolOutputFailure(t *testing.T) {
 			}
 			eq(t, ev["lookup_done"][0], "tool_status", c.status)
 			eq(t, ev["lookup_done"][0], "error_type", c.errorType)
+			eq(t, ev["lookup_done"][0], "tool_call_id", "toolu_1")
 			errors := 0
 			if c.status == "error" {
 				errors = 1

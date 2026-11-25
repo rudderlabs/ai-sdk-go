@@ -52,6 +52,7 @@ func TestToolOutputFailureFixture(t *testing.T) {
 					events++
 					want(t, e.Properties, "tool_status", status)
 					want(t, e.Properties, "error_type", errorType)
+					want(t, e.Properties, "tool_call_id", "call-1")
 				}
 			}
 			if events != 1 {

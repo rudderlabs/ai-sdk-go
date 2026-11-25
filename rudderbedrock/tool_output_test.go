@@ -54,7 +54,7 @@ func TestToolOutputFailure(t *testing.T) {
 			if len(events) != 1 {
 				t.Fatalf("lookup_done: %d", len(events))
 			}
-			check(t, events[0], map[string]any{"tool_status": c.want, "error_type": c.errorType})
+			check(t, events[0], map[string]any{"tool_status": c.want, "error_type": c.errorType, "tool_call_id": "tu_1"})
 			errors := 0
 			if c.want == "error" {
 				errors = 1

@@ -17,8 +17,8 @@ import (
 )
 
 // toolOutputCheck records spans into a fresh interaction declaring lookup_done, then checks
-// lookup_done and lookup's tool_breakdown entry.
-func toolOutputCheck(t *testing.T, record func(i *rudderstackai.Interaction, span func(sdktrace.Status, ...attribute.KeyValue)), status string, errorType any) {
+// lookup_done and lookup's tool_breakdown entry. It returns lookup_done's properties.
+func toolOutputCheck(t *testing.T, record func(i *rudderstackai.Interaction, span func(sdktrace.Status, ...attribute.KeyValue)), status string, errorType any) (event object) {
 	t.Helper()
 	hook.Reset()
 	t.Cleanup(hook.Reset)
@@ -44,7 +44,8 @@ func toolOutputCheck(t *testing.T, record func(i *rudderstackai.Interaction, spa
 		switch e["event"] {
 		case "lookup_done":
 			sent++
-			if p["tool_status"] != status || p["error_type"] != errorType {
+			event = p
+			if p["tool_status"] != status || p["error_type"] != errorType || p["tool_call_id"] != "call-1" {
 				t.Errorf("lookup_done %v", p)
 			}
 		case "ai_response_received":
@@ -58,6 +59,7 @@ func toolOutputCheck(t *testing.T, record func(i *rudderstackai.Interaction, spa
 	if sent != 1 {
 		t.Errorf("lookup_done sent %d times", sent)
 	}
+	return event
 }
 
 // Tool span results are decoded before the check, as Node.js does, so only the decoded value is read.
@@ -75,10 +77,14 @@ func TestToolSpanOutputFailure(t *testing.T) {
 		{"span error keeps its outcome", `{"successful":false}`, "error", codes.Error, nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			toolOutputCheck(t, func(_ *rudderstackai.Interaction, span func(sdktrace.Status, ...attribute.KeyValue)) {
+			event := toolOutputCheck(t, func(_ *rudderstackai.Interaction, span func(sdktrace.Status, ...attribute.KeyValue)) {
 				span(sdktrace.Status{Code: c.spanStatus}, attribute.String("gen_ai.operation.name", "execute_tool"), attribute.String("gen_ai.tool.name", "lookup"),
 					attribute.String("gen_ai.tool.call.id", "call-1"), attribute.String("gen_ai.tool.call.result", c.result))
 			}, c.status, c.errorType)
+			// The span's measured duration survives the classification.
+			if _, ok := event["tool_duration_ms"].(float64); !ok {
+				t.Errorf("tool_duration_ms %v", event["tool_duration_ms"])
+			}
 		})
 	}
 }

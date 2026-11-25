@@ -44,7 +44,7 @@ func TestToolOutputFailureFixture(t *testing.T) {
 					status = "error"
 				}
 				errorType, _ := event["error_type"].(string)
-				if event["tool_status"] != status || errorType != c.Expected.ErrorType {
+				if event["tool_status"] != status || errorType != c.Expected.ErrorType || event["tool_call_id"] != "call-1" {
 					t.Errorf("lookup_done %v", event)
 				}
 				breakdown := one(t, events, "ai_response_received")["tool_breakdown"].([]any)
