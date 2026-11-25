@@ -21,11 +21,10 @@ env:
   # Every module of go.work (./... alone covers only the root module). Keep in sync with the Makefile.
   PKGS: ./... ./rudderopenai/... ./rudderanthropic/... ./ruddergenai/... ./rudderbedrock/... ./rudderotel/... ./cmd/aicheck/... ./internal/conformance/... ./examples/...
 
-# The repo is public: fork PRs run on GitHub-hosted runners, never on ARC.
 jobs:
   lint:
     name: Format, vet and lint
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read # actions/checkout
@@ -59,7 +58,7 @@ jobs:
 
   test:
     name: Unit tests (Go ${{ matrix.go }})
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read # actions/checkout
@@ -106,7 +105,7 @@ jobs:
 
   mcpgo-latest:
     name: mcp-go v1.1.1 (latest)
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read # actions/checkout
@@ -149,7 +148,7 @@ jobs:
 
   module:
     name: Module ${{ matrix.module }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read # actions/checkout
@@ -195,7 +194,7 @@ jobs:
 
   vulncheck:
     name: Vulnerability scan ${{ matrix.module.dir }} (Go ${{ matrix.toolchain }})
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read # actions/checkout
@@ -255,7 +254,7 @@ jobs:
 
   example:
     name: Example ${{ matrix.example }}
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read # actions/checkout

@@ -18,14 +18,13 @@ concurrency:
 
 permissions: {}
 
-# The repo is public: fork PRs run on GitHub-hosted runners, never on ARC.
 jobs:
   bench:
     # Timings are reported only; extra allocations per op must stay within
     # internal/benchreport/alloc_budget.json.
     name: Benchmarks
     if: github.event.schedule != '41 3 * * 0'
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read # actions/checkout
@@ -65,7 +64,7 @@ jobs:
   load:
     name: Load test
     if: github.event.schedule != '41 3 * * 0'
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read # actions/checkout
@@ -97,7 +96,7 @@ jobs:
     # The seed inputs run in every unit-test run; this explores beyond them.
     name: Fuzz ${{ matrix.target }}
     if: github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 * * 0'
-    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read # actions/checkout
