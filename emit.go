@@ -97,6 +97,9 @@ func emitRatesAt(client analytics.Client, event string, w who, properties map[st
 		if msg.UserId == "" && msg.AnonymousId == "" {
 			msg.AnonymousId = systemAnonymousID
 		}
+		if !fitMessage(event, &msg) {
+			return
+		}
 		if err := client.Enqueue(msg); err != nil {
 			debugf("track failed; event dropped", "event", event, "error", err)
 		}

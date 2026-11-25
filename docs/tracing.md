@@ -338,7 +338,7 @@ and also offers `ForceFlush(context.Context) error`. Constants expose `DefaultEv
 | `ExportAllSpans` | false | Export HTTP/database spans too. |
 | `Filter func(sdktrace.ReadOnlySpan) bool` | `IsAISpan` | Replaces the default filter and `ExportAllSpans`. |
 | `ResolveIdentity func(sdktrace.ReadOnlySpan) Identity` | attribute/resource identity | Empty identity or a panic falls back to defaults. |
-| `MaxEventBytes` | 32000 | UTF-8 budget for the serialized Go track event; negative values are rejected. |
+| `MaxEventBytes` | 32000 | UTF-8 budget for the serialized Go track event; negative values are rejected, and larger ones are capped at 32000, since the RudderStack client drops a message over 32 KiB and logs it with its payload. |
 | `EventName` | `ai_otel_span` | Custom event name. |
 | `ExtraProperties` / `ExtraPropertiesFrom` | none | Map or span callback; the callback wins. SDK property names cannot be overridden. |
 | `Simple` | false | Synchronous export at End; otherwise OTel batch processing. |

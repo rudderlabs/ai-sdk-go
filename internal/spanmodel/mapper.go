@@ -168,7 +168,7 @@ func build(s Span, options Options) (*analytics.Track, object, []map[string]any,
 	}
 
 	maxBytes := options.MaxEventBytes
-	if maxBytes == 0 {
+	if maxBytes == 0 || maxBytes > DefaultMaxEventBytes { // the client logs a message over 32 KiB whole
 		maxBytes = DefaultMaxEventBytes
 	}
 	return m, p, candidates, maxBytes

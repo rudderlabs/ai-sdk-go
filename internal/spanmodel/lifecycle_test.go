@@ -193,3 +193,18 @@ func kinds(on bool) *capture.Spans {
 	k := capture.All(on)
 	return &k
 }
+
+// The RudderStack client logs a message over 32 KiB with its payload: a larger budget is capped.
+func TestSpanBudgetIsCappedBelowTheClientLimit(t *testing.T) {
+	hook.Reset()
+	t.Cleanup(hook.Reset)
+	s := wrapperSpan()
+	s.Attributes["gen_ai.output.messages"] = strings.Repeat("<", 40_000)
+	track, err := spanmodel.ToTrack(s, spanmodel.Options{Capture: kinds(true), ContentMasked: true, MaxEventBytes: 1 << 20})
+	if err != nil || track == nil {
+		t.Fatalf("truncation failed: %v", err)
+	}
+	if encoded, _ := json.Marshal(track); len(encoded) > spanmodel.DefaultMaxEventBytes {
+		t.Fatalf("over the capped budget: %d bytes", len(encoded))
+	}
+}
