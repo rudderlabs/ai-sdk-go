@@ -449,7 +449,7 @@ Each contained error has an `ErrorInfo{Kind, Where}`. Kinds:
 
 ## Logging
 
-Warnings (a missing client, a failed `Enqueue`, an invalid status or surface, a dropped `TrackAction` / `TrackScore`, the first classifier failure) go to the default `log/slog` logger, prefixed `[rudderstack-ai]`, mostly once per process. Everything tracking drops or ignores is logged at debug level, errors by type only, never event payloads or captured text. Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value, read on every log call) to write it through the default slog handler whatever its level, or `slog.SetLogLoggerLevel(slog.LevelDebug)` to show it.
+Warnings (a missing client, a failed `Enqueue`, an invalid status or surface, a dropped `TrackAction` / `TrackScore`, the first classifier failure) go to the default `log/slog` logger, prefixed `[rudderstack-ai]`, mostly once per process. Everything tracking drops or ignores is logged at debug level, errors by type only, never event payloads or captured text. An invalid option value is named by its type only, never the value. Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value, read on every log call) to write it through the default slog handler whatever its level, or `slog.SetLogLoggerLevel(slog.LevelDebug)` to show it.
 
 ## Warehouse column types
 

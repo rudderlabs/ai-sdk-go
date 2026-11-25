@@ -54,7 +54,7 @@ func TrackAction(ctx context.Context, o TrackActionOptions) {
 			return
 		}
 		if !actionTypes[o.ActionType] {
-			warnf("non-standard action_type %s", o.ActionType)
+			warnf("non-standard action_type of type %T", o.ActionType)
 		}
 		p := map[string]any{"conversation_id": conversation, "interaction_id": o.InteractionID, "action_type": string(o.ActionType)}
 		put(p, "account_id", first(o.AccountID, cv.accountID))

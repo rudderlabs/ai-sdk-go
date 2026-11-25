@@ -401,7 +401,7 @@ The check validates every event against the spec this version emits (and client 
 | No `ai_interaction_classified`             | No classifier, a call outside an interaction, an answer that failed, or a classifier error (logged once).                             |
 | Cost column is an integer in the warehouse | The first loaded value was `0`: see [warehouse column types](docs/configuration.md#warehouse-column-types).                           |
 
-Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value turns it on; it is read on every log call) to log everything tracking drops or ignores at debug level through the default `log/slog` handler, whatever its level, prefixed `[rudderstack-ai]`: errors by type only, never event payloads or captured text. Warnings (same prefix) are logged mostly once per process without it. Tracking never panics into your code and returns provider errors unchanged; `WithOnError` sees what it contained ([errors](docs/configuration.md#errors)).
+Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value turns it on; it is read on every log call) to log everything tracking drops or ignores at debug level through the default `log/slog` handler, whatever its level, prefixed `[rudderstack-ai]`: errors by type only, never event payloads or captured text. Warnings (same prefix) are logged mostly once per process without it; an option value outside its list (a surface, confidence, status, pause or block reason, or action type) is named by its type only, never the value. Tracking never panics into your code and returns provider errors unchanged; `WithOnError` sees what it contained ([errors](docs/configuration.md#errors)).
 
 ## Compatibility
 
