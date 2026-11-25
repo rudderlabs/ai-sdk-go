@@ -1172,15 +1172,19 @@ func (s *sessionTracker) settle(t *turn, id string, e map[string]any, at msTime,
 	if i == nil {
 		i = t.borrowed
 	}
-	startedAt, ok := t.state.recorded.get(id)
-	if !ok || i == nil {
+	startedAt, recorded := t.state.recorded.get(id)
+	// Without this turn's record the caller's interaction can still hold it (restored from its JSON
+	// snapshot): the core settles a tool it holds under that ID and ignores any other.
+	if i == nil || (!recorded && t.borrowed == nil) {
 		return
 	}
-	t.state.recorded.delete(id)
 	var duration *time.Duration
-	if startedAt.ok && at.ok {
-		d := time.Duration(max(0, at.v-startedAt.v)) * time.Millisecond
-		duration = &d
+	if recorded {
+		t.state.recorded.delete(id)
+		if startedAt.ok && at.ok {
+			d := time.Duration(max(0, at.v-startedAt.v)) * time.Millisecond
+			duration = &d
+		}
 	}
 	if errorType != "" {
 		kit.RecordToolResult(i, id, rudderstackai.ToolResult{Error: rudderstackai.Ptr(true), ErrorType: errorType, Duration: duration}, false)
@@ -1408,7 +1412,7 @@ func (s *sessionTracker) end(t *turn, end turnEnd, endAt msTime, unfinished bool
 		kit.HintStatus(i, end.status, end.errorType, end.pauseReason)
 		// Every unfinished turn carries whole state, even when only an interrupt or blocking remains.
 		if s.cfg.sessionID != "" {
-			if unfinished || end.status == rudderstackai.StatusPaused || end.status == rudderstackai.StatusCancelled {
+			if unfinished || end.status == rudderstackai.StatusPaused {
 				borrowedTurns.Lock()
 				if _, ok := borrowedTurns.m[s.cfg.sessionID]; !ok {
 					borrowedTurns.order = append(borrowedTurns.order, s.cfg.sessionID)

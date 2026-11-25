@@ -39,6 +39,8 @@ type maStream struct {
 	Events    []json.RawMessage `json:"events"`
 	Cassette  string            `json:"cassette"`
 	StopAfter *int              `json:"stop_after"`
+	// "pause_restore": after this stream the caller pauses its interaction and restores it from the JSON snapshot.
+	Caller string `json:"caller"`
 }
 
 type maExpected struct {
@@ -54,6 +56,8 @@ type maScenario struct {
 		CaptureContent bool            `json:"capture_content"`
 		Session        json.RawMessage `json:"session"`
 		MaxMapEntries  int             `json:"max_map_entries"`
+		// "interaction": every stream is read inside one caller interaction, ended without a status after the last.
+		Caller string `json:"caller"`
 	} `json:"options"`
 	Streams  []maStream   `json:"streams"`
 	Expected []maExpected `json:"expected"`
@@ -242,6 +246,38 @@ func stableMA(sc maScenario, props map[string]any) map[string]any {
 	return out
 }
 
+// consumeCallerMA reads a scenario's streams inside one caller interaction, as Node's fixture runner does.
+func consumeCallerMA(ctx context.Context, t *testing.T, f maFixture, sc maScenario, opts []rudderanthropic.SessionOption) {
+	t.Helper()
+	var session struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(f.Session, &session); err != nil {
+		t.Fatal(err)
+	}
+	callerCtx, caller := rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{UserID: "user_1", ConversationID: session.ID})
+	for _, s := range sc.Streams {
+		consumeMA(callerCtx, t, s, opts)
+		if s.Caller != "pause_restore" {
+			continue
+		}
+		snapshot, ok := caller.Pause(rudderstackai.PauseOptions{})
+		if !ok {
+			t.Fatal("the caller's interaction did not pause")
+		}
+		raw, err := json.Marshal(snapshot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var restored rudderstackai.PausedInteraction
+		if err := json.Unmarshal(raw, &restored); err != nil {
+			t.Fatal(err)
+		}
+		callerCtx, caller = rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{Resume: &restored})
+	}
+	caller.End(rudderstackai.EndOptions{})
+}
+
 func TestManagedAgentsFixture(t *testing.T) {
 	f := loadMAFixture(t)
 	for _, sc := range f.Scenarios {
@@ -265,8 +301,12 @@ func TestManagedAgentsFixture(t *testing.T) {
 				opts = append(opts, rudderanthropic.WithSession(rawJSON(f.Session)))
 			}
 			ctx := context.Background()
-			for _, s := range sc.Streams {
-				consumeMA(ctx, t, s, opts)
+			if sc.Options.Caller == "interaction" {
+				consumeCallerMA(ctx, t, f, sc, opts)
+			} else {
+				for _, s := range sc.Streams {
+					consumeMA(ctx, t, s, opts)
+				}
 			}
 			rudderstackai.Flush(ctx)
 			rec.mu.Lock()
@@ -3438,6 +3478,92 @@ func TestManagedAgentsBlockingThreadStatusLeavesACancelledCallerTurnBehind(t *te
 				t.Fatalf("responses: %v", responses)
 			}
 		})
+	}
+}
+
+// A turn that finished cancelled is over: the next turn starts fresh, also when its stream opened after
+// its prompt was sent, so it has no prompt echo.
+func TestManagedAgentsBlockingFinishedCancelledCallerTurnLeavesTheNextAlone(t *testing.T) {
+	for _, statuses := range []bool{true, false} {
+		t.Run(fmt.Sprintf("statuses=%v", statuses), func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithLimits(rudderstackai.Limits{}))
+			resetMA(t)
+			maBlockingOwned(t, "interaction", func(ctx context.Context) {
+				maDrain(maBlockingStream(ctx, t, append(maRecorded("session.thread_status_running", "one"), `{"type":"user.interrupt","id":"one-interrupt"}`, maEndTurn("one"))))
+				var second []string
+				if statuses {
+					second = append(second, maRecorded("session.thread_status_running", "two")[:2]...)
+				}
+				second = append(second, `{"type":"span.model_request_end","id":"two-model","model_usage":{"input_tokens":10,"output_tokens":2}}`, maEndTurn("two"))
+				maDrain(maBlockingStream(ctx, t, second))
+			})
+			responses := rec.events(t)["ai_response_received"]
+			if len(responses) != 1 || responses[0]["response_status"] != "success" || responses[0]["llm_call_count"] != float64(2) {
+				t.Fatalf("responses: %v", responses)
+			}
+		})
+	}
+}
+
+// A caller that restores its paused interaction from JSON (in this process or another) has none of the
+// adapter's own record of its tools; their results still settle them in its interaction.
+func TestManagedAgentsBlockingResultsAfterAJSONRestore(t *testing.T) {
+	for _, where := range []string{"same process", "another process"} {
+		for _, kind := range []string{"custom", "tool", "confirmation", "deny"} {
+			t.Run(where+"/"+kind, func(t *testing.T) {
+				_, rec := setup(t, rudderstackai.WithToolBreakdown(true), rudderstackai.WithLimits(rudderstackai.Limits{}))
+				resetMA(t)
+				opening := kind
+				if kind == "deny" {
+					opening = "confirmation"
+				}
+				ctx, caller := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u"})
+				maDrain(maBlockingStream(ctx, t, maBlockingOpening(opening)))
+				snapshot, ok := caller.Pause(rudderstackai.PauseOptions{})
+				if !ok {
+					t.Fatal("the caller's interaction did not pause")
+				}
+				raw, err := json.Marshal(snapshot)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var restored rudderstackai.PausedInteraction
+				if err := json.Unmarshal(raw, &restored); err != nil {
+					t.Fatal(err)
+				}
+				if where == "another process" {
+					rudderanthropic.ResetManagedAgents()
+				}
+				ctx, resumed := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{Resume: &restored})
+				answer := strings.TrimSuffix(maBlockingReply(kind, "tool-0"), "}") + `,"is_error":true}`
+				switch kind {
+				case "deny":
+					answer = `{"type":"user.tool_confirmation","id":"deny-0","tool_use_id":"tool-0","result":"deny"}`
+				case "confirmation":
+					answer = maBlockingReply("confirmation", "tool-0")
+				}
+				// A result for a tool the interaction never had changes nothing.
+				rest := []string{answer, strings.TrimSuffix(maBlockingReply("custom", "tool-9"), "}") + `,"is_error":true}`, `{"type":"session.status_running","id":"running"}`}
+				if kind == "confirmation" {
+					rest = append(rest, `{"type":"agent.tool_result","id":"ran-0","tool_use_id":"tool-0","is_error":true}`)
+				}
+				maDrain(maBlockingStream(ctx, t, append(rest, maEndTurn("restored"))))
+				resumed.End(rudderstackai.EndOptions{})
+				var statuses []string
+				var tools []map[string]any
+				for _, response := range rec.events(t)["ai_response_received"] {
+					statuses = append(statuses, fmt.Sprint(response["response_status"]))
+					breakdown, _ := response["tool_breakdown"].([]any)
+					for _, e := range breakdown {
+						tools = append(tools, e.(map[string]any))
+					}
+				}
+				if !slices.Equal(statuses, []string{"paused", "success"}) || len(tools) != 1 || tools[0]["tool_name"] != "tool_0" ||
+					tools[0]["call_count"] != float64(1) || tools[0]["error_count"] != float64(1) {
+					t.Fatalf("statuses %v, tools %v", statuses, tools)
+				}
+			})
+		}
 	}
 }
 

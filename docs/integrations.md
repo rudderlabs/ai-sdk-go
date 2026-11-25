@@ -129,7 +129,7 @@ The adapter does not accept `InteractionOptions.Resume` and ignores it when supp
 
 The turn keeps waiting until every blocking `requires_action.event_ids` call receives its `user.tool_confirmation`, `user.custom_tool_result`, or self-hosted `user.tool_result`, or the session reports running again (including a thread's own running or rescheduled status, resumed child-thread work and previews). Each reply settles only its call ID, and the pause reason reflects the calls still outstanding; partial replies survive clean and failed reconnects. Outstanding calls are bounded by `Limits.MaxMapEntries`.
 
-Turn state held by the adapter (pending request output, waiting reasons, and an interrupt) carries across streams in the same process only; a caller’s JSON restore in another process keeps what was already recorded into the interaction.
+Turn state held by the adapter (pending request output, waiting reasons, an interrupt, and when each open tool started) carries across streams in the same process only. After a caller’s JSON restore, in this process or another, the interaction keeps what was already recorded, and a later result still settles its tool's outcome, without a duration.
 
 To keep one answer across reconnects, read the session inside this SDK's interaction (`StartInteraction` with its returned context).
 
