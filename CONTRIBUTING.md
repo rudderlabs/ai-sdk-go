@@ -49,7 +49,7 @@ Each target covers every module of `go.work`.
 | `make load`      | Load test: sustained interactions and MCP calls through analytics-go to a local data plane (`LOAD_SECONDS`, `LOAD_RATE`) |
 | `make example`   | Runs every example with `--check`                                                |
 
-CI also runs `gofmt -l .` and `go vet` on their own, tests on the minimum and latest supported Go, builds, tests and vulnchecks each module alone at the minimum versions in its `go.mod`, tests `ruddermcpgo` against the latest mcp-go, and fails if total coverage drops below 90%.
+CI also runs `gofmt -l .` and `go vet` on their own, tests on the latest supported Go, builds and vulnchecks each module alone at the minimum versions in its `go.mod`, tests `ruddermcpgo` against the latest mcp-go, and fails if total coverage drops below 90%. Pushes to main and release PRs also test on the minimum supported Go, test each module alone at its `go.mod` minimums, and vulncheck with the minimum Go toolchain.
 
 ## Testing rules
 
