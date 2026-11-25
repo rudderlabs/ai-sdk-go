@@ -207,7 +207,7 @@ genai retries below the tracking transport and has no attempt number. The transp
 
 ## Tool output failures
 
-The one vendor output convention the integrations read is top-level boolean `successful: false`. A function tool returning a JSON object such as `{"successful": false, "error": "backend down"}`, or a string containing that JSON object, counts as a failed call with `error_type: "api_error"` on its declared tool event and in `tool_breakdown`. This applies to OpenAI, Anthropic, Bedrock and Gemini tool results, and to `rudderotel` product events (tool spans and tool responses on model spans).
+The one vendor output convention the integrations read is top-level boolean `successful: false`. A function tool returning a JSON object such as `{"successful": false, "error": "backend down"}`, or a string containing that JSON object, counts as a failed call with `error_type: "api_error"` on its declared tool event and in `tool_breakdown`. This applies to OpenAI, Anthropic, Bedrock and Gemini tool results, and to `rudderotel` product events: tool spans, and the tool responses a model span's input carries, which are read only when the request forces a tool or a structured-output candidate is pending ([How integrations work](#how-integrations-work)).
 
 String `"false"`, arrays, missing keys, true, nested `successful: false` and non-JSON strings retain their existing outcomes. Provider failure signals (`is_error`, `status: error`, a Gemini `error` key, a failed span) keep their existing categories and a call counts once. Returned content, duration and tool identity are preserved.
 
