@@ -10,6 +10,7 @@ How each integration attaches, what it records, and its edge cases. Event fields
 - [Gateways and OpenAI-compatible endpoints](#gateways-and-openai-compatible-endpoints)
 - [Streaming and cancellation](#streaming-and-cancellation)
 - [Retries](#retries)
+- [Tool output failures](#tool-output-failures)
 - [Classifier clients](#classifier-clients)
 - [Manual](#manual)
 - [Go platform limits](#go-platform-limits)
@@ -56,7 +57,7 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 - Tracked: POST requests to `.../chat/completions` (Chat Completions) and `.../responses` (Responses API), streamed or not.
 - Recorded: `model` (the served model, else the requested one), `requested_model` when another model served it, `prompt_tokens` / `input_tokens` as input (they include cached tokens), cached tokens, `reasoning_tokens`, `service_tier`, the response `id`, the answer text (for the classifier and evaluator only), and `usage.cost` as the call's cost when a gateway reports one.
 - `finish_reason`: Chat Completions as sent, `refusal` when the message has a refusal. Responses API: `stop`, `tool_calls` when the output has only tool calls, `refusal` for a refusal part, `length` for `incomplete` at `max_output_tokens`, otherwise the incomplete reason. A `failed` response is a failed call that keeps its usage; a `cancelled` one is a cancelled call.
-- Tool calls: `tool_calls` of every returned choice (function and custom tools); Responses output items whose type ends in `_call` (function, custom and hosted tools, `mcp_call` with its server label as `mcp_server`). Results come from `role: "tool"` messages and `*_call_output` items of a later request; they carry no error flag, so `tool_status` stays `unknown` and `tool_breakdown` has no `error_count`.
+- Tool calls: `tool_calls` of every returned choice (function and custom tools); Responses output items whose type ends in `_call` (function, custom and hosted tools, `mcp_call` with its server label as `mcp_server`). Results come from `role: "tool"` messages and `*_call_output` items of a later request; they carry no error flag, so `tool_status` stays `unknown` and `tool_breakdown` has no `error_count`, except for [tool output failures](#tool-output-failures).
 - Server tools: `web_search_call`, `file_search_call`, `code_interpreter_call` and `image_generation_call` count as server tool calls by kind (`web_search`, ...), for `ServerToolPerCall` fees.
 - Streamed Chat Completions: the request gains `stream_options.include_usage` unless you set it, and the extra usage-only chunk is hidden from your code. A host that rejects it (HTTP 400 or 422 naming the parameter, or without an error code) gets the request again as you wrote it; once a host names the parameter, this middleware stops adding it there. `rudderopenai.WithStreamUsage(true)` always adds it, with no resend; `WithStreamUsage(false)` never does. Without usage, a streamed call has no tokens and no cost.
 - Not tracked: non-streamed `background: true` Responses requests (only queued; polling is not intercepted).
@@ -203,6 +204,12 @@ context never ends; a retry arriving later can start another span.
 A failed attempt counts as retried when the client sends it again or closes its response unread, which is how both clients behave. With spans disabled, a connection error (no response) outside an interaction is recorded per attempt. A retried failed response that a middleware added before `WithTracking` (outside it) reads is also recorded per attempt.
 
 genai retries below the tracking transport and has no attempt number. The transport groups retries using per-invocation request identity; successful retries record one final call. With spans disabled, a connection error outside an interaction is recorded per attempt. The AWS SDK retries below the Bedrock tracker, so a Bedrock operation is recorded once, with the final outcome. `ClassifierClient` calls turn retries off.
+
+## Tool output failures
+
+The one vendor output convention the integrations read is top-level boolean `successful: false`. A function tool returning a JSON object such as `{"successful": false, "error": "backend down"}`, or a string containing that JSON object, counts as a failed call with `error_type: "api_error"` on its declared tool event and in `tool_breakdown`. This applies to OpenAI, Anthropic, Bedrock and Gemini tool results, and to `rudderotel` product events (tool spans and tool responses on model spans).
+
+String `"false"`, arrays, missing keys, true, nested `successful: false` and non-JSON strings retain their existing outcomes. Provider failure signals (`is_error`, `status: error`, a Gemini `error` key, a failed span) keep their existing categories and a call counts once. Returned content, duration and tool identity are preserved.
 
 ## Classifier clients
 
