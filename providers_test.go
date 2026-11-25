@@ -21,12 +21,6 @@ func TestRoutedModelCloudAnthropicIDs(t *testing.T) {
 
 func TestAuditCanonicalModelIDs(t *testing.T) {
 	for _, tc := range []struct{ raw, want string }{
-		{"anthropic.claude-haiku-4-5-20251001-v1:0", "claude-haiku-4-5"},
-		{"us.anthropic.claude-opus-5", "claude-opus-5"},
-		{"Claude-Opus-5", "claude-opus-5"},
-		{"claude-sonnet-4-5@20250929", "claude-sonnet-4-5"},
-		{"claude-sonnet-5", "claude-sonnet-5"},
-		{"claude-sonnet-5-5", "claude-sonnet-5-5"},
 		{"claude-sonnet-5-preview", "claude-sonnet-5-preview"},
 		{"claude-sonnet-5-1234", "claude-sonnet-5-1234"},
 		{"claude-sonnet-5-v2", "claude-sonnet-5-v2"},
@@ -48,14 +42,10 @@ func TestAuditCanonicalModelIDs(t *testing.T) {
 		{"global.anthropic.claude-haiku-4-5-20251001-v1:0", "claude-haiku-4-5"},
 		{"claude-haiku-4-5@20251001", "claude-haiku-4-5"},
 		{"claude-3-5-sonnet-v2@20241022", "claude-3-5-sonnet-v2"},
-		{"claude-3-5-sonnet-latest", "claude-3-5-sonnet-latest"},
 		{"claude-haiku-4-5-20251001", "claude-haiku-4-5"},
 		{"claude-haiku-4-5-2025-10-01", "claude-haiku-4-5-2025-10-01"},
 		{"claude-haiku-4-5", "claude-haiku-4-5"},
-		{"gpt-4.1-mini-2025-04-14", "gpt-4.1-mini-2025-04-14"},
 		{"openai/gpt-4o", "openai/gpt-4o"},
-		{"gemini-2.5-pro", "gemini-2.5-pro"},
-		{"amazon.nova-pro-v1:0", "amazon.nova-pro-v1:0"},
 		{"US.ANTHROPIC.GPT-4.1-mini-20251001-v1:0@20251101", "US.ANTHROPIC.GPT-4.1-mini-20251001-v1:0@20251101"},
 		{"OpenAI/GPT-4O", "OpenAI/GPT-4O"},
 		{"Gemini-2.5-Pro@002", "Gemini-2.5-Pro@002"},

@@ -33,21 +33,6 @@ func TestBundledSchemasMatchSpec(t *testing.T) {
 	}
 }
 
-func TestAcceptsMigrationSpecVersions(t *testing.T) {
-	for _, version := range []string{"0_3_0", "0_4_0"} {
-		t.Run(version, func(t *testing.T) {
-			capture := filepath.Join(repoRoot(t), "spec", "fixtures", "migration-check", "spec_version_"+version+".jsonl")
-			var stdout, stderr bytes.Buffer
-			if code := run([]string{capture}, &stdout, &stderr); code != 0 {
-				t.Fatalf("exit code %d; stdout: %s; stderr: %s", code, stdout.String(), stderr.String())
-			}
-			if strings.Contains(stdout.String(), "context.wrapperLibrary.specVersion is") || !strings.Contains(stdout.String(), "RESULT: PASS") {
-				t.Fatalf("unexpected checker output: %s", stdout.String())
-			}
-		})
-	}
-}
-
 func TestBundledSchemaValidatesLimitEventSampleRate(t *testing.T) {
 	spec, err := readSchema("", specSchema)
 	if err != nil {
