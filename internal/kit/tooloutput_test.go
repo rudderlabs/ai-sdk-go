@@ -228,3 +228,57 @@ func TestToolOutputPrecedenceAcrossPause(t *testing.T) {
 		}
 	}
 }
+
+// A pause freezes a successful result's rule outcome; a vendor failure merged after resume still
+// reports its category, while the frozen callback properties stay as they were.
+func TestToolOutputFailureAfterFrozenSuccess(t *testing.T) {
+	for _, c := range []struct {
+		source string
+		fail   func(*rudderstackai.Interaction)
+	}{
+		{"wrapper", func(i *rudderstackai.Interaction) {
+			RecordToolOutput(i, "call-1", rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Result: map[string]any{"successful": false}}, true, DecodedOutput)
+		}},
+		// rudderotel's tool span after classification.
+		{"span", func(i *rudderstackai.Interaction) {
+			hook.Tracing.RecordTool(i, rudderstackai.ToolCall{ID: "call-1", Name: "lookup", Error: rudderstackai.Ptr(true), ErrorType: "api_error"}, true)
+		}},
+	} {
+		for _, restore := range []bool{false, true} {
+			t.Run(fmt.Sprint(c.source, "/", restore), func(t *testing.T) {
+				rec := newRecorder(t)
+				seen := toolOutputRules(t)
+				client := &pauseClient{recorder: rec}
+				_, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u1", Analytics: client})
+				client.reenter = func() {
+					i.RecordToolCalls(rudderstackai.ToolCall{ID: "call-1", Name: "lookup"})
+					RecordToolOutput(i, "call-1", rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Result: map[string]any{"successful": true}}, true, DecodedOutput)
+				}
+				s, _ := i.Pause(rudderstackai.PauseOptions{})
+				if len(s.PendingTools) != 1 || s.PendingTools[0]["rule_outcome"] == nil {
+					t.Fatalf("outcome not frozen: %s", jsonText(s))
+				}
+				if restore {
+					var stored rudderstackai.PausedInteraction
+					if err := json.Unmarshal([]byte(jsonText(s)), &stored); err != nil {
+						t.Fatal(err)
+					}
+					_, i = rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{Resume: &stored, Analytics: rec})
+				} else {
+					i.Resume()
+				}
+				c.fail(i)
+				i.End(rudderstackai.EndOptions{})
+				want(t, rec.props(t, "lookup_done"), map[string]any{"tool_status": "error", "error_type": "api_error"})
+				if len(*seen) != 1 || jsonText((*seen)[0]) != `{"successful":true}` {
+					t.Errorf("rule re-evaluated: %v", *seen)
+				}
+				responses := rec.named("ai_response_received")
+				breakdown := responses[len(responses)-1].Properties["tool_breakdown"].([]map[string]any)
+				if len(breakdown) != 1 || jsonText(breakdown[0]["error_types"]) != `{"api_error":1}` {
+					t.Errorf("tool_breakdown %s", jsonText(breakdown))
+				}
+			})
+		}
+	}
+}

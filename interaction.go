@@ -2187,7 +2187,12 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool, original *re
 		p["tool_status"] = toolStatus(t.err)
 	}
 	put(p, "mcp_server", t.mcpServer)
-	put(p, "error_type", outcome.errorType)
+	errorType := outcome.errorType
+	// A vendor failure merged after the outcome froze still reports its category.
+	if t.outputFailure && t.errorType == "api_error" {
+		errorType = t.errorType
+	}
+	put(p, "error_type", errorType)
 	if resultSize >= 0 {
 		p["result_size_bytes"] = resultSize
 	}
