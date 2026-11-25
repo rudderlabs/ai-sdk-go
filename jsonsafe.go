@@ -31,8 +31,10 @@ var errUnencodable = errors.New("rudderstackai: a value could not be encoded as 
 
 func jsonSafe(v any) (any, bool) {
 	switch x := v.(type) {
-	case nil, string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, json.Number:
+	case nil, string, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 		return x, true
+	case json.Number:
+		return encodeNow(x) // an invalid literal fails to encode, and the client would log the message
 	case float64:
 		return x, !math.IsNaN(x) && !math.IsInf(x, 0)
 	case float32:
