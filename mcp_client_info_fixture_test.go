@@ -82,3 +82,40 @@ func TestClientLabelsDoNotShareTheRawValue(t *testing.T) {
 		}
 	}
 }
+
+// The memo keeps the raw clientInfo as its key: a substring (a User-Agent version, a callback result) must not pin
+// the string it was cut from.
+func TestCheckedClientMemoKeyKeepsNoRawMemory(t *testing.T) {
+	buf := strings.Repeat("x", 1<<16) + "memo-key-agent"
+	name := buf[1<<16:]
+	cleanClient(&mcpbridge.Client{Name: name})
+	start := uintptr(unsafe.Pointer(unsafe.StringData(buf)))
+	checkedClients.Lock()
+	defer checkedClients.Unlock()
+	for key := range checkedClients.byRaw {
+		at := uintptr(unsafe.Pointer(unsafe.StringData(key.Name)))
+		if key.Name == "memo-key-agent" && at >= start && at < start+uintptr(len(buf)) {
+			t.Fatal("the memo key shares the raw value's memory")
+		}
+	}
+}
+
+func TestCheckedClientMemoSkipsWithheldAndLongValues(t *testing.T) {
+	size := func() int {
+		checkedClients.Lock()
+		defer checkedClients.Unlock()
+		return len(checkedClients.byRaw)
+	}
+	checkedClients.Lock()
+	clear(checkedClients.byRaw)
+	checkedClients.Unlock()
+	cleanClient(&mcpbridge.Client{Name: "memo-agent", Version: "v1.2.3"}) // version withheld
+	cleanClient(&mcpbridge.Client{Name: strings.Repeat("a", maxCheckedClientBytes+1)})
+	if n := size(); n != 0 {
+		t.Fatalf("memo holds %d entries, want none", n)
+	}
+	cleanClient(&mcpbridge.Client{Name: "memo-agent", Version: "1.2.3"})
+	if n := size(); n != 1 {
+		t.Fatalf("memo holds %d entries, want 1", n)
+	}
+}

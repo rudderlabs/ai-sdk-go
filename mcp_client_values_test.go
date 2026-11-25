@@ -122,7 +122,7 @@ func TestMCPAppClientPropertiesChecked(t *testing.T) {
 		MCPEvents: true,
 		Redact:    func(string) (string, error) { return "app-redacted", nil },
 		EventRules: EventRules{Tools: map[string]ToolEventRule{"list_destinations": {Event: "destinations_listed", Properties: func(map[string]any, any) map[string]any {
-			return map[string]any{"client_name": "rule-agent", "client_title": "\tJane Doe ", "client_version": "9.9.9"}
+			return map[string]any{"client_name": "rule-agent", "client_title": "\tJane Doe jane.doe@example.com ", "client_version": "9.9.9"}
 		}}}},
 	})
 	// No name or version at initialize: the rule's still never reach the event.
@@ -131,7 +131,7 @@ func TestMCPAppClientPropertiesChecked(t *testing.T) {
 	p := r.props(t, "destinations_listed")
 	_, name := p["client_name"]
 	_, version := p["client_version"]
-	if name || version || p["client_title"] != "Jane Doe" {
+	if name || version || p["client_title"] != "Jane Doe [email]" {
 		t.Errorf("declared event = %v", p)
 	}
 	for _, tc := range []struct{ name, want string }{{"agent for jane.doe@example.com", "agent for [email]"}, {strings.Repeat("a", 32_001), ""}} {

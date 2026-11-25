@@ -117,7 +117,7 @@ Messages pass through unchanged, and the libraries' own connections and protocol
 | `Transport`          | detected   | `TransportStdio` or `TransportSSE`, sent as `transport` on `mcp_client_seen`. Streamable HTTP is detected from the request headers; stdio and SSE look the same from inside the server. |
 | `ServerName`         | the server's | Overrides the name the server was created with, sent as `server_name`. State is kept per server name: give each distinct server its own. |
 | `Redact`             | none       | `func(text string) (string, error)`, run after the built-in masking of `call_reason`, `capability_detail` and `feedback_text`. If it fails or panics, the field is not sent. |
-| `DisableRedaction`   | off        | Turns redaction off: the built-in masking and `Redact`. `call_reason`, `capability_detail`, `feedback_text` and `error_message` are still withheld when they match a built-in rule ([fixture](../spec/fixtures/mcp-agent-text-v0.1.json)). |
+| `DisableRedaction`   | off        | Turns redaction off: the built-in masking and `Redact`. `call_reason`, `capability_detail`, `feedback_text` and `error_message` are still withheld when they match a built-in rule, and text over 32,000 code points is withheld unscanned ([fixture](../spec/fixtures/mcp-agent-text-v0.1.json)). |
 
 ## Events
 

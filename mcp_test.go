@@ -782,6 +782,23 @@ func TestCapabilityDetailWithCapture(t *testing.T) {
 	}
 }
 
+// DisableRedaction turns masking off, not the withhold check; a cut that exposes a pattern withholds too.
+func TestCapabilityDetailRedactionOffAndCut(t *testing.T) {
+	server := workspaceServer("workspace-mcp", nil)
+	r := wrap(t, server, Options{CaptureContent: true, DisableRedaction: true, CapabilityRequests: &CapabilityRequestOptions{Capabilities: []string{"bulk_export"}}})
+	cs := connect(t, server, "2025-06-18", nil)
+	for _, detail := range []string{"merge two workspaces", "email ann@example.com", strings.Repeat("x", 187) + " 415-555-0100-9"} {
+		callTool(t, cs, capabilityTool, map[string]any{"capability": "other", "detail": detail}, nil)
+	}
+	var details []any
+	for _, m := range r.named("mcp_capability_requested") {
+		details = append(details, m.Properties["capability_detail"])
+	}
+	if want := []any{"merge two workspaces", nil, nil}; !slices.Equal(details, want) {
+		t.Errorf("details = %v", details)
+	}
+}
+
 func TestNativeCapabilityToolNotShadowed(t *testing.T) {
 	server := mcp.NewServer(&mcp.Implementation{Name: "own-cap-mcp", Version: "1"}, nil)
 	openWorld, destructive := true, true

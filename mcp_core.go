@@ -658,7 +658,11 @@ func (rc *reqCtx) reportedContext(v any) map[string]any {
 // maskedText is call_reason, capability_detail or feedback_text as sent: trimmed, masked and cut
 // to limit code points; "" when masking fails or leaves a built-in pattern, before or after the cut.
 func (o *options) maskedText(text string, limit int) string {
-	masked, ok := o.mask(strings.TrimSpace(text))
+	text = trimJS(text)
+	if overMaskCap(text) {
+		return ""
+	}
+	masked, ok := o.mask(text)
 	if !ok || masked == "" {
 		return ""
 	}
@@ -667,6 +671,18 @@ func (o *options) maskedText(text string, limit int) string {
 		return ""
 	}
 	return cutUnexposed(masked, limit)
+}
+
+// trimJS trims as JS String.prototype.trim does: BOM included, NEL (U+0085) excluded.
+func trimJS(text string) string {
+	return strings.TrimFunc(text, func(r rune) bool {
+		return r == '\ufeff' || (r != '\u0085' && unicode.IsSpace(r))
+	})
+}
+
+// overMaskCap: text over the masking cap is withheld without scanning, with redaction on or off.
+func overMaskCap(text string) bool {
+	return len(text) > maxMaskedCodePoints && utf8.RuneCountInString(text) > maxMaskedCodePoints
 }
 
 // cutUnexposed cuts masked text to limit code points; "" when the cut leaves a built-in pattern
@@ -1690,7 +1706,9 @@ func cleanClient(client *mcpbridge.Client) *mcpbridge.Client {
 		if len(checkedClients.byRaw) >= maxCheckedClients {
 			clear(checkedClients.byRaw)
 		}
-		checkedClients.byRaw[*client] = checked
+		// Copies: the raw values can be substrings of a much larger string (a User-Agent header).
+		key := mcpbridge.Client{Name: strings.Clone(client.Name), Title: strings.Clone(client.Title), Version: strings.Clone(client.Version)}
+		checkedClients.byRaw[key] = checked
 		checkedClients.Unlock()
 	}
 	return &checked
@@ -1729,11 +1747,8 @@ func errorMessage(failure map[string]any, mask func(string) (string, bool)) stri
 		}
 		text = strings.Join(blocks, "\n")
 	}
-	// JS String.prototype.trim includes BOM but excludes NEL (U+0085).
-	text = strings.TrimFunc(text, func(r rune) bool {
-		return r == '\ufeff' || (r != '\u0085' && unicode.IsSpace(r))
-	})
-	if text == "" {
+	text = trimJS(text)
+	if text == "" || overMaskCap(text) {
 		return ""
 	}
 	masked, ok := mask(text)
