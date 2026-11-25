@@ -672,7 +672,7 @@ func TestSDK6017ToolRecordedPastTheCallCap(t *testing.T) {
 				case "record":
 					first.RecordToolCalls(ok)
 				case "span":
-					first.recordToolCalls(true, ToolCall{Name: "approve_me", Error: Ptr(false)})
+					first.recordToolCalls(true, false, ToolCall{Name: "approve_me", Error: Ptr(false)})
 				case "result":
 					first.RecordToolResult("wait", ToolResult{Result: "ok", Error: Ptr(false)})
 				default:

@@ -289,7 +289,7 @@ func recordToolResults(c *kit.Call) {
 			}
 			failed := b["is_error"] == true
 			_, hasResult := b["content"]
-			kit.RecordToolResult(c.Interaction, kit.Str(b["tool_use_id"]), rudderstackai.ToolResult{Error: &failed, Result: kit.ToolResultValue(b["content"])}, hasResult)
+			kit.RecordToolOutput(c.Interaction, kit.Str(b["tool_use_id"]), rudderstackai.ToolResult{Error: &failed, Result: kit.ToolResultValue(b["content"])}, hasResult, kit.DecodedOutput)
 		}
 	}
 }

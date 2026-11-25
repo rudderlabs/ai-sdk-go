@@ -25,19 +25,19 @@ func TestRound1CaptureOffReportSiblings(t *testing.T) {
 					i.RecordToolCalls(call)
 				case "tracing":
 					call.Result = result
-					i.recordToolCalls(true, call)
+					i.recordToolCalls(true, false, call)
 				case "after_end":
 					i.End(EndOptions{})
 					call.Result = result
 					i.RecordToolCalls(call)
 				case "provider_history":
 					i.RecordToolCalls(call)
-					hook.RecordToolResult(i, "t", ToolResult{Result: result}, true)
+					hook.RecordToolResult(i, "t", ToolResult{Result: result}, true, false)
 				case "provider_named_history":
 					call.ID = ""
 					call.StructuredCandidate = true
 					i.RecordToolCalls(call)
-					hook.RecordToolResult(i, "", ToolResult{Result: result}, true, "lookup")
+					hook.RecordToolResult(i, "", ToolResult{Result: result}, true, false, "lookup")
 				default:
 					i.RecordToolCalls(call)
 					i.RecordToolResult("t", ToolResult{Result: result})

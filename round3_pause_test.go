@@ -197,6 +197,7 @@ func TestRound3SnapshotRejectsInvalidNewFields(t *testing.T) {
 		{"rule_outcome": map[string]any{"suppressed": false, "properties": []any{}}},
 		{"rule_outcome": map[string]any{"suppressed": false, "properties": map[string]any{}, "result_size_bytes": -1}},
 		{"rule_outcome": map[string]any{"suppressed": false, "properties": map[string]any{}, "result_size_bytes": 1.5}},
+		{"rule_outcome": map[string]any{"suppressed": false, "properties": map[string]any{}, "error_type": "denied"}},
 	} {
 		setupAI(t)
 		s := PausedInteraction{InteractionID: "old", ConversationID: "c", Trigger: TriggerUser, PauseCount: 1, PendingTools: []map[string]any{record}}

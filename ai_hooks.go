@@ -19,8 +19,8 @@ func init() {
 		})
 		return interaction, ephemeral
 	}
-	hook.RecordToolResult = func(i any, id string, result any, hasResult bool, name ...string) {
-		i.(*Interaction).recordToolResult(id, result.(ToolResult), hasResult, name...)
+	hook.RecordToolResult = func(i any, id string, result any, hasResult, outputFailure bool, name ...string) {
+		i.(*Interaction).recordToolResult(id, result.(ToolResult), hasResult, outputFailure, name...)
 	}
 	hook.HasStructuredTools = func(i any) bool { return i.(*Interaction).hasStructuredTools() }
 	hook.KeepMessages = func(i any, messages any) { i.(*Interaction).keepMessages(messages) }

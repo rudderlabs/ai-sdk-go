@@ -52,7 +52,7 @@ func recordChatToolResults(c *kit.Call) {
 		msg := kit.Map(m)
 		if msg["role"] == "tool" {
 			_, hasResult := msg["content"]
-			kit.RecordToolResult(c.Interaction, kit.Str(msg["tool_call_id"]), rudderstackai.ToolResult{Result: kit.ParseToolValue(msg["content"])}, hasResult)
+			kit.RecordToolOutput(c.Interaction, kit.Str(msg["tool_call_id"]), rudderstackai.ToolResult{Result: kit.ParseToolValue(msg["content"])}, hasResult, kit.DecodedOutput)
 		}
 	}
 }

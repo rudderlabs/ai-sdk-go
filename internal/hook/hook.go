@@ -16,8 +16,9 @@ var (
 	// ForCall returns the interaction a model call starting now reports into, and whether it is
 	// ephemeral (opened for this call; the integration must end it). Nil for untracked calls.
 	ForCall func(ctx context.Context, integration string, client analytics.Client) (interaction any, ephemeral bool)
-	// RecordToolResult carries whether a result was observed, including JSON null.
-	RecordToolResult func(interaction any, id string, result any, hasResult bool, name ...string)
+	// RecordToolResult carries whether a result was observed, including JSON null, and whether
+	// the vendor output convention failed it.
+	RecordToolResult func(interaction any, id string, result any, hasResult, outputFailure bool, name ...string)
 	// HasStructuredTools reports whether model spans may complete a pending candidate.
 	HasStructuredTools func(interaction any) bool
 	// KeepMessages keeps a request's messages for the classifier and evaluator.

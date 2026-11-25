@@ -261,7 +261,7 @@ func recordToolResults(i *rudderstackai.Interaction, messages []types.Message, p
 				continue
 			}
 			failed := r.Value.Status == types.ToolResultStatusError
-			kit.RecordToolResult(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolOutcomeValue(r.Value.Content, passes...)}, len(r.Value.Content) > 0)
+			kit.RecordToolOutput(i, *r.Value.ToolUseId, rudderstackai.ToolResult{Error: &failed, Result: toolOutcomeValue(r.Value.Content, passes...)}, len(r.Value.Content) > 0, kit.DecodedOutput)
 		}
 	}
 }

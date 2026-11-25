@@ -21,7 +21,7 @@ func TestToolSpanMatchesMissingLabels(t *testing.T) {
 			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
 			defer i.End(EndOptions{})
 			i.RecordToolCalls(ToolCall{ID: "wrapper", Name: "lookup", AgentName: c.wrapperAgent, ParentTool: c.wrapperParent})
-			i.recordToolCalls(true, ToolCall{Name: "lookup", AgentName: c.spanAgent, ParentTool: c.spanParent, Duration: Ptr(time.Second)})
+			i.recordToolCalls(true, false, ToolCall{Name: "lookup", AgentName: c.spanAgent, ParentTool: c.spanParent, Duration: Ptr(time.Second)})
 			if len(i.tools) != c.want {
 				t.Fatalf("tools=%d want %d", len(i.tools), c.want)
 			}
@@ -74,7 +74,7 @@ func TestToolSpanSkipsSettledResult(t *testing.T) {
 	defer i.End(EndOptions{})
 	i.RecordToolCalls(ToolCall{ID: "completed", Name: "lookup"}, ToolCall{ID: "pending", Name: "lookup"})
 	i.RecordToolResult("completed", ToolResult{Result: "done"})
-	i.recordToolCalls(true, ToolCall{Name: "lookup", Error: Ptr(false), Duration: Ptr(time.Second)})
+	i.recordToolCalls(true, false, ToolCall{Name: "lookup", Error: Ptr(false), Duration: Ptr(time.Second)})
 	if len(i.tools) != 2 || i.toolsByID["completed"].duration != nil || !i.toolsByID["pending"].settled {
 		t.Fatal("tool span matched a settled tool instead of the pending tool")
 	}

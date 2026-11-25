@@ -84,7 +84,9 @@ func init() {
 		return owner
 	}
 	hook.Tracing.AdoptAnalytics = func(i any, c analytics.Client) { i.(*Interaction).adoptAnalytics(c) }
-	hook.Tracing.RecordTool = func(i, call any) { i.(*Interaction).recordToolCalls(true, call.(ToolCall)) }
+	hook.Tracing.RecordTool = func(i, call any, outputFailure bool) {
+		i.(*Interaction).recordToolCalls(true, outputFailure, call.(ToolCall))
+	}
 	hook.Tracing.Analytics = func() analytics.Client { return cfg().analytics }
 	hook.Tracing.CaptureLevel = func() *capture.Policy { return cfg().captureLevel() }
 	hook.Tracing.Redact = redactText
