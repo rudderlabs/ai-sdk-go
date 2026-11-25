@@ -2090,11 +2090,17 @@ type toolRuleOutcome struct {
 	errorType string
 }
 
-func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolved) *toolRuleOutcome {
-	var errorType string
+// eventErrorType is a declared event's category: the frozen outcome's, or that of a vendor
+// failure merged after the outcome froze.
+func eventErrorType(frozen string, t *recordedTool) string {
 	if t.outputFailure && t.errorType == "api_error" {
-		errorType = t.errorType
+		return t.errorType
 	}
+	return frozen
+}
+
+func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolved) *toolRuleOutcome {
+	errorType := eventErrorType("", &t)
 	args, _ := t.args.(map[string]any)
 	if rule.When != nil {
 		send := false
@@ -2187,12 +2193,7 @@ func (i *Interaction) toolEvent(rule ToolEventRule, t recordedTool, original *re
 		p["tool_status"] = toolStatus(t.err)
 	}
 	put(p, "mcp_server", t.mcpServer)
-	errorType := outcome.errorType
-	// A vendor failure merged after the outcome froze still reports its category.
-	if t.outputFailure && t.errorType == "api_error" {
-		errorType = t.errorType
-	}
-	put(p, "error_type", errorType)
+	put(p, "error_type", eventErrorType(outcome.errorType, &t))
 	if resultSize >= 0 {
 		p["result_size_bytes"] = resultSize
 	}
@@ -2919,8 +2920,8 @@ func pendingTool(c *recordedTool) map[string]any {
 		if c.ruleOutcome.resultSize >= 0 {
 			outcome["result_size_bytes"] = c.ruleOutcome.resultSize
 		}
-		if c.ruleOutcome.errorType != "" {
-			outcome["error_type"] = c.ruleOutcome.errorType
+		if errorType := eventErrorType(c.ruleOutcome.errorType, c); errorType != "" {
+			outcome["error_type"] = errorType
 		}
 		p["rule_outcome"] = outcome
 	}

@@ -282,3 +282,34 @@ func TestToolOutputFailureAfterFrozenSuccess(t *testing.T) {
 		}
 	}
 }
+
+// A vendor failure that lands while the run is still paused survives a second snapshot of it.
+func TestToolOutputFailureWhilePausedSurvivesSnapshot(t *testing.T) {
+	rec := newRecorder(t)
+	seen := toolOutputRules(t)
+	client := &pauseClient{recorder: rec}
+	_, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u1", Analytics: client})
+	client.reenter = func() {
+		i.RecordToolCalls(rudderstackai.ToolCall{ID: "call-1", Name: "lookup"})
+		RecordToolOutput(i, "call-1", rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Result: map[string]any{"successful": true}}, true, DecodedOutput)
+	}
+	if _, ok := i.Pause(rudderstackai.PauseOptions{}); !ok {
+		t.Fatal("pause")
+	}
+	client.reenter = func() {}
+	RecordToolOutput(i, "call-1", rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Result: map[string]any{"successful": false}}, true, DecodedOutput)
+	s, ok := i.Pause(rudderstackai.PauseOptions{})
+	if !ok || len(s.PendingTools) != 1 || jsonText(s.PendingTools[0]["rule_outcome"].(map[string]any)["error_type"]) != `"api_error"` {
+		t.Fatalf("snapshot %s", jsonText(s))
+	}
+	var stored rudderstackai.PausedInteraction
+	if err := json.Unmarshal([]byte(jsonText(s)), &stored); err != nil {
+		t.Fatal(err)
+	}
+	_, i = rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{Resume: &stored, Analytics: rec})
+	i.End(rudderstackai.EndOptions{})
+	want(t, rec.props(t, "lookup_done"), map[string]any{"tool_status": "error", "error_type": "api_error"})
+	if len(*seen) != 1 {
+		t.Errorf("rule re-evaluated: %v", *seen)
+	}
+}
