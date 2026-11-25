@@ -106,8 +106,6 @@ jobs:
 
   mcpgo-latest:
     name: mcp-go v1.1.1 (latest)
-    # Release PRs, main and manual runs only.
-    if: github.event_name != 'pull_request' || startsWith(github.head_ref, 'release-please--branches--main')
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'arc-amd64' || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
