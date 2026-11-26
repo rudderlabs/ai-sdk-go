@@ -432,7 +432,7 @@ type PausedInteraction struct {
 	// restoration. Written only with WithLLMCallEvents and above 0.
 	CallSequence *int `json:"call_sequence,omitempty"`
 	// CountedToolIDs are the tool-call IDs earlier segments counted, oldest first: a later report
-	// for one is ignored, as in process.
+	// for one adds no count or event, as in process.
 	CountedToolIDs []string `json:"counted_tool_ids,omitempty"`
 }
 
