@@ -656,29 +656,6 @@ func captureMessageContext(v map[string]any) map[string]any {
 
 // captureSpanAttributes is captureAttributes, but the finish reasons the span summary reads are
 // captured whole, as on main: the summary is not content, so no budget cuts what it reports.
-// They are captured once, apart from the rest, so a serializer in them runs once.
 func captureSpanAttributes(admitted map[string]any) map[string]any {
-	const key = "gen_ai.response.finish_reasons"
-	reasons, has := admitted[key]
-	rest := admitted
-	if has {
-		rest = maps.Clone(admitted)
-		delete(rest, key)
-	}
-	out := captureAttributes(rest)
-	if has {
-		if all, kept := wholeValue(reasons); kept {
-			out[key] = all
-		}
-	}
-	return out
-}
-
-// wholeValue is v captured without a budget, as main captured every attribute. Both passes are
-// memoised or share their copies, so the work is linear in distinct containers.
-func wholeValue(v any) (any, bool) {
-	defer enterCapture()()
-	resolved, _ := resolveCaptureWith(map[string]any{"v": v}, true, true, nil)
-	m, _ := resolved.(map[string]any)
-	return (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, noBudget: true, share: true, copies: map[copyKey]any{}}).strip(m["v"])
+	return captureAttributes(admitted, "gen_ai.response.finish_reasons")
 }

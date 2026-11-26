@@ -948,19 +948,12 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 			if original != nil {
 				source = original
 			}
-			if !resultContent.cut { // a value the budget cut is never reused for later content
-				seedMCPResult(&walk{memo: resultContent.memo}, source, resultContent.value)
-			}
+			seedMCPResult(&walk{memo: resultContent.memo}, source, resultContent.value)
 		} else {
-			if _, declared := rc.declaredRule(); declared {
-				// A rule reads the whole decoded result, so it is encoded as before.
-				b, _ := captureEncoded(o.Result)
-				_ = json.Unmarshal(b, &result)
-				size = len(b)
-			} else {
-				// No rule: the size and the few fields the event reads, without encoding the result.
-				result, size = mcpResultView(o.Result)
-			}
+			// Nothing is stored: the base encoding gives the classification inputs and size.
+			b, _ := captureEncoded(o.Result)
+			_ = json.Unmarshal(b, &result)
+			size = len(b)
 		}
 		if rc.wireResultSize > 0 {
 			size = rc.wireResultSize

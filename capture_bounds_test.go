@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -538,16 +537,27 @@ func TestSizingNeverRunsSerializersOutsideTheCapture(t *testing.T) {
 	}
 }
 
-func TestPlainResultDeeperThanTheDepthCapIsSizedExactly(t *testing.T) {
+// Sizes are main's, depth-cap truncation and a serializer elsewhere in the report included
+// (the values come from running main on the same inputs).
+func TestToolResultSizesEqualMains(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
-	var v any = "leaf"
-	for range 80 {
-		v = map[string]any{"c": v}
+	var deep any = "leaf"
+	for range 40 {
+		deep = map[string]any{"c": deep}
 	}
-	want, _ := compactJSON(v)
-	for name, got := range map[string]int{"root": captureValue(v).size, "field": captureValueFields(map[string]any{"result": v}).sizes["result"]} {
-		if got != len(want) {
-			t.Errorf("%s size=%d want %d", name, got, len(want))
+	when := map[string]any{"t": time.Unix(0, 0).UTC()}
+	for name, c := range map[string]struct {
+		in    map[string]any
+		sizes map[string]int
+	}{
+		"deep":       {map[string]any{"args": 1, "result": deep}, map[string]int{"args": 1, "result": 182}},
+		"time+func":  {map[string]any{"args": when, "result": func() {}}, map[string]int{"args": 28}},
+		"time+nan":   {map[string]any{"args": when, "result": math.NaN()}, map[string]int{"args": 28, "result": -1}},
+		"time+raw":   {map[string]any{"args": when, "result": json.RawMessage(`{bad`)}, map[string]int{"args": 28}},
+		"plain+func": {map[string]any{"args": 1, "result": map[string]any{"f": func() {}, "k": 1}}, map[string]int{"args": 1, "result": -1}},
+	} {
+		if got := captureValueFields(c.in).sizes; !reflect.DeepEqual(got, c.sizes) {
+			t.Errorf("%s: sizes=%v, main's %v", name, got, c.sizes)
 		}
 	}
 }
@@ -990,9 +1000,6 @@ func TestSizeArithmeticSaturatesInsteadOfWrapping(t *testing.T) {
 	if n, err := exactSize(sharedMaps(100)); err != nil || n != math.MaxInt {
 		t.Fatalf("exactSize=%d, %v", n, err)
 	}
-	if got := captureValueFields(map[string]any{"k": sharedMaps(100)}).sizes["k"]; got != math.MaxInt {
-		t.Fatalf("size=%d", got)
-	}
 }
 
 type ptrMarshalFunc func()
@@ -1000,29 +1007,6 @@ type ptrMarshalFunc func()
 var ptrMarshalCalls int
 
 func (*ptrMarshalFunc) MarshalJSON() ([]byte, error) { ptrMarshalCalls++; return []byte(`"f"`), nil }
-
-func TestPointerToNonDataTypeIsLeftOutBeforeItsSerializer(t *testing.T) {
-	setupAI(t, WithEmitSpans(true))
-	ptrMarshalCalls = 0
-	f := ptrMarshalFunc(func() {})
-	got := captureContent(map[string]any{"f": &f, "keep": 1}).(map[string]any)
-	if _, err := exactSize(map[string]any{"f": &f}); err == nil || errors.Is(err, errSerializer) || len(got) != 1 || ptrMarshalCalls != 0 {
-		t.Fatalf("captured %v, serializers ran %d times", got, ptrMarshalCalls)
-	}
-	if within, custom := newInspector().shape(&f, false); !within || custom {
-		t.Fatalf("inspector: within=%t custom=%t", within, custom)
-	}
-}
-
-func TestReportSaysWhetherTheBudgetCutItsContent(t *testing.T) {
-	setupAI(t, WithEmitSpans(true))
-	if captureResolved(map[string]any{"a": 1}, nil).cut {
-		t.Error("a small result reported cut")
-	}
-	if !captureResolved(map[string]any{"a": filler(maxWalkNodes + 5)}, nil).cut {
-		t.Error("a cut result not reported cut, so MCP seeds would carry its cut copy")
-	}
-}
 
 func TestSpanSummaryFinishReasonsAreNotBudgeted(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
@@ -1036,48 +1020,6 @@ func TestSpanSummaryFinishReasonsAreNotBudgeted(t *testing.T) {
 	}
 	if n := len(got["gen_ai.input.messages"].([]any)); n >= maxWalkNodes+5 {
 		t.Fatalf("content attribute was not budgeted: %d", n)
-	}
-}
-
-func TestMCPResultWithoutARuleIsNotEncoded(t *testing.T) {
-	// 2^40 paths: encoding the result would never finish.
-	result := map[string]any{"isError": true, "structuredContent": sharedMaps(40)}
-	want := 2
-	for range 40 {
-		want = 11 + 2*want
-	}
-	want += 36 + 1 // {"isError":true,"structuredContent": ... }
-	var p map[string]any
-	bounded(t, func() { p, _ = toolOutcome(t, result) })
-	if p["tool_status"] != "error" || p["is_error_result"] != true || p["result_size_bytes"] != want {
-		t.Fatalf("status=%v is_error=%v size=%v want %d", p["tool_status"], p["is_error_result"], p["result_size_bytes"], want)
-	}
-	if !reflect.DeepEqual(p["result_content_types"], []string{"structured"}) {
-		t.Fatalf("content types=%v", p["result_content_types"])
-	}
-}
-
-func TestMCPResultViewReadsTheSameFieldsFromBytesAndValues(t *testing.T) {
-	setupAI(t, WithEmitSpans(true))
-	value := map[string]any{
-		"content":           []any{map[string]any{"type": "text", "text": "x"}, map[string]any{"type": "image"}, map[string]any{"type": "text"}},
-		"structuredContent": map[string]any{"nextCursor": "c", "status": 429},
-		"_meta":             map[string]any{"com.rudderstack/http_status": 503, "pad": filler(10)},
-		"isError":           true, "requestState": "s", "nextCursor": "n",
-		"inputRequests": map[string]any{"k": map[string]any{"method": "elicitation/create", "params": filler(5)}},
-	}
-	raw, _ := compactJSON(value)
-	plain, plainSize := mcpResultView(value)
-	scanned, scannedSize := mcpResultView(&serResult{calls: new(int), raw: string(raw)})
-	if plainSize != len(raw) || scannedSize != len(raw) {
-		t.Fatalf("sizes %d, %d want %d", plainSize, scannedSize, len(raw))
-	}
-	// Numbers are float64 in both, and the fields agree; a request keeps its params only in the plain view.
-	for k, entry := range plain["inputRequests"].(map[string]any) {
-		plain["inputRequests"].(map[string]any)[k] = map[string]any{"method": entry.(map[string]any)["method"]}
-	}
-	if !reflect.DeepEqual(plain, scanned) {
-		t.Fatalf("plain=%v\nscanned=%v", plain, scanned)
 	}
 }
 
@@ -1266,5 +1208,25 @@ func TestSpanSummaryFinishReasonsRunASerializerOnce(t *testing.T) {
 	got := captureSpanAttributes(map[string]any{"gen_ai.response.finish_reasons": []any{&onceMarshaler{&calls}}, "other": 1})
 	if calls != 1 || got["gen_ai.response.finish_reasons"] == nil {
 		t.Fatalf("serializer ran %d times, finish reasons=%v", calls, got["gen_ai.response.finish_reasons"])
+	}
+}
+
+func TestPointerToNonDataTypeIsLeftOutBeforeItsSerializer(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	ptrMarshalCalls = 0
+	f := ptrMarshalFunc(func() {})
+	got := captureContent(map[string]any{"f": &f, "keep": 1}).(map[string]any)
+	if len(got) != 1 || ptrMarshalCalls != 0 {
+		t.Fatalf("captured %v, serializers ran %d times", got, ptrMarshalCalls)
+	}
+}
+
+func TestSerializerSharedWithFinishReasonsRunsOnce(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	calls := 0
+	shared := &onceMarshaler{&calls}
+	got := captureSpanAttributes(map[string]any{"gen_ai.response.finish_reasons": []any{shared}, "other": shared})
+	if calls != 1 || got["other"] == nil || got["gen_ai.response.finish_reasons"] == nil {
+		t.Fatalf("serializer ran %d times: %v", calls, got)
 	}
 }

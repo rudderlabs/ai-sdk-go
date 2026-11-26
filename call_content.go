@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -420,7 +421,6 @@ type captureReport struct {
 	size  int
 	sizes map[string]int
 	memo  map[visit]any
-	cut   bool // the budget left values out of value
 }
 
 // The recursion guard contains only identities while app code is on the current stack. It
@@ -499,14 +499,14 @@ func captureProperties(p map[string]any, seeds ...captureSeed) map[string]any {
 	return captureProps(p, false, seeds)
 }
 
-// captureAttributes is captureProperties with a budget for each attribute.
-func captureAttributes(p map[string]any) map[string]any { return captureProps(p, true, nil) }
+// captureAttributes is captureProperties with a budget for each attribute, except the ones named in
+// whole, which a summary reads and so no budget cuts.
+func captureAttributes(p map[string]any, whole ...string) map[string]any {
+	return captureEach(p, make(map[string]any, len(p)), nil, whole)
+}
 
 func captureProps(p map[string]any, fields bool, seeds []captureSeed) map[string]any {
 	out := make(map[string]any, len(p))
-	if fields {
-		return captureEach(p, out, seeds)
-	}
 	// Everything resolves together, scalars included: the properties are one captured value, so
 	// one budget covers all of them, in key order (span attributes are each their own).
 	resolved := p
@@ -577,19 +577,29 @@ func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureS
 	if consume != nil {
 		consume(resolved)
 	}
-	// Each value is sized on its own: a serializer in one captured value doesn't change how
-	// another is measured.
-	in, z := newInspector(), newSizer()
+	// Sized as main sized: from the original when no serializer ran and nothing was cut by depth,
+	// else from the whole resolved copy. The sizer counts a shared value at each place without
+	// expanding it, and a serializer's output as the bytes it wrote.
+	z := newSizer()
 	sizes := map[string]int{}
-	size := fieldSize(v, resolved, fields, in, z)
-	if m, ok := v.(map[string]any); ok && fields {
-		rm, _ := resolved.(map[string]any)
-		for k, value := range m {
-			sizes[k] = fieldSize(value, rm[k], false, in, z)
+	var size int
+	if !w.usedSerializer && !w.incomplete {
+		size = originalSize(v, z)
+		if m, ok := v.(map[string]any); ok && fields {
+			for k, value := range m {
+				sizes[k] = originalSize(value, z)
+			}
+		}
+	} else {
+		size = resolvedSize(v, resolved, z)
+		if m, ok := resolved.(map[string]any); ok && fields {
+			original, _ := v.(map[string]any)
+			for k, value := range m {
+				sizes[k] = resolvedSize(original[k], value, z)
+			}
 		}
 	}
-	content := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, fields: fields}
-	out, _ := content.strip(resolved)
+	out, _ := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, fields: fields}).strip(resolved)
 	// One pass copies every memoised container once and reuses it where it appears, so the work
 	// is linear in distinct containers however much they share.
 	memo := make(map[visit]any, len(w.memo))
@@ -597,11 +607,27 @@ func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureS
 	for key, value := range w.memo {
 		memo[key], _ = sw.strip(value)
 	}
-	return captureReport{value: out, size: size, sizes: sizes, memo: memo, cut: content.cuts > 0}
+	return captureReport{value: out, size: size, sizes: sizes, memo: memo}
 }
 
 // resolvedSize is base's encoded size: serializer output counts as the bytes encoding/json
 // wrote for it, HTML escapes included.
+// originalSize is main's captureSize of a value no serializer touched: its encoded size, -1 when it
+// cannot be encoded.
+func originalSize(v any, z *sizer) int {
+	if text, ok := v.(string); ok {
+		return len(text)
+	}
+	n, err := z.size(reflect.ValueOf(v))
+	switch {
+	case err == nil:
+		return n
+	case errors.Is(err, errSerializer):
+		return captureSize(v) // a serializer the walk did not reach: encoded once, as main did
+	}
+	return -1
+}
+
 func resolvedSize(original, resolved any, z *sizer) int {
 	if _, ok := original.(string); ok {
 		return captureSize(resolved)
@@ -1523,10 +1549,17 @@ func structMedia(rv reflect.Value) bool {
 
 // captureEach captures span attributes, each with a budget of its own: values that run no app
 // code are stripped as they are, and the rest resolve in one pass.
-func captureEach(p, out map[string]any, seeds []captureSeed) map[string]any {
+func captureEach(p, out map[string]any, seeds []captureSeed, whole []string) map[string]any {
+	// One resolve walk for all the attributes, so a serializer shared between them runs once; the
+	// copies made from it are budgeted per attribute, and whole ones share their copies instead.
+	shared := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, noBudget: true, share: true, copies: map[copyKey]any{}}
 	strip := func(m map[string]any) {
 		for k, value := range m {
-			if v, keep := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(value); keep {
+			w := shared
+			if !slices.Contains(whole, k) {
+				w = &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}
+			}
+			if v, keep := w.strip(value); keep {
 				out[k] = v
 			}
 		}
@@ -1547,7 +1580,7 @@ func captureEach(p, out map[string]any, seeds []captureSeed) map[string]any {
 	strip(plain)
 	if typed != nil {
 		defer enterCapture()()
-		resolved, _ := resolveCapture(typed, true, seeds)
+		resolved, _ := resolveCaptureWith(typed, true, true, seeds)
 		m, _ := resolved.(map[string]any)
 		strip(m)
 	}
