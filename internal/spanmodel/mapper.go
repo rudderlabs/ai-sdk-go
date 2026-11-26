@@ -73,7 +73,7 @@ func cutValue(value string, target int) string {
 	return value[:end] + truncationSuffix
 }
 
-// SpanToTrack maps one ended span; nil means it could not fit the event budget.
+// ToTrack maps one ended span; nil means it could not fit the event budget.
 // It does not apply the export filter. The original span is never mutated.
 func ToTrack(s Span, options Options) (*analytics.Track, error) {
 	m, p, candidates, maxBytes := build(s, options)

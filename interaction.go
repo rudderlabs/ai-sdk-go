@@ -32,7 +32,7 @@ type InteractionOptions struct {
 	// ConversationID is the conversation (thread, chat) ID. Minted when missing: every event
 	// needs one.
 	ConversationID string
-	// OneShot uses the interaction ID when no explicit or context conversation ID exists. Since v0.4; default false.
+	// OneShot uses the interaction ID when no explicit or context conversation ID exists. Default false.
 	OneShot bool
 	// InteractionID replaces the generated UUID. To join MCP server events through
 	// com.rudderstack/interaction_id, use a UUID or 32 hex digits: MCP servers ignore other shapes.
@@ -385,11 +385,11 @@ type PausedInteraction struct {
 	OutcomeHint any    `json:"outcome_hint,omitempty"`
 	Outcome     string `json:"outcome,omitempty"`
 	Integration string `json:"integration,omitempty"`
-	// SeenResponseIDs retains provider/response ID pairs already counted. Since v0.4.
+	// SeenResponseIDs retains provider/response ID pairs already counted.
 	SeenResponseIDs [][2]string `json:"seen_response_ids,omitempty"`
 	// LastFailedCallType retains the latest failed model call's category for resumed RunTask errors.
 	LastFailedCallType string `json:"last_failed_call_type,omitempty"`
-	// PendingCalls and PendingTools carry usage accepted after the paused segment closed. Since v0.4.
+	// PendingCalls and PendingTools carry usage accepted after the paused segment closed.
 	PendingCalls []map[string]any `json:"pending_calls,omitempty"`
 	PendingTools []map[string]any `json:"pending_tools,omitempty"`
 	// ReportCount orders reports independently of aggregate call totals.
@@ -399,7 +399,7 @@ type PausedInteraction struct {
 	// PendingCompactions carries compactions recorded after the paused response captured totals.
 	PendingCompactions *int `json:"pending_compactions,omitempty"`
 	// CallSequence is the model calls reported across all segments, so call_index continues after
-	// restoration. Written only with WithLLMCallEvents and above 0. Since v0.4 (SDK-6798).
+	// restoration. Written only with WithLLMCallEvents and above 0.
 	CallSequence *int `json:"call_sequence,omitempty"`
 }
 
@@ -458,7 +458,7 @@ type recordedCall struct {
 	// aggregate report stands for); content is its masked input and output until the event is sent.
 	callIndex int
 	content   *callContent
-	// order is its stamp in the segment's order of model and tool calls (SDK-6017).
+	// order is its stamp in the segment's order of model and tool calls.
 	order int
 	// Past MaxCallsPerInteraction, calls are folded into an overflow record per group: unpriced
 	// (a successful call had no cost) and feesUnknown (server-tool fees missing) then stick.
@@ -477,7 +477,7 @@ type recordedTool struct {
 	hasResult, settled, fired                           bool
 	ruleOutcome                                         *toolRuleOutcome
 	// agentKey is its own agent, else the latest model call's when it was recorded: that agent's
-	// next call settles the wait (SDK-6017). order is its place in the segment; carried tools restart at 0.
+	// next call settles the wait. order is its place in the segment; carried tools restart at 0.
 	agentKey string
 	order    int
 	// keyCall is the stamp of the model call whose agent it took (0: none, or its own agent), so a
@@ -658,10 +658,8 @@ func (i *Interaction) answerErrorType(err error) string {
 // ID is the interaction ID (interaction_id): return it to your client for feedback events.
 func (i *Interaction) ID() string { return i.id }
 
-// ConversationID is the conversation_id of the interaction.
 func (i *Interaction) ConversationID() string { return i.conversationID }
 
-// Trigger is who started the interaction.
 func (i *Interaction) Trigger() Trigger { return i.trigger }
 
 // Ended reports whether ai_response_received was sent.
@@ -1533,7 +1531,7 @@ func (i *Interaction) noteCallOutcomeLocked(r *recordedCall) {
 	}
 }
 
-// stampCallLocked: a model call by an agent settles the wait on that agent's earlier tool calls (SDK-6017).
+// stampCallLocked: a model call by an agent settles the wait on that agent's earlier tool calls.
 func (i *Interaction) stampCallLocked(c *recordedCall) {
 	i.order++
 	c.order = i.order
@@ -1542,7 +1540,7 @@ func (i *Interaction) stampCallLocked(c *recordedCall) {
 }
 
 // restampCallLocked: a merge named the agent of a call stamped without one. Its stamp moves to
-// that agent, with the tools that took its empty key, as if it had been recorded with the agent (SDK-6017).
+// that agent, with the tools that took its empty key, as if it had been recorded with the agent.
 func (i *Interaction) restampCallLocked(c *recordedCall) {
 	// A folded call keeps only totals, under the agent it was folded with.
 	if c.agentName == "" || c.order == 0 || !slices.Contains(i.calls, c) {
@@ -1832,7 +1830,7 @@ func (i *Interaction) recordToolCalls(fromSpan, outputFailure bool, calls ...Too
 				limit := cfg().limits.MaxCallsPerInteraction
 				capped := len(i.tools) >= limit
 				// One that may wait on an approval is still stored past the cap, as many again at
-				// most, so that a pause can carry it instead of counting it twice (SDK-6017).
+				// most, so that a pause can carry it instead of counting it twice.
 				if capped && (call.ID == "" || ran || call.StructuredCandidate || len(i.tools) >= 2*limit) {
 					// Counted in its tool_breakdown identity only: no declared event.
 					i.foldToolLocked(&recordedTool{name: name, mcpServer: server, parentTool: call.ParentTool, agentName: call.AgentName, calls: 1})
@@ -2839,7 +2837,7 @@ func pendingCall(c *recordedCall) map[string]any {
 }
 
 // pendingTime reads a pending call's start or end: epoch milliseconds, or what Go (RFC 3339)
-// and Python (nanoseconds) wrote before SDK-6111.
+// and Python (nanoseconds) wrote in older snapshots.
 func pendingTime(p map[string]any, edge string) time.Time {
 	switch at := p[edge+"_at"].(type) {
 	case string:
@@ -2910,7 +2908,7 @@ func pendingTool(c *recordedTool) map[string]any {
 	return p
 }
 
-// selectionObject normalizes the positional metadata Python wrote before SDK-6111.
+// selectionObject normalizes positional metadata in older Python snapshots.
 func selectionObject(value any, primary bool) map[string]any {
 	if object, ok := value.(map[string]any); ok {
 		return object
@@ -2956,7 +2954,7 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		c.spanSource = restoredSpanSource(p["span_source"])
 		c.callIndex = int(pendingNumber(p, "call_index"))
 		c.spanID = pendingText(p, "span_id")
-		// Go wrote twin_matched and usage_unknown before SDK-6111.
+		// Older Go snapshots used twin_matched and usage_unknown.
 		c.fromSpan = pendingBool(p, "from_span")
 		if _, present := p["matched"]; present {
 			c.twinMatched = pendingBool(p, "matched")
@@ -3306,7 +3304,7 @@ func (i *Interaction) end(o EndOptions) {
 	}
 	i.filterSpanCallsLocked()
 	var excluded []*recordedTool
-	// Never resumed: a tool the pause still waits on never ran, so nothing counts it (SDK-6017).
+	// Never resumed: a tool the pause still waits on never ran, so nothing counts it.
 	neverResumed := !i.pausedAt.IsZero()
 	i.tools = slices.DeleteFunc(i.tools, func(tool *recordedTool) bool {
 		unrun := neverResumed && i.awaitedLocked(tool)
@@ -3782,8 +3780,6 @@ func utf16Units(rs []rune) []uint16 {
 	return out
 }
 
-// ----------------------------------------------------------------- integration hooks
-
 func (i *Interaction) keepsTextLocked() bool {
 	if i.ended || i.pausing || !i.pausedAt.IsZero() {
 		return false
@@ -4031,7 +4027,7 @@ func (t *recordedTool) structuredPending() bool {
 }
 
 // awaitedLocked: requested by the model and not run yet (awaiting an approval), and its agent made
-// no later call: the pause waits on it, so the segment that runs it counts it (SDK-6017).
+// no later call: the pause waits on it, so the segment that runs it counts it.
 func (i *Interaction) awaitedLocked(t *recordedTool) bool {
 	key := t.agentKey
 	if t.unkeyed {

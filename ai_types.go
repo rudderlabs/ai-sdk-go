@@ -78,7 +78,6 @@ const (
 	ActionRejected          ActionType = "rejected"
 	ActionEdited            ActionType = "edited"
 	ActionClickedThrough    ActionType = "clicked_through"
-	// Since v0.4: feedback dismissal, exports and suggestion reversion.
 	ActionFeedbackDismissed ActionType = "feedback_dismissed"
 	ActionExported          ActionType = "exported"
 	ActionReverted          ActionType = "reverted"

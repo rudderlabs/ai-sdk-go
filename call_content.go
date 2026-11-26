@@ -16,9 +16,8 @@ import (
 	"unicode/utf8"
 )
 
-// Per-call content of ai_llm_response_received (SDK-6798): input messages, output text and the
-// tool calls the model requested, in the OpenTelemetry GenAI shapes. Opt-in: WithLLMCallEvents
-// and content capture together.
+// Per-call content uses OpenTelemetry GenAI shapes for inputs, output text and tool calls.
+// It requires both WithLLMCallEvents and content capture.
 
 // GenAIPart is one part of a [GenAIMessage]: {"type": "text", "content": "..."}, a "tool_call"
 // (id, name, arguments), a "tool_call_response" (id, response), a "uri" (modality, uri,

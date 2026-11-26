@@ -19,7 +19,6 @@ import (
 	"github.com/rudderlabs/ai-sdk-go/internal/structuredoutput"
 )
 
-// Call is one intercepted model request.
 type Call struct {
 	ForcedToolName string
 	Span           any
@@ -64,7 +63,6 @@ type StreamHandler interface {
 	Complete() bool
 }
 
-// Complete reports whether the provider's terminal event arrived.
 func (o *Observer) Complete() bool { return o.Done }
 
 // EventFilter is an optional StreamHandler extension: Hide, asked after OnEvent, drops that event
@@ -89,7 +87,6 @@ type Prepared struct {
 	Accepted func()
 }
 
-// Spec describes one provider API for [Intercept].
 type Spec struct {
 	// RetryUnnumbered groups retries of SDKs that reuse a request without attempt headers.
 	RetryUnnumbered bool
@@ -99,22 +96,19 @@ type Spec struct {
 	Provider    string
 	Integration string
 	Analytics   analytics.Client
-	// IsStream reports whether the request streams.
-	IsStream func(req *http.Request, body map[string]any) bool
+	IsStream    func(req *http.Request, body map[string]any) bool
 	// Untracked passes a request through untracked (a background response that is only queued).
 	Untracked func(req *http.Request, body map[string]any) bool
 	// InputMessages maps the request body to GenAI messages for input_messages. Called only when
 	// the call's content is captured.
 	InputMessages func(request map[string]any) []rudderstackai.GenAIMessage
 	// OnRequest sees the request before it is sent (tool results of earlier calls).
-	OnRequest func(c *Call)
-	// PrepareStream may change a streamed request.
+	OnRequest     func(c *Call)
 	PrepareStream func(c *Call) *Prepared
 	// OnResponse records a successful non-streamed response; false when it was not a finished
 	// call (nothing recorded).
 	OnResponse func(c *Call, body map[string]any, resp *http.Response) bool
-	// NewStream returns the handler of a streamed response.
-	NewStream func(c *Call, resp *http.Response) StreamHandler
+	NewStream  func(c *Call, resp *http.Response) StreamHandler
 	// ErrorType maps a failed response; nil uses the HTTP status.
 	ErrorType func(status int, body map[string]any) string
 }
@@ -353,7 +347,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 
 func (s *Spec) failed(c *Call, errorType string) {
 	safe(func() {
-		// Only spans need unknown usage; with spans off it would hold the call event like main never did.
+		// Unknown usage is span-specific; otherwise failed call events would be deferred.
 		c.RecordCall(rudderstackai.LLMCall{Provider: c.Provider, Model: c.Model, ErrorType: errorType, Integration: c.Integration, UsageUnknown: c.Span != nil})
 		if c.Ephemeral {
 			EndEphemeral(c.Interaction, errorType)

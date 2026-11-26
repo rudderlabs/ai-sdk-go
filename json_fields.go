@@ -157,10 +157,7 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 
 					fields = append(fields, field)
 					if count[f.typ] > 1 {
-						// If there were multiple instances, add a second,
-						// so that the annihilation code will see a duplicate.
-						// It only cares about the distinction between 1 and 2,
-						// so don't bother generating any more copies.
+						// Two copies suffice to mark an ambiguous embedded field.
 						fields = append(fields, fields[len(fields)-1])
 					}
 					continue
@@ -176,9 +173,6 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 	}
 
 	slices.SortFunc(fields, func(a, b jsonField) int {
-		// sort field by name, breaking ties with depth, then
-		// breaking ties with "name came from json tag", then
-		// breaking ties with index sequence.
 		if c := strings.Compare(a.name, b.name); c != 0 {
 			return c
 		}
@@ -194,12 +188,7 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 		return slices.Compare(a.index, b.index)
 	})
 
-	// Delete all fields that are hidden by the Go rules for embedded fields,
-	// except that fields with JSON tags are promoted.
-
-	// The fields are sorted in primary order of name, secondary order
-	// of field index length. Loop over names; for each name, delete
-	// hidden fields by choosing the one dominant field that survives.
+	// Resolve embedding conflicts by name, giving JSON tags precedence.
 	out := fields[:0]
 	for advance, i := 0, 0; i < len(fields); i += advance {
 		// One iteration per name.
@@ -230,16 +219,9 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 	return fields
 }
 
-// dominantField looks through the fields, all of which are known to
-// have the same name, to find the single field that dominates the
-// others using Go's embedding rules, modified by the presence of
-// JSON tags. If there are multiple top-level fields, the boolean
-// will be false: This condition is an error in Go and we skip all
-// the fields.
+// dominantField rejects equally shallow fields with the same tag priority.
 func dominantField(fields []jsonField) (jsonField, bool) {
-	// The fields are sorted in increasing index-length order, then by presence of tag.
-	// That means that the first field is the dominant one. We need only check
-	// for error cases: two fields at top level, either both tagged or neither tagged.
+	// Depth and tag priority are sorted, so only the first two can be ambiguous.
 	if len(fields) > 1 && len(fields[0].index) == len(fields[1].index) && fields[0].tag == fields[1].tag {
 		return jsonField{}, false
 	}

@@ -12,8 +12,7 @@ import (
 	"time"
 )
 
-// Intent classification: after an answer, your classifier labels the interaction with an intent
-// and an outcome, sent as ai_interaction_classified.
+// Classifiers label answered interactions with intent and outcome for ai_interaction_classified.
 
 // DefaultOutcomes are the outcomes a classifier picks from unless [ClassifierOptions.Outcomes]
 // says otherwise.
@@ -51,17 +50,14 @@ type ClassifyTurn struct {
 	Outcomes []string
 }
 
-// ClassifyResult is what a classifier returns.
 type ClassifyResult struct {
 	Intent        string
 	Outcome       string
 	IntentSummary string
 }
 
-// ClassifyFunc is your own classifier.
 type ClassifyFunc func(ctx context.Context, turn ClassifyTurn) (ClassifyResult, error)
 
-// ClassifierReply is a model's reply to the classifier prompt.
 type ClassifierReply struct {
 	Text     string
 	Model    string
@@ -337,8 +333,6 @@ func summaryOf(raw string) string {
 	}
 	return text
 }
-
-// ----------------------------------------------------------------- background work
 
 var background = struct {
 	mu       sync.Mutex
