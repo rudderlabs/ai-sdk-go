@@ -54,7 +54,7 @@ On the laptop, 5,000 interactions per second (about 15,000 events per second) we
 
 Memory caps and their effects: [configuration](configuration.md#limits). Product-event trimming: [events](events.md#event-size). MCP state caps: [MCP limits](mcp.md#limits). Span budgets: [tracing](tracing.md#privacy-and-size).
 
-An interaction leaves nothing behind once it ends.
+An interaction leaves nothing behind once it ends; MCP keeps a few entries per session or interaction (call positions and argument hashes for `retry_count`), up to `MaxMapEntries` per map.
 
 ## Fuzz tests
 

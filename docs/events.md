@@ -31,8 +31,8 @@ Properties on every interaction event (prompt, answer, per-call, declared tool, 
 
 | Property                | Source                                                                                              |
 | ----------------------- | --------------------------------------------------------------------------------------------------- |
-| `conversation_id`       | [`InteractionOptions.ConversationID`](configuration.md#interactionoptions)       |
-| `interaction_id`        | [`InteractionOptions.InteractionID`](configuration.md#interactionoptions)                                                  |
+| `conversation_id`       | [`InteractionOptions.ConversationID`](configuration.md#interactionoptions), else the context's, else the `interaction_id` with `OneShot: true`, else a minted UUID v4 |
+| `interaction_id`        | [`InteractionOptions.InteractionID`](configuration.md#interactionoptions), else a UUID v4 |
 | `feature`               | `Feature` of the options, else the context's                                                        |
 | `surface`               | `Surface` of the options, else the context's; a value outside the `Surface` constants is dropped with a warning |
 | `account_id`            | `AccountID` of the options, else the context's                                                      |
@@ -435,7 +435,7 @@ One event per score: from your evaluator after each successful answer, or from `
 ```
 
 - `evaluation_name`, `evaluator` (`EvaluatorModel`, `EvaluatorCode` or `EvaluatorHuman`) and at least one of a finite `score_value` and a non-empty `score_label` are required; a score without them is dropped with a warning. `sampled` is sent when you set it.
-- `explanation`: `Score.Explanation`, [captured and masked](privacy.md#privacy-and-masking), trimmed and capped at 280 characters.
+- `explanation`: `Score.Explanation`, only with content capture on, [masked](privacy.md#privacy-and-masking), trimmed and capped at 280 characters.
 - Evaluator setup and failures: [configuration](configuration.md#classifier-and-evaluator).
 - `TrackScore` needs `InteractionID` and `ConversationID` (the latter falls back to the context); it adds `feature`, `surface`, `account_id`, `on_behalf_of` and `trigger` when given, and is tagged `integration: "manual"`.
 
