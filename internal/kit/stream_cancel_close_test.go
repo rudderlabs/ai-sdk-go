@@ -12,7 +12,7 @@ import (
 )
 
 // cancelStream opens a spanned stream whose cancellation is settled on the context's goroutine.
-func cancelStream(t *testing.T, ctx context.Context, h StreamHandler) *http.Response {
+func cancelStream(ctx context.Context, t *testing.T, h StreamHandler) *http.Response {
 	t.Helper()
 	spec := Spec{Provider: "openai", Integration: "review",
 		IsStream:  func(*http.Request, map[string]any) bool { return true },
@@ -38,7 +38,7 @@ func TestCloseWaitsForCancellationReport(t *testing.T) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	reporting, release := make(chan struct{}), make(chan struct{})
-	resp := cancelStream(t, ctx, &reentryHandler{finish: func() { close(reporting); <-release }})
+	resp := cancelStream(ctx, t, &reentryHandler{finish: func() { close(reporting); <-release }})
 	cancel()
 	<-reporting
 	closed := make(chan struct{})
@@ -69,7 +69,7 @@ func TestCancellationReportReentersClose(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			h := &reentryHandler{}
-			resp := cancelStream(t, ctx, h)
+			resp := cancelStream(ctx, t, h)
 			reported := make(chan struct{})
 			h.finish = func() {
 				defer close(reported)
@@ -97,7 +97,7 @@ func TestCloseDoesNotWaitWithoutCancellation(t *testing.T) {
 	ctx, i := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u", Classify: rudderstackai.Ptr(false)})
 	defer i.End(rudderstackai.EndOptions{})
 	reading, release := make(chan struct{}), make(chan struct{})
-	resp := cancelStream(t, ctx, &reentryHandler{event: func() { close(reading); <-release }})
+	resp := cancelStream(ctx, t, &reentryHandler{event: func() { close(reading); <-release }})
 	read := make(chan struct{})
 	go func() { defer close(read); _, _ = io.ReadAll(resp.Body) }()
 	<-reading
