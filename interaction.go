@@ -262,6 +262,36 @@ func (i *Interaction) foldToolLocked(t *recordedTool) {
 	i.toolOverflow = append(i.toolOverflow, t)
 }
 
+// countToolIDLocked remembers an ID an earlier segment counted, so a later report of it cannot
+// count it again. Insertion order, oldest evicted first; adding a known ID changes nothing.
+func (i *Interaction) countToolIDLocked(id string) {
+	limit := cfg().limits.MaxCallsPerInteraction
+	if id == "" || limit < 1 {
+		return
+	}
+	if _, ok := i.countedToolSet[id]; ok {
+		return
+	}
+	if i.countedToolSet == nil {
+		i.countedToolSet = map[string]struct{}{}
+	}
+	i.countedToolSet[id] = struct{}{}
+	i.countedToolIDs = append(i.countedToolIDs, id)
+	for len(i.countedToolIDs) > limit {
+		delete(i.countedToolSet, i.countedToolIDs[0])
+		i.countedToolIDs = i.countedToolIDs[1:]
+	}
+}
+
+// ignoredToolLocked: a report for an ID an earlier segment counted creates no record.
+func (i *Interaction) ignoredToolLocked(id string) bool {
+	if id == "" || i.toolsByID[id] != nil {
+		return false
+	}
+	_, counted := i.countedToolSet[id]
+	return counted
+}
+
 func derefFloat(p *float64) float64 {
 	if p == nil {
 		return 0
@@ -401,6 +431,9 @@ type PausedInteraction struct {
 	// CallSequence is the model calls reported across all segments, so call_index continues after
 	// restoration. Written only with WithLLMCallEvents and above 0.
 	CallSequence *int `json:"call_sequence,omitempty"`
+	// CountedToolIDs are the tool-call IDs earlier segments counted, oldest first: a later report
+	// for one adds no count or event, as in process.
+	CountedToolIDs []string `json:"counted_tool_ids,omitempty"`
 }
 
 // resumeFrom applies a Resume snapshot's fields to o; false (with a warning) when it is not one.
@@ -588,6 +621,8 @@ type Interaction struct {
 	capPending             bool
 	buildErrors            []error
 	toolsByID              map[string]*recordedTool
+	countedToolIDs         []string            // IDs earlier segments counted, oldest first, at most MaxCallsPerInteraction
+	countedToolSet         map[string]struct{} // same IDs, for lookup
 	primary                *primarySelection
 	hint                   *outcomeHint
 	clientDisconnected     bool
@@ -1794,6 +1829,9 @@ func (i *Interaction) recordToolCalls(fromSpan, outputFailure bool, calls ...Too
 			i.resumeLocked()
 		}
 		for n, call := range calls {
+			if i.ignoredToolLocked(call.ID) {
+				continue
+			}
 			name, server := normalizeTool(call.Name, call.MCPServer)
 			var tool *recordedTool
 			if call.ID != "" {
@@ -2542,6 +2580,9 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	for _, tool := range i.tools {
 		if i.carriedLocked(tool) {
 			carried = append(carried, tool)
+		} else {
+			// Counted here: a later report of its ID must not count it again.
+			i.countToolIDLocked(tool.id)
 		}
 	}
 	i.tools, i.toolOverflow, i.toolsByID = carried, nil, map[string]*recordedTool{}
@@ -2725,6 +2766,7 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		p["overflow"] = true
 		snapshot.PendingTools = append(snapshot.PendingTools, p)
 	}
+	snapshot.CountedToolIDs = slices.Clone(i.countedToolIDs)
 	return snapshot, true
 }
 
@@ -3123,6 +3165,9 @@ func (i *Interaction) restorePending(snapshot *PausedInteraction) {
 		if c.id != "" {
 			i.toolsByID[c.id] = c
 		}
+	}
+	for _, id := range snapshot.CountedToolIDs {
+		i.countToolIDLocked(id)
 	}
 	i.restartOrderLocked()
 }
