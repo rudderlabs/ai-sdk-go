@@ -50,6 +50,7 @@ func TestPausedSnapshotDoesNotRetainInteraction(t *testing.T) {
 			setupAI(t, WithLimits(Limits{MaxOpenInteractions: 1}))
 			snapshot, object, scope := func() (PausedInteraction, weak.Pointer[Interaction], weak.Pointer[pauseGCProbe]) {
 				probe := &pauseGCProbe{}
+				probe.data[0] = 1
 				ctx := context.WithValue(context.Background(), keyValues, &contextValues{disconnected: func() bool {
 					runtime.KeepAlive(probe)
 					return false
