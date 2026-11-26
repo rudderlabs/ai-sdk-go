@@ -1,6 +1,6 @@
 # Configuration
 
-Process-wide settings, per-interaction options, identity, pricing, classification and shutdown for the AI interaction events. `WrapMCPServer` takes its own `Options`; global sampling and content capture also apply: see [mcp.md](mcp.md#options).
+Settings, interactions, identity, pricing, classification and shutdown. MCP has [separate options](mcp.md#options), with global sampling and content capture.
 
 - [Configure](#configure)
 - [Which client is used](#which-client-is-used)
@@ -34,7 +34,7 @@ err := rudderstackai.Configure(
 )
 ```
 
-`Configure` changes only the settings passed, is safe to call concurrently, and validates every option first: an invalid one returns an error and changes nothing. A nil option is skipped.
+`Configure` changes only the settings passed and is safe to call concurrently. It validates all options before changing anything. An invalid option returns an error. Nil options are skipped.
 
 | Option                                  | Default | Meaning                                                                                                                       |
 | --------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -69,7 +69,7 @@ For an interaction, the first that is set: `InteractionOptions.Analytics` (or `T
 
 For `StartInteraction` and `RunInteraction`. Every field is optional.
 
-One interaction per user turn, not per conversation or process. Pass your chat or thread ID as `ConversationID` so turns group into a conversation. A one-shot feature with no thread (a Generate button, a suggested fix) sets `OneShot: true`: without an explicit or context conversation ID, `conversation_id` is the interaction's ID. The default still mints a separate conversation ID. Resending the history each turn is fine: each turn reports only its own calls.
+Use one interaction per user turn. Set `ConversationID` to your chat or thread ID to group turns. For a feature without a thread, such as a Generate button or suggested fix, set `OneShot: true`. With no explicit or context conversation ID, `OneShot` uses the interaction ID as `conversation_id`. Without `OneShot`, the default generates a separate conversation ID. Resending history is fine: each turn reports only its own calls.
 
 | Field                                       | Meaning                                                                                                     |
 | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -92,11 +92,11 @@ One interaction per user turn, not per conversation or process. Pass your chat o
 | `NoPromptEvent`                             | Skip `ai_user_prompt_created`                                                                               |
 | `Resume`                                    | `*PausedInteraction` from [`Pause`](#pauses-and-resumes): continue that run; its IDs, identity and background fields win over the other options, and no prompt event is sent |
 
-`RunInteraction(ctx, o, fn)` also puts the options' identity, conversation, feature, surface, account, client and context into the context `fn` receives (as `WithValues` would), so `TrackAction`, `TrackScore` and nested tasks inside it inherit them.
+`RunInteraction(ctx, o, fn)` adds the options' identity, conversation, feature, surface, account, client and context to `fn`'s context, as `WithValues` does. `TrackAction`, `TrackScore` and nested tasks inherit them.
 
 ## Interaction
 
-`StartInteraction` returns a context carrying the interaction and the `*Interaction`; pass the context to every model call. For code that cannot use a callback, call `End(rudderstackai.EndOptions{})` when the answer is out. `FromContext(ctx)` returns the interaction a context carries, or nil. All methods are safe for concurrent use and never panic.
+`StartInteraction` returns a context carrying the interaction and the `*Interaction`. Pass that context to every model call. Without a callback, call `End(rudderstackai.EndOptions{})` when the answer is out. `FromContext(ctx)` returns the interaction or nil. All methods are safe for concurrent use and never panic.
 
 | Method                          | Meaning                                                                                                   |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -178,12 +178,9 @@ err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{T
 
 ### Callback re-entry
 
-Interaction state publication must finish before application code runs. Pausing keeps its
-in-progress guard active through finalization, redaction, tool events and delivery. Calls
-accepted during finalization belong to the closing segment; calls accepted during delivery
-belong to the next segment. Each accepted call is emitted and counted once.
+Calls accepted during finalization belong to the closing segment. Calls accepted during delivery belong to the next segment. Each accepted call is emitted and counted once.
 
-`Pause` called from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError` (one warning without it). Credits/retries, analytics Enqueue, redactors, content serializers, and event rules are covered. It leaves the interaction unchanged and keeps credits; Pause never panics. Error handlers, application code, and callbacks for other interactions may pause normally. Another goroutine waits on a condition for pricing, including retries/capture, for an internal 5 s bound; expiry refuses with `Reason: pricing_in_flight`, and late credits stay in the open segment. Callback callers use the goroutine ID from the first runtime.Stack line; failed parsing falls back to waiting.
+`Pause` from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError`, or one warning without it. This covers credits/retries, analytics Enqueue, redactors, content serializers and event rules. The interaction and credits stay unchanged. Pause never panics. Error handlers, application code and callbacks for other interactions may pause normally. Another goroutine waits up to 5 s for pricing, including retries/capture. Expiry refuses with `Reason: pricing_in_flight`. Late credits stay in the open segment. If callback-goroutine detection fails, Pause falls back to waiting.
 
 ## Context values
 
@@ -203,7 +200,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 Fields: `UserID`, `AnonymousID`, `ConversationID`, `Feature`, `AccountID`, `OnBehalfOf`, `Surface`, `Analytics`, `Context` (extra message context such as `{"app": {"build": "7"}}`), and the cookie sources `Request`, `Cookies`, `CookieValues`. Standalone model calls: [Interaction ownership](integrations.md#interaction-ownership).
 
-`Middleware(next http.Handler) http.Handler` does the cookie part for every request: handlers get a context as from `WithValues(r.Context(), ContextValues{Request: r})`, and an interaction that ends while the client is gone (the request context is cancelled before the handler returns) is sent with `client_disconnected: true`. An interaction that ends after the handler returned is never marked.
+`Middleware(next http.Handler) http.Handler` gives handlers the context of `WithValues(r.Context(), ContextValues{Request: r})`. An interaction ending after request cancellation but before the handler returns carries `client_disconnected: true`. Interactions ending after the handler returns are never marked.
 
 ```go
 http.Handle("/chat", rudderstackai.Middleware(http.HandlerFunc(chat)))
@@ -237,9 +234,9 @@ See [Product trace ID](tracing.md#product-trace-id).
 
 Credits retries preserve the newest retained call usage and metadata when a hook re-enters and matches a twin. The published credits belong to that same usage and metadata.
 
-`WithCredits` prices each successful `CreditCall` in app credits after USD pricing. The credits hook must be side-effect free and idempotent: it can run more than once for one call if usage or pricing metadata changes while it runs, through re-entrant enrichment inside the hook or concurrent enrichment from another thread/goroutine. After 3 attempts, continued changes omit the call's credits and report `credits_unstable` through the error hook (with `where: credits`), distinct from a throwing hook's `user_callback`.
+The credits hook must be side-effect free and idempotent. It may run again if usage or pricing metadata changes during the hook, through re-entry or concurrent enrichment. After 3 attempts, continued changes omit credits and report `credits_unstable` with `where: credits`. A failing hook instead reports `user_callback`.
 
-No prices ship with the SDK: list prices change and many customers negotiate their own. Register the models you use; unpriced calls keep their tokens and have no cost ([rules](events.md#cost)).
+Register the models you use: the SDK ships no prices, since list prices change and customers negotiate their own. Unpriced calls retain tokens and have no cost ([rules](events.md#cost)).
 
 ```go
 err := rudderstackai.RegisterPrice("claude-sonnet-4-5", rudderstackai.ModelPrice{
@@ -329,7 +326,7 @@ The evaluator gets an `EvaluationTurn` (`InteractionID`, `ConversationID`, `Prom
 
 ## Flush and shutdown
 
-The SDK installs no exit or signal hooks (Go has no reliable exit hook): call these yourself before the process exits.
+The SDK installs no exit or signal hooks. Call these before the process exits.
 
 ```go
 ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -377,25 +374,13 @@ Sampling runs before the event reaches your analytics-go client, so it works wit
 | `MaxCallsPerInteraction` | 1,000    | Model calls and tool calls past it still count in the totals, `usage_breakdown` and `tool_breakdown`, but are no longer kept one by one: tool outcomes and declared tool events are dropped, even if the outcome came with the call. A tool call past it with an ID and no outcome is still kept, up to as many again, in case a pause waits on it: it is then counted once, in the segment that runs it, so at most twice that many tool calls are kept. |
 | `MaxMapEntries`          | 10,000   | Remembered clients, failed attempts held for a retry, each MCP map per server and mcp-go sessions: the oldest entry goes first (a held attempt is recorded at once). Open model-call spans tracked for [span dedup](tracing.md#one-span-per-call-with-the-span-processor): once full, a new one exports without dedup; none is evicted. |
 
-Events are sent outside the SDK's locks: when analytics-go's queue is full, only the goroutine sending waits. Masking limits: [privacy](privacy.md#privacy-and-masking).
+When analytics-go's queue is full, only the sending goroutine waits. Masking limits: [privacy](privacy.md#privacy-and-masking).
 
 ## Errors
 
-User hooks and analytics client methods run after the SDK releases its bookkeeping locks, so a callback can re-enter tracking from another thread or goroutine.
+User hooks and analytics client methods can re-enter tracking from another thread or goroutine.
 
-| Callback family | Go behavior |
-| --- | --- |
-| Error handlers | Notices and contained build failures detached in `unlock`, reported outside `mu` |
-| Redactors | Prompt/response masking outside `mu` |
-| Adapter finalizers | `beforeEnd` detached under `mu`, invoked outside it |
-| Tool filters/properties | Jobs copied and fired flag set under `mu`, hooks outside it |
-| Transport/delivery/flush | Outbox detached before `Enqueue`; flush outside `mu` |
-| Classifier/evaluator | Turn copied, work scheduled after response publication |
-| JSON serialization hooks | Tool properties normalized/sized outside `mu`; delivery serialization outside `mu` |
-| Identity/trace/disconnect/error classification | Startup or outside `mu` |
-| Credit/pricing | `WithCredits` invokes a side-effect-free, idempotent callback outside `mu`; pricing may retry |
-
-Tracking never panics into your code: a panic in the SDK, in an integration (including the AWS SDK's stream-decoding goroutine) or in a hook you configured is contained, and your call's own result or error is returned unchanged. Event values are encoded before they reach the RudderStack client, so serializer failures never reach your app. Content serializers follow the [null and field omission rules](privacy.md#serializer-behavior); a failed serializer on other extra event properties drops that property.
+Tracking never panics into your code. SDK, integration and configured-hook panics are contained, including panics in the AWS SDK's stream-decoding goroutine. Your call's result or error is returned unchanged. Serializer failures never reach your app. Content serializers follow the [null and omission rules](privacy.md#serializer-behavior); a failed serializer on other extra event properties drops that property.
 
 Background hooks leave the ended interaction ended, reject new calls, retain prior usage and emit one classification or evaluation.
 

@@ -2,7 +2,7 @@
 
 See the [shared client specification](../spec/CLIENT-EVENTS.md) for web and mobile SDKs, one-shot interactions, suggestions, feedback, client engagement and declared tool events since v0.4.
 
-For a feature without a chat thread, set `OneShot: true` when starting the interaction or task. Return the interaction ID to the client and use it as both `interaction_id` and `conversation_id`. Conversation ID precedence and the chat default: [InteractionOptions](configuration.md#interactionoptions).
+For features without a chat thread, use [one-shot interactions](configuration.md#interactionoptions). Return the interaction ID to the client as both `interaction_id` and `conversation_id`.
 
 Export destination rules: [`ai_user_action`](events.md#ai_user_action).
 

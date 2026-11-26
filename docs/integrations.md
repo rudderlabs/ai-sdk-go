@@ -79,7 +79,7 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 `WithTracking(opts...)` is `option.WithMiddleware(Middleware(opts...))`. Options: `WithProvider(label)` (default `anthropic`) and `WithAnalytics(client)`.
 
 - Tracked: Messages API requests (`.../messages`), streamed or not, including beta messages. Token counting and batches pass through.
-- Bedrock and Vertex AI clients: pass the tracking option before `bedrock.WithLoadDefaultConfig` / `bedrock.WithConfig` / `vertex.WithGoogleAuth` (middleware runs in registration order, and those options rewrite the request after it), and set the provider label:
+- Bedrock and Vertex AI clients: pass the tracking option before `bedrock.WithLoadDefaultConfig` / `bedrock.WithConfig` / `vertex.WithGoogleAuth`, and set the provider label:
 
 ```go
 client := anthropic.NewClient(
@@ -98,7 +98,7 @@ client := anthropic.NewClient(
 
 Integration module: `github.com/rudderlabs/ai-sdk-go/ruddergenai`.
 
-`google.golang.org/genai` v1.72.0 or later. The genai client has no middleware hook, so tracking sits in its HTTP client.
+`google.golang.org/genai` v1.72.0 or later. Tracking uses its HTTP client.
 
 ```go
 client, err := genai.NewClient(ctx, &genai.ClientConfig{
@@ -138,7 +138,7 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 	})
 ```
 
-`WithTracking(opts...)` returns a `func(*bedrockruntime.Options)`: pass it to `bedrockruntime.New` / `NewFromConfig`, or to a single call. It adds an `APIOptions` middleware (initialize step) that sees the typed input and output, and wraps the client's protocol to observe stream events as the SDK decodes them. Option: `WithAnalytics(client)`. There is no `WithProvider`: the provider is always `aws.bedrock`.
+`WithTracking(opts...)` returns a `func(*bedrockruntime.Options)`: pass it to `bedrockruntime.New` / `NewFromConfig`, or to a single call. Option: `WithAnalytics(client)`. There is no `WithProvider`: the provider is always `aws.bedrock`.
 
 - Tracked: `Converse` and `ConverseStream`. Other operations pass through.
 - `model` is the request `ModelId` (Converse responses carry none); `response_id` is the AWS request ID.
@@ -205,7 +205,7 @@ context never ends; a retry arriving later can start another span.
 
 A failed attempt counts as retried when the client sends it again or closes its response unread, which is how both clients behave. With spans disabled, a connection error (no response) outside an interaction is recorded per attempt. A retried failed response that a middleware added before `WithTracking` (outside it) reads is also recorded per attempt.
 
-genai retries below the tracking transport and has no attempt number. The transport groups retries using per-invocation request identity; successful retries record one final call. The AWS SDK retries below the Bedrock tracker, so a Bedrock operation is recorded once, with the final outcome. `ClassifierClient` calls turn retries off.
+Successful GenAI retries record one final call. Bedrock operations are recorded once with the final outcome. `ClassifierClient` calls disable retries.
 
 ## Tool output failures
 
@@ -279,7 +279,7 @@ An agent that calls MCP servers can join each `mcp_tool_called` to its answer by
 - Streams and cancellation: [Streaming and cancellation](#streaming-and-cancellation). Pausing: [Pauses and resumes](configuration.md#pauses-and-resumes). Disconnection: [Middleware](configuration.md#context-values).
 - Retry limits: [Retries](#retries).
 
-Go resolves one package instance for each import path in a build, including when dependencies use vendoring. Import aliases and repeated wrapping share invocation recognition, so they emit one span. Independently renamed forks use different package identities and internal context keys; cross-fork wrapper recognition is a platform limit. Lazy Go iterators retain the explicit context passed by the caller, and resolve active interaction ownership and capture policy when provider work starts.
+Go resolves one package instance for each import path in a build, including when dependencies use vendoring. Import aliases and repeated wrapping share invocation recognition, so they emit one span. Independently renamed forks cannot recognize each other's wrappers. Lazy Go iterators retain the explicit context passed by the caller, and resolve active interaction ownership and capture policy when provider work starts.
 
 - Mastra is a TypeScript framework, so this SDK has no Mastra integration; use `@rudderstack/ai` (Node.js).
 - Provider integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients. Go has no LangChain,

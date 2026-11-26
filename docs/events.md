@@ -1,6 +1,6 @@
 # Events
 
-Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md), including opt-in `mcp_feedback_submitted` through `FeedbackRequests`. `mcp_capability_requested` / `request_capability` are deprecated; use `FeedbackRequests`. The JSON Schema is [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json); a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
+AI interaction events, sample payloads and property rules. See [MCP](mcp.md) for server events and feedback options. JSON Schema: [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json). Data catalog and tracking plan: [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
 
 ## Event size
 
@@ -300,13 +300,13 @@ Only with `WithLLMCallEvents(true)`: one per recorded call. Retained, timed span
 
 Also, when known: `agent_name`, `requested_model`, `reasoning_tokens`, `cache_write_1h_tokens`, `server_tool_call_count`, `server_tool_cost_usd`, `error_type`. `provider` and `model` are `null` when unknown. `finish_reason` is as the integration reports it (Anthropic's `end_turn` and `max_tokens` are kept as sent; the others are normalised, see [integrations.md](integrations.md)).
 
-- `call_index`: the 1-based order of the call in its interaction, across pauses and resumes. A report with `CallCount` n takes n places, so the next call starts n later; a call folded past `Limits.MaxCallsPerInteraction` keeps its own number. Always sent (it is not content). With `WithEmitSpans(true)`, retained wrapper call events also send `span_id`, matching that invocation's `ai_otel_span`.
+- `call_index`: the 1-based order of the call in its interaction, across pauses and resumes. A report with `CallCount` n takes n places, so the next call starts n later; a call folded past `Limits.MaxCallsPerInteraction` keeps its own number. Always sent (it is not content).
 - With both `WithLLMCallEvents(true)` and content capture (opt-in, personal data): `input_messages` (everything sent on the call: system prompt, history, tool results, in the OpenTelemetry GenAI `[{ role, parts }]` shape), `input_truncated`, `output_text` and `output_tool_calls` (`[{ name, arguments? }]`, JSON-string arguments parsed). Sent by every provider module and by `rudderotel` product-event spans; with `RecordCall` set `LLMCall.InputMessages`, `OutputText` and `OutputToolCalls`. A failed or cut-off call still sends its input and the output that arrived; the schema has no flag for a cut-off output.
 - Messages use roles `system`, `user`, `assistant` and `tool`; parts are `text`, `reasoning`, `tool_call` (`id`, `name`, `arguments`), `tool_call_response` (`id`, `response`), `uri` (`modality`, `uri`) and `file` (`modality`, `mime_type`?, `file_id`) and `blob` (`modality`, `mime_type`, never the bytes; `data:` URIs become blobs). Tool definitions are not sent.
 - Masking is the same as `prompt_text` (built-ins, then your redact hook) on every string in messages and tool arguments. A string over 32,000 code points is shortened first (`input_truncated` true); if the hook fails or drops a string, the whole field (`input_messages` with `input_truncated`, `output_text` or `output_tool_calls`) is left out.
 - Size: the event stays within 30,000 bytes. Over it, `output_text` and `output_tool_calls` that fit nowhere go first; then the oldest messages after the leading system messages are dropped (the last message always stays), then the longest string loses its tail; `input_truncated` is true. Calls folded past `MaxCallsPerInteraction` send no content. Tool results and media remove native bytes: native byte buffers are removed from captured containers after resolving app serializers; cyclic edges are omitted, `data:` URIs become `data:<media type>` and base64 payloads of media objects are dropped; media is `image`, `audio`, `video` or `document`, with `file` parts for provider-held file IDs. A pending call in a pause snapshot keeps its `call_index`.
 
-Serializer capture: with spans on or off, `MarshalJSON` / `MarshalText` output is captured once per value per report and reused by events, spans and sizes. Raw bytes are stripped, while bytes already encoded as ordinary serializer text, including base64, remain subject to existing masking. A failing serializer produces JSON null; its fields are never walked. See [content capture](privacy.md#content-capture) for timing and known limits.
+Serializer timing, byte stripping, failure behavior and known limits: [content capture](privacy.md#content-capture).
 
 ## Declared tool events
 

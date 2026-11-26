@@ -2,11 +2,11 @@
 
 ## What it is
 
-Standard AI product events for Go services, sent through the RudderStack Go client you already use
-and following the [AI events spec v0.4](spec/ai-events-v0.4.schema.json):
+AI product events for Go services, sent through your RudderStack Go client using the
+[AI events spec v0.4](spec/ai-events-v0.4.schema.json):
 
-- AI interactions in chat apps and background agents: each answer becomes a small set of track events (prompt, answer with models, tokens, cost, latency and status, feedback, scores), however many model calls it took.
-- MCP servers: each request an AI client makes becomes a track event that says which client called, which tool, whether it worked, and for which customer.
+- Chat apps and background agents: each answer produces track events for the prompt, answer (models, tokens, cost, latency, status), feedback and scores, across all its model calls.
+- MCP servers: each AI client request produces a track event with the client, tool, outcome and customer.
 
 ```
 your app ─ provider client + integration ─ RunInteraction ─ analytics-go ─ RudderStack ─ warehouse, destinations

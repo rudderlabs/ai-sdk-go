@@ -1,15 +1,15 @@
 # Tracing
 
-The optional `github.com/rudderlabs/ai-sdk-go/rudderotel` module consumes spans your application's
-instrumentation already creates. Each finished AI span becomes one `ai_otel_span` RudderStack
-track event. `properties.otlp` is a complete OTLP/JSON `ExportTraceServiceRequest` containing that
-span, forwardable to `/v1/traces`. The core module has no OpenTelemetry dependency.
+The optional `github.com/rudderlabs/ai-sdk-go/rudderotel` module converts finished AI spans from
+your instrumentation to `ai_otel_span` track events. `properties.otlp` contains a complete
+OTLP/JSON `ExportTraceServiceRequest` for that span, forwardable to `/v1/traces`.
+The core has no OpenTelemetry dependency.
 
 ## Product trace ID
 
 `ai_response_received` carries `trace_id` from `InteractionOptions.TraceID` or `SetTraceID`; a value you set always wins. Use it to join an answer to a Langfuse, LangSmith or OpenTelemetry trace.
 
-The core module does not depend on OpenTelemetry. To take the trace ID of the active OpenTelemetry span, install the optional `rudderotel` module and register it:
+To use the active OpenTelemetry span's trace ID, install `rudderotel` and register it:
 
 ```sh
 go get github.com/rudderlabs/ai-sdk-go/rudderotel@v0.5.0
@@ -78,41 +78,26 @@ return err // the original error, unchanged
 `StartSpan(ctx, SpanOptions) (context.Context, *Span)` supports `execute_tool`, `retrieval` and
 `invoke_agent`. Manual spans use `rudderstack.span_source: manual`. The handle exposes immutable
 `TraceID` and `SpanID`, `SetAttributes(map[string]any)` and idempotent `End(error)`. When disabled,
-the returned context is unchanged and the handle is a no-op. Pass the returned context to nested
-work; the nearest active SDK span becomes its parent only within the same interaction. Ended
-spans are skipped. Provider middleware makes its wrapper span active on the context passed
-downstream; independent concurrent requests and streams keep independent contexts. No interaction
-root span is created.
+it returns the original context and a no-op handle. Pass the returned context to nested work:
+the nearest active SDK span in the same interaction becomes its parent. Ended spans are skipped.
+Wrapper middleware passes its active span downstream; concurrent requests and streams keep
+independent contexts. No interaction root span is created.
 
-A root span gets a random nonzero W3C trace ID (32 lowercase hex digits), shared per interaction
-and saved as `sdk_trace_id` across pause/resume. The application's `TraceID`, `SetTraceID` and
-`WithTraceIDFrom` continue to control the product interaction's `trace_id` independently. A nested
-span inherits its parent's trace. Importing `rudderotel` registers an optional bridge that lets an
-SDK span inherit an active OTel trace, parent span ID and trace state when there is no active SDK
-parent belonging to the same interaction; the core still has no OTel dependency. A new interaction
-or a task with `NoParent: true` uses the active OTel parent, or its own fresh interaction trace.
-Span identity is captured from the owning interaction when the span starts. Standalone manual
-spans capture identity, track context and the analytics client from their start context;
-without identity they use the [product-event fallback](configuration.md#identity-and-cookies).
-A new span ignores an ended interaction and its spans as owners or parents, and captures the
-current `WithValues` identity and analytics client. A call settling after
-its interaction ended still emits its span with the original interaction, trace and parent; its late
-product call stays dropped.
+Root spans get a random nonzero W3C trace ID (32 lowercase hex digits), shared per interaction
+and saved as `sdk_trace_id` across pause/resume. Product `trace_id` remains independently
+controlled by `TraceID`, `SetTraceID` and `WithTraceIDFrom`. Nested spans inherit their parent
+trace. With `rudderotel` imported, an SDK span without an active SDK parent in the same
+interaction inherits the active OTel trace, parent span ID and trace state. New interactions
+and `NoParent: true` tasks use the active OTel parent or a fresh interaction trace.
+Span identity comes from its owner at Start. Standalone manual spans use their start context
+for identity, track context and client, with the [product fallback](configuration.md#identity-and-cookies)
+when identity is absent. New spans ignore ended interactions and their spans as owners or
+parents, using current `WithValues` identity and client. Calls settling after interaction end
+still emit spans with their original interaction, trace and parent; late product calls are dropped.
 
-Accepted call admission and totals finish before span transport. Spans go directly to the
-analytics client's `Enqueue`, using the same normalized OTLP mapper, masking, sensitive attribute
-stripping and truncation as the OTel exporter; product-event sampling does not apply. A transport
-or `WithOnError` failure cannot undo admission. Span setup, capture, normalization and transport
-failures are contained and reported through `WithOnError` or warnings; provider work continues.
-SDK retries and usage-parameter fallback share one
-span with duration covering the retries. Raw HTTP response access uses the same middleware and
-emits once. Streaming spans finish once on completion, early close, cancellation or errors.
-Ending an interaction leaves an unread wrapper stream pending until close, cancellation, or flush.
-Context cancellation finishes even an unread stream's
-span and records the cancelled call, including when the provider decoder is blocked.
-With spans disabled, product bookkeeping follows the provider's read/Close path. At the latest, core `Flush` or `Shutdown` finishes every still-pending wrapper span exactly once
-as unread/cancelled, with unknown usage, including a streaming response that arrives after its
-interaction ended and is never read, closed or aborted. Manual spans remain caller-owned.
+Accepted calls and totals are final before span delivery. Spans use the OTel exporter's mapping, masking, sensitive-attribute stripping and truncation. Product-event sampling does not apply. Transport or `WithOnError` failure cannot undo an accepted call. Span setup, capture, normalization and delivery failures are contained and reported through `WithOnError` or warnings; provider work continues.
+SDK retries and usage-parameter fallback share one span whose duration includes retries. Raw HTTP response access emits once through the same middleware. Streaming spans finish once on completion, early close, cancellation or errors. Ending an interaction leaves an unread wrapper stream pending until close, cancellation, or flush.
+Cancellation finishes even an unread stream and records the cancelled call, including when the provider decoder is blocked. With spans disabled, product bookkeeping follows the provider's read/Close path. At the latest, core `Flush` or `Shutdown` finishes every still-pending wrapper span exactly once as unread/cancelled, with unknown usage. This includes streaming responses arriving after interaction end that are never read, closed or aborted. Manual spans remain caller-owned.
 
 Call `span_id` joins: [`ai_llm_response_received`](events.md#ai_llm_response_received). Content follows the [capture and serializer policy](privacy.md#content-capture).
 
@@ -120,38 +105,32 @@ Numeric maps are preserved, map keys honour `MarshalText` with Go JSON precedenc
 
 ### One span per call with the span processor
 
-When `WithEmitSpans(true)` and a `rudderotel` span processor (`NewSpanProcessor` or
-`RegisterTracing`) both see a model call, the SDK span is the one sent when it has an analytics
-client and its mandatory core encodes as JSON and fits the span size budget with room for
-completion timing and status. A message context that JSON cannot encode (a NaN or infinite
-number, an invalid `json.Number`) never fits. Otherwise the OpenTelemetry span exports normally,
+When `WithEmitSpans(true)` and `rudderotel.NewSpanProcessor` or `RegisterTracing` see the same
+model call, the SDK span is sent if it has a client and its mandatory core encodes as JSON and
+fits the budget, including room for completion timing and status. Unencodable message context
+(NaN, infinity or invalid `json.Number`) never fits. Otherwise the OTel span exports normally
 and the SDK span follows its ordinary delivery path.
 
-- An OpenTelemetry model-call span (the conventions in
-  [product events from spans](#product-events-from-spans): GenAI `chat` / `text_completion` /
-  `generate_content`, OpenInference `LLM`, older OpenLLMetry `llm.request.type`) that starts
-  inside any active wrapper call ancestor in the current interaction is dropped by every
-  `rudderotel` processor, using a mark they share. Manual tool, retrieval and agent middleware do
-  not hide the call; the ancestry stops at the interaction boundary. Other processors and
-  exporters receive it unchanged. Exported descendants of a covered OpenTelemetry model span keep
-  their span IDs in the SDK owner's trace; direct children use the SDK owner as parent, and deeper
-  parent links stay intact. `Filter`, `ResolveIdentity` and `ExtraPropertiesFrom` get your
-  original span, with its own trace, span and parent IDs; the exported IDs are applied after them.
-  Your APM spans keep the original OpenTelemetry data. Span-built product events still count the
-  call once.
+- Every `rudderotel` processor drops OTel model-call spans starting inside an active wrapper
+  ancestor in the current interaction. Supported conventions are GenAI `chat`, `text_completion`
+  and `generate_content`, OpenInference `LLM` and OpenLLMetry `llm.request.type`; see
+  [product events from spans](#product-events-from-spans). Manual tool, retrieval and agent
+  middleware do not hide calls. Ancestry stops at the interaction boundary. Other processors
+  and exporters receive spans unchanged. Exported descendants keep their span IDs in the
+  SDK owner's trace. Direct children use the SDK owner as parent; deeper parent links stay intact.
+  `Filter`, `ResolveIdentity` and `ExtraPropertiesFrom` receive the original trace, span and
+  parent IDs before export rewrites. Span-built product events count the call once.
 - If an earlier processor already sent a child under an OpenTelemetry model span's original IDs
   before RudderStack observed that parent, the original parent is kept as well as the SDK span.
   Buffered children still resolve to the SDK owner at export.
-- For an active, still-recording model-call span a processor observed outside an SDK call, in the
-  same open interaction, the first wrapper call that starts directly inside it takes its place.
-  The SDK span adopts its trace ID, span ID and parent span ID, and fixes the interaction's SDK
-  trace, including pause snapshots. It is sent normally, through the SDK's own path;
-  `ai_llm_response_received.span_id` carries the adopted ID. Later wrapper calls inside that span
-  are ordinary children of that ID. Every `rudderotel` processor drops the replaced span when it
-  ends, synchronously, by a mark they share, including one registered after the span started.
-  Filters, sampling, batching, analytics-client failures and processor shutdown do not decide
-  whether the call's span is sent, and a stream read after the OpenTelemetry span ended still
-  sends the adopted span.
+- The first wrapper call directly inside an active, recording OTel model span observed by a
+  processor outside an SDK call, in the same open interaction, replaces it. The SDK span
+  adopts its trace, span and parent IDs and fixes the interaction's SDK trace, including pause
+  snapshots. It uses normal SDK delivery; `ai_llm_response_received.span_id` has the adopted ID.
+  Later wrappers inside that span become children of that ID. Every `rudderotel` processor
+  synchronously drops the replaced span at End, even processors registered after Start.
+  Filters, sampling, batching, client failures and processor shutdown do not decide whether
+  the call's span is sent. Reading a stream after OTel span End still sends the adopted span.
 - An outer model-call span with no wrapper call inside is exported normally. A newer SDK span in
   between prevents adoption: the most recently started active SDK span decides.
 - An SDK span that replaced or covered an OpenTelemetry span sheds optional fields in this order
@@ -170,11 +149,9 @@ and the SDK span follows its ordinary delivery path.
   `rudderstack.anonymous_id`. String shortening or shedding sets `truncated: true`; an ordinary
   oversized SDK span that replaced or covered nothing still drops.
 
-The trade-off: RudderStack gets the SDK span, with its attributes and timing, under the
-OpenTelemetry span's IDs, not the attributes and timing your application put on its span.
-Processors that are not RudderStack's (your APM exporter, for example) receive your original span
-unchanged: nothing from the SDK is copied onto it, and the processor's usual identity attributes
-still apply.
+RudderStack gets the SDK span's attributes and timing under the OTel span's IDs. Other
+processors, such as your APM exporter, receive the original OTel span. The SDK copies nothing
+onto it; the processor's usual identity attributes still apply.
 
 Matching uses context nesting only, never times or model names. Limits:
 
@@ -186,23 +163,17 @@ Matching uses context nesting only, never times or model names. Limits:
 - A span that already ended, an ended interaction, and a span that started in another interaction
   never adopt.
 - Go has no framework integrations, so no integration model spans take part.
-- Dedup tracks at most `Limits.MaxMapEntries` open model-call spans (default 10,000). A
-  model-call span that starts while that many are open, for example behind spans that never end,
-  is neither covered nor adopted and exports as without dedup (`limit_reached`). A span stays
-  open until every `rudderotel` processor that saw it start has ended it or shut down (one behind
-  an adapter that drops ends holds it until it shuts down); descendants of an already covered
-  span are tracked until they end, so its tree stays intact. Nothing is evicted: after that, a
-  replaced or covered span's mark and a covered tree stay as long as your span object, or the
-  snapshot OpenTelemetry passes to the processors at its end, is reachable, without keeping it
-  alive. Processors that end the span later, behind a slow one or registered after it started,
-  still drop it, and a child started later from a context that holds an ended covered span still
-  joins the SDK owner's tree.
+- Dedup tracks at most `Limits.MaxMapEntries` open model-call spans (default 10,000). New
+  model spans at the cap export without dedup (`limit_reached`). A span stays open until every
+  `rudderotel` processor that saw its start ends it or shuts down. A processor behind an adapter
+  that drops ends holds it until shutdown. Covered descendants remain tracked until End to keep
+  their tree intact. Nothing is evicted. Later processors, including those registered after
+  Start, still drop replaced or covered spans. Children started from an ended covered span
+  still join the SDK owner's tree.
 - With two copies of the tracing module (for example a vendored fork under another import path),
-  replacement marks are not shared between copies, so an adopted span can be exported twice;
-  register processors from one copy.
+  an adopted span can export twice. Register processors from one copy.
 - With the simple processor (`Simple: true`), filter, identity, extra-properties and redact callbacks
-  must not end spans: OpenTelemetry's simple processor holds its own lock while exporting, so a span
-  ended there deadlocks.
+  must not end spans: doing so deadlocks.
 
 ## Framework trees with manual spans
 
@@ -244,36 +215,32 @@ err := rudderstackai.RunInteraction(ctx, opts, func(ctx context.Context, in *rud
 })
 ```
 
-Import `context`, `errors` and `sync` for this pattern. `send` must support concurrent calls.
-The two manual tool spans parent to the manual agent; each streamed wrapper span parents to
-its own tool. All share the interaction and trace. Keep parents open until workers and streams
-finish. An `errgroup.WithContext(ctx)` works the same way: pass its derived context into workers.
+Import `context`, `errors` and `sync`. `send` must support concurrent calls. Each wrapper span
+parents to its tool span; both tools parent to the agent. All share the interaction and trace.
+Keep parents open until workers and streams finish. With `errgroup.WithContext(ctx)`, pass its
+derived context to workers.
 
-Provider middleware records a failed span when a downstream handler panics, then re-panics with
-its original value unchanged. Manual spans use an explicit lifecycle: call `End(err)`; errors
-record their Go concrete type, and error text follows the content policy. Raw responses that the
-middleware cannot map finish only their span with HTTP status, without parsed usage or content
-or an invented product call. Raw access to a mapped JSON response still supplies the usage and
-content the middleware parses. Invalid JSON, JSON `null` and response extraction failures finish
-with error status while preserving product-event behavior. Normal wrapper completion records the request, response and usage attributes described above.
+Provider middleware records downstream handler panics as failed spans, then re-panics with the
+original value. Call `End(err)` on manual spans; errors record their Go concrete type, with
+text following capture policy. Unmapped raw responses finish only the span with HTTP status,
+without parsed usage, content or a product call. Mapped raw JSON responses still supply parsed
+usage and content. Invalid JSON, JSON `null` and extraction failures finish with error status
+without changing product-event behavior. Normal completion records request, response and usage.
 
 ## Go platform limits
 
 - SDK span parents propagate through explicit `context.Context`. Pass the context returned by `StartSpan` to nested work.
-- OpenAI and Anthropic integrations run at HTTP middleware, below SDK response decoding.
-  Wrapper failures carry the normalized error category; the provider SDK
-  constructs its Go error after middleware returns. Decoding failures after a successful HTTP
-  response cannot change the already completed HTTP span, except invalid JSON and JSON `null`
-  are detected by the middleware and finish with error status.
+- OpenAI and Anthropic wrapper failures use normalized error categories. Decoding failures
+  after a successful HTTP response cannot change the completed HTTP span. Invalid JSON and
+  JSON `null` are detected earlier and finish with error status.
 - Each Google GenAI `GenerateContent`/stream request emits one span. Applications
   managing a Go tool loop make separate requests; pass the manual span context explicitly to
   tools and subsequent requests.
 - Framework integrations and skipped cases: [Go platform limits](integrations.md#go-platform-limits). Bound-stream completion APIs also have no Go wrapper.
-- HTTP middleware has no hook for the outer SDK method's completion. Retry grouping uses
-  per-invocation request identity, retry headers and response-body probes. With spans enabled,
-  every failed attempt has a bounded one-second retry grace, even without context cancellation.
-  This settles calls with no configured retries or an exhausted retry budget. Ending an interaction
-  while an attempt is held, or a retry arriving after that grace, can split spans. HTTP middleware measures individual requests and response consumption.
+- With spans enabled, every failed attempt has a one-second retry grace, even without
+  cancellation. This settles calls with retries disabled or exhausted. Ending an interaction
+  during that grace, or a later retry, can split spans. HTTP middleware measures individual
+  requests and response consumption.
 - Shared fixture substitutions and skips: [Compatibility](integrations.md#compatibility).
 - An unread wrapper stream settles on close, cancellation, or flush (`Flush` or `Shutdown`). Go has
   no deterministic iterator finalization when an open stream is simply abandoned.
@@ -303,18 +270,16 @@ if err := provider.Shutdown(context.Background()); err != nil { return err }
 // Close the client you own afterwards.
 ```
 
-For one-call global setup, use
-`rudderotel.RegisterTracing(options, providerOptions ...sdktrace.TracerProviderOption)`.
-It returns `(*sdktrace.TracerProvider, error)` and refuses to replace an existing global provider,
-including an explicitly registered noop provider. Call it during application startup. Resource,
-sampler, and additional span processors use normal `sdktrace` provider options. When you already
-own a provider, use `NewSpanProcessor`. All propagation uses `context.Context`; pass the context
-returned by `StartInteraction` and `Tracer.Start` to downstream work.
+`rudderotel.RegisterTracing(options, providerOptions ...sdktrace.TracerProviderOption)` returns
+`(*sdktrace.TracerProvider, error)`. Call at startup; it refuses to replace any global provider,
+including an explicitly registered noop provider. Use `sdktrace` options for resources, samplers
+and extra processors. For a provider you own, use `NewSpanProcessor`. Pass the context from
+`StartInteraction` and `Tracer.Start` downstream for propagation.
 
-`NewExporter(options) (*Exporter, error)` implements `sdktrace.SpanExporter` for custom processor
-arrangements. `SpanToTrack(span, options) (*analytics.Track, error)` exposes mapping without the
-export filter. A nil track means the span could not fit its budget. Using the exporter directly
-does not add interaction identity or record product calls; those belong to `SpanProcessor`.
+`NewExporter(options) (*Exporter, error)` implements `sdktrace.SpanExporter` for custom
+processors. `SpanToTrack(span, options) (*analytics.Track, error)` maps without export filtering;
+a nil track means the span could not fit its budget. Direct export adds no interaction identity
+or product calls; use `SpanProcessor` for those.
 
 Exported function signatures (types below are from `rudderotel`):
 
@@ -366,11 +331,9 @@ OnStart adds missing `user.id`, `session.id`, `rudderstack.anonymous_id`, `gen_a
 win. Parent `user.id` / `session.id` fill missing context values. System runs (`RunTask`) inherit
 no personal identity from parent spans.
 
-Identity stays off non-AI spans, so other exporters see the original HTTP/database spans. It is
-held aside for AI descendants. If instrumentation adds its AI attributes after Start, RudderStack
-uses a tagged copy of the ended snapshot. Go OTel's OnEnd supplies
-an immutable snapshot. The processor retains active span state until End; a bounded cache
-(`Limits.MaxMapEntries`) holds ended-parent identity without retaining span objects.
+Identity stays off non-AI spans and remains available to AI descendants. Other exporters see
+the original HTTP/database spans. AI attributes added after Start are recognized at End.
+Ended-parent identity is cached up to `Limits.MaxMapEntries` without retaining span objects.
 
 The event's `interaction_id` and `conversation_id` join it to product events. `LinkTraceID` fills
 an unset interaction trace ID; an explicit `TraceID` wins, and a later `SetTraceID` replaces the
@@ -426,10 +389,23 @@ Span mapping rules (shared cases in [`tracing-product-events-v0.1.json`](../spec
 
 - Nested model calls: skip a model-call span only when a retained descendant model-call span in the same trace carries a response ID or usage attributes, and either has a response ID or shares any exact response/request model name with an overlapping time window (inclusive endpoints). The parent must have no response ID or the same response ID as that descendant; different response IDs keep both calls even when the model and time window match. A descendant with no usage attributes and no response ID never suppresses its richer parent; explicit zero token counts are usage evidence. A failed parent is skipped only for a failed descendant with the same model and overlapping window; a successful fallback never removes its failure. Keep the descendant. This includes ADK Go `generate_content` with a direct `anthropic.messages.create` child and descendants through non-model spans. Nesting alone is insufficient: different or unknown models without a response ID remain separate calls.
 - OpenInference prep spans: skip an `openinference.span.kind = "LLM"` model-call span only if it has no token-usage attributes in any supported convention (including input, output and cache counts; zero counts are usage), no response ID, no output messages or text (including tool-only output), and status other than `ERROR`; another unrelated model-call span with usage (neither ancestor nor descendant) must share its interaction and trace and start between this span's start minus **1 ms** and the interaction end, inclusive. This covers overlapping calls and later LlamaIndex `_prepare_chat_with_tools` / `achat` root siblings in either end order. A lone span, a failed span, or usage in another trace/interaction cannot trigger this rule.
-- Counting at End: every model-call span records immediately, retaining internal trace/span IDs, parent/ancestor IDs, raw request/response model, response ID, timing, usage/output presence, ERROR status and OpenInference LLM kind. These tags never appear in product or exported span events. After interaction finalizers, the interaction's synchronous end path applies both rules once to recorded span calls, before pending call events, totals, costs, breakdowns, primary model and answer selection. Skipped calls cannot provide evidence. Cycles are handled conservatively so a group retains a call. A call whose event was already emitted by an earlier adapter match is kept and counted, even if later spans make it redundant; published call events must agree with answer totals. Remaining pending calls close skipped positions in `call_index`. Processor/SDK flush and processor shutdown do not settle or hold model calls. At `maxCallsPerInteraction`, folded calls count conservatively and cannot provide individual span evidence; non-model ancestry is bounded by `maxMapEntries`.
-- Pause/resume: pause finalizes and filters its segment before publishing its totals and pending calls, then clears that segment's calls and ancestry. Its calls do not count again after resume. Calls recorded during call/tool delivery passes before totals are captured join the paused segment. Calls accepted after capture remain pending for the next segment before the pause snapshot is returned. Those pending calls carry the same internal tags, including resolved ancestors through non-model spans, in `pending_calls[].span_source`; JSON restoration retains and validates them, so End can apply the rules across resume. Older snapshots without tags count conservatively.
+- Counting at End: model-call spans record immediately. At interaction End, both rules run once
+  after finalizers, before pending call events, totals, costs, breakdowns, primary model and
+  answer selection. Internal span-source tags never appear in product or exported span events.
+  Skipped calls provide no evidence. Cycles conservatively retain a call.
+  Calls whose events were already emitted by adapter matching remain counted so events agree
+  with totals. Remaining pending calls close gaps in `call_index`. Processor/SDK flush and
+  processor shutdown neither settle nor hold model calls. At `maxCallsPerInteraction`, folded
+  calls count conservatively and provide no individual span evidence. Non-model ancestry is
+  bounded by `maxMapEntries`.
+- Pause/resume: pause finalizes and filters its segment before publishing totals and pending
+  calls. Those calls do not count again after resume. Calls recorded during call/tool delivery
+  before totals capture join the paused segment. Calls accepted afterwards stay pending for
+  the next segment and enter the snapshot. JSON restoration retains and validates
+  `pending_calls[].span_source`, including ancestry through non-model spans, so End can apply
+  the rules across resume. Older snapshots without tags count conservatively.
 - Cache writes: `gen_ai.usage.cache_write.input_tokens` takes precedence over `gen_ai.usage.cache_creation.input_tokens`, then `gen_ai.usage.cache_creation_input_tokens`, then `llm.token_count.prompt_details.cache_write`. Use the first valid nonnegative integer, including zero. Map it once to `cache_write_tokens` and apply the same cache-write price as cache creation; never sum aliases.
-- Provider API IDs: product calls map only `anthropic.messages` → `anthropic`, `openai.chat` / `openai.responses` → `openai`, and `google.generative-ai` → `gcp.gemini`. Apply this explicit allow-list after the existing lowercase step; never split arbitrary names at a dot. `aws.bedrock`, `gcp.vertex_ai`, `gcp.gemini`, `azure.ai.openai`, `azure.ai.inference` and unknown dotted names stay unchanged. Raw OTLP provider attributes and the GenAI provider summary keep the reported label.
+- Provider API IDs: product calls map only `anthropic.messages` → `anthropic`, `openai.chat` / `openai.responses` → `openai`, and `google.generative-ai` → `gcp.gemini`. Match these names after lowercasing; never split other names at a dot. `aws.bedrock`, `gcp.vertex_ai`, `gcp.gemini`, `azure.ai.openai`, `azure.ai.inference` and unknown dotted names stay unchanged. Raw OTLP provider attributes and the GenAI provider summary keep the reported label.
 - Semantic Kernel: when `gen_ai.response.finish_reasons` is absent, read singular `gen_ai.response.finish_reason`. Strip the prefix through the last dot and lowercase the value: `FinishReason.STOP` / `STOP` → `stop`, `LENGTH` → `length`, `TOOL_CALLS` → `tool_calls`, `CONTENT_FILTER` → `content_filter`, case-insensitively. Unknown suffixes are lowercased too. Existing plural values keep their precedence and spelling.
 - Traceloop / OpenLLMetry: after GenAI and OpenInference classification, `traceloop.span.kind = "tool"` identifies one `execute_tool` execution. Read the tool name from `traceloop.entity.name` after `gen_ai.tool.name` / `tool.name`, and arguments/result from `traceloop.entity.input` / `traceloop.entity.output` after the existing tool content keys. Successful and failed executions count in `tool_breakdown`; these entity content keys follow `rudderstackai.WithCaptureContent(true)` and masking. The default `IsAISpan` filter also exports these tools and attaches interaction context when they start.
 - Mirascope native ops: parse `mirascope.response.usage` only if it is a JSON string of at most 64 KiB (65,536 UTF-8 bytes). Ignore malformed JSON, non-object JSON and invalid counts without throwing. Map `input_tokens`, `output_tokens`, `cache_read_tokens` and `cache_write_tokens` as independent fallbacks after existing GenAI and OpenInference usage keys. Zero counts are valid and existing counts win. Input tokens already include cache reads/writes; do not add them again. Ignore `reasoning_tokens` / `total_tokens` rather than deriving missing usage. Cache counts use registered cache pricing.
@@ -502,8 +478,5 @@ go run ./examples/tracing --check
 
 ## Core integration API
 
-`internal/hook.Tracing` is the integration API for sibling modules under this repository's module
-path. It exposes identity/suppression, open-interaction lookup, analytics adoption, measured tool
-recording, configured client/content policy, redaction, client registration, and background-work
-waiting and client flushing. It contains no OTel types and adds no exported core API. Span LLM calls use the existing
-`Interaction.RecordCall(LLMCall)` and trace linking preserves `Interaction.SetTraceID` behavior.
+Sibling modules use `Interaction.RecordCall(LLMCall)` for model calls and
+`Interaction.SetTraceID` for trace linking. No exported core API or OTel dependency is added.

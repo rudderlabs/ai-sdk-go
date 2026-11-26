@@ -2,13 +2,13 @@
 
 ## Checking a migration
 
-Moving AI events your app already sends through RudderStack to this SDK? `aicheck` checks a recording of what the app sends; it is its own module, so the app gains no dependency. Record the events while you drive the app, once per switch setting. In the test or harness, make `ruddertest.Recorder` the app's own analytics-go client where the app builds it, before the app calls `rudderstackai.Configure` and reads its switches, so legacy calls and switch-off runs are recorded too (configuring a recorder after start misses them):
+`aicheck` validates recorded RudderStack events during a migration. Its separate module adds no app dependency. Record once per switch setting while exercising the app. Replace the analytics-go client with `ruddertest.Recorder` where the app builds it, before `rudderstackai.Configure` and switch reads. This captures legacy calls and switch-off runs; configuring the recorder after startup misses them:
 
 ```go
 client, err := ruddertest.NewRecorder("events.jsonl") // github.com/rudderlabs/ai-sdk-go/ruddertest, instead of analytics.NewWithConfig(...)
 ```
 
-The recorder creates the file in the current folder, where it's easy to commit by accident: record outside the repo (for example in a temp folder) or add the capture file to `.gitignore`.
+The recorder writes to the current folder. Record outside the repo, such as a temp folder, or add the capture file to `.gitignore` to avoid committing it.
 
 ```bash
 go install github.com/rudderlabs/ai-sdk-go/cmd/aicheck@v0.8.0
@@ -23,7 +23,7 @@ The check validates every event against the spec this version emits (and client 
 
 ## Upgrading to AI events spec v0.4
 
-Events carry `specVersion` `0.4.0`. The server schema and conformance fixture are now `ai-events-v0.4.schema.json` and `conformance-v0.4.json`. The client schema remains `ai-client-events-v0.2.schema.json`, following the v0.3 release precedent. The migration checker accepts both 0.3.0 and 0.4.0 captures.
+Events carry `specVersion` `0.4.0`. The server schema and conformance fixture are now `ai-events-v0.4.schema.json` and `conformance-v0.4.json`. The client schema remains `ai-client-events-v0.2.schema.json`. The migration checker accepts both 0.3.0 and 0.4.0 captures.
 
 - [One-shot and client events](client-events.md).
 - Server fields: [response fields](events.md#ai_response_received), [credits](configuration.md#pricing), [call metadata](integrations.md#how-integrations-work), [agent versions and variants](configuration.md#interactionoptions), [MCP results](mcp.md#events), [tool events](events.md#declared-tool-events) and [error types](events.md#error-types).
