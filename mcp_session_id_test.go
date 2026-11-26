@@ -3,11 +3,13 @@ package rudderstackai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -161,12 +163,15 @@ func TestMCPSessionIDSSEHeader(t *testing.T) {
 }
 
 func TestMCPSessionIDStatefulIssued(t *testing.T) {
+	// Unique IDs: go-sdk's throwaway pre-initialize session would otherwise share the real
+	// session's key and its cleanup could delete it.
+	var n atomic.Int64
 	for _, tc := range []struct {
 		name string
 		opts *mcp.ServerOptions
 	}{
 		{"generated", nil},
-		{"custom", &mcp.ServerOptions{GetSessionID: func() string { return "session-abc" }}},
+		{"custom", &mcp.ServerOptions{GetSessionID: func() string { return fmt.Sprintf("session-%d", n.Add(1)) }}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := mcp.NewServer(&mcp.Implementation{Name: t.Name(), Version: "1"}, tc.opts)
