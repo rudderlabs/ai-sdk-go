@@ -205,16 +205,25 @@ func fitMessage(event string, msg *analytics.Track) bool {
 	if n, ok := boundBytes(*msg); ok && n <= maxMessageBytes {
 		return true // the common case: no encoding, no allocation
 	}
+	encodingFailed := false
+	measure := func(msg analytics.Track) int {
+		n, err := clientBytesResult(msg)
+		encodingFailed = err != nil
+		if encodingFailed {
+			return 1 << 30
+		}
+		return n
+	}
 	// free is what the rest leaves for properties, as the client measures them. fitPropertiesWithin
 	// counts them unescaped, so its room scales by how much the client's escaping of <, > and & adds.
 	refit := func() bool {
 		rest := *msg
 		rest.Properties = nil
-		free := maxMessageBytes - clientBytes(rest) - len(`,"properties":`)
+		free := maxMessageBytes - measure(rest) - len(`,"properties":`)
 		room := free
 		for range 16 { // ends sooner: each pass must shrink the room
 			msg.Properties = analytics.Properties(fitPropertiesWithin(event, msg.Properties, room))
-			escaped := clientBytes(*msg) - (maxMessageBytes - free)
+			escaped := measure(*msg) - (maxMessageBytes - free)
 			if escaped <= free {
 				return true
 			}
@@ -227,7 +236,7 @@ func fitMessage(event string, msg *analytics.Track) bool {
 		return false
 	}
 	untrimmed := msg.Properties
-	if clientBytes(*msg) <= maxMessageBytes || refit() {
+	if measure(*msg) <= maxMessageBytes || refit() {
 		return true
 	}
 	msg.Context = &analytics.Context{Extra: map[string]any{"wrapperLibrary": msg.Context.Extra["wrapperLibrary"]}}
@@ -235,13 +244,25 @@ func fitMessage(event string, msg *analytics.Track) bool {
 	if refit() {
 		return true
 	}
-	warnOnce("event-dropped-too-large", event+" was over 32 KiB after trimming; dropped it", 0)
+	if encodingFailed {
+		warnOnce("event-dropped-unserializable", event+" could not be serialized; dropped it", 0)
+	} else {
+		warnOnce("event-dropped-too-large", event+" was over 32 KiB after trimming; dropped it", 0)
+	}
 	return false
 }
 
 // clientBytes is msg's size as the client measures it: json.Marshal (HTML escaped) of msg with the
 // fields Enqueue adds before its size check. Counted, not buffered.
 func clientBytes(msg analytics.Track) int {
+	n, err := clientBytesResult(msg)
+	if err != nil {
+		return 1 << 30 // the client would log it: never fits
+	}
+	return n
+}
+
+func clientBytesResult(msg analytics.Track) (int, error) {
 	msg.Type = "track"
 	msg.MessageId = first(msg.MessageId, idPlaceholder)
 	msg.AnonymousId = first(msg.AnonymousId, idPlaceholder)
@@ -255,9 +276,9 @@ func clientBytes(msg analytics.Track) int {
 	msg.Context = &c
 	var n byteCount
 	if err := json.NewEncoder(&n).Encode(msg); err != nil {
-		return 1 << 30 // the client would log it: never fits
+		return 0, err
 	}
-	return int(n) - 1 // Encode's newline
+	return int(n) - 1, nil // Encode's newline
 }
 
 // boundBytes is at least msg's clientBytes, without encoding: the exact escaped size of its
