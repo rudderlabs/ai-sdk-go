@@ -330,6 +330,20 @@ Budget scenarios additionally allow `capture_content`, interaction-node `anonymo
 
 Inspect only a plain object with top-level boolean `successful: false`, or a string that parses to such an object. Before parsing strings, require the string after leading whitespace to start with `{` and contain `successful`. Arrays, nested failures (including inner results of `COMPOSIO_MULTI_EXECUTE_TOOL`), `successful: "false"`, true, missing keys, null and malformed or non-JSON strings do not signal a failure. Preserve framework failure signals and their categories; never count one call twice. Drivers should assert the helper's classification and run the cases through a framework adapter, checking declared tool events and `tool_breakdown`. Other outputs retain the adapter's original outcome and result content. Deferred declared tool events preserve the vendor category across pause/resume in optional `pending_tools[].rule_outcome.error_type: "api_error"`, after raw output is discarded.
 
+## Client queue full fixture
+
+`client-queue-full-v0.1.json` (`fixture_version: 1`) covers events sent while the RudderStack client's queue is full. Each case has `name`, `path`, `capacity`, `expected` (Node.js and Python) and `expected_go`.
+
+The driver sets a fake client as the global client. It accepts `capacity` events and never drains during the case. Past that, the Node.js and Python fakes refuse each event the way their real clients do: rudder-sdk-python's `track` returns `(False, msg)`, and rudder-sdk-node drops it when `queue.length >= maxInternalQueueSize`. The Go fake blocks in `Enqueue` until the driver makes room, as analytics-go does on a full queue, so Go never refuses.
+
+`path` selects what the case sends:
+
+* `interaction`: one manual interaction for user `u` with prompt `hello`, ended with answer `answer`. It sends `ai_user_prompt_created`, then `ai_response_received`.
+* `span`: with `emit_spans` on and no interaction, one manual span named `step` with operation `execute_tool`. It sends one `ai_otel_span`.
+* `tracing`: the tracing exporter, with `export_all_spans` on, exports one ended OTel span named `step`. It sends one `ai_otel_span`.
+
+`delivered` lists the event names the client accepted, in order. `errors` lists the onError kinds, in order; each `limit_reached` here has where `track`. The driver lifts the once-a-minute onError limit, so `errors` holds one `limit_reached` per refused event and none for an accepted one.
+
 ## Pause segments fixture
 
 `pause-segments-v0.1.json` is shared byte for byte by Node.js, Python and Go, and all three run it. Each case starts a fresh interaction with `config` (`emit_llm_calls`, `capture_content`: boolean, `max_calls_per_interaction`: integer, `event_rules.tools`: tool name to declared event name), runs `steps` in order and checks `expected`.

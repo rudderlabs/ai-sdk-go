@@ -1,0 +1,132 @@
+{
+  "fixture_version": 1,
+  "description": "Events a RudderStack client with a full queue refuses, on each emit path. The Node.js and Python clients refuse them and the SDK reports each one to onError as limit_reached; analytics-go blocks instead and never refuses. See FIXTURE-FORMAT.md.",
+  "cases": [
+    {
+      "name": "interaction-room-for-all",
+      "path": "interaction",
+      "capacity": 2,
+      "expected": {
+        "delivered": [
+          "ai_user_prompt_created",
+          "ai_response_received"
+        ],
+        "errors": []
+      },
+      "expected_go": {
+        "delivered": [
+          "ai_user_prompt_created",
+          "ai_response_received"
+        ],
+        "errors": []
+      }
+    },
+    {
+      "name": "interaction-answer-refused",
+      "path": "interaction",
+      "capacity": 1,
+      "expected": {
+        "delivered": [
+          "ai_user_prompt_created"
+        ],
+        "errors": [
+          "limit_reached"
+        ]
+      },
+      "expected_go": {
+        "delivered": [
+          "ai_user_prompt_created",
+          "ai_response_received"
+        ],
+        "errors": []
+      }
+    },
+    {
+      "name": "interaction-all-refused",
+      "path": "interaction",
+      "capacity": 0,
+      "expected": {
+        "delivered": [],
+        "errors": [
+          "limit_reached",
+          "limit_reached"
+        ]
+      },
+      "expected_go": {
+        "delivered": [
+          "ai_user_prompt_created",
+          "ai_response_received"
+        ],
+        "errors": []
+      }
+    },
+    {
+      "name": "span-room",
+      "path": "span",
+      "capacity": 1,
+      "expected": {
+        "delivered": [
+          "ai_otel_span"
+        ],
+        "errors": []
+      },
+      "expected_go": {
+        "delivered": [
+          "ai_otel_span"
+        ],
+        "errors": []
+      }
+    },
+    {
+      "name": "span-refused",
+      "path": "span",
+      "capacity": 0,
+      "expected": {
+        "delivered": [],
+        "errors": [
+          "limit_reached"
+        ]
+      },
+      "expected_go": {
+        "delivered": [
+          "ai_otel_span"
+        ],
+        "errors": []
+      }
+    },
+    {
+      "name": "tracing-export-room",
+      "path": "tracing",
+      "capacity": 1,
+      "expected": {
+        "delivered": [
+          "ai_otel_span"
+        ],
+        "errors": []
+      },
+      "expected_go": {
+        "delivered": [
+          "ai_otel_span"
+        ],
+        "errors": []
+      }
+    },
+    {
+      "name": "tracing-export-refused",
+      "path": "tracing",
+      "capacity": 0,
+      "expected": {
+        "delivered": [],
+        "errors": [
+          "limit_reached"
+        ]
+      },
+      "expected_go": {
+        "delivered": [
+          "ai_otel_span"
+        ],
+        "errors": []
+      }
+    }
+  ]
+}
