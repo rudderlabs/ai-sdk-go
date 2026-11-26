@@ -10,10 +10,12 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 func nodeCount(v any) int {
@@ -488,17 +490,26 @@ func TestMCPControlFieldsSurviveTheBudget(t *testing.T) {
 			opts.EventRules = EventRules{Tools: map[string]ToolEventRule{"big": {Event: "big_called"}}}
 		}
 		server := mcp.NewServer(&mcp.Implementation{Name: "big", Version: "1"}, nil)
-		content := make([]mcp.Content, maxWalkNodes/3+100)
-		for i := range content {
-			content[i] = &mcp.TextContent{Text: "x"}
+		// "_meta" sorts before "isError", so its entries use the whole budget first.
+		meta := mcp.Meta{}
+		for i := range maxWalkNodes + 10 {
+			meta[strconv.FormatInt(int64(i), 36)] = 1
 		}
 		server.AddTool(&mcp.Tool{Name: "big", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			return &mcp.CallToolResult{Content: content, IsError: true}, nil
+			return &mcp.CallToolResult{Meta: meta, IsError: true}, nil
 		})
 		r := wrap(t, server, opts)
 		cs := connectMaybeObserved(t, server, true)
 		callTool(t, cs, "big", map[string]any{}, nil)
-		p := r.wait(t, "mcp_tool_called", 1)[0].Properties
+		// Capture is slow under -race and coverage: wait for the event, not for a fixed time.
+		var events []analytics.Track
+		for deadline := time.Now().Add(2 * time.Minute); len(events) == 0 && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+			events = r.named("mcp_tool_called")
+		}
+		if len(events) != 1 {
+			t.Fatalf("rule=%t: %d mcp_tool_called events: %v", rule, len(events), r.names())
+		}
+		p := events[0].Properties
 		if p["tool_status"] != "error" || p["is_error_result"] != true {
 			t.Errorf("rule=%t: an error result was reported as %v: %v", rule, p["tool_status"], p)
 		}
