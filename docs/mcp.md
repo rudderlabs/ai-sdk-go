@@ -362,7 +362,7 @@ Elicitations that reach the client are recorded by the sending middleware: the a
 
 MCP Events is a draft extension: an agent subscribes to server updates, delivered by signed webhook. Neither library has hooks for it, so with `MCPEvents: true` two helpers wrap your own subscription handling and webhook sender (`ruddermcpgo.TrackMCPEventSubscription` and `ruddermcpgo.WrapMCPEventSender` on mcp-go). Both may change with the draft.
 
-`SubscriptionChange.SessionID` is sent as you give it (trimmed, cut to 256 characters), so pass the transport's own session ID, never a client-supplied value. It is sent as given, so pass only an ID your transport issued and checks, never a stateless session accessor (mcp-go `WithStateLess` or a custom manager's `SessionID()`, go-sdk `req.Session.ID()` under `MCPGODEBUG=allowsessionsinstateless=1`) or the raw `Mcp-Session-Id` header: those return the client's header.
+`SubscriptionChange.SessionID` is sent as given (trimmed, cut to 256 characters), so pass only an ID your transport issued and checks, never a stateless session accessor (mcp-go `WithStateLess` or a custom manager's `SessionID()`, go-sdk `req.Session.ID()` under `MCPGODEBUG=allowsessionsinstateless=1`) or the raw `Mcp-Session-Id` header: those return the client's header.
 
 ```go
 // In your subscribe handler: created or refreshed, with the granted lifetime.
