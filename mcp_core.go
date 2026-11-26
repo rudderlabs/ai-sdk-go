@@ -165,7 +165,6 @@ const pendingInputTTL = time.Hour
 type pendingInput struct {
 	start     time.Time
 	requestID string
-	toolName  string
 	// position is the input_required leg's call_index and ms_since_previous_call, which the
 	// retry that completes the call takes over: the leg sends no event, so it leaves no gap.
 	position map[string]any
@@ -296,7 +295,7 @@ type reqCtxKey struct{}
 
 func clientFromMeta(v any) *mcpbridge.Client {
 	m, ok := toJSONValue(v).(map[string]any)
-	if !ok || v == nil {
+	if !ok {
 		return nil
 	}
 	return &mcpbridge.Client{Name: str(m["name"]), Title: str(m["title"]), Version: str(m["version"])}
@@ -1304,7 +1303,7 @@ func (rc *reqCtx) inputRequired(keys []string, requestState string) {
 	defer rc.st.Unlock()
 	for _, key := range keys {
 		notices = append(notices, rc.st.inputRequired.setSilent(rc.inputKey(key, requestState), pendingInput{
-			start: time.Now(), requestID: rc.requestID, toolName: rc.toolName, position: position,
+			start: time.Now(), requestID: rc.requestID, position: position,
 		}))
 	}
 }

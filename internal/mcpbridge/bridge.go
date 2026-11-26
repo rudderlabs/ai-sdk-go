@@ -168,8 +168,6 @@ type Call interface {
 	Initialized(client *Client, capabilities any, version string)
 	// Succeeded reports a successful request; on 2026-07-28 it may send mcp_client_seen.
 	Succeeded(method string, discoverVersions []string)
-	ToolName() string
-	RequestID() string
 	CallerKey(parts ...string) string
 }
 
