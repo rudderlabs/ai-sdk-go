@@ -3,6 +3,7 @@ package rudderotel
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -195,9 +196,7 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 		}
 		// Preserve the own identity too, for child spans.
 		held := make(map[string]string, len(tags)+2)
-		for k, v := range tags {
-			held[k] = v
-		}
+		maps.Copy(held, tags)
 		for _, k := range []string{"user.id", "session.id"} {
 			if v := asString(own[k]); v != "" {
 				held[k] = v
