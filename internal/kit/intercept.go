@@ -293,10 +293,21 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 				body.stopCancellation = context.AfterFunc(req.Context(), func() {
 					// Serialize cancellation with parsing, retaining every observed attribute.
 					// This also settles an unread stream without waiting for Read or Close.
+					// The report runs here, after a reader's callbacks, so Close can wait for it.
 					body.mu.Lock()
+					for body.draining && !body.finished {
+						done := body.drained
+						body.mu.Unlock()
+						<-done
+						body.mu.Lock()
+					}
+					if body.finished {
+						// Close or the stream's end claimed it and reports it.
+						body.mu.Unlock()
+						return
+					}
 					body.end(req.Context().Err())
-					body.mu.Unlock()
-					body.drain(hook.Caller())
+					body.drainLocked(hook.Caller())
 				})
 				body.mu.Unlock()
 			}
@@ -488,17 +499,20 @@ type sseBody struct {
 	canceller uint64
 }
 
-func (b *sseBody) drainCallbacks() { b.drain(0) }
-
-// drain claims each notice or observer operation before calling it. Re-entry can add work,
-// but never waits for its own callback or holds a parser mutex. canceller is the calling
-// cancellation goroutine, or 0.
-func (b *sseBody) drain(canceller uint64) {
+// drainCallbacks claims each notice or observer operation before calling it. Re-entry
+// can add work, but never waits for its own callback or holds a parser mutex.
+func (b *sseBody) drainCallbacks() {
 	b.mu.Lock()
 	if b.draining {
 		b.mu.Unlock()
 		return
 	}
+	b.drainLocked(0)
+}
+
+// drainLocked drains with mu held and no drain running, and returns with mu released.
+// canceller is the calling cancellation goroutine, or 0.
+func (b *sseBody) drainLocked(canceller uint64) {
 	b.draining = true
 	b.canceller = canceller
 	b.drained = make(chan struct{})
