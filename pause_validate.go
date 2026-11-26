@@ -138,6 +138,11 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 			return false
 		}
 	}
+	for _, id := range s.CountedToolIDs {
+		if id == "" {
+			return false
+		}
+	}
 	return validPendingRecords(s.PendingCalls, pendingCallKinds, true) && validPendingRecords(s.PendingTools, pendingToolKinds, false)
 }
 
@@ -160,7 +165,7 @@ func (s *PausedInteraction) UnmarshalJSON(data []byte) error {
 			s.invalidSnapshot = true
 		}
 	}
-	for _, key := range []string{"report_count", "successful_call_sequence", "pending_compactions", "call_sequence", "pending_calls", "pending_tools"} {
+	for _, key := range []string{"report_count", "successful_call_sequence", "pending_compactions", "call_sequence", "pending_calls", "pending_tools", "counted_tool_ids"} {
 		if bytes.Equal(bytes.TrimSpace(fields[key]), []byte("null")) {
 			s.invalidSnapshot = true
 		}
