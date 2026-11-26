@@ -16,7 +16,6 @@ import (
 
 // Adapted from encoding/json Go 1.26.11: selection and omission, without encoder caches. Member
 // names come from the running encoding/json (see tagName), whose tag rules change across releases.
-// A field represents a single field found in a struct.
 type jsonField struct {
 	name string
 
@@ -46,7 +45,6 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 	// Types already visited at an earlier level.
 	visited := map[reflect.Type]bool{}
 
-	// Fields found.
 	var fields []jsonField
 
 	for len(next) > 0 {
@@ -59,7 +57,6 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 			}
 			visited[f.typ] = true
 
-			// Scan f.typ for fields to include.
 			for i := 0; i < f.typ.NumField(); i++ {
 				sf := f.typ.Field(i)
 				if sf.Anonymous {
@@ -89,7 +86,6 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 
 				ft := sf.Type
 				if ft.Name() == "" && ft.Kind() == reflect.Pointer {
-					// Follow pointer.
 					ft = ft.Elem()
 				}
 
@@ -106,7 +102,6 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 					}
 				}
 
-				// Record found field and index sequence.
 				if name != "" || !sf.Anonymous || ft.Kind() != reflect.Struct {
 					tagged := name != ""
 					if name == "" {
@@ -123,7 +118,6 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 					}
 					if field.omitZero {
 						t := sf.Type
-						// Provide a function that uses a type's IsZero method.
 						switch {
 						case t.Kind() == reflect.Interface && t.Implements(isZeroerType):
 							field.isZero = func(v reflect.Value) bool {
@@ -163,7 +157,6 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 					continue
 				}
 
-				// Record new anonymous struct to explore in next round.
 				nextCount[ft]++
 				if nextCount[ft] == 1 {
 					next = append(next, jsonField{name: ft.Name(), index: index, typ: ft})
@@ -191,8 +184,6 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 	// Resolve embedding conflicts by name, giving JSON tags precedence.
 	out := fields[:0]
 	for advance, i := 0, 0; i < len(fields); i += advance {
-		// One iteration per name.
-		// Find the sequence of fields with the name of this first field.
 		fi := fields[i]
 		name := fi.name
 		for advance = 1; i+advance < len(fields); advance++ {
@@ -201,7 +192,7 @@ func jsonTypeFields(t reflect.Type) []jsonField {
 				break
 			}
 		}
-		if advance == 1 { // Only one field with this name
+		if advance == 1 {
 			out = append(out, fi)
 			continue
 		}

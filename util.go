@@ -89,7 +89,6 @@ func capText(s string, limit int) string {
 	return s
 }
 
-// str returns v when it is a non-empty string.
 func str(v any) string {
 	s, _ := v.(string)
 	return s

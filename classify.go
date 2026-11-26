@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// Classifiers label answered interactions with intent and outcome for ai_interaction_classified.
-
 // DefaultOutcomes are the outcomes a classifier picks from unless [ClassifierOptions.Outcomes]
 // says otherwise.
 var DefaultOutcomes = []string{"resolved", "partial", "unresolved", "escalated", "unsupported", "unclear"}

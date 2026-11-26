@@ -1531,8 +1531,7 @@ func (i *Interaction) stampCallLocked(c *recordedCall) {
 	i.agentCalls[c.agentName] = i.order
 }
 
-// restampCallLocked: a merge named the agent of a call stamped without one. Its stamp moves to
-// that agent, with the tools that took its empty key, as if it had been recorded with the agent.
+// Move the call and its tools to the agent identified by the merge.
 func (i *Interaction) restampCallLocked(c *recordedCall) {
 	// A folded call keeps only totals, under the agent it was folded with.
 	if c.agentName == "" || c.order == 0 || !slices.Contains(i.calls, c) {
@@ -2828,8 +2827,7 @@ func pendingCall(c *recordedCall) map[string]any {
 	return p
 }
 
-// pendingTime reads a pending call's start or end: epoch milliseconds, or what Go (RFC 3339)
-// and Python (nanoseconds) wrote in older snapshots.
+// Older snapshots use RFC 3339 or nanoseconds instead of epoch milliseconds.
 func pendingTime(p map[string]any, edge string) time.Time {
 	switch at := p[edge+"_at"].(type) {
 	case string:
@@ -4016,8 +4014,7 @@ func (t *recordedTool) structuredPending() bool {
 	return t.structuredCandidate && !t.resultSeen && !t.eventEmitted
 }
 
-// awaitedLocked: requested by the model and not run yet (awaiting an approval), and its agent made
-// no later call: the pause waits on it, so the segment that runs it counts it.
+// A tool awaiting approval counts in the segment that runs it, unless its agent made a later call.
 func (i *Interaction) awaitedLocked(t *recordedTool) bool {
 	key := t.agentKey
 	if t.unkeyed {
