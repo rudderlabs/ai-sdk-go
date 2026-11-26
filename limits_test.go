@@ -266,7 +266,7 @@ func TestRedactionTimeoutInFoldedViewSendsPlaceholder(t *testing.T) {
 	slow.MatchTimeout = time.Millisecond
 	rules := []redactRule{{name: "slow", token: "secret"}}
 	// Short runs keep the text's own view fast; the folded view drops the zero-width spaces and backtracks.
-	if got := maskWith(rules, []*regexp2.Regexp{slow}, strings.Repeat("aaaa​", 10)+"!"); got != redactionTimedOut {
+	if got := maskWith(rules, []*regexp2.Regexp{slow}, strings.Repeat("aaaa\u200b", 10)+"!"); got != redactionTimedOut {
 		t.Fatalf("masked = %q; want the placeholder, never the unmasked text", got)
 	}
 	if got := seen.all(); len(got) != 1 || got[0] != (ErrorInfo{Kind: KindRedactionTimeout, Where: "redaction pattern slow"}) {
