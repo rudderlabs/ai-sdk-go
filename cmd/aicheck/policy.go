@@ -6,9 +6,7 @@ import (
 	"slices"
 )
 
-// capturePolicy is the plan's capture_content as the checker reads it: --capture-content (the
-// level above) and --capture-policy (snake_case keys, as in the AI events plan), resolved like the
-// SDKs' captureContent policy (SDK-6888). nil fields are not set.
+// capturePolicy resolves the plan's content flags; nil fields inherit.
 type capturePolicy struct {
 	on     bool
 	policy map[string]*bool

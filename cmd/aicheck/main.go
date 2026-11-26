@@ -62,8 +62,7 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
-// run runs the checker with command-line arguments (without the program name) and returns the
-// exit code.
+// run accepts arguments without the program name.
 func run(args []string, stdout, stderr io.Writer) int {
 	for _, a := range args {
 		if a == "-h" || a == "--help" {

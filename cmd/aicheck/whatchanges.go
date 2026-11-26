@@ -244,8 +244,6 @@ func whatChanges(before, after []*Object, out io.Writer) int {
 			// Compare every occurrence in capture order; a change in a later turn counts too.
 			var d []string
 			mb, ma := byB[name][0], byA[name][0]
-			// equal occurrences pair first, whatever their order (concurrent jobs finish in any order);
-			// the rest pair in capture order, and unmatched ones with the other side's first occurrence
 			restB, restA := slices.Clone(byB[name]), []*Object(nil)
 			for _, m := range byA[name] {
 				fm := fields(m, "", map[string]string{})

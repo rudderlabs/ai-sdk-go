@@ -30,7 +30,6 @@ var clientSchema []byte
 // dialect is the only JSON Schema draft the three SDKs' checkers implement.
 const dialect = "https://json-schema.org/draft/2020-12/schema"
 
-// schemaDoc is one schema file.
 type schemaDoc struct {
 	name string // the path, for errors
 	id   string
@@ -295,7 +294,6 @@ func location(instance any, path []string) string {
 	return b.String()
 }
 
-// walk follows an instance location.
 func walk(v any, path []string) any {
 	for _, tok := range path {
 		v = child(v, tok)
