@@ -80,7 +80,6 @@ type Writer struct {
 	lines Lines
 }
 
-// NewWriter observes the responses written to w.
 func NewWriter(w io.Writer, r *Responses) *Writer { return &Writer{w: w, r: r} }
 
 func (x *Writer) Write(p []byte) (int, error) {

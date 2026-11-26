@@ -58,7 +58,6 @@ func rudderstackCookies(header string, values map[string]string) map[string]stri
 	return out
 }
 
-// requestCookies returns a request's Cookie headers joined, or "".
 func requestCookies(r *http.Request) string {
 	if r == nil {
 		return ""
@@ -138,7 +137,6 @@ func sessionEnded(session map[string]any) bool {
 	return cut != nil && cut["enabled"] == true && past(cut["expiresAt"])
 }
 
-// identityInputs are explicit identity plus cookie inputs.
 type identityInputs struct {
 	userID, anonymousID string
 	cookies             map[string]string

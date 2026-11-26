@@ -129,7 +129,6 @@ func (o Options) root() rudderstackai.Options {
 	return r
 }
 
-// tracked is one wrapped mcp-go server.
 type tracked struct {
 	// tools and prompts read the registry as it is now, for one session.
 	tools   func(server.ClientSession) []mcpbridge.Tool
