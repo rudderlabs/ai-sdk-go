@@ -30,5 +30,17 @@
       "expected_nodes": 100000,
       "expected_sha256": "4121539abccc5b722a0993101c019ad4dc542acc4a88863218ae55c590255f47"
     }
+  ],
+  "result_size_cases": [
+    {
+      "name": "shared_dict",
+      "input": { "$repeat": { "k": "v", "n": [1, 2] }, "times": 3 },
+      "result_size_bytes": 61
+    },
+    {
+      "name": "embeddings",
+      "input": { "$repeat": { "$repeat": 0.125, "times": 1536 }, "times": 130 },
+      "result_size_bytes": 1198341
+    }
   ]
 }

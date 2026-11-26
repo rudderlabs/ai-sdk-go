@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"math"
 	"os"
 	"reflect"
 	"runtime"
@@ -99,6 +100,11 @@ var budgetFixture = func() (f struct {
 		ExpectedNodes  int    `json:"expected_nodes"`
 		ExpectedSHA256 string `json:"expected_sha256"`
 	} `json:"cases"`
+	SizeCases []struct {
+		Name            string `json:"name"`
+		Input           any    `json:"input"`
+		ResultSizeBytes int    `json:"result_size_bytes"`
+	} `json:"result_size_cases"`
 }) {
 	b, err := os.ReadFile("spec/fixtures/capture-budget-v0.1.json")
 	if err == nil {
@@ -215,7 +221,7 @@ func TestCaptureBudgetSizesAndEncoding(t *testing.T) {
 			}
 		})
 		bounded(t, func() {
-			if b, _ := captureEncoded(graph); len(b) == 0 {
+			if b, _, _ := captureEncoded(graph); len(b) == 0 {
 				t.Fatal("no encoding")
 			}
 		})
@@ -287,4 +293,135 @@ func TestBudgetCost(t *testing.T) {
 		i.RecordCall(LLMCall{Provider: "openai", Model: "m", OutputToolCalls: []GenAIToolCall{{Name: "lookup", Arguments: graph}}})
 		i.End(EndOptions{})
 	})
+}
+
+// toolResultSize records input as a plain tool result and returns the emitted result_size_bytes.
+func toolResultSize(t *testing.T, capture bool, result any) any {
+	t.Helper()
+	rule := EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "looked_up", When: func(map[string]any, any) bool { return true }}}}
+	r := setupAI(t, WithCaptureContent(capture), WithEventRules(rule))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
+	i.RecordToolCalls(ToolCall{ID: "t", Name: "lookup", Result: result, Error: Ptr(false)})
+	i.End(EndOptions{})
+	return r.props(t, "looked_up")["result_size_bytes"]
+}
+
+func TestResultSizeFixture(t *testing.T) {
+	for _, c := range budgetFixture.SizeCases {
+		for _, capture := range []bool{false, true} {
+			t.Run(c.Name, func(t *testing.T) {
+				if got := toolResultSize(t, capture, buildBudget(c.Input)); got != c.ResultSizeBytes {
+					t.Fatalf("result_size_bytes=%v, want %d", got, c.ResultSizeBytes)
+				}
+			})
+		}
+	}
+}
+
+func TestResultSizeSharedMapIsExact(t *testing.T) {
+	shared := map[string]any{"html": "<a&b>", "n": []any{1, 2.5}}
+	result := map[string]any{"a": shared, "b": shared, "c": []any{shared, shared}}
+	b, _ := compactJSON(result)
+	if got := toolResultSize(t, true, result); got != len(b) {
+		t.Fatalf("result_size_bytes=%v, want %d", got, len(b))
+	}
+	// Past the budget the size stays exact: x nested in {a: x, b: x} 30 levels.
+	deep := sharedMaps(30)
+	want := int64(2)
+	for range 30 {
+		want = 11 + 2*want
+	}
+	if n, err := exactSize(deep); err != nil || int64(n) != want {
+		t.Fatalf("exactSize=%d, %v; want %d", n, err, want)
+	}
+}
+
+type sizeTagged struct {
+	Name  string          `json:"name"`
+	Skip  string          `json:"skip,omitempty"`
+	Count int             `json:"count,string"`
+	Ratio float32         `json:"ratio"`
+	Inner *sizeTagged     `json:"inner,omitempty"`
+	Raw   json.RawMessage `json:"raw"`
+	When  time.Time       `json:"when"`
+	Blob  []byte          `json:"blob"`
+}
+
+func TestExactSizeMatchesCompactJSON(t *testing.T) {
+	shared := &sizeTagged{Name: "<x>&\u2028", Count: 7, Ratio: 0.1, Raw: json.RawMessage(`{"a": 1}`), Blob: []byte("hi")}
+	values := []any{
+		nil, "text <>&", 1, -3.5, float32(0.1), true, []any{}, map[string]any{}, []string{"a", "b"},
+		map[int]string{2: "b", 10: "a"}, map[string]any{"k": []any{1, "x", nil, map[string]any{"z": false}}},
+		[]byte("abc"), json.Number("12.50"), time.Unix(0, 0).UTC(), shared,
+		[]*sizeTagged{shared, shared, {Name: "n", Inner: shared}}, struct{ A, b int }{1, 2},
+		map[string]any{"p": shared, "q": shared}, [2]int{1, 2}, (*int)(nil),
+	}
+	for n, v := range values {
+		want, err := compactJSON(v)
+		if err != nil {
+			t.Fatalf("%d: %v", n, err)
+		}
+		if got, err := exactSize(v); err != nil || got != len(want) {
+			t.Errorf("%d %T: exactSize=%d err=%v, want %d (%s)", n, v, got, err, len(want), want)
+		}
+	}
+	for n, v := range []any{func() {}, make(chan int), complex(1, 2), map[string]any{"f": func() {}}, math.NaN()} {
+		if _, err := compactJSON(v); err == nil {
+			t.Fatalf("%d: compactJSON accepted %T", n, v)
+		}
+		if _, err := exactSize(v); err == nil {
+			t.Errorf("%d %T: exactSize accepted it", n, v)
+		}
+	}
+	cyc := map[string]any{}
+	cyc["self"] = cyc
+	if _, err := exactSize(cyc); err == nil {
+		t.Error("cycle accepted")
+	}
+}
+
+type countingMarshaler struct{ calls *int }
+
+func (c *countingMarshaler) MarshalJSON() ([]byte, error) {
+	*c.calls++
+	return []byte(`{"n":1}`), nil
+}
+
+func TestBudgetCutIsNotReusedByAnotherRoot(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	calls := 0
+	shared := map[string]any{"a": &countingMarshaler{&calls}, "b": 7}
+	first := make([]any, maxWalkNodes-4)
+	for n := range first {
+		first[n] = "v"
+	}
+	first = append(first, shared)
+	got := captureFields(map[string]any{"first": first, "second": shared}).(map[string]any)
+	want := map[string]any{"a": map[string]any{"n": json.Number("1")}, "b": 7}
+	if second := got["second"]; !reflect.DeepEqual(second, want) {
+		t.Fatalf("second root=%v", second)
+	}
+	if calls != 1 {
+		t.Fatalf("serializer ran %d times", calls)
+	}
+	if kept := got["first"].([]any); len(kept) != maxWalkNodes-3 {
+		t.Fatalf("first root kept %d", len(kept))
+	}
+}
+
+func TestBudgetCountsEntriesWithDroppedKeys(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	// Interface keys of an unsupported type are dropped, yet each costs budget.
+	m := map[any]any{}
+	for n := range maxWalkNodes {
+		m[[1]int{n}] = n
+	}
+	m["keep"] = 1
+	got := captureContent(m)
+	if got == nil {
+		t.Fatal("nil")
+	}
+	if g, ok := got.(map[string]any); !ok || len(g) != 0 {
+		t.Fatalf("kept %v", got)
+	}
 }

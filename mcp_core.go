@@ -951,9 +951,9 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 			seedMCPResult(&walk{memo: resultContent.memo}, source, resultContent.value)
 		} else {
 			// Nothing is stored: the base encoding gives the classification inputs and size.
-			b, _ := captureEncoded(o.Result)
+			var b []byte
+			b, size, _ = captureEncoded(o.Result)
 			_ = json.Unmarshal(b, &result)
-			size = len(b)
 		}
 		if rc.wireResultSize > 0 {
 			size = rc.wireResultSize

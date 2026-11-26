@@ -250,15 +250,31 @@ type walk struct {
 	usedSerializer bool
 	incomplete     bool
 	memo           map[visit]any
-	nodes          int  // values this walk has counted; the root counts itself
+	nodes          int            // values this walk has counted; the root counts itself
+	cuts           int            // times the budget stopped a loop
+	cut            map[visit]bool // containers on the path when it did: never memoised
+	dumped         map[visit]serializerOutput
 	fields         bool // the root map's values are separate captured values, each with its own budget
+}
+
+// serializerOutput is what an app serializer returned for a value the budget cut, so a later
+// captured value of the report reads it whole without running the serializer again.
+type serializerOutput struct {
+	decoded any
+	raw     []byte
 }
 
 // take counts one more value; false once the budget is spent, so the walk stops and leaves the
 // rest out like values past the depth cap.
 func (w *walk) take() bool {
 	if w.nodes >= maxWalkNodes-1 {
-		w.incomplete = true
+		w.cuts++
+		if w.cut == nil {
+			w.cut = map[visit]bool{}
+		}
+		for key := range w.path {
+			w.cut[key] = true
+		}
 		return false
 	}
 	w.nodes++
@@ -431,18 +447,26 @@ func enterCapture() (leave func()) {
 
 // captureEncoded is base's encoding of a report value that stores no content, such as an MCP
 // result without a declared rule: one serializer run, for classification and size only.
-func captureEncoded(v any) (b []byte, err error) {
+func captureEncoded(v any) (b []byte, size int, err error) {
 	defer enterCapture()()
 	defer func() {
 		if r := recover(); r != nil {
-			b, err = nil, fmt.Errorf("panic: %v", r)
+			b, size, err = nil, 0, fmt.Errorf("panic: %v", r)
 		}
 	}()
 	if !expandedWithin(v, false) {
-		resolved, _ := resolveCapture(v, false, nil)
-		return boundedJSON(resolved, false)
+		// The classification input comes from the budgeted tree; the size stays exact unless an
+		// app serializer produced part of it.
+		resolved, w := resolveCapture(v, false, nil)
+		b, err = boundedJSON(resolved, false)
+		if w.usedSerializer {
+			return b, len(b), err
+		}
+		size, _ = exactSize(v)
+		return b, size, err
 	}
-	return compactJSON(v)
+	b, err = compactJSON(v)
+	return b, len(b), err
 }
 
 func resolveCapture(v any, fields bool, seeds []captureSeed) (any, *walk) {
@@ -534,13 +558,15 @@ func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureS
 	}
 	sizes := map[string]int{}
 	var size int
-	if !w.usedSerializer && !w.incomplete && expandedWithin(v, fields) {
+	if !w.usedSerializer && !w.incomplete {
 		// The complete walk proved that no serializer can run. Measure the base JSON encoding,
 		// preserving float32 precision, struct tags and encoding failures without another app call.
-		size = captureSize(v)
+		// Past the budget it is measured without expanding shared values, so it stays exact.
+		z := newSizer()
+		size = plainSize(v, expandedWithin(v, fields), z)
 		if m, ok := v.(map[string]any); ok {
 			for k, value := range m {
-				sizes[k] = captureSize(value)
+				sizes[k] = plainSize(value, expandedWithin(value, false), z)
 			}
 		}
 	} else {
@@ -553,10 +579,16 @@ func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureS
 		}
 	}
 	out, _ := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, fields: fields}).strip(resolved)
-	// The memo holds only serializer output, decoded JSON with no sharing, so these strips are linear.
+	// Each memo entry is stripped under its own budget, and the total is capped; entries left are not remembered.
 	memo := make(map[visit]any, len(w.memo))
+	work := 0
 	for key, value := range w.memo {
-		memo[key], _ = (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(value)
+		if work >= maxWalkNodes*maxWalkDepth {
+			break
+		}
+		sw := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}
+		memo[key], _ = sw.strip(value)
+		work += sw.nodes + 1
 	}
 	return captureReport{value: out, size: size, sizes: sizes, memo: memo}
 }
@@ -583,6 +615,22 @@ type serialized struct {
 func (s serialized) MarshalJSON() ([]byte, error) { return s.raw, nil }
 
 var serializedType = reflect.TypeFor[serialized]()
+
+// plainSize is base's encoded size of a value no serializer touched: compactJSON while its
+// tree fits the budget, else an exact measure that does not expand shared references.
+func plainSize(v any, within bool, z *sizer) int {
+	if within {
+		return captureSize(v)
+	}
+	n, err := z.size(reflect.ValueOf(v))
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
+// exactSize is len(compactJSON(v)) without expanding shared references.
+func exactSize(v any) (int, error) { return newSizer().size(reflect.ValueOf(v)) }
 
 func captureSize(v any) int {
 	if text, ok := v.(string); ok {
@@ -774,6 +822,9 @@ func (w *walk) custom(rv reflect.Value) (any, bool) {
 		if value, seen := w.memo[key]; seen {
 			return value, true
 		}
+		if d, seen := w.dumped[key]; seen {
+			return w.finishCustom(key, stable, d.decoded, d.raw), true
+		}
 		w.memo[key] = nil
 	}
 	id := callbackCaller()
@@ -802,14 +853,29 @@ func (w *walk) custom(rv reflect.Value) (any, bool) {
 		captureActive.Unlock()
 	}()
 	decoded, raw := decodeSerializer(target)
+	return w.finishCustom(key, stable, decoded, raw), true
+}
+
+// finishCustom captures a serializer's output. A capture the budget cut is not memoised: another
+// captured value of the report reads the output again, whole, within its own budget.
+func (w *walk) finishCustom(key visit, stable bool, decoded any, raw []byte) any {
+	before := w.cuts
 	out, _ := w.strip(decoded)
 	if w.resolve && raw != nil {
 		out = serialized{value: out, raw: raw}
 	}
 	if stable {
-		w.memo[key] = out
+		if w.cuts != before {
+			delete(w.memo, key)
+			if w.dumped == nil {
+				w.dumped = map[visit]serializerOutput{}
+			}
+			w.dumped[key] = serializerOutput{decoded, raw}
+		} else {
+			w.memo[key] = out
+		}
 	}
-	return out, true
+	return out
 }
 
 // Primitive map keys use Node String() conventions; other keys are dropped.
@@ -923,7 +989,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	defer w.leave(key)
 	if w.serializers && key.ptr != 0 {
 		defer func() {
-			if keep {
+			if keep && !w.cut[key] {
 				w.memo[key] = out
 			}
 		}()
@@ -1005,6 +1071,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 			value reflect.Value
 		}
 		entries := make([]entry, 0, rv.Len())
+		dropped := 0
 		for it := rv.MapRange(); it.Next(); {
 			name, ok := mapKey(it.Key())
 			if w.serializers && legacyValidMapKey(it.Key().Type()) {
@@ -1017,14 +1084,22 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 				if w.legacy {
 					return nil, false
 				}
+				dropped++
 				continue
 			}
 			entries = append(entries, entry{name, it.Value()})
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
+		// An entry whose key is left out still counts; with no place in the order they count first.
+		for ; dropped > 0 && !(w.fields && w.depth == 1); dropped-- {
+			if !w.take() {
+				break
+			}
+		}
 		for _, entry := range entries {
 			if w.fields && w.depth == 1 {
 				w.nodes = 0 // the value is its own root
+				clear(w.cut)
 			} else if !w.take() {
 				break
 			}
