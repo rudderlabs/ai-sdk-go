@@ -32,6 +32,9 @@ type sessionInfo struct {
 	client     *mcpbridge.Client
 	sequence   uint64
 	callers    *boundedMap[sessionInfo]
+	// seen and issued record, at the session's first request, whether the transport assigned
+	// ss.ID() (the client's header was absent or different) rather than the client supplying it.
+	seen, issued bool
 }
 
 var (
@@ -235,8 +238,20 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 	r.SessionID = sessionIDOf(ss, extra)
 	r.Responses = mcpbridge.ResponsesFrom(ctx)
 	var info sessionInfo
+	var issued, header string
+	if extra != nil && extra.Header != nil {
+		header = extra.Header.Get("Mcp-Session-Id")
+	}
 	if ss != nil {
-		info, _ = sessions.get(ss)
+		info = sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
+			if !i.seen {
+				i.seen, i.issued = true, ss.ID() != "" && header != ss.ID()
+			}
+			return i
+		})
+		if info.issued {
+			issued = ss.ID()
+		}
 		r.ClientFor = func(account, user, anonymous string) (*mcpbridge.Client, string) {
 			var known sessionInfo
 			sessions.update(ss, func(i sessionInfo, _ bool) sessionInfo {
@@ -257,6 +272,7 @@ func (w *wrapped) before(ctx context.Context, method string, req mcp.Request) *h
 			r.Connection = info.connection
 		}
 	}
+	r.IssuedSessionID, r.ClientSessionID = issued, header
 	r.ProtocolVersion = info.version
 	if r.ProtocolVersion == "" && r.HTTP {
 		r.ProtocolVersion = extra.Header.Get("Mcp-Protocol-Version")

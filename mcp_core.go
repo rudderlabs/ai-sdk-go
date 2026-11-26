@@ -387,7 +387,7 @@ func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
 	}
 	interactionID, traceID := joinIDs(r.Meta)
 	base := map[string]any{}
-	put(base, "mcp_session_id", capID(r.SessionID))
+	put(base, "mcp_session_id", reportedSessionID(r.IssuedSessionID, r.ClientSessionID))
 	base["server_name"] = opts.name
 	put(base, "server_version", opts.version)
 	put(base, "account_id", id.AccountID)

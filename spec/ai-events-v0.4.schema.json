@@ -1182,7 +1182,7 @@
         "mcp_session_id": {
           "type": "string",
           "minLength": 1,
-          "description": "From the Mcp-Session-Id header (2025-06-18) or a host-provided session key in _meta; absent otherwise."
+          "description": "The session ID the server transport issued, sent as is. Without one, a client-sent Mcp-Session-Id header counts only as a UUID (8-4-4-4-12 hex digits) or 32 hex digits, in either case and not all zeros; absent otherwise."
         },
         "server_name": {
           "type": "string",
@@ -1404,7 +1404,7 @@
         "call_index": {
           "type": "integer",
           "minimum": 0,
-          "description": "Position of this call within its mcp_session_id, else its interaction_id."
+          "description": "Position of this call within its MCP session (its mcp_session_id, or a client-sent Mcp-Session-Id that is not sent), else its interaction_id."
         },
         "ms_since_previous_call": {
           "type": "number",
