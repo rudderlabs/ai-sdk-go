@@ -36,6 +36,8 @@ Extra allocations per call repeat exactly from run to run and are gated in CI: a
 | `interaction/openai`              | `RunInteraction` with one wrapped chat completion                                                      |
 | `interaction/openai-stream`       | The same, streamed: 100 content chunks                                                                 |
 | `interaction/openai+content`      | A 4 KB prompt and a 4 KB answer, `WithCaptureContent` and `WithLLMCallEvents` on, all masked           |
+| `interaction/openai+content-cjk`  | The same with CJK text with fullwidth punctuation as prompt and answer                                 |
+| `interaction/openai+content-emoji` | The same with emoji with ZWJ sequences as prompt and answer                                           |
 | `interaction/openai+spans`        | `interaction/openai` with `WithEmitSpans`                                                              |
 | `interaction/openai-stream+spans` | `interaction/openai-stream` with `WithEmitSpans`                                                       |
 | `mcp/tools-call`                  | One `tools/call` through `WrapMCPServer`, over in-memory transports                                    |
