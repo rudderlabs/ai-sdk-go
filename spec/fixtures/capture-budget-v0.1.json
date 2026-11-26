@@ -1,0 +1,34 @@
+{
+  "fixture_version": 1,
+  "description": "Content capture keeps at most max_nodes values of one captured value, counted depth-first at each place a value is referenced. Identical in every SDK. See FIXTURE-FORMAT.md, capture-budget-v0.1.json.",
+  "max_nodes": 100000,
+  "cases": [
+    {
+      "name": "exact_fit",
+      "input": { "$repeat": "v", "times": 99999 },
+      "expected": { "$repeat": "v", "times": 99999 }
+    },
+    {
+      "name": "wide_list",
+      "input": { "$repeat": "v", "times": 100005 },
+      "expected": { "$repeat": "v", "times": 99999 }
+    },
+    {
+      "name": "shared_lists",
+      "input": { "$repeat": { "$repeat": "v", "times": 270 }, "times": 1000 },
+      "expected": { "$repeat": { "$repeat": "v", "times": 270 }, "times": 369 }
+    },
+    {
+      "name": "shared_arrays_deep",
+      "input": { "$nest": "v", "width": 2, "depth": 30 },
+      "expected_nodes": 100000,
+      "expected_sha256": "8377a3c08fb11c139e06ea97d5a75a5ba120be2cd39b351a327d60e58504aa6a"
+    },
+    {
+      "name": "shared_objects_deep",
+      "input": { "$nest": "v", "keys": ["a", "b"], "depth": 30 },
+      "expected_nodes": 100000,
+      "expected_sha256": "4121539abccc5b722a0993101c019ad4dc542acc4a88863218ae55c590255f47"
+    }
+  ]
+}

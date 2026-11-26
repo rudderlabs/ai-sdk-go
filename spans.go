@@ -449,7 +449,7 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 	s.mu.Unlock()
 	n := s.model(name, operation, source, attrs, a, err, ended)
 	// Resolve after copying under the lock, while the interaction callback guard is active.
-	n.Attributes = captureProperties(spanmodel.AdmitAttributes(n.Attributes, n.Scope.Name, s.capture))
+	n.Attributes = captureAttributes(spanmodel.AdmitAttributes(n.Attributes, n.Scope.Name, s.capture))
 	safely(func() { s.send(n, masked) })
 }
 

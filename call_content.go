@@ -227,6 +227,10 @@ func isBytes(v any) bool {
 // that cycle detection cannot see.
 const maxWalkDepth = 64
 
+// maxWalkNodes is the values one captured value keeps, counted depth first at each place it is
+// reached: a shared value counts every time, so a graph costs what its JSON would.
+const maxWalkNodes = 100_000
+
 type visit struct {
 	ptr uintptr
 	typ reflect.Type
@@ -246,6 +250,19 @@ type walk struct {
 	usedSerializer bool
 	incomplete     bool
 	memo           map[visit]any
+	nodes          int  // values this walk has counted; the root counts itself
+	fields         bool // the root map's values are separate captured values, each with its own budget
+}
+
+// take counts one more value; false once the budget is spent, so the walk stops and leaves the
+// rest out like values past the depth cap.
+func (w *walk) take() bool {
+	if w.nodes >= maxWalkNodes-1 {
+		w.incomplete = true
+		return false
+	}
+	w.nodes++
+	return true
 }
 
 // enter marks a pointer, map or slice as on the path; false when it is already there (a cycle) or
@@ -421,11 +438,15 @@ func captureEncoded(v any) (b []byte, err error) {
 			b, err = nil, fmt.Errorf("panic: %v", r)
 		}
 	}()
+	if !expandedWithin(v, false) {
+		resolved, _ := resolveCapture(v, false, nil)
+		return boundedJSON(resolved, false)
+	}
 	return compactJSON(v)
 }
 
-func resolveCapture(v any, seeds []captureSeed) (any, *walk) {
-	w := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, resolve: true, serializers: true, memo: map[visit]any{}}
+func resolveCapture(v any, fields bool, seeds []captureSeed) (any, *walk) {
+	w := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, resolve: true, serializers: true, memo: map[visit]any{}, fields: fields}
 	for _, seed := range seeds {
 		w.seed(reflect.ValueOf(seed.original), seed.captured, 0)
 		if len(seed.memo) > 0 {
@@ -442,6 +463,13 @@ func resolveCapture(v any, seeds []captureSeed) (any, *walk) {
 // captureProperties captures event properties or attributes in one pass. The map only holds
 // them: each value is stripped on its own, so the map's own shape never drops them all.
 func captureProperties(p map[string]any, seeds ...captureSeed) map[string]any {
+	return captureProps(p, false, seeds)
+}
+
+// captureAttributes is captureProperties with a budget for each attribute.
+func captureAttributes(p map[string]any) map[string]any { return captureProps(p, true, nil) }
+
+func captureProps(p map[string]any, fields bool, seeds []captureSeed) map[string]any {
 	out := make(map[string]any, len(p))
 	strip := func(m map[string]any) {
 		for k, value := range m {
@@ -467,7 +495,7 @@ func captureProperties(p map[string]any, seeds ...captureSeed) map[string]any {
 	strip(plain)
 	if typed != nil {
 		defer enterCapture()()
-		resolved, _ := resolveCapture(typed, seeds)
+		resolved, _ := resolveCapture(typed, fields, seeds)
 		m, _ := resolved.(map[string]any)
 		strip(m)
 	}
@@ -476,24 +504,37 @@ func captureProperties(p map[string]any, seeds ...captureSeed) map[string]any {
 
 // captureContent is the detached snapshot of a report that needs no sizes and seeds no later
 // capture, such as call content or span context.
-func captureContent(v any) any {
+func captureContent(v any) any { return captureContentWith(v, false) }
+
+// captureFields is captureContent for a map whose values are separate captured values, each with
+// its own budget.
+func captureFields(v any) any { return captureContentWith(v, true) }
+
+func captureContentWith(v any, fields bool) any {
 	defer enterCapture()()
-	resolved, _ := resolveCapture(v, nil)
-	out, _ := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(resolved)
+	resolved, _ := resolveCapture(v, fields, nil)
+	out, _ := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, fields: fields}).strip(resolved)
 	return out
 }
 
 // consume reads the resolved tree synchronously, for base wire-shaped callback inputs. The
 // report stores only the stripped snapshot; neither this tree nor its bytes survive the pass.
 func captureResolved(v any, consume func(any), seeds ...captureSeed) captureReport {
+	return captureResolvedWith(v, false, consume, seeds)
+}
+
+// captureValueFields is captureValue for a map whose values are separate captured values.
+func captureValueFields(v any) captureReport { return captureResolvedWith(v, true, nil, nil) }
+
+func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureSeed) captureReport {
 	defer enterCapture()()
-	resolved, w := resolveCapture(v, seeds)
+	resolved, w := resolveCapture(v, fields, seeds)
 	if consume != nil {
 		consume(resolved)
 	}
 	sizes := map[string]int{}
 	var size int
-	if !w.usedSerializer && !w.incomplete {
+	if !w.usedSerializer && !w.incomplete && expandedWithin(v, fields) {
 		// The complete walk proved that no serializer can run. Measure the base JSON encoding,
 		// preserving float32 precision, struct tags and encoding failures without another app call.
 		size = captureSize(v)
@@ -503,15 +544,16 @@ func captureResolved(v any, consume func(any), seeds ...captureSeed) captureRepo
 			}
 		}
 	} else {
-		size = resolvedSize(v, resolved)
+		size = resolvedSize(v, resolved, fields)
 		if m, ok := resolved.(map[string]any); ok {
 			original, _ := v.(map[string]any)
 			for k, value := range m {
-				sizes[k] = resolvedSize(original[k], value)
+				sizes[k] = resolvedSize(original[k], value, false)
 			}
 		}
 	}
-	out, _ := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(resolved)
+	out, _ := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, fields: fields}).strip(resolved)
+	// The memo holds only serializer output, decoded JSON with no sharing, so these strips are linear.
 	memo := make(map[visit]any, len(w.memo))
 	for key, value := range w.memo {
 		memo[key], _ = (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(value)
@@ -521,11 +563,11 @@ func captureResolved(v any, consume func(any), seeds ...captureSeed) captureRepo
 
 // resolvedSize is base's encoded size: serializer output counts as the bytes encoding/json
 // wrote for it, HTML escapes included.
-func resolvedSize(original, resolved any) int {
+func resolvedSize(original, resolved any, fields bool) int {
 	if _, ok := original.(string); ok {
 		return captureSize(resolved)
 	}
-	if b, err := compactJSON(resolved); err == nil {
+	if b, err := boundedJSON(resolved, fields); err == nil {
 		return len(b)
 	}
 	return -1
@@ -930,6 +972,9 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		}
 		list := make([]any, 0, rv.Len())
 		for n := 0; n < rv.Len(); n++ {
+			if !w.take() {
+				break
+			}
 			item := rv.Index(n)
 			// Binary items are stripped; other unrepresentable values keep their positions.
 			if item.Kind() == reflect.Interface && !item.IsNil() {
@@ -978,6 +1023,11 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
 		for _, entry := range entries {
+			if w.fields && w.depth == 1 {
+				w.nodes = 0 // the value is its own root
+			} else if !w.take() {
+				break
+			}
 			if e, ok := w.typed(entry.value); ok && !w.isBytes(e) {
 				m[entry.name] = e
 			}
@@ -1018,6 +1068,9 @@ func (w *walk) structFields(rv reflect.Value, m map[string]any) {
 		fv, ok := jsonFieldValue(rv, f)
 		if !ok {
 			continue
+		}
+		if !w.take() {
+			break
 		}
 		e, ok := w.typed(fv)
 		if !ok || w.isBytes(e) {
@@ -1070,7 +1123,7 @@ func captureCallContent(inputMessages []GenAIMessage, outputText string, outputT
 			rawCalls[n].Arguments = json.RawMessage("null")
 		}
 	}
-	resolved, _ := captureContent(map[string]any{"messages": inputMessages, "calls": rawCalls}).(map[string]any)
+	resolved, _ := captureFields(map[string]any{"messages": inputMessages, "calls": rawCalls}).(map[string]any)
 	inputMessages = nil
 	if messages, ok := resolved["messages"].([]any); ok {
 		for _, value := range messages {
@@ -1339,4 +1392,144 @@ func legacyMapKey(k reflect.Value) (string, bool) {
 		return strconv.FormatUint(k.Uint(), 10), true
 	}
 	return "", false
+}
+
+// expandedWithin is whether v's JSON tree, counting a shared value at each place, fits the
+// budget: encoding/json expands shared references, so only then is it safe to encode v itself.
+func expandedWithin(v any, fields bool) (ok bool) {
+	defer func() {
+		if recover() != nil {
+			ok = true
+		}
+	}()
+	if m, isMap := v.(map[string]any); isMap && fields {
+		for _, e := range m {
+			if !expandedWithin(e, false) {
+				return false
+			}
+		}
+		return true
+	}
+	left := maxWalkNodes - 1
+	return countNodes(reflect.ValueOf(v), &left, 0)
+}
+
+func countNodes(rv reflect.Value, left *int, chain int) bool {
+	if !rv.IsValid() {
+		return true
+	}
+	if chain > maxWalkDepth { // a cycle of pointers alone
+		return false
+	}
+	if _, custom := customTarget(rv); custom {
+		return true
+	}
+	child := func(c reflect.Value) bool {
+		if *left <= 0 {
+			return false
+		}
+		*left--
+		return countNodes(c, left, 0)
+	}
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		return rv.IsNil() || countNodes(rv.Elem(), left, chain+1)
+	case reflect.Slice, reflect.Array:
+		if rv.Type().Elem().Kind() == reflect.Uint8 {
+			return true
+		}
+		for n := 0; n < rv.Len(); n++ {
+			if !child(rv.Index(n)) {
+				return false
+			}
+		}
+	case reflect.Map:
+		for it := rv.MapRange(); it.Next(); {
+			if !child(it.Value()) {
+				return false
+			}
+		}
+	case reflect.Struct:
+		for _, f := range cachedJSONFields(rv.Type()) {
+			if fv, ok := jsonFieldValue(rv, f); ok && !child(fv) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// boundedJSON is the compact JSON of a resolved tree under the walk's budget, so a shared
+// sub-tree is not expanded without limit. Within the budget it equals compactJSON.
+func boundedJSON(v any, fields bool) ([]byte, error) {
+	var buf bytes.Buffer
+	left := maxWalkNodes - 1
+	if err := encodeBounded(&buf, v, &left, fields); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func encodeBounded(buf *bytes.Buffer, v any, left *int, fields bool) error {
+	switch x := v.(type) {
+	case []any:
+		if x == nil {
+			break
+		}
+		buf.WriteByte('[')
+		first := true
+		for _, e := range x {
+			if *left <= 0 {
+				break
+			}
+			*left--
+			if !first {
+				buf.WriteByte(',')
+			}
+			first = false
+			if err := encodeBounded(buf, e, left, false); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte(']')
+		return nil
+	case map[string]any:
+		if x == nil {
+			break
+		}
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		buf.WriteByte('{')
+		first := true
+		for _, k := range keys {
+			if fields {
+				*left = maxWalkNodes - 1
+			} else if *left <= 0 {
+				break
+			} else {
+				*left--
+			}
+			name, err := compactJSON(k)
+			if err != nil {
+				return err
+			}
+			if !first {
+				buf.WriteByte(',')
+			}
+			first = false
+			buf.Write(name)
+			buf.WriteByte(':')
+			if err := encodeBounded(buf, x[k], left, false); err != nil {
+				return err
+			}
+		}
+		buf.WriteByte('}')
+		return nil
+	}
+	b, err := compactJSON(v)
+	buf.Write(b)
+	return err
 }

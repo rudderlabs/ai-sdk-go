@@ -940,7 +940,7 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		if _, declared := rc.declaredRule(); declared && !failed {
 			// Rule properties reuse this report's content instead of serializing again.
 			resultContent = captureResolved(o.Result, func(resolved any) {
-				b, _ := compactJSON(resolved)
+				b, _ := boundedJSON(resolved, false)
 				_ = json.Unmarshal(b, &result)
 			})
 			size = resultContent.size

@@ -1779,7 +1779,7 @@ func (i *Interaction) recordToolCalls(fromSpan, outputFailure bool, calls ...Too
 		for n, call := range calls {
 			_, rule := cfg().toolRules[names[n]]
 			if captureOn || rule {
-				captured[n] = captureValue(map[string]any{"args": call.Args, "result": call.Result})
+				captured[n] = captureValueFields(map[string]any{"args": call.Args, "result": call.Result})
 			}
 		}
 		var fire []*recordedTool
