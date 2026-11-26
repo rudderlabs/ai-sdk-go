@@ -7,6 +7,8 @@ package ruddermcpgo
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -49,5 +51,31 @@ func TestInputRequired2026(t *testing.T) {
 	}
 	if p["request_id"] == nil || p["request_id"] == calls[0].Properties["request_id"] {
 		t.Errorf("request_id = %v, want the original request's", p["request_id"])
+	}
+}
+
+// A 2026-07-28 request with a name or email in Mcp-Session-Id sends no mcp_session_id.
+func TestMCPSessionID2026RejectedHeader(t *testing.T) {
+	s := workspaceServer(t.Name(), nil)
+	r := wrap(t, s, Options{})
+	ts := httptest.NewServer(server.NewStreamableHTTPServer(s, server.WithStateLess(true)))
+	defer ts.Close()
+	cs, err := sdk.NewClient(testClient, nil).Connect(context.Background(),
+		&sdk.StreamableClientTransport{Endpoint: ts.URL, DisableStandaloneSSE: true, HTTPClient: &http.Client{Transport: headerTransport{sessionEmail}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = cs.Close() }()
+	if got := cs.InitializeResult().ProtocolVersion; got != "2026-07-28" {
+		t.Fatalf("negotiated %s", got)
+	}
+	callTool(t, cs, "list_destinations", map[string]any{"workspace_id": "w"}, nil)
+	for _, e := range r.all() {
+		if _, ok := e.Properties["mcp_session_id"]; ok {
+			t.Errorf("%s sent mcp_session_id = %v", e.Event, e.Properties["mcp_session_id"])
+		}
+	}
+	if len(r.named("mcp_tool_called")) != 1 {
+		t.Errorf("events = %v", r.names())
 	}
 }

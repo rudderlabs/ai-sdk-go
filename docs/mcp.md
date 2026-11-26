@@ -131,7 +131,7 @@ MCP tool results reuse the written wire message after a successful write; a fail
 
 ## Session ID
 
-`mcp_session_id` is the session ID the server transport issued, trimmed and cut to 256 characters, whatever its shape. With no issued ID, the client-sent `Mcp-Session-Id` header is sent only when, trimmed, it is a UUID or 32 hex digits (not all zeros), as for `interaction_id`; otherwise `mcp_session_id` is left out, so a client cannot put a name or email there. A rejected header still scopes `call_index`, `ms_since_previous_call` and `retry_count` in memory; it is never sent ([fixture](../spec/fixtures/mcp-session-id-v0.1.json)).
+`mcp_session_id` is the session ID the server transport issued, trimmed and cut to 256 characters, whatever its shape. With no issued ID, the client-sent `Mcp-Session-Id` header is sent only when, trimmed, it is a UUID or 32 hex digits (not all zeros), as for `interaction_id`; otherwise `mcp_session_id` is left out, so a client cannot put a name or email there. A rejected header still scopes `call_index`, `ms_since_previous_call` and `retry_count` in memory; it is never sent ([fixture](../spec/fixtures/mcp-session-id-v0.1.json)). With go-sdk, wrap the server before it serves: a session that connected before `WrapMCPServer` reports no `mcp_session_id` (its in-process state is unaffected).
 
 | Transport | `mcp_session_id` |
 | --- | --- |
@@ -140,10 +140,11 @@ MCP tool results reuse the written wire message after a successful write; a fail
 | go-sdk `MCPGODEBUG=allowsessionsinstateless=1` | The header, only if UUID or 32 hex: the ID equals the client's header, so it is not treated as issued |
 | go-sdk SSE | Absent: the issued ID is hidden and request headers are not passed |
 | mcp-go default and `WithStateful(true)` managers | `mcp-session-<uuid>` on initialize and every later request |
-| mcp-go `WithStateLess(true)` | The header, only if UUID or 32 hex |
-| mcp-go custom `WithSessionIdManager` | The issued ID on initialize; later requests only if it is a UUID or 32 hex, because the SDK cannot see which manager validated the header |
+| mcp-go `WithStateLess(true)` | The header, only if UUID, 32 hex or `mcp-session-<uuid>`: that is mcp-go's own ID format, so it counts as issued, and it can only carry a UUID |
+| mcp-go custom `WithSessionIdManager` | The issued ID on initialize; later requests only if it is a UUID, 32 hex or `mcp-session-<uuid>`, because the SDK cannot see which manager validated the header |
 | mcp-go SSE | The server's own ID, whatever the header says |
-| stdio, in-memory | Absent |
+| mcp-go in-process (a client with a sampling, elicitation or roots handler) | The ID the in-process transport issued (`inprocess-<n>`), as is |
+| stdio, go-sdk in-memory, mcp-go in-process without a handler | Absent |
 
 ## Events
 

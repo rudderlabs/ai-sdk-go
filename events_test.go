@@ -202,3 +202,15 @@ func TestMCPEventsSkipMissingIDsAndLatency(t *testing.T) {
 		t.Error("delivery_latency_ms without OccurredAt")
 	}
 }
+
+// SubscriptionChange.SessionID is the app's own value: sent as given, whatever its shape.
+func TestSubscriptionChangeSessionIDSentAsGiven(t *testing.T) {
+	for _, id := range []string{"session-abc", "6f1c2a8e-3b4d-4c5e-9f60-718293a4b5c6"} {
+		server := workspaceServer("events-session-"+id[:4], nil)
+		r := wrap(t, server, Options{MCPEvents: true})
+		TrackMCPEventSubscription(context.Background(), server, SubscriptionChange{Action: SubscriptionCreated, SubscriptionID: "sub", EventName: "e", SessionID: id})
+		if got := r.props(t, "mcp_event_subscription_changed")["mcp_session_id"]; got != id {
+			t.Errorf("mcp_session_id = %v, want %q", got, id)
+		}
+	}
+}

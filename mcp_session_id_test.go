@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -216,5 +217,110 @@ func TestMCPSessionIDSharedFixture(t *testing.T) {
 				t.Fatalf("reportedSessionID = %q, want %q", got, want)
 			}
 		})
+	}
+}
+
+// go-sdk reads MCPGODEBUG in init(), so the compat mode runs in a re-exec'd test binary.
+func TestMCPSessionIDLegacyStatelessSessions(t *testing.T) {
+	if os.Getenv("RUDDER_LEGACY_STATELESS_INNER") == "" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestMCPSessionIDLegacyStatelessSessions$", "-test.v")
+		cmd.Env = append(os.Environ(), "MCPGODEBUG=allowsessionsinstateless=1", "RUDDER_LEGACY_STATELESS_INNER=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("inner run failed: %v\n%s", err, out)
+		} else if !strings.Contains(string(out), "--- PASS: TestMCPSessionIDLegacyStatelessSessions/email") {
+			t.Fatalf("inner cases did not run:\n%s", out)
+		}
+		return
+	}
+	for _, tc := range []struct{ name, header, want string }{
+		{"email", sessionEmail, ""},
+		{"uuid", sessionUUID, sessionUUID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := workspaceServer(t.Name(), nil)
+			r := wrap(t, s, Options{})
+			ts := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s }, &mcp.StreamableHTTPOptions{Stateless: true}))
+			defer ts.Close()
+			postTool(t, ts.URL, tc.header)
+			postTool(t, ts.URL, tc.header)
+			events := append(r.named("mcp_client_seen"), r.named("mcp_tool_called")...)
+			if len(events) < 3 {
+				t.Fatalf("events = %v", r.names())
+			}
+			for i, e := range events {
+				got, present := e.Properties["mcp_session_id"]
+				if tc.want == "" && present || tc.want != "" && got != tc.want {
+					t.Errorf("%s %d: mcp_session_id = %v (present %v), want %q", e.Event, i, got, present, tc.want)
+				}
+			}
+			// The rejected header still scopes call positions in-process.
+			for i, c := range r.named("mcp_tool_called") {
+				if idx, scoped := c.Properties["call_index"]; !scoped || idx != i {
+					t.Errorf("call %d: call_index = %v (present %v), want %d", i, idx, scoped, i)
+				}
+			}
+		})
+	}
+}
+
+// A header that is not sent as mcp_session_id still scopes pending input_required legs, so one
+// client's retry never consumes another client's leg.
+func TestMCPSessionIDRejectedHeaderScopesPendingLegs(t *testing.T) {
+	server := confirmServer("scoped-confirm", 0)
+	r := wrap(t, server, Options{})
+	ts := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true}))
+	defer ts.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	connectAs := func(header string, handler func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error)) *mcp.ClientSession {
+		cs, err := mcp.NewClient(&mcp.Implementation{Name: "c", Version: "1"}, &mcp.ClientOptions{ElicitationHandler: handler}).Connect(ctx,
+			&mcp.StreamableClientTransport{Endpoint: ts.URL, DisableStandaloneSSE: true, HTTPClient: &http.Client{Transport: headerTransport{header}}}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = cs.Close() })
+		return cs
+	}
+	answer := func(context.Context, *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		return &mcp.ElicitResult{Action: "accept", Content: map[string]any{}}, nil
+	}
+	pending, release := make(chan struct{}), make(chan struct{})
+	alpha := connectAs("alpha session", func(ctx context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
+		close(pending)
+		<-release
+		return answer(ctx, req)
+	})
+	beta := connectAs("beta session", answer)
+	alphaDone := make(chan error, 1)
+	go func() {
+		_, err := alpha.CallTool(ctx, &mcp.CallToolParams{Name: "confirm", Arguments: map[string]any{}})
+		alphaDone <- err
+	}()
+	<-pending // alpha's input_required leg is pending
+	if _, err := beta.CallTool(ctx, &mcp.CallToolParams{Name: "confirm", Arguments: map[string]any{}}); err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	if err := <-alphaDone; err != nil {
+		t.Fatal(err)
+	}
+	calls := r.named("mcp_tool_called")
+	if len(calls) != 2 {
+		t.Fatalf("mcp_tool_called = %d, want 2: %v", len(calls), r.names())
+	}
+	for i, c := range calls {
+		if _, sent := c.Properties["mcp_session_id"]; sent {
+			t.Errorf("call %d sent mcp_session_id", i)
+		}
+		// Beta's retry is its own first call (index 0, no retry_count), not alpha's leg; alpha's keeps position 0.
+		if c.Properties["call_index"] != 0 {
+			t.Errorf("call %d: call_index = %v, want 0", i, c.Properties["call_index"])
+		}
+		if _, ok := c.Properties["retry_count"]; ok {
+			t.Errorf("call %d: retry_count present", i)
+		}
+	}
+	if n := len(r.named("mcp_elicitation_completed")); n != 2 {
+		t.Errorf("mcp_elicitation_completed = %d, want 2", n)
 	}
 }

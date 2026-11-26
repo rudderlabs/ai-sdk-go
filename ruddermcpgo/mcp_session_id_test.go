@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -63,6 +65,9 @@ func TestMCPSessionIDStatelessHeader(t *testing.T) {
 		{"email", sessionEmail, ""},
 		{"uuid", sessionUUID, sessionUUID},
 		{"none", "", ""},
+		// mcp-go's own ID format is accepted as issued, so only a UUID can ride in it.
+		{"prefixed email", "mcp-session-" + sessionEmail, ""},
+		{"prefixed uuid", "mcp-session-" + sessionUUID, "mcp-session-" + sessionUUID},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := workspaceServer(t.Name(), nil)
@@ -179,5 +184,47 @@ func TestMCPSessionIDSSEIssuedBeatsHeader(t *testing.T) {
 	}
 	if id, _ := ids[0].(string); len(id) != 36 {
 		t.Errorf("session ID = %q, want the SSE server's UUID", id)
+	}
+}
+
+type noSampling struct{}
+
+func (noSampling) CreateMessage(context.Context, mcp.CreateMessageRequest) (*mcp.CreateMessageResult, error) {
+	return nil, nil
+}
+
+// The in-process transport registers a session (with the ID it issued) only for a client with a
+// handler; there is no header, so the ID is sent as is.
+func TestMCPSessionIDInProcess(t *testing.T) {
+	s := workspaceServer(t.Name(), nil)
+	r := wrap(t, s, Options{})
+	c, err := client.NewInProcessClientWithSamplingHandler(s, noSampling{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	init := mcp.InitializeRequest{}
+	init.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	init.Params.ClientInfo = mcp.Implementation{Name: "c", Version: "1"}
+	if _, err := c.Initialize(ctx, init); err != nil {
+		t.Fatal(err)
+	}
+	call := mcp.CallToolRequest{}
+	call.Params.Name = "list_destinations"
+	call.Params.Arguments = map[string]any{"workspace_id": "w"}
+	if _, err := c.CallTool(ctx, call); err != nil {
+		t.Fatal(err)
+	}
+	ids := sessionIDs(r, "mcp_tool_called")
+	if len(ids) != 1 {
+		t.Fatalf("events = %v", r.names())
+	}
+	if id, _ := ids[0].(string); !strings.HasPrefix(id, "inprocess-") {
+		t.Errorf("mcp_session_id = %v, want the in-process transport's ID", ids[0])
 	}
 }
