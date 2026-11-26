@@ -667,6 +667,16 @@ func (b *sseBody) end(err error) {
 			safe(func() { b.h.Finish(Completed, "") })
 			return
 		}
+		// A context that ended before the terminal event outranks a later EOF, whoever claims
+		// the end.
+		if errors.Is(err, io.EOF) && b.ctx.Err() != nil {
+			if !b.preferTerminal {
+				safe(func() { complete = b.h.Complete() })
+			}
+			if !complete {
+				err = b.ctx.Err()
+			}
+		}
 		if errors.Is(err, io.EOF) {
 			safe(func() { b.h.Finish(Completed, "") })
 			return

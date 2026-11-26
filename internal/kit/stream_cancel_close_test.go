@@ -2,6 +2,7 @@ package kit
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -166,6 +167,46 @@ func TestCancellationReportReentersClose(t *testing.T) {
 				t.Fatal("Close inside the cancellation report blocked")
 			}
 		})
+	}
+}
+
+type endHandler struct {
+	done bool
+	ends []End
+}
+
+func (h *endHandler) OnEvent(string, []byte) {}
+func (h *endHandler) Finish(e End, _ string) { h.ends = append(h.ends, e) }
+func (h *endHandler) Complete() bool         { return h.done }
+
+// An EOF read after the context ended completes the call only if the provider's terminal event
+// arrived; otherwise the call is cancelled, so a cancelled call that reaches EOF is not billed.
+func TestEOFAfterCancelNeedsTerminalEvent(t *testing.T) {
+	for _, spans := range []bool{false, true} {
+		for _, terminal := range []bool{false, true} {
+			for _, cancelled := range []bool{false, true} {
+				t.Run(fmt.Sprintf("spans=%v/terminal=%v/cancelled=%v", spans, terminal, cancelled), func(t *testing.T) {
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					if cancelled {
+						cancel()
+					}
+					h := &endHandler{done: terminal}
+					b := &sseBody{ctx: ctx, h: h, preferTerminal: spans}
+					b.mu.Lock()
+					b.end(io.EOF)
+					b.mu.Unlock()
+					b.drainCallbacks()
+					want := Completed
+					if cancelled && !terminal {
+						want = Cancelled
+					}
+					if len(h.ends) != 1 || h.ends[0] != want {
+						t.Fatalf("ends=%v, want %v", h.ends, want)
+					}
+				})
+			}
+		}
 	}
 }
 
