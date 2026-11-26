@@ -1023,3 +1023,18 @@ func TestReportSaysWhetherTheBudgetCutItsContent(t *testing.T) {
 		t.Error("a cut result not reported cut, so MCP seeds would carry its cut copy")
 	}
 }
+
+func TestSpanSummaryFinishReasonsAreNotBudgeted(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	reasons := make([]string, maxWalkNodes+5)
+	for i := range reasons {
+		reasons[i] = "stop"
+	}
+	got := captureSpanAttributes(map[string]any{"gen_ai.response.finish_reasons": reasons, "gen_ai.input.messages": filler(maxWalkNodes + 5)})
+	if n := len(got["gen_ai.response.finish_reasons"].([]any)); n != len(reasons) {
+		t.Fatalf("summary reads %d of %d finish reasons", n, len(reasons))
+	}
+	if n := len(got["gen_ai.input.messages"].([]any)); n >= maxWalkNodes+5 {
+		t.Fatalf("content attribute was not budgeted: %d", n)
+	}
+}

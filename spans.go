@@ -449,7 +449,7 @@ func (s *Span) finishUnsafe(name, operation, source string, a map[string]any, er
 	s.mu.Unlock()
 	n := s.model(name, operation, source, attrs, a, err, ended)
 	// Resolve after copying under the lock, while the interaction callback guard is active.
-	n.Attributes = captureAttributes(spanmodel.AdmitAttributes(n.Attributes, n.Scope.Name, s.capture))
+	n.Attributes = captureSpanAttributes(spanmodel.AdmitAttributes(n.Attributes, n.Scope.Name, s.capture))
 	safely(func() { s.send(n, masked) })
 }
 
@@ -652,4 +652,25 @@ func captureMessageContext(v map[string]any) map[string]any {
 		}
 	}
 	return out
+}
+
+// captureSpanAttributes is captureAttributes, but the finish reasons the span summary reads are
+// captured whole, as on main: the summary is not content, so no budget cuts what it reports.
+func captureSpanAttributes(admitted map[string]any) map[string]any {
+	out := captureAttributes(admitted)
+	const key = "gen_ai.response.finish_reasons"
+	if v, ok := admitted[key]; ok {
+		if all, kept := wholeValue(v); kept {
+			out[key] = all
+		}
+	}
+	return out
+}
+
+// wholeValue is v captured without a budget, as main captured every attribute.
+func wholeValue(v any) (any, bool) {
+	defer enterCapture()()
+	resolved, _ := resolveCaptureWith(map[string]any{"v": v}, true, true, nil)
+	m, _ := resolved.(map[string]any)
+	return (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, noBudget: true}).strip(m["v"])
 }

@@ -62,7 +62,7 @@ analytics-go drops whole batches instead, passing every message in them to `Conf
 
 Memory caps and their effects: [configuration](configuration.md#limits). Product-event trimming: [events](events.md#event-size). MCP state caps: [MCP limits](mcp.md#limits). Span budgets: [tracing](tracing.md#privacy-and-size).
 
-Captured content keeps 64 levels of nesting and at most 100,000 values of each captured value (a context, a content field, a tool argument or result), counting a shared object at each place it appears; later values are left out. Input messages over that budget lose their newest messages, which the event size trim would otherwise keep. A tool result's `result_size_bytes` is exact at any size, except for a result an app serializer produced (a type with `MarshalJSON`): that one is sized from its captured copy, so over the budget it is the copy's size.
+Captured content keeps 64 levels of nesting and at most 100,000 values of each captured value (a context, a content field, a tool argument or result), counting a shared object at each place it appears; later values are left out. Input messages over that budget lose their newest messages, which the event size trim would otherwise keep. Only captured content is budgeted: `result_size_bytes`, MCP status and signals, and rule inputs are computed from the whole value exactly as before.
 
 An interaction leaves nothing behind once it ends. MCP keeps each session's or interaction's call position, and one `retry_count` entry per distinct tool and arguments, so a long session can fill a map. These maps hold up to `MaxMapEntries` entries per server and drop the least recently set first.
 
