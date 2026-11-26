@@ -3,6 +3,8 @@
   "interaction/openai": 375,
   "interaction/openai-stream": 6050,
   "interaction/openai+content": 880,
+  "interaction/openai+content-cjk": 1105,
+  "interaction/openai+content-emoji": 1085,
   "interaction/openai+spans": 925,
   "interaction/openai-stream+spans": 6610,
   "mcp/tools-call": 395

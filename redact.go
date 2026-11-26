@@ -10,7 +10,9 @@ import (
 
 // Built-in masking of opt-in text (call_reason, capability_detail). The rules are shared with
 // the Node.js and Python SDKs through spec/fixtures/redaction-v0.1.json; regexp2 is used because
-// the patterns rely on lookbehind, which RE2 lacks.
+// the patterns rely on lookbehind, which RE2 lacks. Text that is not plain NFKC is also matched in a
+// folded view (format characters dropped, each code point NFKC on its own, redact_fold.go): the mask
+// is the union of both views' matches, so nothing the rules mask on the text itself is lost.
 
 // maxMaskedCodePoints: longer text is withheld rather than masked.
 const maxMaskedCodePoints = 32_000
@@ -29,27 +31,30 @@ type redactRule struct {
 	token   string
 	check   func(string) bool
 	keep    bool
+	// needs: a match contains at least one of these substrings, so a text with none skips the rule
+	// in the folded and own views (never changes the result; the plain engine runs every rule).
+	needs []string
 }
 
 var redactRules = []redactRule{
 	{name: "pem_private_key", pattern: `-----BEGIN[A-Z0-9 ]*PRIVATE KEY-----(?:[^-]|-(?!----))*(?:-----END[A-Z0-9 ]*PRIVATE KEY-----)?`, token: "secret"},
-	{name: "bearer", pattern: `(?<![A-Za-z0-9_-])[Bb]earer[ \t]+[A-Za-z0-9._~+/-]{16,}=*`, token: "secret"},
+	{name: "bearer", pattern: `(?<![A-Za-z0-9_-])[Bb]earer[ \t]+[A-Za-z0-9._~+/-]{16,}=*`, token: "secret", needs: []string{"earer"}},
 	{name: "jwt", pattern: `(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`, token: "secret"},
 	{name: "openai_anthropic_key", pattern: `(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}`, token: "secret"},
-	{name: "stripe_key", pattern: `(?<![A-Za-z0-9_-])(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{10,}`, token: "secret"},
+	{name: "stripe_key", pattern: `(?<![A-Za-z0-9_-])(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{10,}`, token: "secret", needs: []string{"_live_", "_test_"}},
 	{name: "google_api_key", pattern: `(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])`, token: "secret"},
 	{name: "google_oauth_token", pattern: `(?<![A-Za-z0-9_-])ya29\.[0-9A-Za-z_-]{20,}`, token: "secret"},
 	{name: "slack_token", pattern: `(?<![A-Za-z0-9_-])xox[abposr]-[A-Za-z0-9-]{10,}`, token: "secret"},
 	{name: "github_token", pattern: `(?<![A-Za-z0-9_-])gh[pousr]_[A-Za-z0-9]{20,}`, token: "secret"},
 	{name: "aws_access_key", pattern: `(?<![A-Za-z0-9])(?:AKIA|ASIA)[A-Z0-9]{16}(?![A-Za-z0-9])`, token: "secret"},
-	{name: "url_password", pattern: `((?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*://[^ \t\r\n:/@]*:)[^ \t\r\n/@]+(?=@)`, token: "secret", keep: true},
-	{name: "key_value_secret", pattern: `((?<![A-Za-z0-9_-])(?:[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss][Ss][_-]?[Tt][Oo][Kk][Ee][Nn]|[Aa][Uu][Tt][Hh][_-]?[Tt][Oo][Kk][Ee][Nn]|[Cc][Ll][Ii][Ee][Nn][Tt][_-]?[Ss][Ee][Cc][Rr][Ee][Tt]|[Ss][Ee][Cc][Rr][Ee][Tt][_-]?[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Pp][Ww][Dd])["']?[ \t]*[:=][ \t]*["']?)[^ \t\r\n"'&,;]{4,}`, token: "secret", keep: true},
-	{name: "email", pattern: `(?<![A-Za-z0-9._%+\u00C0-\uD7FF-])[A-Za-z0-9._%+\u00C0-\uD7FF-]+@[A-Za-z0-9\u00C0-\uD7FF-]+(?:\.[A-Za-z0-9\u00C0-\uD7FF-]+)*\.[A-Za-z\u00C0-\uD7FF]{2,}`, token: "email"},
-	{name: "ipv4", pattern: `(?<![A-Za-z0-9.])(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?![0-9]|\.[0-9])`, token: "ip"},
-	{name: "ipv6", pattern: `(?<![A-Za-z0-9:.])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![A-Za-z0-9:])`, token: "ip", check: checkIPv6},
+	{name: "url_password", pattern: `((?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*://[^ \t\r\n:/@]*:)[^ \t\r\n/@]+(?=@)`, token: "secret", needs: []string{"://"}, keep: true},
+	{name: "key_value_secret", pattern: `((?<![A-Za-z0-9_-])(?:[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss][Ss][_-]?[Tt][Oo][Kk][Ee][Nn]|[Aa][Uu][Tt][Hh][_-]?[Tt][Oo][Kk][Ee][Nn]|[Cc][Ll][Ii][Ee][Nn][Tt][_-]?[Ss][Ee][Cc][Rr][Ee][Tt]|[Ss][Ee][Cc][Rr][Ee][Tt][_-]?[Kk][Ee][Yy]|[Tt][Oo][Kk][Ee][Nn]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Pp][Ww][Dd])["']?[ \t]*[:=][ \t]*["']?)[^ \t\r\n"'&,;]{4,}`, token: "secret", needs: []string{":", "="}, keep: true},
+	{name: "email", pattern: `(?<![A-Za-z0-9._%+\u00C0-\uD7FF-])[A-Za-z0-9._%+\u00C0-\uD7FF-]+@[A-Za-z0-9\u00C0-\uD7FF-]+(?:\.[A-Za-z0-9\u00C0-\uD7FF-]+)*\.[A-Za-z\u00C0-\uD7FF]{2,}`, token: "email", needs: []string{"@"}},
+	{name: "ipv4", pattern: `(?<![A-Za-z0-9.])(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?![0-9]|\.[0-9])`, token: "ip", needs: []string{"."}},
+	{name: "ipv6", pattern: `(?<![A-Za-z0-9:.])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![A-Za-z0-9:])`, token: "ip", needs: []string{":"}, check: checkIPv6},
 	{name: "iban", pattern: `(?<![A-Za-z0-9])[A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?(?![A-Za-z0-9])`, token: "iban", check: checkIBAN},
-	{name: "us_ssn", pattern: `(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9-])`, token: "ssn", check: checkSSN},
-	{name: "card", pattern: `(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?![0-9])`, token: "card", check: checkLuhn},
+	{name: "us_ssn", pattern: `(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9]|-[0-9])`, token: "ssn", check: checkSSN},
+	{name: "card", pattern: `(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?<![ -][0-9])(?<![ -][0-9]{2})(?![0-9])`, token: "card", check: checkLuhn},
 	{name: "phone", pattern: `(?<![A-Za-z0-9+])(?<![0-9][ .-])(?:\+[0-9]{1,3}(?:[ .-]?(?:\([0-9]{1,4}\)|[0-9]{1,4})){2,6}|(?:\([0-9]{2,4}\)[ .-]?|[0-9]{2,4}[ .-])[0-9]{3,4}[ .-][0-9]{3,4}|[0-9]{4,5}[ .-][0-9]{5,6})(?![0-9A-Za-z]|[ .-][0-9])`, token: "phone", check: checkPhone},
 }
 
@@ -151,6 +156,25 @@ func checkIBAN(m string) bool {
 func maskBuiltIn(text string) string { return maskWith(redactRules, compiledRules, text) }
 
 func maskWith(rules []redactRule, compiled []*regexp2.Regexp, text string) string {
+	if isFolded(text) {
+		return maskPlain(rules, compiled, text)
+	}
+	folded, ok := foldedView(text).spans(rules, compiled)
+	if !ok {
+		return redactionTimedOut
+	}
+	if len(folded) == 0 {
+		return maskPlain(rules, compiled, text)
+	}
+	own, ok := ownView(text).spans(rules, compiled)
+	if !ok {
+		return redactionTimedOut
+	}
+	return applySpans(text, mergeSpans(own, folded))
+}
+
+// maskPlain runs each rule over the previous rule's output, on the text as written.
+func maskPlain(rules []redactRule, compiled []*regexp2.Regexp, text string) string {
 	out := text
 	for i, r := range rules {
 		token := "[" + r.token + "]"

@@ -1,6 +1,6 @@
 {
-  "fixture_version": 1,
-  "description": "Built-in masking of opt-in text fields (prompt_text, response_text, action_details.feedback_text, intent_summary) and of span content. Each SDK's built-in masking must turn every input into its expected output exactly. `rules` lists the rules in application order: `pattern` is the exact regular expression source both SDKs compile (no flags; applied globally, left to right, without overlaps); every match is replaced by `tokens[token]` unless `check` names a validation the match must pass (luhn: Luhn checksum; ipv6: 8 groups, or fewer with one `::`; phone: 10-12 digits, 9-15 after a leading +; ssn: area not 000/666/900-999, group not 00, serial not 0000; iban: 15-34 alphanumerics without spaces and ISO 7064 mod-97 == 1); with `keep_group: 1` only the text after capture group 1 is replaced. Each rule runs over the previous rule's output, so the first rule to match a span wins. Text longer than 32000 code points is not masked: the field is withheld (`expected: null`). A case with `repeat: n` means input and expected are each repeated n times. Names and postal addresses are not caught.",
+  "fixture_version": 2,
+  "description": "Built-in masking of opt-in text fields (prompt_text, response_text, action_details.feedback_text, intent_summary) and of span content. Each SDK's built-in masking must turn every input into its expected output exactly. `rules` lists the rules in application order: `pattern` is the exact regular expression source both SDKs compile (no flags; applied globally, left to right, without overlaps); every match is replaced by `tokens[token]` unless `check` names a validation the match must pass (luhn: Luhn checksum; ipv6: 8 groups, or fewer with one `::`; phone: 10-12 digits, 9-15 after a leading +; ssn: area not 000/666/900-999, group not 00, serial not 0000; iban: 15-34 alphanumerics without spaces and ISO 7064 mod-97 == 1); with `keep_group: 1` only the text after capture group 1 is replaced. Each rule runs over the previous rule's output, so the first rule to match a span wins. Text longer than 32000 code points is not masked: the field is withheld (`expected: null`). A case with `repeat: n` means input and expected are each repeated n times. Masking also sees through format characters and compatibility forms. The folded view of a text drops every code point listed in `format_characters` (Unicode 17.0 category Cf) and replaces every other code point with that code point's own NFKC form (one code point at a time, so nothing composes across characters). When the folded view differs from the text, the rules run as above twice, independently: over the text and over its folded view. Each view's final replacements are mapped to the text's code points: a replacement covers the code point its first character came from through the one its last character came from, format characters between them included. Within a view, a replacement that would end inside one code point's NFKC form or inside an earlier replacement is widened to cover all of it, and widened replacements of one rule that overlap merge. Replacements from the two views that overlap merge too, and the merged span takes the token of the part that starts first (ties: the one that ends last, then the text's own view). The output is the text with each span replaced by its token; everything else keeps the text's own characters, so nothing the text's own view masks is left unmasked and unmasked text is never changed. NFKC comes from the runtime's Unicode tables, so a character newer than those tables is not folded. Names and postal addresses are not caught.",
   "tokens": {
     "email": "[email]",
     "phone": "[phone]",
@@ -269,6 +269,281 @@
       "input": "😀",
       "expected": "😀",
       "repeat": 16001
+    },
+    {
+      "name": "card_with_expiry",
+      "input": "Card 4111 1111 1111 1111 12/27, or 5555555555554444 08/29",
+      "expected": "Card [card] 12/27, or [card] 08/29"
+    },
+    {
+      "name": "ssn_trailing_hyphen",
+      "input": "SSN 123-45-6789- on file; part 123-45-6789-1234 is not one",
+      "expected": "SSN [ssn]- on file; part 123-45-6789-1234 is not one"
+    },
+    {
+      "name": "card_grouping_4_4_4_4",
+      "input": "Visa 4111 1111 1111 1111 or 5555-5555-5555-4444.",
+      "expected": "Visa [card] or [card]."
+    },
+    {
+      "name": "card_grouping_4_6_5",
+      "input": "Amex 3714 496353 98431.",
+      "expected": "Amex [card]."
+    },
+    {
+      "name": "card_grouping_4_6_4",
+      "input": "Diners 3056 930902 5904.",
+      "expected": "Diners [card]."
+    },
+    {
+      "name": "card_grouping_4_4_4_4_3",
+      "input": "Card 6011 0000 0000 0000 001.",
+      "expected": "Card [card]."
+    },
+    {
+      "name": "card_no_separators_13_to_19",
+      "input": "4222222222222, 371449635398431, 5555555555554444 and 6011000000000000001",
+      "expected": "[card], [card], [card] and [card]"
+    },
+    {
+      "name": "fold_format_pem_private_key",
+      "input": "key:\n-----BEGIN RSA PRI\u200bVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun\n-----END RSA PRIVATE KEY-----\nthanks",
+      "expected": "key:\n[secret]\nthanks"
+    },
+    {
+      "name": "fold_format_bearer",
+      "input": "Authorization: Bearer abcdef0123\u200c456789ABCDEF.ghij",
+      "expected": "Authorization: [secret]"
+    },
+    {
+      "name": "fold_format_jwt",
+      "input": "jwt eyJhbGciOi\u2060JIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk sent",
+      "expected": "jwt [secret] sent"
+    },
+    {
+      "name": "fold_format_openai_anthropic_key",
+      "input": "key sk-proj-AbCd\ufeffEf0123456789xyzXYZ here",
+      "expected": "key [secret] here"
+    },
+    {
+      "name": "fold_format_stripe_key",
+      "input": "live sk_live_FAKE\u00ad0000example here",
+      "expected": "live [secret] here"
+    },
+    {
+      "name": "fold_format_google_api_key",
+      "input": "key AIzaSyD-1234567890\u2062abcdefghijklmnopqrstu end",
+      "expected": "key [secret] end"
+    },
+    {
+      "name": "fold_format_google_oauth_token",
+      "input": "header ya29.a0AfH6SMBx3k\u200bL9qZ_tR-7vWm2nYpQ8sJdKfE end",
+      "expected": "header [secret] end"
+    },
+    {
+      "name": "fold_format_slack_token",
+      "input": "slack xoxb-1234\u200d567890-abcdefghij end",
+      "expected": "slack [secret] end"
+    },
+    {
+      "name": "fold_format_github_token",
+      "input": "github ghp_0123456789\udb40\udc20abcdefghijABCDEFGHIJ012345 end",
+      "expected": "github [secret] end"
+    },
+    {
+      "name": "fold_format_aws_access_key",
+      "input": "aws AKIAIOSF\u180eODNN7EXAMPLE end",
+      "expected": "aws [secret] end"
+    },
+    {
+      "name": "fold_format_url_password",
+      "input": "postgres:\u200b//admin:S3cret!@db.example.com:5432/app",
+      "expected": "postgres:\u200b//admin:[secret]@db.example.com:5432/app"
+    },
+    {
+      "name": "fold_format_key_value_secret",
+      "input": "api_\u200bkey=9f8e7d6c5b4a&pass\u00adword = \"hunter22\"",
+      "expected": "api_\u200bkey=[secret]&pass\u00adword = \"[secret]\""
+    },
+    {
+      "name": "fold_format_email",
+      "input": "Mail jane.doe@exam\u00adple.com or jane\ufeff.doe@example.com today",
+      "expected": "Mail [email] or [email] today"
+    },
+    {
+      "name": "fold_format_ipv4",
+      "input": "Server 192.168\u200b.1.254 up",
+      "expected": "Server [ip] up"
+    },
+    {
+      "name": "fold_format_ipv6",
+      "input": "Client 2001:db8:85a3:\u200b:8a2e:370:7334 up",
+      "expected": "Client [ip] up"
+    },
+    {
+      "name": "fold_format_iban",
+      "input": "IBAN DE89 3704 00\u200b44 0532 0130 00 ok",
+      "expected": "IBAN [iban] ok"
+    },
+    {
+      "name": "fold_format_us_ssn",
+      "input": "SSN 123-45\u200b-6789 ok",
+      "expected": "SSN [ssn] ok"
+    },
+    {
+      "name": "fold_format_card",
+      "input": "Card 4111 1111\u200b 1111 1111 ok",
+      "expected": "Card [card] ok"
+    },
+    {
+      "name": "fold_format_phone",
+      "input": "Call +1 415\u200b 555 0123 or 555\u200e-987-6543 now",
+      "expected": "Call [phone] or [phone] now"
+    },
+    {
+      "name": "fold_fullwidth_pem_private_key",
+      "input": "－－－－－ＢＥＧＩＮ\u3000ＲＳＡ ＰＲＩＶＡＴＥ ＫＥＹ－－－－－\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo4lgOEePzNm0tRgeLezV6ffAt0gun\n－－－－－ＥＮＤ ＲＳＡ ＰＲＩＶＡＴＥ ＫＥＹ－－－－－",
+      "expected": "[secret]"
+    },
+    {
+      "name": "fold_fullwidth_bearer",
+      "input": "Ａｕｔｈｏｒｉｚａｔｉｏｎ： Ｂｅａｒｅｒ ａｂｃｄｅｆ０１２３４５６７８９ＡＢＣＤＥＦ．ｇｈｉｊ",
+      "expected": "Ａｕｔｈｏｒｉｚａｔｉｏｎ： [secret]"
+    },
+    {
+      "name": "fold_fullwidth_jwt",
+      "input": "jwt ｅｙＪｈｂＧｃｉＯｉＪＩＵｚＩ１ＮｉＪ９．ｅｙＪｚｄＷＩｉＯｉＩｘＭｊＭ０Ｉｎ０．ｄＢｊｆｔＪｅＺ４ＣＶＰｍＢ９２Ｋ２７ｕｈｂＵＪＵ１ｐ１ｒ＿ｗＷ１ｇＦＷＦＯＥｊＸｋ sent",
+      "expected": "jwt [secret] sent"
+    },
+    {
+      "name": "fold_fullwidth_openai_anthropic_key",
+      "input": "key ｓｋ－ａｎｔ－ａｐｉ０３－ＡｂＣｄＥｆ０１２３４５６７８９＿－ｘｙｚ here",
+      "expected": "key [secret] here"
+    },
+    {
+      "name": "fold_fullwidth_stripe_key",
+      "input": "live ｒｋ＿ｔｅｓｔ＿ＦＡＫＥ００００ｅｘａｍｐｌｅ here",
+      "expected": "live [secret] here"
+    },
+    {
+      "name": "fold_fullwidth_google_api_key",
+      "input": "key ＡＩｚａＳｙＤ－１２３４５６７８９０ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕ end",
+      "expected": "key [secret] end"
+    },
+    {
+      "name": "fold_fullwidth_google_oauth_token",
+      "input": "header ｙａ２９．ａ０ＡｆＨ６ＳＭＢｘ３ｋＬ９ｑＺ＿ｔＲ－７ｖＷｍ２ｎＹｐＱ８ｓＪｄＫｆＥ end",
+      "expected": "header [secret] end"
+    },
+    {
+      "name": "fold_fullwidth_slack_token",
+      "input": "slack ｘｏｘｂ－１２３４５６７８９０－ａｂｃｄｅｆｇｈｉｊ end",
+      "expected": "slack [secret] end"
+    },
+    {
+      "name": "fold_fullwidth_github_token",
+      "input": "github ｇｈｐ＿０１２３４５６７８９ａｂｃｄｅｆｇｈｉｊＡＢＣＤＥＦＧＨＩＪ０１２３４５ end",
+      "expected": "github [secret] end"
+    },
+    {
+      "name": "fold_fullwidth_aws_access_key",
+      "input": "aws ＡＫＩＡＩＯＳＦＯＤＮＮ７ＥＸＡＭＰＬＥ end",
+      "expected": "aws [secret] end"
+    },
+    {
+      "name": "fold_fullwidth_url_password",
+      "input": "ｈｔｔｐｓ：／／ａｄｍｉｎ：Ｓ３ｃｒｅｔ＠ｅｘａｍｐｌｅ．ｃｏｍ／ａｐｐ",
+      "expected": "ｈｔｔｐｓ：／／ａｄｍｉｎ：[secret]＠ｅｘａｍｐｌｅ．ｃｏｍ／ａｐｐ"
+    },
+    {
+      "name": "fold_fullwidth_key_value_secret",
+      "input": "ｐａｓｓｗｏｒｄ＝ｈｕｎｔｅｒ２２ and Ｔｏｋｅｎ： abc123def",
+      "expected": "ｐａｓｓｗｏｒｄ＝[secret] and Ｔｏｋｅｎ： [secret]"
+    },
+    {
+      "name": "fold_fullwidth_email",
+      "input": "Mail jane.doe＠example.com or ｂｏｂ＠ｃｏｒｐ．ｉｏ today",
+      "expected": "Mail [email] or [email] today"
+    },
+    {
+      "name": "fold_fullwidth_ipv4",
+      "input": "Server １０．０．０．１２:8080 up",
+      "expected": "Server [ip]:8080 up"
+    },
+    {
+      "name": "fold_fullwidth_ipv6",
+      "input": "Client ２００１：ｄｂ８：：１ up",
+      "expected": "Client [ip] up"
+    },
+    {
+      "name": "fold_fullwidth_iban",
+      "input": "IBAN ＤＥ８９\u3000３７０４ ００４４ ０５３２ ０１３０ ００ ok",
+      "expected": "IBAN [iban] ok"
+    },
+    {
+      "name": "fold_fullwidth_us_ssn",
+      "input": "SSN ０７８－０５－１１２０ ok",
+      "expected": "SSN [ssn] ok"
+    },
+    {
+      "name": "fold_fullwidth_card",
+      "input": "Card ４１１１\u3000１１１１ １１１１ １１１１ ok",
+      "expected": "Card [card] ok"
+    },
+    {
+      "name": "fold_fullwidth_phone",
+      "input": "Call ４１５－５５５－０１００ or ＋４４ ２０ ７９４６ ０９５８ now",
+      "expected": "Call [phone] or [phone] now"
+    },
+    {
+      "name": "fold_compatibility_digits",
+      "input": "SSN ①②③-④⑤-⑥⑦⑧⑨, card 𝟒𝟏𝟏𝟏 𝟏𝟏𝟏𝟏 𝟏𝟏𝟏𝟏 𝟏𝟏𝟏𝟏",
+      "expected": "SSN [ssn], card [card]"
+    },
+    {
+      "name": "fold_expansion_masked_whole",
+      "input": "Card 4111 1111 1111 111¼ end",
+      "expected": "Card [card] end"
+    },
+    {
+      "name": "fold_format_edges_kept",
+      "input": "\u200b4111 1111 1111 1111\u200b and \u00adjane@example.com\u00ad",
+      "expected": "\u200b[card]\u200b and \u00ad[email]\u00ad"
+    },
+    {
+      "name": "fold_cjk_fullwidth_punctuation",
+      "input": "请联系我：jane.doe@example.com，电话（５５５）１２３-４５６７。",
+      "expected": "请联系我：[email]，电话[phone]。"
+    },
+    {
+      "name": "fold_emoji_zwj_kept",
+      "input": "👩\u200d💻 call +1 415 555 0123 👨\u200d👩\u200d👧",
+      "expected": "👩\u200d💻 call [phone] 👨\u200d👩\u200d👧"
+    },
+    {
+      "name": "fold_unmasked_text_unchanged",
+      "input": "Ｈｅｌｌｏ，世界！ 👩\u200d💻 ①② ｶﾀｶﾅ\u00a0ok\u00ad ﬁle Ⅳ 𝟏𝟐\u200b",
+      "expected": "Ｈｅｌｌｏ，世界！ 👩\u200d💻 ①② ｶﾀｶﾅ\u00a0ok\u00ad ﬁle Ⅳ 𝟏𝟐\u200b"
+    },
+    {
+      "name": "fold_check_still_applies",
+      "input": "Order 1234 5678\u200b 9012 3456 shipped",
+      "expected": "Order 1234 5678\u200b 9012 3456 shipped"
+    },
+    {
+      "name": "fold_never_masks_less",
+      "input": "Card 4111 1111 1111 1111\u200b5 and Contact me at\u3000jane@example.com",
+      "expected": "Card [card]\u200b5 and Contact me [email]"
+    },
+    {
+      "name": "fold_joined_neighbour_still_masked",
+      "input": "x\u200bsk-abcdefghijklmnop1234 and user\u200bjane@example.com",
+      "expected": "x\u200b[secret] and [email]"
+    },
+    {
+      "name": "fold_decomposed_accent_email",
+      "input": "Mail jose\u0301@example.com today",
+      "expected": "Mail [email] today"
     }
   ],
   "rules": [
@@ -358,13 +633,13 @@
     },
     {
       "name": "us_ssn",
-      "pattern": "(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9-])",
+      "pattern": "(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9]|-[0-9])",
       "token": "ssn",
       "check": "ssn"
     },
     {
       "name": "card",
-      "pattern": "(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?![0-9])",
+      "pattern": "(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?<![ -][0-9])(?<![ -][0-9]{2})(?![0-9])",
       "token": "card",
       "check": "luhn"
     },
@@ -374,5 +649,28 @@
       "token": "phone",
       "check": "phone"
     }
+  ],
+  "format_characters": [
+    "00AD",
+    "0600-0605",
+    "061C",
+    "06DD",
+    "070F",
+    "0890-0891",
+    "08E2",
+    "180E",
+    "200B-200F",
+    "202A-202E",
+    "2060-2064",
+    "2066-206F",
+    "FEFF",
+    "FFF9-FFFB",
+    "110BD",
+    "110CD",
+    "13430-1343F",
+    "1BCA0-1BCA3",
+    "1D173-1D17A",
+    "E0001",
+    "E0020-E007F"
   ]
 }

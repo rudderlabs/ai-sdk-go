@@ -9,9 +9,11 @@ import (
 	"net"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"unicode"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 )
@@ -24,7 +26,8 @@ type redactionFixture struct {
 		Expected *string `json:"expected"`
 		Repeat   int     `json:"repeat"`
 	} `json:"cases"`
-	Rules []struct {
+	FormatCharacters []string `json:"format_characters"`
+	Rules            []struct {
 		Name      string `json:"name"`
 		Pattern   string `json:"pattern"`
 		Token     string `json:"token"`
@@ -55,6 +58,29 @@ func TestRedactionRulesMatchSharedFixture(t *testing.T) {
 		got := redactRules[i]
 		if got.name != want.Name || got.pattern != want.Pattern || got.token != want.Token || got.keep != (want.KeepGroup == 1) || (got.check != nil) != (want.Check != "") {
 			t.Errorf("rule %d (%s) differs from the fixture", i, want.Name)
+		}
+	}
+}
+
+func TestFormatCharactersMatchSharedFixture(t *testing.T) {
+	want := map[rune]bool{}
+	for _, item := range loadRedactionFixture(t).FormatCharacters {
+		lo, hi, _ := strings.Cut(item, "-")
+		if hi == "" {
+			hi = lo
+		}
+		a, err1 := strconv.ParseInt(lo, 16, 32)
+		b, err2 := strconv.ParseInt(hi, 16, 32)
+		if err1 != nil || err2 != nil {
+			t.Fatalf("bad fixture entry %q", item)
+		}
+		for c := rune(a); c <= rune(b); c++ {
+			want[c] = true
+		}
+	}
+	for c := rune(0); c <= unicode.MaxRune; c++ {
+		if got := unicode.Is(formatCharacters, c); got != want[c] {
+			t.Errorf("U+%04X: in the source list %t, in the fixture %t", c, got, want[c])
 		}
 	}
 }
