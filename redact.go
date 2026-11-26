@@ -54,10 +54,12 @@ var redactRules = []redactRule{
 	{name: "ipv6", pattern: `(?<![A-Za-z0-9:.])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![A-Za-z0-9:])`, token: "ip", needs: []string{":"}, check: checkIPv6},
 	{name: "iban", pattern: `(?<![A-Za-z0-9])[A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?(?![A-Za-z0-9])`, token: "iban", check: checkIBAN},
 	{name: "us_ssn", pattern: `(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9-])`, token: "ssn", check: checkSSN},
-	{name: "card", pattern: `(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?:(?<![ -][0-9])(?<![ -][0-9]{2})|(?!/))(?![0-9])`, token: "card", check: checkLuhn},
+	{name: "card", pattern: `(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?![0-9])`, token: "card", check: checkLuhn},
 	{name: "phone", pattern: `(?<![A-Za-z0-9+])(?<![0-9][ .-])(?:\+[0-9]{1,3}(?:[ .-]?(?:\([0-9]{1,4}\)|[0-9]{1,4})){2,6}|(?:\([0-9]{2,4}\)[ .-]?|[0-9]{2,4}[ .-])[0-9]{3,4}[ .-][0-9]{3,4}|[0-9]{4,5}[ .-][0-9]{5,6})(?![0-9A-Za-z]|[ .-][0-9])`, token: "phone", check: checkPhone},
-	// Runs last, so it only takes an SSN with a lone trailing hyphen that no earlier rule (phone, card) took.
+	// Runs after phone and card, so it only takes an SSN with a lone trailing hyphen they did not take.
 	{name: "us_ssn_trailing_hyphen", pattern: `(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?=-(?![0-9]))`, token: "ssn", check: checkSSN},
+	// Last, so a number the phone rule took keeps [phone]: a card followed by a separated 1-2 digit group (an expiry month).
+	{name: "card_trailing_group", pattern: `(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?![0-9])`, token: "card", check: checkCardTrailingGroup},
 }
 
 var compiledRules = func() []*regexp2.Regexp {
@@ -93,6 +95,27 @@ func checkLuhn(m string) bool {
 		sum += d
 	}
 	return sum%10 == 0
+}
+
+// A separated 1-2 digit group after a Luhn-valid card of at least 13 digits.
+func checkCardTrailingGroup(m string) bool {
+	n := len(m)
+	for _, k := range []int{3, 2} { // leftmost separator wins, as in /[ -][0-9]{1,2}$/
+		if n >= k && (m[n-k] == ' ' || m[n-k] == '-') && isDigits(m[n-k+1:]) {
+			head := m[:n-k]
+			return len(digits(head)) >= 13 && checkLuhn(head)
+		}
+	}
+	return false
+}
+
+func isDigits(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // Exactly 8 groups, or fewer with a single "::".

@@ -1,6 +1,6 @@
 {
   "fixture_version": 2,
-  "description": "Built-in masking of opt-in text fields (prompt_text, response_text, action_details.feedback_text, intent_summary) and of span content. Each SDK's built-in masking must turn every input into its expected output exactly. `rules` lists the rules in application order: `pattern` is the exact regular expression source both SDKs compile (no flags; applied globally, left to right, without overlaps); every match is replaced by `tokens[token]` unless `check` names a validation the match must pass (luhn: Luhn checksum; ipv6: 8 groups, or fewer with one `::`; phone: 10-12 digits, 9-15 after a leading +; ssn: area not 000/666/900-999, group not 00, serial not 0000; iban: 15-34 alphanumerics without spaces and ISO 7064 mod-97 == 1); with `keep_group: 1` only the text after capture group 1 is replaced. Each rule runs over the previous rule's output, so the first rule to match a span wins. Text longer than 32000 code points is not masked: the field is withheld (`expected: null`). A case with `repeat: n` means input and expected are each repeated n times. Masking also sees through format characters and compatibility forms. The folded view of a text drops every code point listed in `format_characters` (Unicode 17.0 category Cf) and replaces every other code point with that code point's own NFKC form (one code point at a time, so nothing composes across characters). When the folded view differs from the text, the rules run as above twice, independently: over the text and over its folded view. Each view's final replacements are mapped to the text's code points: a replacement covers the code point its first character came from through the one its last character came from, format characters between them included (a replacement that covers part of one code point's NFKC form covers that whole code point). Replacements that overlap, from either view, merge, and the merged span takes the token of the part that starts first (ties: the one that ends last, then the text's own view). The output is the text with each span replaced by its token; everything else keeps the text's own characters, so nothing the text's own view masks is left unmasked and unmasked text is never changed. NFKC comes from the runtime's Unicode tables, so a character newer than those tables is not folded. Names and postal addresses are not caught.",
+  "description": "Built-in masking of opt-in text fields (prompt_text, response_text, action_details.feedback_text, intent_summary) and of span content. Each SDK's built-in masking must turn every input into its expected output exactly. `rules` lists the rules in application order: `pattern` is the exact regular expression source both SDKs compile (no flags; applied globally, left to right, without overlaps); every match is replaced by `tokens[token]` unless `check` names a validation the match must pass (luhn: Luhn checksum; card_trailing_group: the match ends in a space or hyphen and a group of one or two digits, and at least 13 digits before that separator pass the Luhn checksum (the whole match is replaced); ipv6: 8 groups, or fewer with one `::`; phone: 10-12 digits, 9-15 after a leading +; ssn: area not 000/666/900-999, group not 00, serial not 0000; iban: 15-34 alphanumerics without spaces and ISO 7064 mod-97 == 1); with `keep_group: 1` only the text after capture group 1 is replaced. Each rule runs over the previous rule's output, so the first rule to match a span wins. Text longer than 32000 code points is not masked: the field is withheld (`expected: null`). A case with `repeat: n` means input and expected are each repeated n times. Masking also sees through format characters and compatibility forms. The folded view of a text drops every code point listed in `format_characters` (Unicode 17.0 category Cf) and replaces every other code point with that code point's own NFKC form (one code point at a time, so nothing composes across characters). When the folded view differs from the text, the rules run as above twice, independently: over the text and over its folded view. Each view's final replacements are mapped to the text's code points: a replacement covers the code point its first character came from through the one its last character came from, format characters between them included (a replacement that covers part of one code point's NFKC form covers that whole code point). Replacements that overlap, from either view, merge, and the merged span takes the token of the part that starts first (ties: the one that ends last, then the text's own view). The output is the text with each span replaced by its token; everything else keeps the text's own characters, so nothing the text's own view masks is left unmasked and unmasked text is never changed. NFKC comes from the runtime's Unicode tables, so a character newer than those tables is not folded. Names and postal addresses are not caught.",
   "tokens": {
     "email": "[email]",
     "phone": "[phone]",
@@ -273,7 +273,7 @@
     {
       "name": "card_with_expiry",
       "input": "Card 4111 1111 1111 1111 12/27, or 5555555555554444 08/29",
-      "expected": "Card [card] 12/27, or [card] 08/29"
+      "expected": "Card [card]/27, or [card]/29"
     },
     {
       "name": "ssn_trailing_hyphen",
@@ -298,12 +298,27 @@
     {
       "name": "card_grouping_4_4_4_1",
       "input": "Visa 4222 2222 2222 2 or 4111 1111 1111 11 11, exp 4222 2222 2222 2 1/27",
-      "expected": "Visa [card] or [card], exp [card] 1/27"
+      "expected": "Visa [card] or [card], exp [card]/27"
     },
     {
-      "name": "limit_card_short_group_before_slash",
+      "name": "card_short_last_group_before_slash",
       "input": "Visa 4222 2222 2222 2/27",
-      "expected": "Visa 4222 2222 2222 2/27"
+      "expected": "Visa [card]/27"
+    },
+    {
+      "name": "card_short_group_after_card",
+      "input": "Card 4111 1111 1111 1111 12 ok",
+      "expected": "Card [card] ok"
+    },
+    {
+      "name": "card_trailing_group_needs_13_digits",
+      "input": "Ref 411111111117-12 here",
+      "expected": "Ref 411111111117-12 here"
+    },
+    {
+      "name": "card_trailing_group_after_phone",
+      "input": "Call +1 415 555 0107 12 times",
+      "expected": "Call [phone] times"
     },
     {
       "name": "card_grouping_4_6_5",
@@ -511,6 +526,11 @@
       "expected": "Card [card] ok"
     },
     {
+      "name": "fold_fullwidth_card_with_expiry",
+      "input": "Card ４１１１ １１１１ １１１１ １１１１ １２／２７",
+      "expected": "Card [card]／２７"
+    },
+    {
       "name": "fold_fullwidth_phone",
       "input": "Call ４１５－５５５－０１００ or ＋４４ ２０ ７９４６ ０９５８ now",
       "expected": "Call [phone] or [phone] now"
@@ -699,7 +719,7 @@
     },
     {
       "name": "card",
-      "pattern": "(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?:(?<![ -][0-9])(?<![ -][0-9]{2})|(?!/))(?![0-9])",
+      "pattern": "(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?![0-9])",
       "token": "card",
       "check": "luhn"
     },
@@ -714,6 +734,12 @@
       "pattern": "(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?=-(?![0-9]))",
       "token": "ssn",
       "check": "ssn"
+    },
+    {
+      "name": "card_trailing_group",
+      "pattern": "(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?![0-9])",
+      "token": "card",
+      "check": "card_trailing_group"
     }
   ],
   "format_characters": [
