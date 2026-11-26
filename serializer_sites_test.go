@@ -11,6 +11,7 @@ import (
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/dataplane"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 type finalReviewPrivateContext struct{ Secret string }
@@ -58,8 +59,7 @@ func TestFinalReviewPrivateSpanContext(t *testing.T) {
 type finalReviewSharedSerializer struct{ Calls int }
 
 func (v *finalReviewSharedSerializer) MarshalJSON() ([]byte, error) {
-	v.Calls++
-	return json.Marshal(map[string]any{"public": fmt.Sprintf("capture-%d", v.Calls)})
+	return testkit.CaptureJSON(&v.Calls)
 }
 func TestFinalReviewToolEventSerializerCount(t *testing.T) {
 	for _, spans := range []bool{false, true} {

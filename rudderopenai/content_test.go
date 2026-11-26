@@ -3,6 +3,8 @@ package rudderopenai
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 func asJSON(t *testing.T, v any) string {
@@ -14,14 +16,7 @@ func asJSON(t *testing.T, v any) string {
 	return string(b)
 }
 
-func req(t *testing.T, s string) map[string]any {
-	t.Helper()
-	var m map[string]any
-	if err := json.Unmarshal([]byte(s), &m); err != nil {
-		t.Fatal(err)
-	}
-	return m
-}
+var req = testkit.JSONMap
 
 func TestChatInputMessages(t *testing.T) {
 	got := asJSON(t, chatInputMessages(req(t, `{"messages":[

@@ -33,16 +33,7 @@ type recorder struct {
 	msgs []analytics.Track
 }
 
-func (r *recorder) Enqueue(m analytics.Message) error {
-	t, ok := m.(analytics.Track)
-	if !ok {
-		return fmt.Errorf("unexpected %T", m)
-	}
-	r.mu.Lock()
-	r.msgs = append(r.msgs, t)
-	r.mu.Unlock()
-	return nil
-}
+func (r *recorder) Enqueue(m analytics.Message) error { return testkit.AppendTrack(&r.mu, &r.msgs, m) }
 
 func (r *recorder) Close() error { return nil }
 

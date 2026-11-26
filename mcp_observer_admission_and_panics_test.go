@@ -11,17 +11,13 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 type round1PanicWriter struct{ calls int }
 
-func (w *round1PanicWriter) Write(p []byte) (int, error) {
-	w.calls++
-	if w.calls == 1 {
-		panic("writer")
-	}
-	return len(p), nil
-}
+func (w *round1PanicWriter) Write(p []byte) (int, error) { return testkit.PanicWrite(&w.calls, p) }
+
 func (*round1PanicWriter) Close() error { return nil }
 
 func TestRound1ObservedWriterPanicSiblings(t *testing.T) {

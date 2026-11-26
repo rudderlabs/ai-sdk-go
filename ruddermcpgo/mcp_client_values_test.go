@@ -7,21 +7,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/mark3labs/mcp-go/server"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 // Client-supplied IDs and client details through the mcp-go wrapper, as for the go-sdk
 // (spec/fixtures/mcp-traceparent-v0.1.json, spec/fixtures/mcp-client-info-v0.1.json).
 
-func minted(id any) bool {
-	s, _ := id.(string)
-	u, err := uuid.Parse(s)
-	return err == nil && u.String() == s && u.Version() == 4
-}
+var minted = testkit.MintedUUID
 
 // connectHTTPAs serves s over streamable HTTP to a go-sdk client that initializes with client.
 func connectHTTPAs(t *testing.T, s *server.MCPServer, client *sdk.Implementation, httpClient *http.Client) *sdk.ClientSession {

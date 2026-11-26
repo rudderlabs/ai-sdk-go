@@ -17,6 +17,8 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	analytics "github.com/rudderlabs/analytics-go/v4"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 const schemaURL = "https://rudderstack.com/schemas/ai-events/0.4.0"
@@ -89,13 +91,7 @@ type recorder struct {
 func newRecorder(t *testing.T) *recorder {
 	t.Helper()
 	r := &recorder{}
-	t.Cleanup(func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		for _, msg := range r.invalid {
-			t.Errorf("event breaks the spec schema: %s", msg)
-		}
-	})
+	testkit.CheckRecordedEvents(t, &r.mu, &r.invalid)
 	return r
 }
 
@@ -116,37 +112,15 @@ func (r *recorder) Enqueue(m analytics.Message) error {
 
 func (r *recorder) Close() error { return nil }
 
-func (r *recorder) all() []analytics.Track {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]analytics.Track(nil), r.messages...)
-}
+func (r *recorder) all() []analytics.Track { return testkit.SnapshotTracks(&r.mu, &r.messages) }
 
-func (r *recorder) named(event string) []analytics.Track {
-	var out []analytics.Track
-	for _, m := range r.all() {
-		if m.Event == event {
-			out = append(out, m)
-		}
-	}
-	return out
-}
+func (r *recorder) named(event string) []analytics.Track { return testkit.NamedTracks(r.all(), event) }
 
-func (r *recorder) names() []string {
-	var out []string
-	for _, m := range r.all() {
-		out = append(out, m.Event)
-	}
-	return out
-}
+func (r *recorder) names() []string { return testkit.TrackNames(r.all()) }
 
 func (r *recorder) props(t *testing.T, event string) map[string]any {
 	t.Helper()
-	got := r.named(event)
-	if len(got) != 1 {
-		t.Fatalf("want 1 %s, got %d: %v", event, len(got), r.names())
-	}
-	return got[0].Properties
+	return testkit.OnlyEventProperties(t, event, r.named, r.names)
 }
 
 func (r *recorder) find(t *testing.T, event, key string, value any) map[string]any {
@@ -160,10 +134,7 @@ func (r *recorder) find(t *testing.T, event, key string, value any) map[string]a
 	return nil
 }
 
-func mustJSON(v any) string {
-	b, _ := json.Marshal(v)
-	return string(b)
-}
+var mustJSON = testkit.JSONString
 
 // handlerSeen records the arguments a tool handler received.
 type handlerSeen struct {

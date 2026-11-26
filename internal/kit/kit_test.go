@@ -35,13 +35,7 @@ type recorder struct {
 func newRecorder(t *testing.T) *recorder {
 	t.Helper()
 	r := &recorder{}
-	t.Cleanup(func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		for _, msg := range r.invalid {
-			t.Errorf("event breaks the spec schema: %s", msg)
-		}
-	})
+	testkit.CheckRecordedEvents(t, &r.mu, &r.invalid)
 	return r
 }
 
@@ -87,11 +81,7 @@ func (r *recorder) names() []string {
 // props returns the properties of the only event with this name.
 func (r *recorder) props(t *testing.T, event string) map[string]any {
 	t.Helper()
-	got := r.named(event)
-	if len(got) != 1 {
-		t.Fatalf("want 1 %s, got %d: %v", event, len(got), r.names())
-	}
-	return got[0].Properties
+	return testkit.OnlyEventProperties(t, event, r.named, r.names)
 }
 
 func (r *recorder) none(t *testing.T, event string) {

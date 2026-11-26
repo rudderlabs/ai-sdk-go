@@ -13,6 +13,7 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 	"github.com/rudderlabs/ai-sdk-go/ruddergenai"
 )
 
@@ -32,21 +33,7 @@ func (s static) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // plausible reports whether every number in the JSON is below 1e15 in magnitude: no provider
 // reports token counts beyond that, and sums of larger ones may overflow.
-func plausible(raw []byte) bool {
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.UseNumber()
-	for {
-		tok, err := d.Token()
-		if err != nil {
-			return err == io.EOF
-		}
-		if n, ok := tok.(json.Number); ok {
-			if f, err := n.Float64(); err != nil || math.Abs(f) >= 1e15 {
-				return false
-			}
-		}
-	}
-}
+var plausible = testkit.PlausibleJSONNumbers
 
 func FuzzUsage(f *testing.F) {
 	for _, s := range []string{

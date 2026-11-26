@@ -3,7 +3,6 @@ package ruddermcpgo
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"strings"
 	"sync/atomic"
@@ -17,6 +16,7 @@ import (
 
 	ai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/serializerfixture"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 // delayedWriter delays each write, like a slow transport.
@@ -33,10 +33,7 @@ func (w delayedWriter) Write(p []byte) (int, error) {
 // slowWire is app output whose JSON encoding takes a while, like a large structured result.
 type slowWire struct{ delay time.Duration }
 
-func (v slowWire) MarshalJSON() ([]byte, error) {
-	time.Sleep(v.delay)
-	return []byte(`{"public":"visible"}`), nil
-}
+func (v slowWire) MarshalJSON() ([]byte, error) { return testkit.SlowJSON(v.delay) }
 
 // rewritingWriter is an app response filter between the server and the observed writer: it
 // rewrites each JSON-RPC response line before the observer sees it.
@@ -92,24 +89,10 @@ func serveObservedStdio(t *testing.T, s *server.MCPServer, delay *atomic.Int64, 
 	return cs
 }
 
-func fixtureMS(t *testing.T, m map[string]any, key string) time.Duration {
-	t.Helper()
-	n, ok := m[key].(float64)
-	if !ok {
-		t.Fatalf("missing %s", key)
-	}
-	return time.Duration(n) * time.Millisecond
-}
+var fixtureMS = testkit.FixtureMilliseconds
 
 // propMS reads an integer millisecond property, whichever numeric type the event carries.
-func propMS(t *testing.T, v any) time.Duration {
-	t.Helper()
-	var n float64
-	if err := json.Unmarshal([]byte(fmt.Sprint(v)), &n); err != nil {
-		t.Fatalf("not a number: %v", v)
-	}
-	return time.Duration(n) * time.Millisecond
-}
+var propMS = testkit.PropertyMilliseconds
 
 // waitEvents waits for n events named event; held events are sent after the response is written.
 func waitEvents(t *testing.T, r *recorder, event string, n int) []analytics.Track {

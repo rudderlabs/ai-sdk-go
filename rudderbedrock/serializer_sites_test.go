@@ -12,12 +12,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	ai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/dataplane"
 	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
-
-	analytics "github.com/rudderlabs/analytics-go/v4"
 )
 
 func TestFinalReviewBedrockCallbackShapes(t *testing.T) {
@@ -63,8 +62,7 @@ func TestFinalReviewBedrockCallbackShapes(t *testing.T) {
 type finalReviewBedrockSerializer struct{ Calls int }
 
 func (v *finalReviewBedrockSerializer) MarshalJSON() ([]byte, error) {
-	v.Calls++
-	return json.Marshal(map[string]any{"public": fmt.Sprintf("capture-%d", v.Calls)})
+	return testkit.CaptureJSON(&v.Calls)
 }
 
 func TestFinalReviewBedrockToolSerializerCount(t *testing.T) {

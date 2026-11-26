@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 func TestMCPErrorMessageFixtures(t *testing.T) {
@@ -338,12 +339,7 @@ func (w *capoffWriter) Write(p []byte) (int, error) {
 
 type capoffClient struct{ *recorder }
 
-func (c *capoffClient) Flush(context.Context) error {
-	if len(c.named("mcp_tool_called")) != 1 {
-		return errors.New("event missing at analytics flush")
-	}
-	return nil
-}
+func (c *capoffClient) Flush(context.Context) error { return testkit.RequireEventAtFlush(c.named) }
 
 func TestMCPErrorMessageNoWriteWait(t *testing.T) {
 	for _, mode := range []string{"off-result", "off-rpc", "split-result", "split-rpc", "on-success"} {

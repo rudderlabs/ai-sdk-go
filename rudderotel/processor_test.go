@@ -26,6 +26,7 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 	"github.com/rudderlabs/ai-sdk-go/ruddertest"
 )
 
@@ -278,12 +279,7 @@ func TestClassifierSuppressionAndFlush(t *testing.T) {
 	}
 }
 
-func strconvBool(v bool) string {
-	if v {
-		return "true"
-	}
-	return "false"
-}
+var strconvBool = testkit.BoolName
 
 type setupCleanupProcessor struct {
 	*tracetest.SpanRecorder

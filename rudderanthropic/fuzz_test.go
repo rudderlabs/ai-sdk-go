@@ -83,12 +83,7 @@ var params = anthropic.MessageNewParams{
 	Messages: []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock("hi"))},
 }
 
-func outcome(raw string, err error) string {
-	if err != nil {
-		return "error: " + err.Error()
-	}
-	return raw
-}
+var outcome = testkit.Outcome
 
 // tracked runs fn in an interaction with a fresh recorder and returns what fn returned.
 func tracked(t *testing.T, fn func(context.Context) string) (string, *recorder) {
@@ -130,21 +125,7 @@ func checkAnswer(t *testing.T, rec *recorder) map[string][]map[string]any {
 
 // plausible reports whether every number in the JSON is below 1e15 in magnitude: no provider
 // reports token counts beyond that, and sums of larger ones may overflow.
-func plausible(raw []byte) bool {
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.UseNumber()
-	for {
-		tok, err := d.Token()
-		if err != nil {
-			return err == io.EOF
-		}
-		if n, ok := tok.(json.Number); ok {
-			if f, err := n.Float64(); err != nil || math.Abs(f) >= 1e15 {
-				return false
-			}
-		}
-	}
-}
+var plausible = testkit.PlausibleJSONNumbers
 
 func FuzzMessagesUsage(f *testing.F) {
 	for _, s := range []string{
