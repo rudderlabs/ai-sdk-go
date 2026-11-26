@@ -19,23 +19,14 @@ How each integration attaches, what it records, and its edge cases. Event fields
 
 When a model request forces exactly one named tool, matching response calls without a tool result returned before the final End count as structured output, not tool calls: they are excluded from `tool_call_count`, `tool_breakdown` and unknown-outcome declared tool events; model calls and tokens still count. This covers OpenAI Chat and Responses named function choices, Anthropic named tool choices, Bedrock Converse named tool choices, Gemini `ANY` with one allowed function name, and Go provider wrappers used by structured-output frameworks, without library markers. A tool result or an already emitted tool event keeps the call real. Pause does not exclude candidates: their pending state survives JSON snapshots, and a result after resume keeps them real. Native OpenAI `response_format` / `json_schema` has no tool calls and is unchanged. Model spans apply the same rule when `gen_ai.request.tool_choice`, `gen_ai.request.toolChoice`, `ai.prompt.toolChoice` or JSON `llm.invocation_parameters` exposes the choice and message attributes expose tool identities; later input tool results or execution spans keep the tool real. Spans without that request choice retain existing accounting. Each exclusion logs the name, call ID and `structured output: forced tool with no result` through `RUDDERSTACK_AI_DEBUG`; the recording-based check command has no exclusion-reason field, so the debug log is the inspection path.
 
-Each integration is its own Go module and hooks into its provider SDK's own extension point (client middleware, an HTTP transport, or AWS middleware), so the client you construct stays your client:
-
-| Integration     | Module (`go get`)                                    | Attach with                                                       | Minimum Go |
-| --------------- | ---------------------------------------------------- | ----------------------------------------------------------------- | ---------- |
-| OpenAI          | `github.com/rudderlabs/ai-sdk-go/rudderopenai`       | `openai.NewClient(rudderopenai.WithTracking())`                   | 1.26.11     |
-| Anthropic       | `github.com/rudderlabs/ai-sdk-go/rudderanthropic`    | `anthropic.NewClient(rudderanthropic.WithTracking())`             | 1.26.11     |
-| Google Gen AI   | `github.com/rudderlabs/ai-sdk-go/ruddergenai`        | `genai.ClientConfig{HTTPClient: ruddergenai.HTTPClient(nil)}`     | 1.26.11     |
-| Amazon Bedrock  | `github.com/rudderlabs/ai-sdk-go/rudderbedrock`      | `bedrockruntime.NewFromConfig(cfg, rudderbedrock.WithTracking())` | 1.26.11     |
-
-Every module needs Go 1.26.11 or later, as the core does, and requires the oldest provider SDK version it supports, so Go may upgrade a dependency below that minimum ([Compatibility](../README.md#compatibility)).
-
 - A call made with a context that carries an interaction (`RunInteraction`, `StartInteraction`, `RunTask`) reports into it. A call without one opens its own one-call interaction and ends it when the call (or its stream) ends: `trigger: system` unless the context carries an identity from `WithValues`, no prompt event, never classified. A call made after its interaction ended logs a warning and becomes such a separate answer, with `parent_interaction_id` set to the ended one.
 - Requests and responses reach the provider SDK unchanged, except that a streamed Chat Completions request asks for usage (see [OpenAI](#openai)). Provider errors are returned to your code unchanged.
 - A client with the tracking option applied twice tracks each call once.
 - Only model calls are tracked; every other request (embeddings, file uploads, token counting, batches) passes through.
 
 ## OpenAI
+
+Integration module: `github.com/rudderlabs/ai-sdk-go/rudderopenai`.
 
 `github.com/openai/openai-go/v3` v3.70.0 or later.
 
@@ -63,6 +54,8 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 - Not tracked: non-streamed `background: true` Responses requests (only queued; polling is not intercepted).
 
 ## Anthropic
+
+Integration module: `github.com/rudderlabs/ai-sdk-go/rudderanthropic`.
 
 `github.com/anthropics/anthropic-sdk-go` v1.78.0 or later.
 
@@ -100,6 +93,8 @@ client := anthropic.NewClient(
 
 ## Google Gen AI
 
+Integration module: `github.com/rudderlabs/ai-sdk-go/ruddergenai`.
+
 `google.golang.org/genai` v1.72.0 or later. The genai client has no middleware hook, so tracking sits in its HTTP client.
 
 ```go
@@ -122,6 +117,8 @@ client, err := genai.NewClient(ctx, &genai.ClientConfig{
 - Errors map by HTTP status, then the Google RPC status (`RESOURCE_EXHAUSTED` `rate_limit`, `DEADLINE_EXCEEDED` `timeout`, `UNAUTHENTICATED` and `PERMISSION_DENIED` `auth_error`, `INVALID_ARGUMENT` `invalid_request`, `CANCELLED` `cancelled`).
 
 ## Amazon Bedrock
+
+Integration module: `github.com/rudderlabs/ai-sdk-go/rudderbedrock`.
 
 `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` v1.63.1 or later.
 
@@ -150,6 +147,8 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 - Stream read-ahead: the AWS SDK decodes up to two events ahead of what your code has received, so an event counts only once two more were decoded, or when the stream ends or fails (then every decoded event counts). Closing a stream early can leave the last one or two decoded events, such as a tool call your code never saw, uncounted.
 
 ## Gateways and OpenAI-compatible endpoints
+
+- Provider labels follow OpenTelemetry `gen_ai.provider.name`: `openai`, `anthropic`, `aws.bedrock`, `gcp.gemini` (Gemini API), `gcp.vertex_ai` (Vertex AI, also for Anthropic on Vertex AI: `rudderanthropic.WithProvider("gcp.vertex_ai")`), `azure.ai.openai`.
 
 Point openai-go at the endpoint and name the provider:
 
@@ -263,6 +262,9 @@ An agent that calls MCP servers can join each `mcp_tool_called` to its answer by
 
 ## Go platform limits
 
+Go resolves one package instance for each import path in a build, including when dependencies use vendoring. Import aliases and repeated wrapping share invocation recognition, so they emit one span. Independently renamed forks use different package identities and internal context keys; cross-fork wrapper recognition is a platform limit. Lazy Go iterators retain the explicit context passed by the caller, and resolve active interaction ownership and capture policy when provider work starts.
+
+- Mastra is a TypeScript framework, so this SDK has no Mastra integration; use `@rudderstack/ai` (Node.js).
 - Provider integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients. Go has no LangChain,
   LangGraph, OpenAI Agents SDK, Claude Agent SDK or Vercel AI SDK integrations. Use manual spans for framework operations. Enable `WithEmitSpans(true)` and use manual `invoke_agent`, `execute_tool` and
   `retrieval` spans with wrapped model calls to build the same tree. Pass each returned context
@@ -274,3 +276,40 @@ An agent that calls MCP servers can join each `mcp_tool_called` to its answer by
 - Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
 - `Flush` sends analytics-go's queue (v4.5.1, the minimum, has `Flush(ctx)`); a custom client without a flush method is reported as `client_outdated`, so close it before exiting. There is no exit hook: call `Flush` or `Shutdown` yourself. `Shutdown` never closes clients; afterwards, call `CloseClient(ctx, client)` for each client you own.
 - Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint.
+
+## Compatibility
+
+Each module requires the oldest version it supports; Go may upgrade a dependency below that minimum. CI tests the workspace with the newer versions the examples use. Isolated minimum-version tests run on main, release PRs and manual runs, excluding examples.
+
+| Module                                        | Requires and tested at (minimum)                               | Also tested with |
+| --------------------------------------------- | -------------------------------------------------------------- | ---------------- |
+| All modules                                   | Go 1.26.11                                                      | Go 1.26, 1.27    |
+| `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.5.1, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.5.0 |
+| `.../rudderopenai`                            | `github.com/openai/openai-go/v3` v3.70.0                        | v3.98.0          |
+| `.../rudderanthropic`                         | `github.com/anthropics/anthropic-sdk-go` v1.78.0                | v1.84.0          |
+| `.../ruddergenai`                             | `google.golang.org/genai` v1.72.0                               | v1.77.0          |
+| `.../rudderbedrock`                           | `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` v1.63.1   | v1.63.12          |
+| `.../rudderotel`                              | `go.opentelemetry.io/otel` / `trace` / `sdk` v1.47.0           |                  |
+
+Every Go module runs the applicable shared fixtures in [`spec/fixtures/`](../spec/fixtures).
+
+
+The root module holds the interaction API, the `net/http` middleware and MCP support. It depends on analytics-go, the MCP libraries (go-sdk and mcp-go), regexp2 (redaction patterns), google/uuid, and santhosh-tekuri/jsonschema (used only by the SDK's own schema tests, so it is not compiled into your binary). Each provider integration, and the OpenTelemetry helper `rudderotel`, is its own module, so an MCP-only service does not pull provider SDKs.
+
+## Examples
+
+| Example                                               | Shows                                                                                          |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| [`openai`](../examples/openai)                           | `rudderopenai`: a streamed Chat Completions answer, a registered price, `TrackAction` feedback |
+| [`anthropic`](../examples/anthropic)                     | `rudderanthropic`: a streamed Messages answer with cache reads and writes                      |
+| [`google-genai`](../examples/google-genai)               | `ruddergenai`: a tool call, then a streamed answer, with `tool_breakdown`                      |
+| [`bedrock-converse`](../examples/bedrock-converse)       | `rudderbedrock`: `Converse` with a tool, then `ConverseStream`, priced through an inference profile |
+| [`background-agent`](../examples/background-agent)       | `RunTask`: system-triggered work with a chained sub-task and `TrackScore`                      |
+| [`approval-loop`](../examples/approval-loop)             | `RunTask` that pauses twice for approval and resumes from a stored snapshot; `ai_task_started` |
+| [`manual`](../examples/manual)                           | `StartInteraction`, `RecordCall`, `RecordToolCalls`, a declared tool event, a custom classifier |
+| [`mcp-server`](../examples/mcp-server)                   | stdio and streamable HTTP, `request_context`, a declared event, `submit_feedback`           |
+| [`mcp-server-mcpgo`](../examples/mcp-server-mcpgo)       | The same server on mcp-go with `ruddermcpgo.WrapServer`, 2025-06-18 and 2026-07-28             |
+| [`mcp-stateless-http`](../examples/mcp-stateless-http)   | Stateless streamable HTTP on 2026-07-28, confirmation through an `input_required` elicitation  |
+| [`mcp-auth`](../examples/mcp-auth)                       | A bearer token check and `Identify`: `userId`, `account_id`, `oauth_client_id`, `token_scopes` |
+
+From the repository root: `go run ./examples/<name> --check` runs one end to end against a local mock data plane and a mock LLM (no credentials); `--live` sends the same events to `RUDDERSTACK_DATA_PLANE_URL` with `RUDDERSTACK_WRITE_KEY`; without flags a provider example makes one real call and an MCP example serves. Details: [examples/README.md](../examples/README.md).

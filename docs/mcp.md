@@ -19,7 +19,7 @@ Both send the same events with the same options, defaults and properties. `rudde
 - [Joining the calling agent](#joining-the-calling-agent)
 - [Agent-reported context](#agent-reported-context)
 - [Declared tool events](#declared-tool-events)
-- [Unmet demand: request_capability](#unmet-demand-request_capability)
+- [Unmet demand: request_capability](#unmet-demand-request_capability-deprecated)
 - [Elicitation](#elicitation)
 - [MCP Events (experimental)](#mcp-events-experimental)
 - [Limits](#limits)
@@ -28,11 +28,17 @@ Both send the same events with the same options, defaults and properties. `rudde
 
 ```go
 server := mcp.NewServer(&mcp.Implementation{Name: "workspace-mcp", Version: "1.4.0"}, nil)
-// server.AddTool / mcp.AddTool ...
+mcp.AddTool(server, &mcp.Tool{Name: "create_audience"}, createAudience)
 
 if err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 	Analytics: client, // analytics.Client from github.com/rudderlabs/analytics-go/v4
-	Identify:  identify,
+	Identify: func(ctx context.Context, tok *auth.TokenInfo) (rudderstackai.Identity, error) {
+		if tok == nil {
+			return rudderstackai.Identity{}, nil
+		}
+		workspace, _ := tok.Extra["workspace_id"].(string)
+		return rudderstackai.Identity{UserID: tok.UserID, AccountID: workspace}, nil
+	},
 	EventRules: rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
 		"create_audience": {Event: "audience_created"},
 	}},
@@ -110,7 +116,7 @@ Messages pass through unchanged, and the libraries' own connections and protocol
 | `RequestContext`     | off        | `Enabled: true` injects `request_context`; `Intents` and `DisableUserSentiment` apply only when enabled.                                                                          |
 | `ClientSeenWindow`   | 24 hours   | Window in which a (client, OAuth client, user) is reported once by `mcp_client_seen`, per server name and process.                                                                                               |
 | `CaptureContent`     | global setting | Sends masked `call_reason` and `capability_detail` capped at 200 characters, `feedback_text` capped at 2,000, and `error_message` capped at 200 when the [final response is observed](#error-messages-observing-the-final-response). False follows `Configure`'s setting.                                                                                                |
-| `ContentCapture`     | none       | Per kind (`CallReason`, `FeedbackText`, `ErrorMessage`, see [Content capture](configuration.md#content-capture)); its keys win over `CaptureContent`. `&ContentCapture{Default: Ptr(false)}` turns this server off when the global setting is on. |
+| `ContentCapture`     | none       | Per kind (`CallReason`, `FeedbackText`, `ErrorMessage`, see [Content capture](privacy.md#content-capture)); its keys win over `CaptureContent`. `&ContentCapture{Default: Ptr(false)}` turns this server off when the global setting is on. |
 | `CapabilityRequests` | off (nil)  | Deprecated: use `FeedbackRequests`. Existing `request_capability` behavior remains available.                                                                         |
 | `FeedbackRequests` | off (nil) | `&FeedbackRequestOptions{Capabilities: []string{"bulk_export"}}` adds `submit_feedback`. Cannot be combined with `CapabilityRequests`. |
 | `MCPEvents`          | off        | Enables the experimental [MCP Events](#mcp-events-experimental) helpers.                                                                                                          |

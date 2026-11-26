@@ -66,7 +66,7 @@ The user asked something. Sent for an interaction with `Trigger: TriggerUser` (t
 - The event is held until the interaction's first model call starts (or a call is recorded, or the interaction ends), so it carries that call's integration in `context.wrapperLibrary` and the integration's client. Its timestamp is the moment `StartInteraction` ran.
 - `intent` is the one set by `InteractionOptions.Intent` or `SetIntent` before the event goes out; a later `SetIntent` lands on `ai_response_received` only.
 - `input_method`, `attachment_count` and `attachment_types` come from `InputMethod`, `AttachmentCount` and `AttachmentTypes`. Attachment kinds are `image`, `audio`, `video`, `pdf` or `file` (any other value becomes `file`), lower-cased and each sent once. Never file names or content.
-- `prompt_text`: `PromptText`, only with content capture on, [masked](configuration.md#privacy-and-masking).
+- `prompt_text`: `PromptText`, only with content capture on, [masked](privacy.md#privacy-and-masking).
 
 ## ai_response_received
 
@@ -311,7 +311,7 @@ Also, when known: `agent_name`, `requested_model`, `reasoning_tokens`, `cache_wr
 - Masking is the same as `prompt_text` (built-ins, then your redact hook) on every string in messages and tool arguments. A string over 32,000 code points is shortened first (`input_truncated` true); if the hook fails or drops a string, the whole field (`input_messages` with `input_truncated`, `output_text` or `output_tool_calls`) is left out.
 - Size: the event stays within 30,000 bytes. Over it, `output_text` and `output_tool_calls` that fit nowhere go first; then the oldest messages after the leading system messages are dropped (the last message always stays), then the longest string loses its tail; `input_truncated` is true. Calls folded past `MaxCallsPerInteraction` send no content. Tool results and media remove native bytes: native byte buffers are removed from captured containers after resolving app serializers; cyclic edges are omitted, `data:` URIs become `data:<media type>` and base64 payloads of media objects are dropped; media is `image`, `audio`, `video` or `document`, with `file` parts for provider-held file IDs. A pending call in a pause snapshot keeps its `call_index`.
 
-Serializer capture: with spans on or off, `MarshalJSON` / `MarshalText` output is captured once per value per report and reused by events, spans and sizes. Raw bytes are stripped, while bytes already encoded as ordinary serializer text, including base64, remain subject to existing masking. A failing serializer produces JSON null; its fields are never walked. See [content capture](configuration.md#content-capture) for timing and known limits.
+Serializer capture: with spans on or off, `MarshalJSON` / `MarshalText` output is captured once per value per report and reused by events, spans and sizes. Raw bytes are stripped, while bytes already encoded as ordinary serializer text, including base64, remain subject to existing masking. A failing serializer produces JSON null; its fields are never walked. See [content capture](privacy.md#content-capture) for timing and known limits.
 
 
 ## Declared tool events
@@ -351,7 +351,7 @@ Each call of `create_ticket` then sends one `ticket_created`:
 
 - When: once per de-duplicated tool call, as soon as its outcome (`Error`) or output (`Result`) is known; otherwise when the interaction ends, with `tool_status: "unknown"`. Calls of tools without a rule send nothing.
 - SDK-owned properties: `tool_name`, `tool_call_id` (absent without a provider ID), `tool_status` (`success`, `error` or `unknown`), `tool_duration_ms` (only when a duration was reported), `agent_name` when known, `trigger` and the [common fields](#common-fields). They win over what `Properties` returns.
-- `args` is the call's arguments when they are a JSON object (JSON text is parsed), else nil; `result` is what the integration saw of the tool's output (a later request's tool message or result block, parsed when it is JSON), or `ToolResult.Result`. Neither is sent unless `Properties` returns it. What `Properties` returns is sent unmasked: pass free text, such as a user's comment, through [`MaskText`](configuration.md#privacy-and-masking) first.
+- `args` is the call's arguments when they are a JSON object (JSON text is parsed), else nil; `result` is what the integration saw of the tool's output (a later request's tool message or result block, parsed when it is JSON), or `ToolResult.Result`. Neither is sent unless `Properties` returns it. What `Properties` returns is sent unmasked: pass free text, such as a user's comment, through [`MaskText`](privacy.md#privacy-and-masking) first.
 - `When` returning false, or panicking, skips the event. If `Properties` panics, or its output would take the event over the 30,000-byte properties budget, the event is sent without your properties. Output that cannot fit any message once escaped as analytics-go escapes `<`, `>` and `&` is also left out, and the event still goes out; Node.js and Python, whose clients don't escape, never take this path.
 - Rule keys are tool names as the model calls them (`mcp__server__tool` for flat MCP names). Event names starting with `ai_` or `mcp_` are rejected by `Configure`. `WithEventRules` replaces earlier rules. These rules are separate from the `Options.EventRules` of [WrapMCPServer](mcp.md#declared-tool-events), which use the same types.
 - Outside an interaction each call is its own answer, so a tool's result, sent in the next request, never reaches the rule: the event goes out with `tool_status: "unknown"` and a nil `result`. Run the whole tool loop inside one `RunInteraction` when a rule needs results.
@@ -411,6 +411,15 @@ rudderstackai.TrackClassification(ctx, rudderstackai.TrackClassificationOptions{
 - Identity and context options match `TrackScore`: `UserID`/`AnonymousID`, `AccountID`, `OnBehalfOf`, `Feature`, `Surface`, `AgentVersion`, `Variant`, `Analytics` and `Context`; each falls back to the context of `WithValues`. `Trigger` has no context fallback: it is sent only when set to `TriggerUser` or `TriggerSystem`. `WithSampleRates` for `ai_interaction_classified` applies.
 
 ## ai_interaction_scored
+
+```go
+rudderstackai.TrackScore(ctx, rudderstackai.TrackScoreOptions{
+	Score:          rudderstackai.Score{EvaluationName: "helpfulness", ScoreLabel: "pass", Evaluator: rudderstackai.EvaluatorHuman},
+	InteractionID:  interactionID,
+	ConversationID: chatID,
+	UserID:         userID,
+})
+```
 
 One event per score: from your evaluator after each successful answer, or from `TrackScore` for a score from elsewhere (a human review, an offline judge).
 

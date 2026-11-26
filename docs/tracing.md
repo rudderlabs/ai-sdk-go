@@ -5,6 +5,22 @@ instrumentation already creates. Each finished AI span becomes one `ai_otel_span
 track event. `properties.otlp` is a complete OTLP/JSON `ExportTraceServiceRequest` containing that
 span, forwardable to `/v1/traces`. The core module has no OpenTelemetry dependency.
 
+## Product trace ID
+
+`ai_response_received` carries `trace_id` from `InteractionOptions.TraceID` or `SetTraceID`; a value you set always wins. Use it to join an answer to a Langfuse, LangSmith or OpenTelemetry trace.
+
+The core module does not depend on OpenTelemetry. To take the trace ID of the active OpenTelemetry span, install the optional `rudderotel` module and register it:
+
+```sh
+go get github.com/rudderlabs/ai-sdk-go/rudderotel@v0.5.0
+```
+
+```go
+err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID))
+```
+
+`WithTraceIDFrom(fn func(context.Context) string)` is consulted with the context given to `StartInteraction` / `RunInteraction`, then with the context of each integration call until it returns a non-empty ID. `rudderotel.TraceID(ctx)` returns the trace ID of the span in `ctx`, or "". No span is created or exported. Without `WithTraceIDFrom`, `trace_id` comes only from `TraceID` / `SetTraceID`.
+
 ## Choose a setup
 
 | Setup                  | Turn on                                                     | You get                                                                                         |
@@ -334,7 +350,7 @@ and also offers `ForceFlush(context.Context) error`. Constants expose `DefaultEv
 | --- | --- | --- |
 | `Analytics` | core's configured client | Required if no client was configured. |
 | `CaptureContent *bool` | core's `WithCaptureContent`, read at export | An explicit pointer wins, including false. |
-| `ContentCapture *rudderstackai.ContentCapture` | core's `WithContentCapture`, read at export | Span content per kind (`Spans: &SpanCapture{Messages, ToolCalls, HTTP}`); its keys win over `CaptureContent`. See [Content capture](configuration.md#content-capture). |
+| `ContentCapture *rudderstackai.ContentCapture` | core's `WithContentCapture`, read at export | Span content per kind (`Spans: &SpanCapture{Messages, ToolCalls, HTTP}`); its keys win over `CaptureContent`. See [Content capture](privacy.md#content-capture). |
 | `ExportAllSpans` | false | Export HTTP/database spans too. |
 | `Filter func(sdktrace.ReadOnlySpan) bool` | `IsAISpan` | Replaces the default filter and `ExportAllSpans`. |
 | `ResolveIdentity func(sdktrace.ReadOnlySpan) Identity` | attribute/resource identity | Empty identity or a panic falls back to defaults. |
