@@ -31,8 +31,8 @@ Properties on every interaction event (prompt, answer, per-call, declared tool, 
 
 | Property                | Source                                                                                              |
 | ----------------------- | --------------------------------------------------------------------------------------------------- |
-| `conversation_id`       | [`InteractionOptions.ConversationID`](configuration.md#interactionoptions), else the context's, else the `interaction_id` with `OneShot: true`, else a minted UUID v4 |
-| `interaction_id`        | [`InteractionOptions.InteractionID`](configuration.md#interactionoptions), else a UUID v4 |
+| `conversation_id`       | [`InteractionOptions.ConversationID`](configuration.md#interactionoptions), else the context's, else the `interaction_id` with `OneShot: true`, else a minted UUID v4. `RunTask` uses `TaskOptions.ConversationID`, else its chained parent's, never the context's. A [`Resume`](configuration.md#pauses-and-resumes) snapshot's ID wins. |
+| `interaction_id`        | [`InteractionOptions.InteractionID`](configuration.md#interactionoptions), else a UUID v4. A `Resume` snapshot's ID wins. |
 | `feature`               | `Feature` of the options, else the context's                                                        |
 | `surface`               | `Surface` of the options, else the context's; a value outside the `Surface` constants is dropped with a warning |
 | `account_id`            | `AccountID` of the options, else the context's                                                      |
