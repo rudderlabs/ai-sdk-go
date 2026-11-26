@@ -97,11 +97,7 @@ type ClassifierOptions struct {
 	Timeout time.Duration
 }
 
-type classifierConfig struct {
-	ClassifierOptions
-}
-
-func newClassifierConfig(o ClassifierOptions) (*classifierConfig, error) {
+func newClassifierConfig(o ClassifierOptions) (*ClassifierOptions, error) {
 	if (o.Client == nil) == (o.Classify == nil) {
 		return nil, errors.New("rudderstackai: classifier needs either Client or Classify")
 	}
@@ -123,7 +119,7 @@ func newClassifierConfig(o ClassifierOptions) (*classifierConfig, error) {
 		o.Outcomes = DefaultOutcomes
 	}
 	o.Intents, o.Outcomes = slices.Clone(o.Intents), slices.Clone(o.Outcomes)
-	return &classifierConfig{o}, nil
+	return &o, nil
 }
 
 // clip keeps the start and the end of a long text, in code points.
@@ -460,7 +456,7 @@ func withTimeout[T any](d time.Duration, fn func(context.Context) (T, error)) (T
 	}
 }
 
-func scheduleClassification(i *Interaction, snap turnSnapshot, c *classifierConfig) chan struct{} {
+func scheduleClassification(i *Interaction, snap turnSnapshot, c *ClassifierOptions) chan struct{} {
 	turn := buildTurn(i, snap, c.Intents, c.Outcomes)
 	if turn.Prompt == "" && turn.Answer == "" {
 		warnOnce("classify-no-text", "intent classification needs prompt or answer text (PromptText, or captured content); interactions without either are left unclassified", dropWarnEvery)
@@ -472,7 +468,7 @@ func scheduleClassification(i *Interaction, snap turnSnapshot, c *classifierConf
 // normaliseLabels maps labels onto the classifier's closed lists: an intent outside Intents
 // becomes "other" (any intent is kept without Intents), an outcome outside Outcomes "unclear".
 // A nil c means no classifier is configured: the default outcomes.
-func normaliseLabels(c *classifierConfig, intent, outcome string) (string, string) {
+func normaliseLabels(c *ClassifierOptions, intent, outcome string) (string, string) {
 	outcomes := DefaultOutcomes
 	if c != nil {
 		outcomes = c.Outcomes
@@ -489,7 +485,7 @@ func normaliseLabels(c *classifierConfig, intent, outcome string) (string, strin
 	return intent, outcome
 }
 
-func classify(i *Interaction, turn ClassifyTurn, c *classifierConfig) {
+func classify(i *Interaction, turn ClassifyTurn, c *ClassifierOptions) {
 	started := time.Now()
 	type outcome struct {
 		parsed ClassifyResult

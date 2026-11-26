@@ -2809,19 +2809,11 @@ func pendingCall(c *recordedCall) map[string]any {
 	if c.feesUnknown {
 		p["fees_unknown"] = true
 	}
-	if c.provider != "" {
-		p["provider"] = c.provider
-	}
-	if c.model != "" {
-		p["model"] = c.model
-	}
+	put(p, "provider", c.provider)
+	put(p, "model", c.model)
 	put(p, "raw_model", c.rawModel)
-	if c.requestedModel != "" {
-		p["requested_model"] = c.requestedModel
-	}
-	if c.agentName != "" {
-		p["agent_name"] = c.agentName
-	}
+	put(p, "requested_model", c.requestedModel)
+	put(p, "agent_name", c.agentName)
 	p["call_count"] = c.callCount
 	p["error_count"] = c.errorCount
 	p["input_tokens"] = c.inputTokens
@@ -2835,18 +2827,10 @@ func pendingCall(c *recordedCall) map[string]any {
 	if c.costUSD != nil && !c.unpriced {
 		p["cost_usd"] = *c.costUSD
 	}
-	if c.finishReason != "" {
-		p["finish_reason"] = c.finishReason
-	}
-	if c.errorType != "" {
-		p["error_type"] = c.errorType
-	}
-	if c.responseID != "" {
-		p["response_id"] = c.responseID
-	}
-	if c.serviceTier != "" {
-		p["service_tier"] = c.serviceTier
-	}
+	put(p, "finish_reason", c.finishReason)
+	put(p, "error_type", c.errorType)
+	put(p, "response_id", c.responseID)
+	put(p, "service_tier", c.serviceTier)
 	p["server_tool_call_count"] = c.serverToolCallCount
 	if c.serverToolCostUSD != nil && !c.feesUnknown {
 		p["server_tool_cost_usd"] = *c.serverToolCostUSD
@@ -2883,35 +2867,21 @@ func pendingTime(p map[string]any, edge string) time.Time {
 
 func pendingTool(c *recordedTool) map[string]any {
 	p := map[string]any{}
-	if c.name != "" {
-		p["tool_name"] = c.name
-	}
-	if c.rawName != "" {
-		p["raw_name"] = c.rawName
-	}
-	if c.id != "" {
-		p["tool_call_id"] = c.id
-	}
-	if c.agentName != "" {
-		p["agent_name"] = c.agentName
-	}
+	put(p, "tool_name", c.name)
+	put(p, "raw_name", c.rawName)
+	put(p, "tool_call_id", c.id)
+	put(p, "agent_name", c.agentName)
 	// An empty key differs from an agent named later: restore must not fall back to that name.
 	if c.agentKey != "" || (c.agentName != "" && !c.unkeyed) {
 		p["agent_key"] = c.agentKey
 	}
-	if c.mcpServer != "" {
-		p["mcp_server"] = c.mcpServer
-	}
-	if c.parentTool != "" {
-		p["parent_tool"] = c.parentTool
-	}
+	put(p, "mcp_server", c.mcpServer)
+	put(p, "parent_tool", c.parentTool)
 	p["call_count"] = c.calls
 	if c.err != nil {
 		p["error"] = *c.err
 	}
-	if c.errorType != "" {
-		p["error_type"] = c.errorType
-	}
+	put(p, "error_type", c.errorType)
 	if c.duration != nil {
 		p["duration_ms"] = float64(*c.duration) / float64(time.Millisecond)
 	}
