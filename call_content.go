@@ -547,6 +547,9 @@ func captureAttributes(p map[string]any) map[string]any { return captureProps(p,
 
 func captureProps(p map[string]any, fields bool, seeds []captureSeed) map[string]any {
 	out := make(map[string]any, len(p))
+	if fields {
+		return captureEach(p, out, seeds)
+	}
 	// Everything resolves together, scalars included: the properties are one captured value, so
 	// one budget covers all of them, in key order (span attributes are each their own).
 	resolved := p
@@ -1674,4 +1677,37 @@ func structMedia(rv reflect.Value) bool {
 		}
 	}
 	return false
+}
+
+// captureEach captures span attributes, each with a budget of its own: values that run no app
+// code are stripped as they are, and the rest resolve in one pass.
+func captureEach(p, out map[string]any, seeds []captureSeed) map[string]any {
+	strip := func(m map[string]any) {
+		for k, value := range m {
+			if v, keep := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}).strip(value); keep {
+				out[k] = v
+			}
+		}
+	}
+	var typed map[string]any
+	plain := make(map[string]any, len(p))
+	for k, value := range p {
+		switch value.(type) {
+		case nil, string, bool, int, int64, float64:
+			plain[k] = value
+		default:
+			if typed == nil {
+				typed = map[string]any{}
+			}
+			typed[k] = value
+		}
+	}
+	strip(plain)
+	if typed != nil {
+		defer enterCapture()()
+		resolved, _ := resolveCapture(typed, true, seeds)
+		m, _ := resolved.(map[string]any)
+		strip(m)
+	}
+	return out
 }
