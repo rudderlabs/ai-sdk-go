@@ -396,7 +396,7 @@ Sampling runs before the event reaches your analytics-go client, so it works wit
 | `MaxCallsPerInteraction` | 1,000    | Model calls and tool calls past it still count in the totals, `usage_breakdown` and `tool_breakdown`, but are no longer kept one by one: tool outcomes and declared tool events are dropped, even if the outcome came with the call. A tool call past it with an ID and no outcome is still kept, up to as many again, in case a pause waits on it: it is then counted once, in the segment that runs it, so at most twice that many tool calls are kept. |
 | `MaxMapEntries`          | 10,000   | Remembered clients, failed attempts held for a retry, each MCP map per server and mcp-go sessions: the oldest entry goes first (a held attempt is recorded at once). Open model-call spans tracked for [span dedup](tracing.md#one-span-per-call-with-the-span-processor): once full, a new one exports without dedup; none is evicted. |
 
-analytics-go's `Enqueue` never refuses an event: when its queue is full, only the sending goroutine waits, so the Go SDK has no full queue to report as `limit_reached`, unlike the Node.js and Python SDKs. Batches analytics-go drops later go to its `Config.Callback` ([delivery](performance.md#delivery)). Masking limits: [privacy](privacy.md#privacy-and-masking).
+analytics-go's `Enqueue` never refuses an event because its queue is full: when it is, only the sending goroutine waits, so the Go SDK has no full queue to report as `limit_reached`, unlike the Node.js and Python SDKs. Batches analytics-go drops later go to its `Config.Callback` ([delivery](performance.md#delivery)). Masking limits: [privacy](privacy.md#privacy-and-masking).
 
 ## Errors
 

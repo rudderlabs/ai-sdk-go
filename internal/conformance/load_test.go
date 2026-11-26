@@ -11,7 +11,7 @@ package conformance
 //
 // LOAD_SECONDS (phase 1; phase 2 runs half as long), LOAD_RATE (interactions per second, each
 // followed by one MCP call) and LOAD_WORKERS scale it. In phase 2 every event must be delivered
-// or lost after analytics-go's retries; analytics-go never refuses one.
+// or lost after analytics-go's retries; a full queue never refuses one.
 
 import (
 	"bytes"
@@ -337,7 +337,7 @@ func TestLoad(t *testing.T) {
 	}
 
 	var warmHeap uint64
-	// Phase 1 needs no pacing wait: Enqueue never refuses an event; it waits while the queue is full.
+	// Phase 1 needs no pacing wait: a full queue never refuses an event; Enqueue waits for room.
 	phase1 := phase(seconds, func() { warmHeap = heapAfterGC() })
 	sent := [3]int64{interactions.Load(), interactions.Load(), mcpCalls.Load()}
 	if !rudderstackai.Flush(ctx) {
