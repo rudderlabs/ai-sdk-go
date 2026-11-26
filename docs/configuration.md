@@ -155,7 +155,7 @@ Snapshot outcome hints prefer canonical keys even when their value is null; lega
 
 A run that waits for something outside it (an approval, a person's answer) pauses: `Pause` sends `ai_response_received` with `response_status: paused`, `pause_reason` and that segment's totals, and the next segment's totals start from zero. When the run ends, its final `ai_response_received` adds `pause_count` and `total_paused_ms`. Every event keeps the same `interaction_id`.
 
-`Pause` called from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError` (one warning without it). Credits/retries, analytics Enqueue, redactors, content serializers, and event rules are covered. It leaves the interaction unchanged and keeps credits; Pause never panics. Error handlers, application code, and callbacks for other interactions may pause normally. Another goroutine waits on a condition for pricing, including retries/capture, for an internal 5 s bound; expiry refuses with `Reason: pricing_in_flight`, and late credits stay in the open segment. Callback callers use the goroutine ID from the first runtime.Stack line; failed parsing falls back to waiting.
+
 
 ```go
 err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{TriggerSource: "queue", Resume: saved},
@@ -180,6 +180,15 @@ err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{T
 - `PauseOptions`: `Reason` (default `PauseOther`), `ResponseText` (sent as `response_text` only with content capture on), `ExtraProperties`. Pausing again before a resume sends nothing and returns the same snapshot; after `End`, `ok` is false.
 - `End` while paused ends the run: the wait counts as paused time, and the final segment has no calls. A tool call the pause still waits on never ran, so it is not counted and sends no event; one whose outcome was recorded while paused counts in the final segment.
 - A call counted before a pause and reported again after the resume (a manual `RecordCall`, a late span) is deduplicated only when both reports carry the same response ID; otherwise it counts again, so counting is not exactly-once across a pause.
+
+### Callback re-entry
+
+Interaction state publication must finish before application code runs. Pausing keeps its
+in-progress guard active through finalization, redaction, tool events and delivery. Calls
+accepted during finalization belong to the closing segment; calls accepted during delivery
+belong to the next segment. Each accepted call is emitted and counted once.
+
+`Pause` called from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError` (one warning without it). Credits/retries, analytics Enqueue, redactors, content serializers, and event rules are covered. It leaves the interaction unchanged and keeps credits; Pause never panics. Error handlers, application code, and callbacks for other interactions may pause normally. Another goroutine waits on a condition for pricing, including retries/capture, for an internal 5 s bound; expiry refuses with `Reason: pricing_in_flight`, and late credits stay in the open segment. Callback callers use the goroutine ID from the first runtime.Stack line; failed parsing falls back to waiting.
 
 ## Context values
 
@@ -366,7 +375,23 @@ Captured text is masked with a 100 ms budget per pattern; a text that runs out o
 
 ## Errors
 
+User hooks and analytics client methods run after the SDK releases its bookkeeping locks, so a callback can re-enter tracking from another thread or goroutine.
+
+| Callback family | Go behavior |
+| --- | --- |
+| Error handlers | Notices and contained build failures detached in `unlock`, reported outside `mu` |
+| Redactors | Prompt/response masking outside `mu` |
+| Adapter finalizers | `beforeEnd` detached under `mu`, invoked outside it |
+| Tool filters/properties | Jobs copied and fired flag set under `mu`, hooks outside it |
+| Transport/delivery/flush | Outbox detached before `Enqueue`; flush outside `mu` |
+| Classifier/evaluator | Turn copied, work scheduled after response publication |
+| JSON serialization hooks | Tool properties normalized/sized outside `mu`; delivery serialization outside `mu` |
+| Identity/trace/disconnect/error classification | Startup or outside `mu` |
+| Credit/pricing | `WithCredits` invokes a side-effect-free, idempotent callback outside `mu`; pricing may retry |
+
 Tracking never panics into your code: a panic in the SDK, in an integration (including the AWS SDK's stream-decoding goroutine) or in a hook you configured is contained, and your call's own result or error is returned unchanged. Event values are encoded before they reach the RudderStack client, so serializer failures never reach your app. Content serializers follow the [null and field omission rules](privacy.md#serializer-behavior); a failed serializer on other extra event properties drops that property.
+
+Background hooks leave the ended interaction ended, reject new calls, retain prior usage and emit one classification or evaluation.
 
 Each contained error has an `ErrorInfo{Kind, Where}`. Kinds:
 
