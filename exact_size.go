@@ -26,6 +26,16 @@ func (z *sizer) leaf(v any) (int, error) {
 	return len(b), err
 }
 
+// text is the size of s as a JSON string: plain printable ASCII needs no encoder.
+func (z *sizer) text(s string) (int, error) {
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c < 0x20 || c >= 0x80 || c == '"' || c == '\\' {
+			return z.leaf(s)
+		}
+	}
+	return len(s) + 2, nil
+}
+
 func (z *sizer) shared(rv reflect.Value, measure func() (int, error)) (int, error) {
 	key, stable := serializerIdentity(rv)
 	if !stable {
@@ -99,7 +109,12 @@ func (z *sizer) size(rv reflect.Value) (int, error) {
 		return len(strconv.FormatInt(rv.Int(), 10)), nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		return len(strconv.FormatUint(rv.Uint(), 10)), nil
-	case reflect.Float32, reflect.Float64, reflect.String:
+	case reflect.String:
+		if rv.Type() != jsonNumberType {
+			return z.text(rv.String())
+		}
+		return z.leaf(rv.Interface())
+	case reflect.Float32, reflect.Float64:
 		return z.leaf(rv.Interface())
 	}
 	return 0, errUnsizable // channels, funcs, complex numbers, unsafe pointers
@@ -127,7 +142,7 @@ func (z *sizer) object(rv reflect.Value) (int, error) {
 		if !ok {
 			return 0, errUnsizable
 		}
-		k, err := z.leaf(name)
+		k, err := z.text(name)
 		if err != nil {
 			return 0, err
 		}

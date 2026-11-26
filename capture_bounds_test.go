@@ -636,17 +636,22 @@ func TestCustomPropertiesAreOneRoot(t *testing.T) {
 func TestSizesOfManyKeysSharingOneValueAreCheap(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
 	shared := filler(90000)
-	m := map[string]any{}
-	for i := range 2000 {
-		m[fmt.Sprintf("k%d", i)] = shared
+	timed := func(keys int) time.Duration {
+		m := map[string]any{}
+		for i := range keys {
+			m[fmt.Sprintf("k%d", i)] = shared
+		}
+		started := time.Now()
+		if r := captureValue(m); r.size <= 0 {
+			t.Fatalf("size=%d", r.size)
+		}
+		return time.Since(started)
 	}
-	started := time.Now()
-	r := captureValue(m)
-	if d := time.Since(started); d > 2*time.Second {
-		t.Fatalf("took %v", d)
-	}
-	if r.size <= 0 {
-		t.Fatalf("size=%d", r.size)
+	// The cost is the budget's, not the keys': 2000 keys take about what 2 do, under any instrumentation.
+	timed(2)
+	one, many := timed(2), timed(2000)
+	if many > 5*one+100*time.Millisecond {
+		t.Fatalf("2 keys took %v, 2000 keys took %v", one, many)
 	}
 }
 
