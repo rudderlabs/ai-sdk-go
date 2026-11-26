@@ -918,7 +918,7 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 	}
 	extra := map[string]any{}
 	status := "success"
-	var result map[string]any
+	var result, ruleResult map[string]any
 	var resultContent captureReport
 	switch {
 	case o.Cancelled:
@@ -968,6 +968,10 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		}
 		if complete != nil {
 			result = withMCPControls(result, complete)
+			// Rule inputs are the whole result's too: the cut copy may have lost the structured content.
+			if whole, ok := complete.(map[string]any); ok {
+				ruleResult = whole
+			}
 		}
 
 		if requests, ok := result["inputRequests"].(map[string]any); ok {
@@ -1009,7 +1013,10 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		}
 	}
 	rc.finish("mcp_tool_called", "tool_name", rc.toolName, status, extra)
-	rc.declaredEvent(result, status, resultContent)
+	if ruleResult == nil {
+		ruleResult = result
+	}
+	rc.declaredEvent(ruleResult, status, resultContent)
 }
 
 func (rc *reqCtx) Finished(method, name string, size int, errorType string) {

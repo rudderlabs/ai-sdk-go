@@ -481,9 +481,7 @@ func captureEncoded(v any) (b []byte, size int, complete any, err error) {
 		// its bytes, already written once, give the budgeted copy without running it again, and
 		// the whole decoded result for what the copy may lose.
 		var tree any
-		dec := json.NewDecoder(bytes.NewReader(b))
-		dec.UseNumber()
-		if dec.Decode(&tree) != nil {
+		if json.Unmarshal(b, &tree) != nil {
 			return b, len(b), nil, nil
 		}
 		bounded, _, err := boundedJSONCut(tree, false)
@@ -507,9 +505,7 @@ func captureEncoded(v any) (b []byte, size int, complete any, err error) {
 func completeResult(original, resolved any) any {
 	if s, ok := resolved.(serialized); ok {
 		var tree any
-		dec := json.NewDecoder(bytes.NewReader(s.raw))
-		dec.UseNumber()
-		if s.raw == nil || dec.Decode(&tree) != nil {
+		if s.raw == nil || json.Unmarshal(s.raw, &tree) != nil {
 			return map[string]any{}
 		}
 		return tree

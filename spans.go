@@ -172,7 +172,7 @@ type spanContextCapture struct {
 
 func (c *spanContextCapture) resolve(v map[string]any) map[string]any {
 	if !c.done {
-		c.value, _ = captureContent(v).(map[string]any)
+		c.value = captureMessageContext(v)
 		c.done = true
 	}
 	return c.value
@@ -242,7 +242,7 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time, captured
 	if len(captured) > 0 {
 		s.msgContext = captured[0].resolve(msgContext)
 	} else {
-		s.msgContext, _ = captureContent(msgContext).(map[string]any)
+		s.msgContext = captureMessageContext(msgContext)
 	}
 	s.SpanID = randomSpanID(8)
 	s.seq = spanSeq.Add(1)
@@ -640,4 +640,16 @@ func init() {
 		span, _ := s.(*Span)
 		return i.(*Interaction).recordWrapperCall(call.(LLMCall), span, status)
 	}
+}
+
+// captureMessageContext is the span's message context under one budget. The session ID the SDK
+// adds to it is a join field, so an app context past the budget cannot hide it.
+func captureMessageContext(v map[string]any) map[string]any {
+	out, _ := captureContent(v).(map[string]any)
+	if sid, ok := v["sessionId"].(int64); ok && out != nil {
+		if _, kept := out["sessionId"]; !kept {
+			out["sessionId"] = sid
+		}
+	}
+	return out
 }

@@ -1012,3 +1012,46 @@ func TestResultStatsComeFromTheWholeResultWhenTheCopyIsCut(t *testing.T) {
 		}
 	}
 }
+
+func TestRuleInputsComeFromTheWholeResultWhenTheCopyIsCut(t *testing.T) {
+	whole := func() map[string]any {
+		return map[string]any{"_meta": map[string]any{"pad": filler(maxWalkNodes + 5)}, "structuredContent": map[string]any{"ok": true}}
+	}
+	raw, _ := json.Marshal(whole())
+	calls := 0
+	for name, result := range map[string]any{"plain": whole(), "serializer": &serResult{calls: &calls, raw: string(raw)}} {
+		var seen any
+		rule := EventRules{Tools: map[string]ToolEventRule{"t": {Event: "t_called", When: func(_ map[string]any, result any) bool { seen = result; return true }}}}
+		s := workspaceServer("rules", nil)
+		wrap(t, s, Options{EventRules: rule})
+		w, _ := instances.get(s)
+		tools := []mcpbridge.Tool{{Name: "t", Schema: map[string]any{"type": "object"}}}
+		rc := w.begin(mcpbridge.Request{Ctx: context.Background(), RegisteredTools: tools})
+		rc.ToolCall("t", nil, false, nil, "")
+		rc.ToolDone(mcpbridge.Outcome{Result: result})
+		if !reflect.DeepEqual(seen, map[string]any{"ok": true}) {
+			t.Errorf("%s: the rule saw %v", name, seen)
+		}
+	}
+}
+
+func TestSessionIDSurvivesAnAppContextPastTheBudget(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	got := captureMessageContext(map[string]any{"a": filler(maxWalkNodes + 5), "sessionId": int64(7)})
+	if got["sessionId"] != int64(7) {
+		t.Fatalf("context=%v", got["sessionId"])
+	}
+}
+
+func TestSpanSummaryInputsSurviveALargeAttribute(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	// The summary's usage, model and IDs come from the captured attributes, each under its own budget.
+	got := captureAttributes(map[string]any{
+		"aaa.big": filler(maxWalkNodes + 5), "gen_ai.usage.input_tokens": 7, "gen_ai.request.model": "m",
+		"gen_ai.conversation.id": "c1", "rudderstack.interaction_id": "i1", "zzz.finish": []string{"stop"},
+	})
+	if got["gen_ai.usage.input_tokens"] != 7 || got["gen_ai.request.model"] != "m" || got["gen_ai.conversation.id"] != "c1" ||
+		got["rudderstack.interaction_id"] != "i1" || !reflect.DeepEqual(got["zzz.finish"], []any{"stop"}) {
+		t.Fatalf("attributes=%v", got)
+	}
+}
