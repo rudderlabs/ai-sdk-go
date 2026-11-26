@@ -2494,7 +2494,7 @@ var finishErrors = map[string]string{"length": "length", "max_tokens": "length",
 // process; ok is false once the interaction ended or while pause finalization is in progress.
 // Callers, including callbacks, can retry after finalization; Pause never waits on another pause.
 // A paused run is never ended by the TTL or [Shutdown], but it keeps counting toward
-// [Limits.MaxOpenInteractions] until it ends; resuming a run that counts always succeeds.
+// [Limits.MaxOpenInteractions] until it ends or is garbage-collected; resuming a run that counts always succeeds.
 // [RunInteraction] and [RunTask] leave it paused when fn returns nil. Pausing again before a resume sends nothing.
 func (i *Interaction) Pause(o PauseOptions) (paused PausedInteraction, ok bool) {
 	safely(func() { paused, ok = i.pause(o) })

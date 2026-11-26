@@ -99,19 +99,26 @@ func TestPausedSnapshotDoesNotRetainInteraction(t *testing.T) {
 					t.Fatalf("child: %v\n%s", err, out)
 				}
 			}
-			_, refused := StartInteraction(context.Background(), InteractionOptions{UserID: "tenant-b"})
-			if !refused.Ended() {
-				t.Fatal("GC freed the paused slot")
+			// The collected pause no longer counts: a new run and a foreign restore take the slot normally.
+			_, fresh := StartInteraction(context.Background(), InteractionOptions{UserID: "tenant-b"})
+			if fresh.Ended() {
+				t.Fatal("collected pause still held its slot")
 			}
+			_, blocked := StartInteraction(context.Background(), InteractionOptions{UserID: "tenant-c"})
+			if !blocked.Ended() {
+				t.Fatal("limit not enforced with a live run")
+			}
+			fresh.End(EndOptions{})
 			foreign := snapshot
 			foreign.InteractionID = "other"
-			_, refused = StartInteraction(context.Background(), InteractionOptions{Resume: &foreign})
-			if !refused.Ended() {
-				t.Fatal("mismatched ID took the collected owner's slot")
+			_, other := StartInteraction(context.Background(), InteractionOptions{Resume: &foreign})
+			if other.Ended() {
+				t.Fatal("mismatched ID restore refused with room")
 			}
+			other.End(EndOptions{})
 			_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshot, Classify: Ptr(false)})
 			if restored.Ended() || restored.userID != "tenant-a" || openCount() != 1 {
-				t.Fatal("snapshot could not restore the collected owner's slot")
+				t.Fatal("snapshot could not restore after its owner was collected")
 			}
 			restored.End(EndOptions{})
 			_, next := StartInteraction(context.Background(), InteractionOptions{UserID: "tenant-b"})

@@ -5,6 +5,7 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 	"weak"
@@ -16,7 +17,7 @@ import (
 // Node.js and Python.
 type Limits struct {
 	// MaxOpenInteractions is how many interactions may be open or paused at once (default 10,000);
-	// a paused run holds its slot until it ends. Past it,
+	// a paused run holds its slot until it ends or the app drops it and it is garbage-collected. Past it,
 	// new interactions are not tracked: your code runs as usual and limit_reached is reported.
 	MaxOpenInteractions int
 	// InteractionTTL is how long an interaction may stay open (default 1 hour). Past it, the next
@@ -101,7 +102,10 @@ func opened(i *Interaction, limit int) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
 	if open.list.Len()+len(open.paused) >= limit {
-		return false
+		prunePausedLocked()
+		if open.list.Len()+len(open.paused) >= limit {
+			return false
+		}
 	}
 	open.nextOrder++
 	i.ownerOrder = open.nextOrder
@@ -131,7 +135,27 @@ func holdPausedSlot(i *Interaction) {
 		i.elem = nil
 	}
 	i.pauseToken = uuid.NewString()
-	open.paused[weak.Make(i)] = slotFor(i)
+	if len(open.paused) >= cfg().limits.MaxOpenInteractions {
+		prunePausedLocked()
+	}
+	ref := weak.Make(i)
+	open.paused[ref] = slotFor(i)
+	// A dropped paused run frees its slot and token entry once collected.
+	runtime.AddCleanup(i, func(ref weak.Pointer[Interaction]) {
+		open.mu.Lock()
+		defer open.mu.Unlock()
+		delete(open.paused, ref)
+	}, ref)
+}
+
+// prunePausedLocked drops the entries of paused runs that were garbage-collected; the cleanup
+// above does the same, but only after the GC cycle, so admission checks prune too.
+func prunePausedLocked() {
+	for ref := range open.paused {
+		if ref.Value() == nil {
+			delete(open.paused, ref)
+		}
+	}
 }
 
 // takePausedSlot transfers a counted slot only to the restore of the exact pause the
@@ -144,7 +168,7 @@ func takePausedSlot(i *Interaction) bool {
 	var matchedSlot pausedSlot
 	found := false
 	for ref, slot := range open.paused {
-		if i.pauseToken == "" || slot.token != i.pauseToken || slot.id != i.id || slot.conversationID != i.conversationID ||
+		if ref.Value() == nil || i.pauseToken == "" || slot.token != i.pauseToken || slot.id != i.id || slot.conversationID != i.conversationID ||
 			slot.userID != i.userID || slot.anonymousID != i.anonymousID {
 			continue
 		}
