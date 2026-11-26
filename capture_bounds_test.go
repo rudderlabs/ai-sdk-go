@@ -1038,3 +1038,85 @@ func TestSpanSummaryFinishReasonsAreNotBudgeted(t *testing.T) {
 		t.Fatalf("content attribute was not budgeted: %d", n)
 	}
 }
+
+func TestMCPResultWithoutARuleIsNotEncoded(t *testing.T) {
+	// 2^40 paths: encoding the result would never finish.
+	result := map[string]any{"isError": true, "structuredContent": sharedMaps(40)}
+	want := 2
+	for range 40 {
+		want = 11 + 2*want
+	}
+	want += 36 + 1 // {"isError":true,"structuredContent": ... }
+	var p map[string]any
+	bounded(t, func() { p, _ = toolOutcome(t, result) })
+	if p["tool_status"] != "error" || p["is_error_result"] != true || p["result_size_bytes"] != want {
+		t.Fatalf("status=%v is_error=%v size=%v want %d", p["tool_status"], p["is_error_result"], p["result_size_bytes"], want)
+	}
+	if !reflect.DeepEqual(p["result_content_types"], []string{"structured"}) {
+		t.Fatalf("content types=%v", p["result_content_types"])
+	}
+}
+
+func TestMCPResultViewReadsTheSameFieldsFromBytesAndValues(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	value := map[string]any{
+		"content":           []any{map[string]any{"type": "text", "text": "x"}, map[string]any{"type": "image"}, map[string]any{"type": "text"}},
+		"structuredContent": map[string]any{"nextCursor": "c", "status": 429},
+		"_meta":             map[string]any{"com.rudderstack/http_status": 503, "pad": filler(10)},
+		"isError":           true, "requestState": "s", "nextCursor": "n",
+		"inputRequests": map[string]any{"k": map[string]any{"method": "elicitation/create", "params": filler(5)}},
+	}
+	raw, _ := compactJSON(value)
+	plain, plainSize := mcpResultView(value)
+	scanned, scannedSize := mcpResultView(&serResult{calls: new(int), raw: string(raw)})
+	if plainSize != len(raw) || scannedSize != len(raw) {
+		t.Fatalf("sizes %d, %d want %d", plainSize, scannedSize, len(raw))
+	}
+	// Numbers are float64 in both, and the sets of fields agree.
+	if !reflect.DeepEqual(plain, scanned) {
+		t.Fatalf("plain=%v\nscanned=%v", plain, scanned)
+	}
+}
+
+// TestMCPEventFieldsEqualMains reproduces main's computation (encode the whole result once,
+// decode it, read the fields) and compares every non-content field of the event.
+func TestMCPEventFieldsEqualMains(t *testing.T) {
+	shared := func(n int) any { return sharedMaps(n) }
+	calls := 0
+	big := filler(maxWalkNodes + 50)
+	cases := map[string]any{
+		"small":       map[string]any{"content": []any{map[string]any{"type": "text", "text": "hi"}}},
+		"error":       map[string]any{"isError": true, "content": []any{map[string]any{"type": "text"}, map[string]any{"type": "image"}}},
+		"status429":   map[string]any{"isError": true, "structuredContent": map[string]any{"status": 429}},
+		"paginated":   map[string]any{"structuredContent": map[string]any{"next_cursor": "c"}, "nextCursor": "n"},
+		"shared":      map[string]any{"isError": true, "structuredContent": map[string]any{"status": 503, "g": shared(12)}},
+		"sharedBlock": map[string]any{"content": []any{map[string]any{"type": "text", "n": shared(12)}}, "nextCursor": "c"},
+		"bigContent":  map[string]any{"content": big, "isError": true, "nextCursor": "n"},
+		"bigMeta":     map[string]any{"_meta": map[string]any{"pad": big}, "isError": true, "structuredContent": map[string]any{"count": 3}},
+		"serializer":  &serResult{calls: &calls, raw: `{"isError":true,"content":[{"type":"text","text":"s"}],"structuredContent":{"nextCursor":"c"}}`},
+		"bigSerial":   &serResult{calls: &calls, raw: `{"_meta":{"pad":` + ones(150000) + `},"isError":true}`},
+		"struct": struct {
+			IsError *bool            `json:"isError"`
+			Content []map[string]any `json:"content"`
+		}{ptr(true), []map[string]any{{"type": "audio"}}},
+	}
+	for name, result := range cases {
+		raw, err := compactJSON(result)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		var want map[string]any
+		_ = json.Unmarshal(raw, &want)
+		stats := resultStats(want, len(raw))
+		isError, _ := want["isError"].(bool)
+		p, _ := toolOutcome(t, result)
+		for _, k := range []string{"result_size_bytes", "result_tokens_estimate", "result_content_types", "result_paginated"} {
+			if !reflect.DeepEqual(p[k], stats[k]) {
+				t.Errorf("%s: %s=%v, main's %v", name, k, p[k], stats[k])
+			}
+		}
+		if p["is_error_result"] != isError || (p["tool_status"] == "error") != isError {
+			t.Errorf("%s: status=%v is_error=%v, main's isError=%v", name, p["tool_status"], p["is_error_result"], isError)
+		}
+	}
+}
