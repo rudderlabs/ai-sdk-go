@@ -281,6 +281,11 @@
       "expected": "SSN [ssn]- on file; part 123-45-6789-1234 is not one"
     },
     {
+      "name": "card_tail_shaped_like_ssn",
+      "input": "Card: 198091-698 478-36-9930-",
+      "expected": "Card: [card]-"
+    },
+    {
       "name": "card_grouping_4_4_4_4",
       "input": "Visa 4111 1111 1111 1111 or 5555-5555-5555-4444.",
       "expected": "Visa [card] or [card]."
@@ -536,6 +541,36 @@
       "expected": "Ｈｅｌｌｏ，世界！ 👩\u200d💻 ①② ｶﾀｶﾅ\u00a0ok\u00ad ﬁle Ⅳ 𝟏𝟐\u200b"
     },
     {
+      "name": "fold_widen_start_into_expansion",
+      "input": "+1 415 555 01004¼111111111111111x",
+      "expected": "[phone][card]x"
+    },
+    {
+      "name": "fold_widen_end_into_expansion",
+      "input": "sk-abcdefghijklmnop123½:db8::1",
+      "expected": "[secret]:db8::1"
+    },
+    {
+      "name": "fold_expansion_starts_value",
+      "input": "¼415-555-0100",
+      "expected": "[phone]"
+    },
+    {
+      "name": "fold_union_merge_extends",
+      "input": "ｓk-abcdefghijklmnop1234@example.com",
+      "expected": "[secret]"
+    },
+    {
+      "name": "fold_union_longer_span_names_token",
+      "input": "4111 1111 1111 １111",
+      "expected": "[card]"
+    },
+    {
+      "name": "fold_format_before_last_group",
+      "input": "5500 0000 0000\u200b 0004",
+      "expected": "[card]"
+    },
+    {
       "name": "fold_check_still_applies",
       "input": "Order 1234 5678\u200b 9012 3456 shipped",
       "expected": "Order 1234 5678\u200b 9012 3456 shipped"
@@ -643,7 +678,7 @@
     },
     {
       "name": "us_ssn",
-      "pattern": "(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9]|-[0-9])",
+      "pattern": "(?<![0-9-])(?:(?<![0-9][ -])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9]|-[0-9])|[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9-]))",
       "token": "ssn",
       "check": "ssn"
     },
