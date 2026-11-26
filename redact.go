@@ -54,7 +54,7 @@ var redactRules = []redactRule{
 	{name: "ipv6", pattern: `(?<![A-Za-z0-9:.])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?![A-Za-z0-9:])`, token: "ip", needs: []string{":"}, check: checkIPv6},
 	{name: "iban", pattern: `(?<![A-Za-z0-9])[A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,4})?(?![A-Za-z0-9])`, token: "iban", check: checkIBAN},
 	{name: "us_ssn", pattern: `(?<![0-9-])[0-9]{3}-[0-9]{2}-[0-9]{4}(?![0-9]|-[0-9])`, token: "ssn", check: checkSSN},
-	{name: "card", pattern: `(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?<![ -][0-9])(?<![ -][0-9]{2})(?![0-9])`, token: "card", check: checkLuhn},
+	{name: "card", pattern: `(?<![0-9])[0-9](?:[ -]?[0-9]){12,18}(?:(?<![ -][0-9])(?<![ -][0-9]{2})|(?!/))(?![0-9])`, token: "card", check: checkLuhn},
 	{name: "phone", pattern: `(?<![A-Za-z0-9+])(?<![0-9][ .-])(?:\+[0-9]{1,3}(?:[ .-]?(?:\([0-9]{1,4}\)|[0-9]{1,4})){2,6}|(?:\([0-9]{2,4}\)[ .-]?|[0-9]{2,4}[ .-])[0-9]{3,4}[ .-][0-9]{3,4}|[0-9]{4,5}[ .-][0-9]{5,6})(?![0-9A-Za-z]|[ .-][0-9])`, token: "phone", check: checkPhone},
 }
 
