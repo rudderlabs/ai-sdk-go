@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 )
 
 // mcpResultView is what a tools/call event with no declared rule reads of a result: its size and
@@ -41,73 +42,174 @@ func mcpResultView(v any) (result map[string]any, size int) {
 	return nil, 0
 }
 
-// plainResult reads the top-level fields from a value with no serializer at its root. Each field
-// is read as encoding/json writes it and decoded as main decoded it (a *int is a number, a field
-// with its own MarshalJSON is what it wrote): the field's value is small, so it is encoded alone.
+// plainResult reads the top-level fields from a value with no serializer at its root, one field
+// at a time, each as encoding/json writes it and decoded as main decoded the result: a small
+// field is encoded and decoded whole, and a large one (_meta, structuredContent, content) is
+// read for the few keys the event needs.
 func plainResult(v any) map[string]any {
 	out := map[string]any{}
-	field := func(holder any, key string) any {
-		x, ok := topLevelField(holder, key)
-		if !ok {
-			return nil
-		}
-		return jsonOf(x)
-	}
-	if b, ok := field(v, "isError").(bool); ok {
-		out["isError"] = b
-	}
-	for _, key := range []string{"requestState", "nextCursor"} {
-		if s, ok := field(v, key).(string); ok {
-			out[key] = s
+	for _, key := range []string{"isError", "requestState", "nextCursor", "inputRequests"} {
+		if d, ok := fieldAsMainDecoded(v, key); ok && d != nil {
+			out[key] = d
 		}
 	}
-	if x, ok := topLevelField(v, "inputRequests"); ok {
-		if rv := reflect.ValueOf(x); rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
-			requests := map[string]any{}
-			for it := rv.MapRange(); it.Next(); {
-				requests[it.Key().String()] = map[string]any{"method": field(it.Value().Interface(), "method")}
-			}
-			out["inputRequests"] = requests
+	if meta, ok := topLevelField(v, "_meta"); ok {
+		if picked, _ := pickFields(meta, "com.rudderstack/http_status"); len(picked) > 0 {
+			out["_meta"] = picked
 		}
 	}
-	if status, ok := field(field2(v, "_meta"), "com.rudderstack/http_status").(float64); ok {
-		out["_meta"] = map[string]any{"com.rudderstack/http_status": status}
-	}
-	if sc, ok := topLevelField(v, "structuredContent"); ok && !isNilValue(sc) {
-		picked := map[string]any{}
-		for _, key := range []string{"status", "statusCode"} {
-			if f, ok := field(sc, key).(float64); ok {
-				picked[key] = f
-			}
+	if sc, ok := topLevelField(v, "structuredContent"); ok {
+		switch picked, kind := pickFields(sc, "status", "statusCode", "nextCursor", "next_cursor"); kind {
+		case jsonObject:
+			out["structuredContent"] = picked
+		case jsonOther:
+			out["structuredContent"] = []any{} // present, with nothing to read from it
 		}
-		for _, key := range []string{"nextCursor", "next_cursor"} {
-			if str, ok := field(sc, key).(string); ok {
-				picked[key] = str
-			}
-		}
-		out["structuredContent"] = picked
 	}
 	if c, ok := topLevelField(v, "content"); ok {
-		if rv := reflect.ValueOf(c); rv.Kind() == reflect.Slice {
-			blocks := []any{}
-			seen := map[string]bool{}
-			for i := 0; i < rv.Len(); i++ {
-				name, ok := blockType(rv.Index(i).Interface())
-				if ok && !seen[name] {
-					seen[name] = true
-					blocks = append(blocks, map[string]any{"type": name})
-				}
-			}
-			out["content"] = blocks
-		}
+		out["content"] = contentBlocks(c)
 	}
 	return out
 }
 
-// field2 is a top-level field's value itself, for reading fields of it.
-func field2(holder any, key string) any {
-	x, _ := topLevelField(holder, key)
-	return x
+type jsonKind int
+
+const (
+	jsonNull jsonKind = iota
+	jsonObject
+	jsonOther
+)
+
+// pickFields is the decoded values of keys in a value, and whether it is an object, null or
+// something else as encoding/json writes it. A map or struct is read field by field; a value
+// with its own serializer, or a raw document, is encoded once and scanned for the keys.
+func pickFields(holder any, keys ...string) (map[string]any, jsonKind) {
+	rv := reflect.ValueOf(holder)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if _, own := customTarget(rv); own || rv.Type() == rawMessageType {
+			break
+		}
+		if rv.IsNil() {
+			return nil, jsonNull
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() {
+		return nil, jsonNull
+	}
+	if _, own := customTarget(rv); own || rv.Type() == rawMessageType {
+		raw, err := compactJSON(rv.Interface())
+		if err != nil {
+			return nil, jsonNull
+		}
+		return scanKeys(raw, keys)
+	}
+	switch rv.Kind() {
+	case reflect.Map, reflect.Struct:
+		if rv.Kind() == reflect.Map && rv.IsNil() {
+			return nil, jsonNull
+		}
+		picked := map[string]any{}
+		for _, key := range keys {
+			if d, ok := fieldAsMainDecoded(rv.Interface(), key); ok && d != nil {
+				picked[key] = d
+			}
+		}
+		return picked, jsonObject
+	case reflect.Slice:
+		if rv.IsNil() {
+			return nil, jsonNull
+		}
+	}
+	return nil, jsonOther
+}
+
+// contentBlocks is the distinct block types of a content value, in order, as main's decode of
+// each block's "type" gave them. Each block is read for that key only.
+func contentBlocks(content any) []any {
+	blocks := []any{}
+	rv := reflect.ValueOf(content)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if _, own := customTarget(rv); own || rv.Type() == rawMessageType {
+			break
+		}
+		if rv.IsNil() {
+			return blocks
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() {
+		return blocks
+	}
+	seen := map[string]bool{}
+	add := func(name any) {
+		if s, ok := name.(string); ok && !seen[s] {
+			seen[s] = true
+			blocks = append(blocks, map[string]any{"type": s})
+		}
+	}
+	if _, own := customTarget(rv); own || rv.Type() == rawMessageType {
+		raw, err := compactJSON(rv.Interface())
+		if err != nil {
+			return blocks
+		}
+		var list []struct {
+			Type any `json:"type"`
+		}
+		_ = json.Unmarshal(raw, &list) // blocks of another shape are skipped, as main skipped them
+		for _, b := range list {
+			add(b.Type)
+		}
+		return blocks
+	}
+	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array || rv.Kind() == reflect.Slice && rv.IsNil() {
+		return blocks
+	}
+	for i := 0; i < rv.Len(); i++ {
+		picked, kind := pickFields(rv.Index(i).Interface(), "type")
+		if kind == jsonObject {
+			add(picked["type"])
+		}
+	}
+	return blocks
+}
+
+// fieldAsMainDecoded is a struct field's or map entry's value as main decoded it, with what the parent's
+// tags do to it: `,string` writes a scalar as a JSON string, omitempty and renames and embedded
+// promotion come from the field selection itself.
+func fieldAsMainDecoded(source any, key string) (any, bool) {
+	rv := reflect.ValueOf(source)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) && !rv.IsNil() {
+		rv = rv.Elem()
+	}
+	if rv.IsValid() && rv.Kind() == reflect.Struct {
+		for _, f := range cachedJSONFields(rv.Type()) {
+			if f.name != key {
+				continue
+			}
+			fv, ok := jsonFieldValue(rv, f)
+			if !ok || !fv.CanInterface() {
+				return nil, false
+			}
+			if _, own := customTarget(fv); f.quoted && !own && quotable(fv) {
+				for fv.Kind() == reflect.Pointer && !fv.IsNil() {
+					fv = fv.Elem()
+				}
+				if fv.Kind() == reflect.Pointer {
+					return nil, true // a nil pointer is null, quoted or not
+				}
+				raw, err := compactJSON(fv.Interface())
+				return string(raw), err == nil
+			}
+			return jsonOf(fv.Interface()), true
+		}
+		return nil, false
+	}
+	x, ok := topLevelField(source, key)
+	if !ok {
+		return nil, false
+	}
+	return jsonOf(x), true
 }
 
 // jsonOf is v as encoding/json writes it, decoded the way main decoded a result.
@@ -123,35 +225,38 @@ func jsonOf(v any) any {
 	return out
 }
 
-// blockType is a content block's type: from its fields, or, for a block with its own serializer,
-// from the bytes of that one block.
-func blockType(block any) (string, bool) {
-	if _, serializer := customTarget(reflect.ValueOf(block)); serializer {
-		raw, err := compactJSON(block)
+// scanKeys decodes the values of keys in a JSON document and skips the rest.
+func scanKeys(raw []byte, keys []string) (map[string]any, jsonKind) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	t, err := dec.Token()
+	if err != nil || t == nil {
+		return nil, jsonNull
+	}
+	if t != json.Delim('{') {
+		return nil, jsonOther
+	}
+	picked := map[string]any{}
+	for dec.More() {
+		key, err := dec.Token()
 		if err != nil {
-			return "", false
+			break
 		}
-		scanned := scanResult(raw)
-		name, ok := scanned["type"].(string)
-		return name, ok
-	}
-	t, ok := topLevelField(block, "type")
-	if !ok {
-		return "", false
-	}
-	name, ok := jsonOf(t).(string)
-	return name, ok
-}
-
-func isNilValue(v any) bool {
-	rv := reflect.ValueOf(v)
-	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
-		if rv.IsNil() {
-			return true
+		name, _ := key.(string)
+		if !slices.Contains(keys, name) {
+			if skipValue(dec) != nil {
+				break
+			}
+			continue
 		}
-		rv = rv.Elem()
+		var x any
+		if decodeFailed(dec.Decode(&x)) {
+			break
+		}
+		if x != nil {
+			picked[name] = x
+		}
 	}
-	return !rv.IsValid()
+	return picked, jsonObject
 }
 
 // scanResult reads the same top-level fields from a JSON document in one streaming pass: only

@@ -1072,11 +1072,24 @@ func TestMCPResultViewReadsTheSameFieldsFromBytesAndValues(t *testing.T) {
 	if plainSize != len(raw) || scannedSize != len(raw) {
 		t.Fatalf("sizes %d, %d want %d", plainSize, scannedSize, len(raw))
 	}
-	// Numbers are float64 in both, and the sets of fields agree.
+	// Numbers are float64 in both, and the fields agree; a request keeps its params only in the plain view.
+	for k, entry := range plain["inputRequests"].(map[string]any) {
+		plain["inputRequests"].(map[string]any)[k] = map[string]any{"method": entry.(map[string]any)["method"]}
+	}
 	if !reflect.DeepEqual(plain, scanned) {
 		t.Fatalf("plain=%v\nscanned=%v", plain, scanned)
 	}
 }
+
+type namedMethod string
+
+type serBlock struct{}
+
+func (serBlock) MarshalJSON() ([]byte, error) { return []byte(`{"type":"audio"}`), nil }
+
+type serStatus struct{}
+
+func (serStatus) MarshalJSON() ([]byte, error) { return []byte(`{"statusCode":429}`), nil }
 
 type namedCode int
 
@@ -1150,6 +1163,45 @@ func TestMCPEventFieldsEqualMains(t *testing.T) {
 	cases["blocks"] = shapedResult{Content: []any{struct {
 		T *string `json:"type"`
 	}{ptr("text")}, namedBlock{"image"}}}
+	type resultAny struct {
+		IsError  any `json:"isError,omitempty"`
+		Structed any `json:"structuredContent"`
+		Content  any `json:"content,omitempty"`
+		Meta     any `json:"_meta,omitempty"`
+		Requests any `json:"inputRequests,omitempty"`
+		State    any `json:"requestState,omitempty"`
+	}
+	type reqEntry struct {
+		Method any `json:"method"`
+	}
+	elicit := "elicitation/create"
+	cases["contentPtrSlice"] = resultAny{Content: &[]map[string]any{{"type": "text"}}}
+	cases["contentArray"] = resultAny{Content: [1]map[string]any{{"type": "image"}}}
+	cases["structuredNilMap"] = resultAny{Structed: map[string]any(nil)}
+	cases["contentNilSlice"] = resultAny{Content: []any(nil), Structed: []any(nil)}
+	cases["requestsNilMap"] = resultAny{Requests: map[string]any(nil), IsError: true}
+	cases["requestsPtrMap"] = resultAny{Requests: &map[string]any{"k": map[string]any{"method": elicit}}, State: "s"}
+	cases["requestsMethodPtr"] = resultAny{Requests: map[string]reqEntry{"k": {&elicit}}, State: "s"}
+	cases["requestsMethodNamed"] = resultAny{Requests: map[string]reqEntry{"k": {namedMethod(elicit)}}, State: "s"}
+	cases["blockRaw"] = resultAny{Content: []any{json.RawMessage(`{"type":"image"}`), serBlock{}, 7, "x"}}
+	cases["rawContent"] = resultAny{Content: json.RawMessage(`[{"type":"audio"},{"type":"text"}]`)}
+	cases["structuredRaw"] = resultAny{IsError: true, Structed: json.RawMessage(`{"status":429,"nextCursor":"c"}`)}
+	cases["structuredCustom"] = resultAny{IsError: true, Structed: serStatus{}}
+	cases["metaNumber"] = resultAny{IsError: true, Meta: map[string]any{"com.rudderstack/http_status": json.Number("429")}}
+	cases["metaPtr"] = resultAny{IsError: true, Meta: map[string]any{"com.rudderstack/http_status": ptr(503)}}
+	type quotedStatus struct {
+		StatusCode *int `json:"statusCode,string"`
+	}
+	cases["quotedStatus"] = resultAny{IsError: true, Structed: quotedStatus{ptr(429)}}
+	cases["omitemptyNil"] = resultAny{IsError: true, Structed: struct {
+		Status *int `json:"status,omitempty"`
+		Code   *int `json:"statusCode,omitempty"`
+	}{nil, ptr(401)}}
+	cases["quotedIsError"] = struct {
+		IsError bool `json:"isError,string"`
+	}{true}
+	cases["quotedNil"] = resultAny{IsError: true, Structed: quotedStatus{nil}}
+	cases["metaRaw"] = resultAny{IsError: true, Meta: json.RawMessage(`{"com.rudderstack/http_status":408,"pad":[1,2]}`)}
 	for name, result := range cases {
 		raw, err := compactJSON(result)
 		if err != nil {
@@ -1157,6 +1209,22 @@ func TestMCPEventFieldsEqualMains(t *testing.T) {
 		}
 		var want map[string]any
 		_ = json.Unmarshal(raw, &want)
+		if requests, ok := want["inputRequests"].(map[string]any); ok {
+			// Main registers the pending keys and sends no completed-call event.
+			p, rc := toolOutcome(t, result)
+			if p != nil {
+				t.Errorf("%s: a completed-call event was sent for an input request", name)
+			}
+			for key, entry := range requests {
+				if m, _ := entry.(map[string]any); m["method"] != "elicitation/create" {
+					continue
+				}
+				if _, found := rc.st.inputRequired.get(rc.inputKey(key, str(want["requestState"]))); !found {
+					t.Errorf("%s: pending key %q not registered", name, key)
+				}
+			}
+			continue
+		}
 		stats := resultStats(want, len(raw))
 		isError, _ := want["isError"].(bool)
 		p, _ := toolOutcome(t, result)
