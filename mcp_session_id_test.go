@@ -23,14 +23,29 @@ const (
 // Mcp-Session-Id header (omitted when empty).
 func postTool(t *testing.T, url, header string) {
 	t.Helper()
-	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_destinations","arguments":{"workspace_id":"w"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"c","version":"1"}}}}`
+	postToolVersion(t, url, header, "2025-06-18")
+}
+
+// postToolVersion is postTool for a given protocol revision; 2026-07-28 carries the
+// per-request _meta and routing headers instead of an initialize.
+func postToolVersion(t *testing.T, url, header, version string) {
+	t.Helper()
+	meta := `{"io.modelcontextprotocol/clientInfo":{"name":"c","version":"1"}}`
+	if version == "2026-07-28" {
+		meta = `{"io.modelcontextprotocol/clientInfo":{"name":"c","version":"1"},"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}`
+	}
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_destinations","arguments":{"workspace_id":"w"},"_meta":` + meta + `}}`
 	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
-	req.Header.Set("Mcp-Protocol-Version", "2025-06-18")
+	req.Header.Set("Mcp-Protocol-Version", version)
+	if version == "2026-07-28" {
+		req.Header.Set("Mcp-Method", "tools/call")
+		req.Header.Set("Mcp-Name", "list_destinations")
+	}
 	if header != "" {
 		req.Header.Set("Mcp-Session-Id", header)
 	}
@@ -80,6 +95,33 @@ func TestMCPSessionIDStatelessHeader(t *testing.T) {
 			}
 			if got, present := seen[0].Properties["mcp_session_id"]; tc.want == "" && present || tc.want != "" && got != tc.want {
 				t.Errorf("mcp_client_seen mcp_session_id = %v, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// On 2026-07-28 both libraries leave the Mcp-Session-Id header on the request, so the same
+// UUID-or-32-hex rule applies as on 2025-06-18.
+func TestMCPSessionIDStateless20260728Header(t *testing.T) {
+	for _, tc := range []struct{ name, header, want string }{
+		{"email", sessionEmail, ""},
+		{"uuid", sessionUUID, sessionUUID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := workspaceServer(t.Name(), nil)
+			r := wrap(t, s, Options{})
+			ts := httptest.NewServer(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return s }, &mcp.StreamableHTTPOptions{Stateless: true}))
+			defer ts.Close()
+			postToolVersion(t, ts.URL, tc.header, "2026-07-28")
+			events := append(r.named("mcp_client_seen"), r.named("mcp_tool_called")...)
+			if len(r.named("mcp_tool_called")) != 1 {
+				t.Fatalf("events = %v", r.names())
+			}
+			for _, e := range events {
+				got, present := e.Properties["mcp_session_id"]
+				if tc.want == "" && present || tc.want != "" && got != tc.want {
+					t.Errorf("%s: mcp_session_id = %v (present %v), want %q", e.Event, got, present, tc.want)
+				}
 			}
 		})
 	}
@@ -296,7 +338,13 @@ func TestMCPSessionIDRejectedHeaderScopesPendingLegs(t *testing.T) {
 		_, err := alpha.CallTool(ctx, &mcp.CallToolParams{Name: "confirm", Arguments: map[string]any{}})
 		alphaDone <- err
 	}()
-	<-pending // alpha's input_required leg is pending
+	select { // alpha's input_required leg is pending
+	case <-pending:
+	case err := <-alphaDone:
+		t.Fatalf("alpha finished before its elicitation was pending: %v", err)
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for alpha's elicitation")
+	}
 	if _, err := beta.CallTool(ctx, &mcp.CallToolParams{Name: "confirm", Arguments: map[string]any{}}); err != nil {
 		t.Fatal(err)
 	}

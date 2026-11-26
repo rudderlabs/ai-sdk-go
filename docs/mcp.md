@@ -131,11 +131,11 @@ MCP tool results reuse the written wire message after a successful write; a fail
 
 ## Session ID
 
-`mcp_session_id` is the session ID the server transport issued, trimmed and cut to 256 characters, whatever its shape. With no issued ID, the client-sent `Mcp-Session-Id` header is sent only when, trimmed, it is a UUID or 32 hex digits (not all zeros), as for `interaction_id`; otherwise `mcp_session_id` is left out, so a client cannot put a name or email there. A rejected header still scopes `call_index`, `ms_since_previous_call` and `retry_count` in memory; it is never sent ([fixture](../spec/fixtures/mcp-session-id-v0.1.json)). With go-sdk, wrap the server before it serves: a session that connected before `WrapMCPServer` reports no `mcp_session_id` (its in-process state is unaffected).
+`mcp_session_id` is the session ID the server transport issued, trimmed and cut to 256 characters, whatever its shape. With no issued ID, the client-sent `Mcp-Session-Id` header is sent only when, trimmed, it is a UUID or 32 hex digits (not all zeros), as for `interaction_id`; otherwise `mcp_session_id` is left out, so a client cannot put a name or email there. A custom transport's non-empty `SessionID()` or `ss.ID()` counts as issued and is sent as is, so it must never return client input. A rejected header still scopes `call_index`, `ms_since_previous_call` and `retry_count` in memory; it is never sent ([fixture](../spec/fixtures/mcp-session-id-v0.1.json)). With go-sdk, wrap the server before it serves: a session that connected before `WrapMCPServer` reports no `mcp_session_id` (its in-process state is unaffected).
 
 | Transport | `mcp_session_id` |
 | --- | --- |
-| go-sdk stateful Streamable HTTP | The ID the transport assigned at initialize (default or `ServerOptions.GetSessionID`), on every request of the session |
+| go-sdk stateful Streamable HTTP | The ID the transport assigned at initialize (default or `ServerOptions.GetSessionID`), on every request of the session. On a header-less initialize, the ID go-sdk generates is sent on that request (`mcp_client_seen`); later requests are new sessions, so their header is sent only when it is a UUID or 32 hex digits, and a `GetSessionID` that returns UUIDs keeps the join |
 | go-sdk `Stateless: true` | The header, only if UUID or 32 hex |
 | go-sdk `MCPGODEBUG=allowsessionsinstateless=1` | The header, only if UUID or 32 hex: the ID equals the client's header, so it is not treated as issued |
 | go-sdk SSE | Absent: the issued ID is hidden and request headers are not passed |
@@ -189,7 +189,7 @@ The go-sdk v1.8 and mcp-go v1.x serve both revisions; both are tested end to end
 | Client name, version, features | The `initialize` request                                       | Each request's `_meta`: `io.modelcontextprotocol/clientInfo`, `io.modelcontextprotocol/clientCapabilities`   |
 | `protocol_version`             | Negotiated in `initialize` (else the `Mcp-Protocol-Version` header) | `io.modelcontextprotocol/protocolVersion` of each request                                              |
 | `mcp_client_seen`              | At `initialize`                                                | After the first successful request in the window; a `server/discover` only when the server supports the version it asks for |
-| `mcp_session_id`               | The ID the transport issued, else an ID-shaped `Mcp-Session-Id` header ([Session ID](#session-id)) | Absent                                                                                                     |
+| `mcp_session_id`               | The ID the transport issued, else an ID-shaped `Mcp-Session-Id` header ([Session ID](#session-id)) | Absent unless the client sends a UUID or 32-hex `Mcp-Session-Id`                                           |
 | Elicitation                    | The server's `elicitation/create` request and the client's response | A `tools/call` result with `inputRequests`, answered by the client's retry with `inputResponses` (matched by `requestState`, else by client, user and tool) |
 
 The `input_required` leg of a call sends no `mcp_tool_called`; the retry that completes it does, without `retry_count`, and takes the leg's `call_index` and `ms_since_previous_call`, so reported calls have no gaps. The elicitation's `request_id` is the original request's and `duration_ms` runs from the `input_required` result to the retry. A handler that returns `InputRequests` to a 2025-06-18 client is answered by the go-sdk through `elicitation/create`, which is recorded the same way as a direct `session.Elicit`. mcp-go answers it the same way, but with no hook for it: those elicitations are not recorded.
@@ -362,7 +362,7 @@ Elicitations that reach the client are recorded by the sending middleware: the a
 
 MCP Events is a draft extension: an agent subscribes to server updates, delivered by signed webhook. Neither library has hooks for it, so with `MCPEvents: true` two helpers wrap your own subscription handling and webhook sender (`ruddermcpgo.TrackMCPEventSubscription` and `ruddermcpgo.WrapMCPEventSender` on mcp-go). Both may change with the draft.
 
-`SubscriptionChange.SessionID` is sent as you give it (trimmed, cut to 256 characters), so pass the transport's own session ID, never a client-supplied value.
+`SubscriptionChange.SessionID` is sent as you give it (trimmed, cut to 256 characters), so pass the transport's own session ID, never a client-supplied value. It is sent as given, so pass only an ID your transport issued and checks, never a stateless session accessor (mcp-go `WithStateLess` or a custom manager's `SessionID()`, go-sdk `req.Session.ID()` under `MCPGODEBUG=allowsessionsinstateless=1`) or the raw `Mcp-Session-Id` header: those return the client's header.
 
 ```go
 // In your subscribe handler: created or refreshed, with the granted lifetime.
