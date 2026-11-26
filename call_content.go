@@ -254,16 +254,20 @@ type walk struct {
 	memo           map[visit]any
 	nodes          int            // values this walk has counted; the root counts itself
 	cuts           int            // times the budget stopped a loop
-	depthCuts      int            // values left out for depth or a cycle
 	cut            map[visit]bool // containers on the path when it did: never memoised
 	dumped         map[visit]serializerOutput
 	share          bool // one pass over a resolved tree: each container is copied once and reused, so no budget
-	copies         map[visit]any
+	copies         map[copyKey]any
 	fields         bool // the root map's values are separate captured values, each with its own budget
 }
 
 // serializerOutput is what an app serializer returned for a value the budget cut, so a later
 // captured value of the report reads it whole without running the serializer again.
+type copyKey struct {
+	visit
+	depth int
+}
+
 type serializerOutput struct {
 	decoded any
 	raw     []byte
@@ -617,7 +621,7 @@ func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureS
 	// One pass copies every memoised container once and reuses it where it appears, so the work
 	// is linear in distinct containers however much they share.
 	memo := make(map[visit]any, len(w.memo))
-	sw := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, share: true, copies: map[visit]any{}}
+	sw := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, share: true, copies: map[copyKey]any{}}
 	for key, value := range w.memo {
 		memo[key], _ = sw.strip(value)
 	}
@@ -1003,19 +1007,18 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	if !ok {
 		w.omitted = true
 		w.incomplete = true
-		w.depthCuts++
 		return nil, false
 	}
 	defer w.leave(key)
 	if w.share && key.ptr != 0 {
-		if c, ok := w.copies[key]; ok {
+		// A copy depends on how much depth is left, so each (container, depth) is copied once.
+		at := copyKey{key, w.depth}
+		if c, ok := w.copies[at]; ok {
 			return c, true
 		}
-		before := w.depthCuts
 		defer func() {
-			// A copy cut by depth fits less than the same value higher up, so it is not reused.
-			if keep && w.depthCuts == before {
-				w.copies[key] = out
+			if keep {
+				w.copies[at] = out
 			}
 		}()
 	}

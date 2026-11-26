@@ -745,7 +745,7 @@ func TestShareCopyCutByDepthIsNotReusedHigherUp(t *testing.T) {
 	}
 	v := []any{deep, shared} // shared is cut by depth in the first place and fits whole in the second
 	plain := (&walk{path: map[visit]bool{}, legacy: false, preserve: true}).stripValue(v)
-	copied := (&walk{path: map[visit]bool{}, legacy: false, preserve: true, share: true, copies: map[visit]any{}}).stripValue(v)
+	copied := (&walk{path: map[visit]bool{}, legacy: false, preserve: true, share: true, copies: map[copyKey]any{}}).stripValue(v)
 	if !reflect.DeepEqual(plain, copied) {
 		t.Fatalf("the shared pass differs from the plain walk")
 	}
@@ -842,5 +842,33 @@ func TestCustomPropertiesKeepEveryKeyWithinTheBudget(t *testing.T) {
 	}
 	if n := len(captureProperties(props)); n != maxWalkNodes-1 {
 		t.Fatalf("kept %d of %d", n, maxWalkNodes-1)
+	}
+}
+
+func TestShareCopiesDeepGraphUnderManyWrapperDepthsOnce(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	graph := sharedMaps(40) // 2^40 paths, more levels than the depth cap allows
+	sw := func() *walk {
+		return &walk{path: map[visit]bool{}, legacy: false, preserve: true, share: true, copies: map[copyKey]any{}}
+	}
+	one := func() time.Duration {
+		started := time.Now()
+		sw().stripValue(graph)
+		return time.Since(started)
+	}
+	one()
+	single := one()
+	// One memo copies the graph under several wrapper depths: each (container, depth) once.
+	w := sw()
+	started := time.Now()
+	for k := range 8 {
+		var v any = graph
+		for range k {
+			v = map[string]any{"w": v}
+		}
+		w.stripValue(v)
+	}
+	if all := time.Since(started); all > 100*single+200*time.Millisecond {
+		t.Fatalf("one depth took %v, eight took %v", single, all)
 	}
 }
