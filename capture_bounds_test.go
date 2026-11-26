@@ -488,7 +488,7 @@ func TestMCPControlFieldsSurviveTheBudget(t *testing.T) {
 			opts.EventRules = EventRules{Tools: map[string]ToolEventRule{"big": {Event: "big_called"}}}
 		}
 		server := mcp.NewServer(&mcp.Implementation{Name: "big", Version: "1"}, nil)
-		content := make([]mcp.Content, maxWalkNodes+10)
+		content := make([]mcp.Content, maxWalkNodes/3+100)
 		for i := range content {
 			content[i] = &mcp.TextContent{Text: "x"}
 		}
@@ -496,9 +496,9 @@ func TestMCPControlFieldsSurviveTheBudget(t *testing.T) {
 			return &mcp.CallToolResult{Content: content, IsError: true}, nil
 		})
 		r := wrap(t, server, opts)
-		cs := connect(t, server, "2025-06-18", nil)
+		cs := connectMaybeObserved(t, server, true)
 		callTool(t, cs, "big", map[string]any{}, nil)
-		p := r.props(t, "mcp_tool_called")
+		p := r.wait(t, "mcp_tool_called", 1)[0].Properties
 		if p["tool_status"] != "error" || p["is_error_result"] != true {
 			t.Errorf("rule=%t: an error result was reported as %v: %v", rule, p["tool_status"], p)
 		}
@@ -549,11 +549,12 @@ func TestPlainResultDeeperThanTheDepthCapIsSizedExactly(t *testing.T) {
 }
 
 func TestCutSerializerOutputTravelsWithTheReport(t *testing.T) {
-	setupAI(t, WithEmitSpans(true), WithCaptureContent(true))
 	calls := 0
-	result := map[string]any{"a": append(filler(maxWalkNodes-3), &onceMarshaler{&calls}), "b": 1}
+	m := &onceMarshaler{&calls}
+	// The result's budget ends inside the serializer's output, so it is kept apart from the memo.
+	result := map[string]any{"a": append(filler(maxWalkNodes-3), m)}
 	rule := EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "looked_up", Properties: func(map[string]any, any) map[string]any {
-		return map[string]any{"again": result}
+		return map[string]any{"again": []any{m}}
 	}}}}
 	setupAI(t, WithEmitSpans(true), WithCaptureContent(true), WithEventRules(rule))
 	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
@@ -579,15 +580,20 @@ func TestSliceCaptureAllocatesWithinTheBudget(t *testing.T) {
 	}
 }
 
-type fieldHolder struct{ A, B, C, D int }
+type fieldHolder struct {
+	A, B, C int
+	D       *onceMarshaler
+}
 
 func TestStructFieldsCountAgainstTheBudget(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
-	list := append(filler(maxWalkNodes-5), fieldHolder{1, 2, 3, 4})
+	calls := 0
+	// A, B and C use the last of the budget; D must be left out unread, its serializer unrun.
+	list := append(filler(maxWalkNodes-5), fieldHolder{1, 2, 3, &onceMarshaler{&calls}})
 	got := captureContent(list).([]any)
 	last, ok := got[len(got)-1].(map[string]any)
-	if !ok || len(last) != 3 {
-		t.Fatalf("struct kept %v", got[len(got)-1])
+	if !ok || len(last) != 3 || calls != 0 {
+		t.Fatalf("struct kept %v, serializer ran %d times", got[len(got)-1], calls)
 	}
 }
 
