@@ -4,15 +4,12 @@ The [`mcp-server`](../mcp-server) workspace server built on [`github.com/mark3la
 
 Request context is off by default. This example opts in with `RequestContext: rudderstackai.RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}}`.
 
-```sh
-# End to end against a local mock data plane, no credentials needed:
-go run ./examples/mcp-server-mcpgo --check
+See [setup](../README.md#setup).
 
-# The same check, with the events sent to your data plane (skipped without both variables):
+```sh
+go run ./examples/mcp-server-mcpgo --check
 RUDDERSTACK_WRITE_KEY=... RUDDERSTACK_DATA_PLANE_URL=... go run ./examples/mcp-server-mcpgo --live
 
-# Serve it against your data plane:
-export RUDDERSTACK_WRITE_KEY=... RUDDERSTACK_DATA_PLANE_URL=...
 go run ./examples/mcp-server-mcpgo --transport=stdio                     # for a client that starts it
 go run ./examples/mcp-server-mcpgo --transport=http --addr=127.0.0.1:8080 # streamable HTTP
 ```
@@ -22,4 +19,4 @@ go run ./examples/mcp-server-mcpgo --transport=http --addr=127.0.0.1:8080 # stre
 - `mcp_client_seen`: server name and version, client name and version, transport, `auth_method: none`, and the negotiated `protocol_version`;
 - `mcp_tool_called` twice: tool name, status, the negotiated `protocol_version`, `intent` and `user_sentiment` from `request_context`, `interaction_id` and `trace_id` from `_meta`, `argument_keys`, `call_index` and `retry_count`;
 - `audience_created` with `audience_type`, and `mcp_feedback_submitted` with `feedback_category: feature_request` and `capability`;
-- every event for the anonymous system user (`anonymousId: ai_system`), with `context.wrapperLibrary`, valid against the spec schema.
+- every event for the anonymous system user (`anonymousId: ai_system`).

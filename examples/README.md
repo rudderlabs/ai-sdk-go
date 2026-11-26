@@ -1,39 +1,38 @@
 # Examples
 
-Each example is a `main` package in this module (Go 1.26.11 or later) that uses `rudderstackai` the way an app would. Run them from a clone of the repository: the checks read the shared schema and cassettes in `spec/`.
+Each example is a `main` package using `rudderstackai` as an app would.
 
-| Example                                    | Shows                                                                                                          |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| [`mcp-server`](mcp-server)                 | `WrapMCPServer` over stdio and streamable HTTP: `request_context`, a declared `audience_created` event, `submit_feedback` |
-| [`mcp-server-mcpgo`](mcp-server-mcpgo)     | The same server on `github.com/mark3labs/mcp-go`, tracked with `ruddermcpgo.WrapServer`, including 2026-07-28 over streamable HTTP |
-| [`mcp-stateless-http`](mcp-stateless-http) | Stateless streamable HTTP on 2026-07-28: a confirmation asked through an `input_required` result and answered in the retry |
-| [`mcp-auth`](mcp-auth)                     | Streamable HTTP behind a bearer token check, with `Identify`: `userId`, `account_id`, `oauth_client_id`, `token_scopes` |
-| [`openai`](openai)                         | `rudderopenai`: a streamed Chat Completions answer in `RunInteraction`, a registered price, `TrackAction` feedback |
-| [`anthropic`](anthropic)                   | `rudderanthropic`: a streamed Messages answer with a cache read and write, priced with cache rates |
-| [`google-genai`](google-genai)             | `ruddergenai`: `generateContent` calling a tool, then the streamed answer, with `tool_breakdown` |
-| [`bedrock-converse`](bedrock-converse)     | `rudderbedrock`: `Converse` calling a tool, then `ConverseStream`, priced through an inference profile |
-| [`background-agent`](background-agent)     | `RunTask` on a schedule (`account_id`, `on_behalf_of`), a chained sub-task (`parent_interaction_id`), `TrackScore` |
-| [`approval-loop`](approval-loop)           | `RunTask` that pauses twice for approval and resumes from a stored `PausedInteraction` in a later worker; `ai_task_started` |
-| [`manual`](manual)                         | No integration: `StartInteraction`, `RecordCall`, `RecordToolCalls`, `RecordToolResult`, `End`, a declared tool event, per-call events, a custom classifier |
-| [`tracing`](tracing)                       | OpenTelemetry span input, product events and trace joins, recorded locally without credentials |
+- [`mcp-server`](mcp-server): Workspace tools, request context and feedback over stdio and streamable HTTP.
+- [`mcp-server-mcpgo`](mcp-server-mcpgo): The workspace server tracked with `ruddermcpgo.WrapServer`, including HTTP on 2026-07-28.
+- [`mcp-stateless-http`](mcp-stateless-http): Confirmation through an `input_required` result and a retry on 2026-07-28.
+- [`mcp-auth`](mcp-auth): Bearer token verification and customer identity over streamable HTTP.
+- [`openai`](openai): A streamed Chat Completions answer, pricing and `TrackAction` feedback.
+- [`anthropic`](anthropic): A streamed Messages answer with cache read and write pricing.
+- [`google-genai`](google-genai): A Gemini tool call followed by a streamed answer with `tool_breakdown`.
+- [`bedrock-converse`](bedrock-converse): `Converse` and `ConverseStream` with inference profile pricing.
+- [`background-agent`](background-agent): A scheduled `RunTask`, a chained sub-task and `TrackScore`.
+- [`approval-loop`](approval-loop): `RunTask` pauses twice for approval and resumes from a stored `PausedInteraction` in a later worker. It emits `ai_task_started`.
+- [`manual`](manual): Manual recording, a declared tool event, per-call events and a custom classifier.
+- [`tracing`](tracing): OpenTelemetry span input, product events and trace joins recorded locally.
 
-The checks need no provider key. Without flags, a provider example runs once against the real provider: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` (or `GOOGLE_API_KEY`), or `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_REGION`. Live runs need `RUDDERSTACK_WRITE_KEY` and `RUDDERSTACK_DATA_PLANE_URL` (a RudderStack source's write key and your data plane URL); a provider run without them sends its events to a local data plane and prints them.
+## Setup
 
-## Run
+Install Go 1.26.11 or later, as required by `examples/go.mod`. Run from a clone of the repository so checks can read the shared schema and cassettes in `spec/`. From the repository root, run `go mod download`, as in [contributing](../CONTRIBUTING.md#setup).
 
-From the repository root:
+Live runs need `RUDDERSTACK_WRITE_KEY` for your RudderStack source and `RUDDERSTACK_DATA_PLANE_URL` for your data plane. Run `export RUDDERSTACK_WRITE_KEY=... RUDDERSTACK_DATA_PLANE_URL=...` before serving an MCP example. Without flags, provider and manual examples run once. Provider credentials are listed in each README. Without the RudderStack variables, events from these runs go to a local data plane and are printed. MCP examples serve a real client. Each README gives its exact commands and extra credentials.
 
 ```sh
-go run ./examples/mcp-auth --check   # end to end against a local mock data plane, no credentials
-go run ./examples/mcp-auth --live    # the same, with the events sent to your data plane
-go run ./examples/mcp-auth           # serve it, for a real MCP client
-go run ./examples/anthropic          # one real Anthropic call (ANTHROPIC_API_KEY), events printed
+go run ./examples/mcp-auth --check
+go run ./examples/mcp-auth --live
+go run ./examples/anthropic
 ```
 
-## How the checks work
+Content capture is off by default. See [privacy](../docs/privacy.md) before enabling it.
 
-`--check` starts a mock data plane (`internal/dataplane`), drives the example with real clients (a go-sdk MCP client, or the provider's own SDK pointed at `internal/testkit`'s mock LLM server, which replays the shared cassette in `spec/fixtures/cassettes/`) and the real analytics-go client, and fails unless every expected event arrives with the expected properties, field by field. Every event is also checked for `context.wrapperLibrary` and validated against `spec/ai-events-v0.4.schema.json`. CI runs every example this way on each pull request (locally: `make example`; `go test ./examples/...` runs them too).
+## Tests
 
-`--live` runs the same check, but the local data plane forwards each batch, write key included, to `RUDDERSTACK_DATA_PLANE_URL` and keeps only the batches it accepts, so the asserts cover what your data plane received. Without both variables it prints `skipped: no key` and exits 0. The `Live examples` workflow runs every example this way nightly and on demand, and writes the skip to the job summary when the repository has no secrets.
+Run `make example` to check every example. Run `go test ./examples/...` for their package tests. CI checks examples on each pull request. `--check` needs no credentials. It uses a local mock data plane from `internal/dataplane`, real go-sdk MCP or provider clients, and the real analytics-go client. Provider checks replay shared cassettes in `spec/fixtures/cassettes/` through `internal/testkit`'s mock LLM server. Checks fail unless expected events arrive with the expected properties, field by field. Every event is checked for `context.wrapperLibrary` and validated against `spec/ai-events-v0.4.schema.json`.
 
-The asserts hold whether the SDK keeps `mcp_client_seen` windows and call counters per wrapped server or per server name: each agent in a check uses its own client name and interaction ID.
+`--live` runs the same check. The local data plane forwards each batch with the write key to `RUDDERSTACK_DATA_PLANE_URL` and keeps only accepted batches. Without both variables, it prints `skipped: no key` and exits 0. The `Live examples` workflow runs nightly and on demand. Missing secrets are reported as a skip in the job summary.
+
+The asserts hold with `mcp_client_seen` windows and call counters per wrapped server or per server name. Each agent in a check uses its own client name and interaction ID.
