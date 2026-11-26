@@ -293,10 +293,21 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 				body.stopCancellation = context.AfterFunc(req.Context(), func() {
 					// Serialize cancellation with parsing, retaining every observed attribute.
 					// This also settles an unread stream without waiting for Read or Close.
+					// The report runs here, after a reader's callbacks, so Close can wait for it.
 					body.mu.Lock()
+					for body.draining && !body.finished {
+						done := body.drained
+						body.mu.Unlock()
+						<-done
+						body.mu.Lock()
+					}
+					if body.finished {
+						// Close or the stream's end claimed it and reports it.
+						body.mu.Unlock()
+						return
+					}
 					body.end(req.Context().Err())
-					body.mu.Unlock()
-					body.drainCallbacks()
+					body.drainLocked(hook.Caller())
 				})
 				body.mu.Unlock()
 			}
@@ -484,6 +495,8 @@ type sseBody struct {
 	callbacks        []func()
 	draining         bool
 	drained          chan struct{}
+	// canceller is the cancellation goroutine while it drains; Close waits for it.
+	canceller uint64
 }
 
 // drainCallbacks claims each notice or observer operation before calling it. Re-entry
@@ -494,7 +507,14 @@ func (b *sseBody) drainCallbacks() {
 		b.mu.Unlock()
 		return
 	}
+	b.drainLocked(0)
+}
+
+// drainLocked drains with mu held and no drain running, and returns with mu released.
+// canceller is the calling cancellation goroutine, or 0.
+func (b *sseBody) drainLocked(canceller uint64) {
 	b.draining = true
+	b.canceller = canceller
 	b.drained = make(chan struct{})
 	for len(b.callbacks) > 0 {
 		fn := b.callbacks[0]
@@ -505,6 +525,7 @@ func (b *sseBody) drainCallbacks() {
 		b.mu.Lock()
 	}
 	b.draining = false
+	b.canceller = 0
 	close(b.drained)
 	b.mu.Unlock()
 }
@@ -646,6 +667,16 @@ func (b *sseBody) end(err error) {
 			safe(func() { b.h.Finish(Completed, "") })
 			return
 		}
+		// A context that ended before the terminal event outranks a later EOF, whoever claims
+		// the end.
+		if errors.Is(err, io.EOF) && b.ctx.Err() != nil {
+			if !b.preferTerminal {
+				safe(func() { complete = b.h.Complete() })
+			}
+			if !complete {
+				err = b.ctx.Err()
+			}
+		}
 		if errors.Is(err, io.EOF) {
 			safe(func() { b.h.Finish(Completed, "") })
 			return
@@ -686,8 +717,26 @@ func (b *sseBody) Close() error {
 	}
 	b.mu.Unlock()
 	b.drainCallbacks()
-	return b.src.Close()
+	err := b.src.Close()
+	// The cancellation goroutine may be reporting this stream: an app step after Close (a
+	// tracing twin, End) must see the cancelled call. Its own re-entry does not wait, and the
+	// bound breaks a report that waits on another goroutine's Close.
+	b.mu.Lock()
+	canceller, done := b.canceller, b.drained
+	b.mu.Unlock()
+	if canceller != 0 && canceller != hook.Caller() {
+		bound := time.NewTimer(cancelReportWait)
+		select {
+		case <-done:
+		case <-bound.C:
+		}
+		bound.Stop()
+	}
+	return err
 }
+
+// cancelReportWait bounds Close's wait for an in-flight cancellation report; tests shorten it.
+var cancelReportWait = 5 * time.Second
 
 // RecordCall adds observed boundaries and app metadata before recording a call.
 func (c *Call) RecordCall(call rudderstackai.LLMCall) bool {

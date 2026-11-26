@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"sync"
 	"testing"
 
@@ -535,5 +538,71 @@ func TestContextLimitMessageClassifier(t *testing.T) {
 	}
 	if got := rudderstackai.ErrorTypeOf(e); got != "context_limit" {
 		t.Fatalf("typed classifier: %s", got)
+	}
+}
+
+// plainSSETransport serves a fixed in-memory SSE body that ignores the request context.
+type plainSSETransport string
+
+func (rt plainSSETransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(string(rt))), Request: req}, nil
+}
+
+// SDK-7211: a stream that delivered its terminal event stays completed and billed even when the
+// context is cancelled before its EOF is reported.
+func TestSDK7211AnthropicTerminalThenCancelIsBilled(t *testing.T) {
+	stream := `event: message_start
+data: {"type":"message_start","message":{"id":"msg_s","model":"claude-haiku-4-5","usage":{"input_tokens":20,"output_tokens":1}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`
+	const events = 6
+	for _, emit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("spans=%t", emit), func(t *testing.T) {
+			_, rec := setup(t, rudderstackai.WithLLMCallEvents(true), rudderstackai.WithEmitSpans(emit),
+				rudderstackai.WithCredits(func(rudderstackai.CreditCall) (*float64, error) { return rudderstackai.Ptr(7.0), nil }))
+			c := anthropic.NewClient(option.WithAPIKey("sk-ant-test"), option.WithMaxRetries(0),
+				option.WithHTTPClient(&http.Client{Transport: plainSSETransport(stream)}), rudderanthropic.WithTracking())
+			base, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ctx, i := rudderstackai.StartInteraction(base, rudderstackai.InteractionOptions{UserID: "u", NoPromptEvent: true})
+			st := c.Messages.NewStreaming(ctx, anthropic.MessageNewParams{}, body(t, request(map[string]any{"stream": true})))
+			n := 0
+			for st.Next() {
+				if n++; n == events {
+					cancel()
+				}
+			}
+			if n != events {
+				t.Fatalf("got %d events, want %d", n, events)
+			}
+			if err := st.Err(); err != nil {
+				t.Fatal(err)
+			}
+			_ = st.Close()
+			i.End(rudderstackai.EndOptions{})
+			ev := rec.events(t)
+			if len(ev["ai_llm_response_received"]) != 1 || len(ev["ai_response_received"]) != 1 {
+				t.Fatalf("events: %v", ev)
+			}
+			call := ev["ai_llm_response_received"][0]
+			eq(t, call, "credits", 7)
+			eq(t, call, "error_type", nil)
+			eq(t, ev["ai_response_received"][0], "response_status", "success")
+		})
 	}
 }

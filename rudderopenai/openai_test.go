@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -615,4 +617,99 @@ func TestContextLimitMessageClassifier(t *testing.T) {
 	if got := rudderstackai.ErrorTypeOf(&openai.Error{StatusCode: 400, Message: "maximum context length exceeded"}); got != "context_limit" {
 		t.Fatalf("typed classifier: %s", got)
 	}
+}
+
+// plainSSETransport serves a fixed in-memory SSE body that ignores the request context.
+type plainSSETransport string
+
+func (rt plainSSETransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(string(rt))), Request: req}, nil
+}
+
+// terminalThenCancel streams sse, cancels the context once the wrapper has seen the terminal
+// event (after the last event the app sees, or, when the SDK consumes the terminal event itself,
+// after the stream ends and before Close), and checks the call stays billed.
+func terminalThenCancel(t *testing.T, sse string, chunks int, sdkTerminal bool, stream func(ctx context.Context, c openai.Client) interface {
+	Next() bool
+	Err() error
+	Close() error
+}) {
+	t.Helper()
+	for _, emit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("spans=%t", emit), func(t *testing.T) {
+			rec, _ := setup(t, rudderstackai.WithLLMCallEvents(true), rudderstackai.WithEmitSpans(emit),
+				rudderstackai.WithCredits(func(rudderstackai.CreditCall) (*float64, error) { return rudderstackai.Ptr(7.0), nil }))
+			client := openai.NewClient(option.WithAPIKey("test"), option.WithMaxRetries(0),
+				option.WithHTTPClient(&http.Client{Transport: plainSSETransport(sse)}), rudderopenai.WithTracking())
+			base, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ctx, i := rudderstackai.StartInteraction(base, rudderstackai.InteractionOptions{UserID: "u", NoPromptEvent: true})
+			s := stream(ctx, client)
+			n := 0
+			for s.Next() {
+				if n++; n == chunks && !sdkTerminal {
+					cancel()
+				}
+			}
+			if sdkTerminal {
+				cancel()
+			}
+			if n != chunks {
+				t.Fatalf("got %d chunks, want %d", n, chunks)
+			}
+			if err := s.Err(); err != nil {
+				t.Fatal(err)
+			}
+			_ = s.Close()
+			i.End(rudderstackai.EndOptions{})
+			events := rec.events(t)
+			call, answer := one(t, events, "ai_llm_response_received"), one(t, events, "ai_response_received")
+			if num(call["credits"]) != 7 || call["error_type"] != nil || answer["response_status"] != "success" {
+				t.Fatalf("call %v, answer %v", call, answer)
+			}
+		})
+	}
+}
+
+// SDK-7211: a stream that delivered its terminal event stays completed and billed even when the
+// context is cancelled before its EOF is reported.
+func TestSDK7211ChatTerminalThenCancelIsBilled(t *testing.T) {
+	sse := `data: {"id":"c1","model":"gpt-4.1-mini","choices":[{"index":0,"delta":{"content":"Hi"}}]}
+
+data: {"id":"c1","model":"gpt-4.1-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"c1","model":"gpt-4.1-mini","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}
+
+data: [DONE]
+
+`
+	terminalThenCancel(t, sse, 2, true, func(ctx context.Context, c openai.Client) interface {
+		Next() bool
+		Err() error
+		Close() error
+	} {
+		return c.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{}, body(streamBody))
+	})
+}
+
+// SDK-7211: a stream that delivered its terminal event stays completed and billed even when the
+// context is cancelled before its EOF is reported.
+func TestSDK7211ResponsesTerminalThenCancelIsBilled(t *testing.T) {
+	sse := `event: response.created
+data: {"type":"response.created","response":{"id":"r1","model":"gpt-4.1-mini","status":"in_progress","output":[]}}
+
+event: response.output_text.delta
+data: {"type":"response.output_text.delta","delta":"Hi"}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"r1","model":"gpt-4.1-mini","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":5,"output_tokens":2}}}
+
+`
+	terminalThenCancel(t, sse, 3, false, func(ctx context.Context, c openai.Client) interface {
+		Next() bool
+		Err() error
+		Close() error
+	} {
+		return c.Responses.NewStreaming(ctx, responses.ResponseNewParams{}, body(`{"model":"gpt-4.1-mini","input":"hi","stream":true}`))
+	})
 }

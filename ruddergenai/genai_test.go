@@ -605,3 +605,59 @@ func TestContextLimitClassifiers(t *testing.T) {
 		}
 	}
 }
+
+// SDK-7211: a stream that delivered its terminal event stays completed and billed even when the
+// context is cancelled before its EOF is reported.
+func TestSDK7211GenAITerminalThenCancelIsBilled(t *testing.T) {
+	var stream strings.Builder
+	for _, c := range []any{
+		reply([]any{m{"text": "Hel"}}, m{"promptTokenCount": 10, "candidatesTokenCount": 2}, ""),
+		reply([]any{m{"text": "lo"}}, m{"promptTokenCount": 10, "candidatesTokenCount": 5}, "STOP"),
+	} {
+		b, _ := json.Marshal(c)
+		stream.WriteString("data: " + string(b) + "\n\n")
+	}
+	const chunks = 2
+	for _, emit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("spans=%t", emit), func(t *testing.T) {
+			rec := setup(t, rudderstackai.WithLLMCallEvents(true), rudderstackai.WithEmitSpans(emit),
+				rudderstackai.WithCredits(func(rudderstackai.CreditCall) (*float64, error) { return rudderstackai.Ptr(7.0), nil }))
+			fake := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}},
+					Body: io.NopCloser(strings.NewReader(stream.String())), Request: req}, nil
+			})
+			client := newClient(t, genai.BackendGeminiAPI, ruddergenai.HTTPClient(&http.Client{Transport: fake}))
+			base, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			ctx, i := rudderstackai.StartInteraction(base, rudderstackai.InteractionOptions{UserID: "u1", NoPromptEvent: true})
+			n := 0
+			for _, err := range client.Models.GenerateContentStream(ctx, model, genai.Text("Hi"), nil) {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if n++; n == chunks {
+					cancel()
+				}
+			}
+			if n != chunks {
+				t.Fatalf("got %d chunks, want %d", n, chunks)
+			}
+			i.End(rudderstackai.EndOptions{})
+			var calls []m
+			for _, e := range rec.events(t) {
+				if e.Event == "ai_llm_response_received" {
+					var props m
+					b, _ := json.Marshal(e.Properties)
+					_ = json.Unmarshal(b, &props)
+					calls = append(calls, props)
+				}
+			}
+			if len(calls) != 1 {
+				t.Fatalf("ai_llm_response_received: %d", len(calls))
+			}
+			want(t, calls[0], "credits", 7)
+			want(t, calls[0], "error_type", nil)
+			want(t, rec.response(t), "response_status", "success")
+		})
+	}
+}
