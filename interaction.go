@@ -681,12 +681,7 @@ func surfaceOf(s Surface) Surface {
 }
 
 func first(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
+	return cmp.Or(values...)
 }
 
 func boolOr(v *bool, fallback bool) bool {
@@ -805,10 +800,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 }
 
 func first2(a, b Surface) Surface {
-	if a != "" {
-		return a
-	}
-	return b
+	return cmp.Or(a, b)
 }
 
 // fillTraceID takes the trace ID [WithTraceIDFrom] finds in the context, unless one is set.
@@ -3393,9 +3385,7 @@ func (i *Interaction) sendBackground(event string, extra map[string]any) {
 	defer i.unlock()
 	p := i.baseLocked()
 	p["trigger"] = string(i.trigger)
-	for k, v := range extra {
-		p[k] = v
-	}
+	maps.Copy(p, extra)
 	i.sendLocked(event, func() map[string]any { return p })
 }
 

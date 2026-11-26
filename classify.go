@@ -142,6 +142,16 @@ func partText(part any) string {
 	return ""
 }
 
+func partsText(parts []any) string {
+	var texts []string
+	for _, p := range parts {
+		if t := partText(p); t != "" {
+			texts = append(texts, t)
+		}
+	}
+	return strings.Join(texts, "\n")
+}
+
 // textMessages reads chat messages as role and text from OpenAI, Anthropic, Responses API,
 // Gemini or Bedrock shapes. Tool messages and non-text parts are left out.
 func textMessages(raw any) []TurnMessage {
@@ -170,22 +180,10 @@ func textMessages(raw any) []TurnMessage {
 		case string:
 			content = c
 		case []any:
-			var parts []string
-			for _, p := range c {
-				if t := partText(p); t != "" {
-					parts = append(parts, t)
-				}
-			}
-			content = strings.Join(parts, "\n")
+			content = partsText(c)
 		}
 		if parts, ok := m["parts"].([]any); ok && content == "" {
-			var texts []string
-			for _, p := range parts {
-				if t := partText(p); t != "" {
-					texts = append(texts, t)
-				}
-			}
-			content = strings.Join(texts, "\n")
+			content = partsText(parts)
 		}
 		if content != "" {
 			out = append(out, TurnMessage{Role: role, Content: content})

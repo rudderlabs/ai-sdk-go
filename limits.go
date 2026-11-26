@@ -1,6 +1,7 @@
 package rudderstackai
 
 import (
+	"cmp"
 	"container/list"
 	"errors"
 	"fmt"
@@ -46,20 +47,13 @@ func WithLimits(l Limits) ConfigOption {
 		}
 		d := defaultLimits
 		c.limits = Limits{
-			MaxOpenInteractions:    orDefault(l.MaxOpenInteractions, d.MaxOpenInteractions),
-			InteractionTTL:         orDefault(l.InteractionTTL, d.InteractionTTL),
-			MaxCallsPerInteraction: orDefault(l.MaxCallsPerInteraction, d.MaxCallsPerInteraction),
-			MaxMapEntries:          orDefault(l.MaxMapEntries, d.MaxMapEntries),
+			MaxOpenInteractions:    cmp.Or(l.MaxOpenInteractions, d.MaxOpenInteractions),
+			InteractionTTL:         cmp.Or(l.InteractionTTL, d.InteractionTTL),
+			MaxCallsPerInteraction: cmp.Or(l.MaxCallsPerInteraction, d.MaxCallsPerInteraction),
+			MaxMapEntries:          cmp.Or(l.MaxMapEntries, d.MaxMapEntries),
 		}
 		return nil
 	}
-}
-
-func orDefault[T int | time.Duration](v, d T) T {
-	if v == 0 {
-		return d
-	}
-	return v
 }
 
 // limitReached reports a cap that was hit.

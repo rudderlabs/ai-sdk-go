@@ -3,6 +3,7 @@ package rudderstackai
 import (
 	"context"
 	"errors"
+	"maps"
 	"math"
 	"strings"
 	"time"
@@ -156,9 +157,7 @@ func TrackScore(ctx context.Context, o TrackScoreOptions) {
 		if o.Trigger == TriggerUser || o.Trigger == TriggerSystem {
 			p["trigger"] = string(o.Trigger)
 		}
-		for k, v := range score {
-			p[k] = v
-		}
+		maps.Copy(p, score)
 		sendStandalone(cv, "ai_interaction_scored", o.UserID, o.AnonymousID, o.Analytics, o.Context, p)
 	})
 }
