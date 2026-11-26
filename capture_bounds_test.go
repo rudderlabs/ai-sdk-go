@@ -994,3 +994,21 @@ func TestNonDataValuesAreLeftOutBeforeTheirSerializer(t *testing.T) {
 		t.Fatalf("captured %v, serializers ran %d times", got, marshalFuncCalls)
 	}
 }
+
+func TestResultStatsComeFromTheWholeResultWhenTheCopyIsCut(t *testing.T) {
+	whole := func() map[string]any {
+		return map[string]any{
+			"_meta":             map[string]any{"pad": filler(maxWalkNodes + 5)},
+			"content":           []any{map[string]any{"type": "text", "text": "x"}},
+			"structuredContent": map[string]any{"nextCursor": "c"},
+		}
+	}
+	raw, _ := json.Marshal(whole())
+	calls := 0
+	for name, result := range map[string]any{"plain": whole(), "serializer": &serResult{calls: &calls, raw: string(raw)}} {
+		p, _ := toolOutcome(t, result)
+		if !reflect.DeepEqual(p["result_content_types"], []string{"text", "structured"}) || p["result_paginated"] != true {
+			t.Errorf("%s: types=%v paginated=%v", name, p["result_content_types"], p["result_paginated"])
+		}
+	}
+}

@@ -980,7 +980,11 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 			rc.inputRequired(keys, str(result["requestState"]))
 			return
 		}
-		for k, v := range resultStats(result, size) {
+		stats := result
+		if complete != nil {
+			stats = mcpStatsInput(complete) // what the stats read, from the whole result
+		}
+		for k, v := range resultStats(stats, size) {
 			extra[k] = v
 		}
 		isError, _ := result["isError"].(bool)
@@ -1916,4 +1920,38 @@ func topLevelField(source any, key string) (any, bool) {
 		}
 	}
 	return nil, false
+}
+
+// mcpStatsInput is what resultStats reads, taken from a whole result: the types of its content
+// blocks, whether it has structured content and any cursor.
+func mcpStatsInput(complete any) map[string]any {
+	out := map[string]any{}
+	if v, ok := topLevelField(complete, "content"); ok {
+		if rv := reflect.ValueOf(v); rv.Kind() == reflect.Slice {
+			blocks := []any{}
+			seen := map[string]bool{}
+			for i := 0; i < rv.Len(); i++ {
+				if t, ok := topLevelField(rv.Index(i).Interface(), "type"); ok {
+					if name, _ := t.(string); !seen[name] {
+						seen[name] = true
+						blocks = append(blocks, map[string]any{"type": name})
+					}
+				}
+			}
+			out["content"] = blocks
+		}
+	}
+	if v, ok := topLevelField(complete, "structuredContent"); ok && v != nil {
+		picked := map[string]any{}
+		for _, key := range []string{"nextCursor", "next_cursor"} {
+			if c, ok := topLevelField(v, key); ok {
+				picked[key] = c
+			}
+		}
+		out["structuredContent"] = picked
+	}
+	if c, ok := topLevelField(complete, "nextCursor"); ok {
+		out["nextCursor"] = c
+	}
+	return out
 }
