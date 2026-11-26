@@ -46,11 +46,17 @@ Each benchmark reports, beside `ns/op`, `B/op` and `allocs/op`, the p50 and p99 
 
 ## Load
 
-`make load` runs `TestLoad` in `internal/conformance` and `TestLoadMCPMaps` in the root package (build tag `load`). `TestLoad` runs 200 goroutines at 500 interactions per second. Nine in ten interactions make two wrapped OpenAI calls with a tool call between them, and every tenth makes one streamed call instead; every fiftieth provider request fails with HTTP 429. Each interaction is followed by an MCP `tools/call` carrying the interaction's ID. Events go through analytics-go to a local data plane. A second phase repeats the workload while the data plane answers HTTP 500.
+`make load` runs `TestLoad` in `internal/conformance` and `TestLoadMCPMaps` in the root package (build tag `load`). `TestLoad` runs 200 goroutines at 500 interactions per second. Nine in ten interactions make two wrapped OpenAI calls with a tool call between them, and every tenth makes one streamed call instead; every fiftieth provider request fails with HTTP 429. Each interaction is followed by an MCP `tools/call` carrying the interaction's ID. Events go through analytics-go to a local data plane. A second phase repeats the workload while the data plane answers HTTP 500, and counts every event (see [Delivery](#delivery)).
 
-The run fails on missing prompt, answer or tool-call events with a healthy data plane, interactions left open, an `internal` error, MCP maps exceeding their cap or never reaching it, or post-GC heap growth above 25% plus 8 MB from warm-up. The MCP cap is 2,000; `TestLoad` requires eviction only after more than 2,000 MCP calls. It also fails if the second phase rejects no data or recovery flush does not finish. On CI, 30 seconds at 500 interactions/second delivered all 15,000 answers and 15,000 tool calls. Heap fell from 10.3 MB after warm-up to 4.2 MB. PRs run 30 seconds; `main` and nightly jobs run 5 minutes. Override with `LOAD_SECONDS`, `LOAD_RATE` and `LOAD_WORKERS`.
+The run fails on missing prompt, answer or tool-call events with a healthy data plane, interactions left open, an `internal` error, MCP maps exceeding their cap or never reaching it, a second-phase event that is neither delivered nor lost after analytics-go's retries, or post-GC heap growth above 25% plus 8 MB from warm-up. The MCP cap is 2,000; `TestLoad` requires eviction only after more than 2,000 MCP calls. It also fails if the second phase rejects no data or recovery flush does not finish. On CI, 30 seconds at 500 interactions/second delivered all 15,000 answers and 15,000 tool calls. Heap fell from 10.3 MB after warm-up to 4.2 MB. PRs run 30 seconds; `main` and nightly jobs run 5 minutes. Override with `LOAD_SECONDS`, `LOAD_RATE` and `LOAD_WORKERS`.
 
-On the laptop, 5,000 interactions per second (about 15,000 events per second) went through without loss. While the data plane is down, analytics-go retries and then drops batches; the SDK's memory stays flat.
+On the laptop, 5,000 interactions per second (about 15,000 events per second) went through without loss.
+
+### Delivery
+
+Events leave through the analytics-go client you pass to `Configure`. It holds them in a 100-slot queue and uploads batches in the background. When the queue is full, `Enqueue` blocks the sending goroutine until there is room: analytics-go applies backpressure instead of dropping, so the SDK never reports a full queue as `limit_reached`, unlike the Node.js and Python SDKs. Your calls slow down to the client's upload rate rather than losing events, which is why the first load phase needs no pacing wait.
+
+While the data plane is down, analytics-go retries each batch, then drops it and passes every message in it to `Config.Callback`'s `Failure`; meanwhile the queue fills and senders wait. The load test's second phase counts each event by name: delivered plus lost after retries equals sent. The SDK's memory stays flat either way.
 
 ## Limits
 
