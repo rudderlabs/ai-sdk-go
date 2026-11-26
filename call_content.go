@@ -256,6 +256,7 @@ type walk struct {
 	cuts           int            // times the budget stopped a loop
 	cut            map[visit]bool // containers on the path when it did: never memoised
 	dumped         map[visit]serializerOutput
+	noBudget       bool // the resolve walk of a consumer that reads the whole value, as base did
 	share          bool // one pass over a resolved tree: each container is copied once and reused, so no budget
 	copies         map[copyKey]any
 	fields         bool // the root map's values are separate captured values, each with its own budget
@@ -276,7 +277,7 @@ type serializerOutput struct {
 // take counts one more value; false once the budget is spent, so the walk stops and leaves the
 // rest out like values past the depth cap.
 func (w *walk) take() bool {
-	if w.share {
+	if w.share || w.noBudget {
 		return true
 	}
 	if w.nodes >= maxWalkNodes-1 {
@@ -412,7 +413,6 @@ func customTarget(rv reflect.Value) (reflect.Value, bool) {
 type captureSeed struct {
 	original, captured any
 	memo               map[visit]any
-	dumped             map[visit]serializerOutput
 }
 
 type captureReport struct {
@@ -420,10 +420,6 @@ type captureReport struct {
 	size  int
 	sizes map[string]int
 	memo  map[visit]any
-	// dumped is the serializer output of values the budget cut, so a later capture of the report
-	// reads it without running the serializer again.
-	dumped map[visit]serializerOutput
-	cut    bool // the budget left values out of value
 }
 
 // The recursion guard contains only identities while app code is on the current stack. It
@@ -464,57 +460,25 @@ func enterCapture() (leave func()) {
 
 // captureEncoded is base's encoding of a report value that stores no content, such as an MCP
 // result without a declared rule: one serializer run, for classification and size only.
-func captureEncoded(v any) (b []byte, size int, complete any, err error) {
+func captureEncoded(v any) (b []byte, err error) {
 	defer enterCapture()()
 	defer func() {
 		if r := recover(); r != nil {
-			b, size, complete, err = nil, 0, nil, fmt.Errorf("panic: %v", r)
+			b, err = nil, fmt.Errorf("panic: %v", r)
 		}
 	}()
-	within, custom := newInspector().shape(v, false)
-	if within {
-		b, err = compactJSON(v)
-		if err != nil || !custom || len(b) <= maxWalkNodes {
-			return b, len(b), nil, err
-		}
-		// A serializer wrote more than the budget could hold (a value takes a byte at least):
-		// its bytes, already written once, give the budgeted copy without running it again, and
-		// the whole decoded result for what the copy may lose.
-		var tree any
-		if json.Unmarshal(b, &tree) != nil {
-			return b, len(b), nil, nil
-		}
-		bounded, _, err := boundedJSONCut(tree, false)
-		return bounded, len(bounded), tree, err
-	}
-	// Past the budget: the capture runs any serializer once, and the classification input comes
-	// from the budgeted tree. The size is exact unless a serializer produced part of the value.
-	resolved, _ := resolveCapture(v, false, nil)
-	b, err = boundedJSON(resolved, false)
-	complete = completeResult(v, resolved)
-	if !custom {
-		if n, sizeErr := exactSize(v); sizeErr == nil {
-			return b, n, complete, err
-		}
-	}
-	return b, len(b), complete, err
-}
-
-// completeResult is the whole result a budgeted copy was made from: the original, or for a
-// serializer's result its own decoded output (never the receiver, whose omitted fields stay omitted).
-func completeResult(original, resolved any) any {
-	if s, ok := resolved.(serialized); ok {
-		var tree any
-		if s.raw == nil || json.Unmarshal(s.raw, &tree) != nil {
-			return map[string]any{}
-		}
-		return tree
-	}
-	return original
+	return compactJSON(v)
 }
 
 func resolveCapture(v any, fields bool, seeds []captureSeed) (any, *walk) {
-	w := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, resolve: true, serializers: true, memo: map[visit]any{}, fields: fields}
+	return resolveCaptureWith(v, fields, false, seeds)
+}
+
+// resolveCaptureWith is resolveCapture; noBudget leaves the walk unbudgeted for a consumer that
+// reads the whole value (an MCP result's status). The walk is memoised, so it is linear in the
+// distinct containers; only the content copies made from it are budgeted.
+func resolveCaptureWith(v any, fields, noBudget bool, seeds []captureSeed) (any, *walk) {
+	w := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, resolve: true, serializers: true, memo: map[visit]any{}, fields: fields, noBudget: noBudget}
 	for _, seed := range seeds {
 		w.seed(reflect.ValueOf(seed.original), seed.captured, 0)
 		if len(seed.memo) > 0 {
@@ -523,10 +487,6 @@ func resolveCapture(v any, fields bool, seeds []captureSeed) (any, *walk) {
 		for key, value := range seed.memo {
 			w.memo[key] = value
 		}
-		if len(seed.dumped) > 0 && w.dumped == nil {
-			w.dumped = map[visit]serializerOutput{}
-		}
-		maps.Copy(w.dumped, seed.dumped)
 	}
 	resolved, _ := w.strip(v)
 	return resolved, w
@@ -610,7 +570,7 @@ func captureValueFields(v any) captureReport { return captureResolvedWith(v, tru
 
 func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureSeed) captureReport {
 	defer enterCapture()()
-	resolved, w := resolveCapture(v, fields, seeds)
+	resolved, w := resolveCaptureWith(v, fields, consume != nil, seeds)
 	if consume != nil {
 		consume(resolved)
 	}
@@ -633,7 +593,7 @@ func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureS
 	for key, value := range w.memo {
 		memo[key], _ = sw.strip(value)
 	}
-	return captureReport{value: out, size: size, sizes: sizes, memo: memo, dumped: w.dumped, cut: w.cuts > 0}
+	return captureReport{value: out, size: size, sizes: sizes, memo: memo}
 }
 
 // resolvedSize is base's encoded size: serializer output counts as the bytes encoding/json

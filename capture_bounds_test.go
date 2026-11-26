@@ -229,11 +229,6 @@ func TestCaptureBudgetSizesAndEncoding(t *testing.T) {
 			}
 		})
 		bounded(t, func() {
-			if b, _, _, _ := captureEncoded(graph); len(b) == 0 {
-				t.Fatal("no encoding")
-			}
-		})
-		bounded(t, func() {
 			captureResolved(graph, func(resolved any) {
 				if b, _ := boundedJSON(resolved, false); len(b) == 0 {
 					t.Fatal("no encoding")
@@ -562,23 +557,6 @@ func TestPlainResultDeeperThanTheDepthCapIsSizedExactly(t *testing.T) {
 	}
 }
 
-func TestCutSerializerOutputTravelsWithTheReport(t *testing.T) {
-	calls := 0
-	m := &onceMarshaler{&calls}
-	// The result's budget ends inside the serializer's output, so it is kept apart from the memo.
-	result := map[string]any{"a": append(filler(maxWalkNodes-3), m)}
-	rule := EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "looked_up", Properties: func(map[string]any, any) map[string]any {
-		return map[string]any{"again": []any{m}}
-	}}}}
-	setupAI(t, WithEmitSpans(true), WithCaptureContent(true), WithEventRules(rule))
-	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
-	i.RecordToolCalls(ToolCall{ID: "t", Name: "lookup", Result: result, Error: Ptr(false)})
-	i.End(EndOptions{})
-	if calls != 1 {
-		t.Fatalf("serializer ran %d times", calls)
-	}
-}
-
 func TestSliceCaptureAllocatesWithinTheBudget(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
 	big := make([]int, 5_000_000)
@@ -754,22 +732,6 @@ func TestShareCopyCutByDepthIsNotReusedHigherUp(t *testing.T) {
 	}
 }
 
-func TestCaptureReportsWhetherTheBudgetCut(t *testing.T) {
-	setupAI(t, WithEmitSpans(true))
-	if captureValue(map[string]any{"a": 1}).cut {
-		t.Error("small value reported cut")
-	}
-	if !captureValue(filler(maxWalkNodes + 5)).cut {
-		t.Error("big value not reported cut")
-	}
-	if _, _, complete, _ := captureEncoded(map[string]any{"a": 1}); complete != nil {
-		t.Error("small encoding reported cut")
-	}
-	if _, _, complete, _ := captureEncoded(filler(maxWalkNodes + 5)); complete == nil {
-		t.Error("big encoding not reported cut")
-	}
-}
-
 func (w *walk) stripValue(v any) any {
 	out, _ := w.strip(v)
 	return out
@@ -802,15 +764,6 @@ func TestSerializerResultIsSizedFromItsBudgetedCopy(t *testing.T) {
 	copied, _ := compactJSON(report.value.(map[string]any)["result"])
 	if report.sizes["result"] != len(copied) || len(copied) >= 300001 {
 		t.Fatalf("size=%d, the copy is %d bytes", report.sizes["result"], len(copied))
-	}
-}
-
-func TestEncodedSerializerResultIsBudgetedAndRunsOnce(t *testing.T) {
-	setupAI(t, WithEmitSpans(true))
-	calls := 0
-	b, size, complete, err := captureEncoded(&manyOnes{n: 150000, calls: &calls})
-	if err != nil || complete == nil || size != len(b) || size >= 300001 || calls != 1 {
-		t.Fatalf("size=%d len=%d complete=%v calls=%d err=%v", size, len(b), complete != nil, calls, err)
 	}
 }
 
@@ -932,15 +885,6 @@ func TestInputRequestCutToAnEmptyMapStillRegistersItsKey(t *testing.T) {
 	_, rc := toolOutcome(t, &serResult{calls: &calls, raw: raw})
 	if _, found := rc.st.inputRequired.get(rc.inputKey("k", "s")); !found {
 		t.Fatal("the pending key was not registered")
-	}
-}
-
-func TestRawMessageBeyondTheBudgetIsCut(t *testing.T) {
-	setupAI(t, WithEmitSpans(true))
-	raw := json.RawMessage(ones(150000))
-	b, size, complete, err := captureEncoded(raw)
-	if err != nil || complete == nil || size != len(raw) || len(b) >= len(raw) {
-		t.Fatalf("size=%d (want %d) copy=%d complete=%v err=%v", size, len(raw), len(b), complete != nil, err)
 	}
 }
 

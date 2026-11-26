@@ -918,7 +918,7 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 	}
 	extra := map[string]any{}
 	status := "success"
-	var result, ruleResult map[string]any
+	var result map[string]any
 	var resultContent captureReport
 	switch {
 	case o.Cancelled:
@@ -937,20 +937,12 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		extra["error_type"] = "api_error"
 	default:
 		size := 0
-		var complete any // the whole result, when the budget left values out of its copy
 		if _, declared := rc.declaredRule(); declared && !failed {
 			// Rule properties reuse this report's content instead of serializing again.
-			var cut bool
-			var root any
 			resultContent = captureResolved(o.Result, func(resolved any) {
-				var b []byte
-				b, cut, _ = boundedJSONCut(resolved, false)
-				root = resolved
+				b, _ := compactJSON(resolved)
 				_ = json.Unmarshal(b, &result)
 			})
-			if cut || resultContent.cut {
-				complete = completeResult(o.Result, root)
-			}
 			size = resultContent.size
 			source := o.Result
 			if original != nil {
@@ -959,19 +951,12 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 			seedMCPResult(&walk{memo: resultContent.memo}, source, resultContent.value)
 		} else {
 			// Nothing is stored: the base encoding gives the classification inputs and size.
-			var b []byte
-			b, size, complete, _ = captureEncoded(o.Result)
+			b, _ := captureEncoded(o.Result)
 			_ = json.Unmarshal(b, &result)
+			size = len(b)
 		}
 		if rc.wireResultSize > 0 {
 			size = rc.wireResultSize
-		}
-		if complete != nil {
-			result = withMCPControls(result, complete)
-			// Rule inputs are the whole result's too: the cut copy may have lost the structured content.
-			if whole, ok := complete.(map[string]any); ok {
-				ruleResult = whole
-			}
 		}
 
 		if requests, ok := result["inputRequests"].(map[string]any); ok {
@@ -984,11 +969,7 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 			rc.inputRequired(keys, str(result["requestState"]))
 			return
 		}
-		stats := result
-		if complete != nil {
-			stats = mcpStatsInput(complete) // what the stats read, from the whole result
-		}
-		for k, v := range resultStats(stats, size) {
+		for k, v := range resultStats(result, size) {
 			extra[k] = v
 		}
 		isError, _ := result["isError"].(bool)
@@ -1013,10 +994,7 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		}
 	}
 	rc.finish("mcp_tool_called", "tool_name", rc.toolName, status, extra)
-	if ruleResult == nil {
-		ruleResult = result
-	}
-	rc.declaredEvent(ruleResult, status, resultContent)
+	rc.declaredEvent(result, status, resultContent)
 }
 
 func (rc *reqCtx) Finished(method, name string, size int, errorType string) {
@@ -1258,7 +1236,7 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string, captured .
 	}
 	var seeds []captureSeed
 	if len(captured) > 0 {
-		seeds = append(seeds, captureSeed{memo: captured[0].memo, dumped: captured[0].dumped})
+		seeds = append(seeds, captureSeed{memo: captured[0].memo})
 	}
 	sdk := map[string]any{}
 	for _, key := range []string{"argument_keys", "invalid_arguments", "request_id", "tool_name", "client_title"} {
@@ -1809,156 +1787,4 @@ func seedMCPResult(w *walk, original, captured any) {
 			w.seed(value, m[key], 0)
 		}
 	}
-}
-
-// mcpControls reads what decides a call's status and pending input from a whole result: the
-// captured copy of a large one can lose it, so a cut result is read before the budget touched it.
-func mcpControls(source any) map[string]any {
-	out := map[string]any{}
-	if v, ok := topLevelField(source, "isError"); ok {
-		if b, ok := v.(bool); ok {
-			out["isError"] = b
-		}
-	}
-	if v, ok := topLevelField(source, "requestState"); ok {
-		if str, ok := v.(string); ok {
-			out["requestState"] = str
-		}
-	}
-	if v, ok := topLevelField(source, "inputRequests"); ok {
-		if rv := reflect.ValueOf(v); rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
-			requests := map[string]any{}
-			for it := rv.MapRange(); it.Next(); {
-				entry := map[string]any{}
-				if method, ok := topLevelField(it.Value().Interface(), "method"); ok {
-					entry["method"] = method
-				}
-				requests[it.Key().String()] = entry
-			}
-			out["inputRequests"] = requests
-		}
-	}
-	for field, keys := range map[string][]string{
-		"_meta":             {"com.rudderstack/http_status"},
-		"structuredContent": {"status", "statusCode"},
-	} {
-		holder, ok := topLevelField(source, field)
-		if !ok {
-			continue
-		}
-		picked := map[string]any{}
-		for _, key := range keys {
-			if v, ok := topLevelField(holder, key); ok {
-				if n, ok := numberOf(v); ok {
-					picked[key] = n
-				}
-			}
-		}
-		if len(picked) > 0 {
-			out[field] = picked
-		}
-	}
-	return out
-}
-
-func numberOf(v any) (float64, bool) {
-	if n, ok := v.(json.Number); ok {
-		f, err := n.Float64()
-		return f, err == nil
-	}
-	rv := reflect.ValueOf(v)
-	switch {
-	case !rv.IsValid():
-	case rv.CanFloat():
-		return rv.Float(), true
-	case rv.CanInt():
-		return float64(rv.Int()), true
-	case rv.CanUint():
-		return float64(rv.Uint()), true
-	}
-	return 0, false
-}
-
-// withMCPControls puts the controls of the whole result over its captured copy's.
-func withMCPControls(result map[string]any, complete any) map[string]any {
-	if result == nil {
-		result = map[string]any{}
-	}
-	for key, value := range mcpControls(complete) {
-		picked, isMap := value.(map[string]any)
-		held, heldMap := result[key].(map[string]any)
-		if (key == "_meta" || key == "structuredContent") && isMap && heldMap {
-			maps.Copy(held, picked)
-			continue
-		}
-		result[key] = value
-	}
-	return result
-}
-
-// topLevelField is the value of a map entry or struct field encoding/json would write as key.
-func topLevelField(source any, key string) (any, bool) {
-	rv := reflect.ValueOf(source)
-	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
-		if rv.IsNil() {
-			return nil, false
-		}
-		rv = rv.Elem()
-	}
-	if !rv.IsValid() {
-		return nil, false
-	}
-	switch rv.Kind() {
-	case reflect.Map:
-		if rv.Type().Key().Kind() != reflect.String {
-			return nil, false
-		}
-		if v := rv.MapIndex(reflect.ValueOf(key).Convert(rv.Type().Key())); v.IsValid() && v.CanInterface() {
-			return v.Interface(), true
-		}
-	case reflect.Struct:
-		for _, f := range cachedJSONFields(rv.Type()) {
-			if f.name != key {
-				continue
-			}
-			if v, ok := jsonFieldValue(rv, f); ok && v.CanInterface() {
-				return v.Interface(), true
-			}
-		}
-	}
-	return nil, false
-}
-
-// mcpStatsInput is what resultStats reads, taken from a whole result: the types of its content
-// blocks, whether it has structured content and any cursor.
-func mcpStatsInput(complete any) map[string]any {
-	out := map[string]any{}
-	if v, ok := topLevelField(complete, "content"); ok {
-		if rv := reflect.ValueOf(v); rv.Kind() == reflect.Slice {
-			blocks := []any{}
-			seen := map[string]bool{}
-			for i := 0; i < rv.Len(); i++ {
-				if t, ok := topLevelField(rv.Index(i).Interface(), "type"); ok {
-					if name, _ := t.(string); !seen[name] {
-						seen[name] = true
-						blocks = append(blocks, map[string]any{"type": name})
-					}
-				}
-			}
-			out["content"] = blocks
-		}
-	}
-	if v, ok := topLevelField(complete, "structuredContent"); ok && v != nil {
-		picked := map[string]any{}
-		for _, key := range []string{"nextCursor", "next_cursor"} {
-			if c, ok := topLevelField(v, key); ok {
-				picked[key] = c
-			}
-		}
-		out["structuredContent"] = picked
-	}
-	if c, ok := topLevelField(complete, "nextCursor"); ok {
-		out["nextCursor"] = c
-	}
-	return out
 }
