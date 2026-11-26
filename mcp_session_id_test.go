@@ -329,7 +329,11 @@ func TestMCPSessionIDRejectedHeaderScopesPendingLegs(t *testing.T) {
 	pending, release := make(chan struct{}), make(chan struct{})
 	alpha := connectAs("alpha session", func(ctx context.Context, req *mcp.ElicitRequest) (*mcp.ElicitResult, error) {
 		close(pending)
-		<-release
+		select { // ctx.Done so a failing test never leaves this handler blocked
+		case <-release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 		return answer(ctx, req)
 	})
 	beta := connectAs("beta session", answer)
