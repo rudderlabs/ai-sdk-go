@@ -1,6 +1,6 @@
 # Performance and limits
 
-What `ai-sdk-go` costs your app, and the limits that keep it bounded. The SDK does its work in your process, next to each model call and MCP request. A model call takes hundreds of milliseconds to seconds, while the SDK adds tens of microseconds: well under 1% of the call. Content capture costs more, a few milliseconds per interaction (see below).
+The SDK runs in your process for each model call and MCP request. It adds tens of microseconds to model calls that take hundreds of milliseconds to seconds: well under 1%. Content capture adds a few milliseconds per interaction (see below).
 
 - [Overhead](#overhead)
 - [How it is measured](#how-it-is-measured)
@@ -22,13 +22,13 @@ The overhead is the median (p50) of the same call with and without the SDK. "CI"
 | `WithEmitSpans`, added per streamed chunk                              | ≤ +1.5 µs                   | +0.6 µs             | under 1 µs          |
 | `WithCaptureContent` with `WithLLMCallEvents`, 8 KB of prompt and answer | ≤ 8 ms                    | 3.7 ms              | 3.3 ms              |
 
-On CI the MCP round trip's p50 did not change measurably (the go-sdk in-memory round trip alone takes 118 µs and varies more than that), while process CPU, which counts every goroutine, rose by about 131 µs per call; that row therefore has a CPU budget too. Masking captured text is the slowest step, in the `regexp2` engine.
+On CI the MCP round trip's p50 did not change measurably (the go-sdk in-memory round trip alone takes 118 µs and varies more than that), while process CPU, which counts every goroutine, rose by about 131 µs per call; that row therefore has a CPU budget too. Masking captured text is the slowest step.
 
 Extra allocations per call repeat exactly from run to run and are gated in CI: about 300 for an interaction with one wrapped call, 315 for an MCP call, 48 per streamed chunk and 700 with content capture. Each must stay within `internal/benchreport/alloc_budget.json`, set at the measurement plus 25%. Timings are a published target, not a CI gate.
 
 ## How it is measured
 
-`make bench` runs `BenchmarkOverhead` in the root package and in `rudderopenai`, against an OpenAI endpoint behind an in-process `http.RoundTripper` and an MCP server over the go-sdk's in-memory transports, so no network time is counted, with an analytics client that drops every event, so the numbers are the SDK's own work. Each scenario has a `baseline` sub-benchmark without the SDK and an `sdk` one with it. `BenchmarkOverhead` runs `BENCH_ROUNDS` rounds (default 5), each running every scenario's baseline then sdk, so drift on a shared machine hits both. Repeated sub-benchmark names get Go's `#01`, `#02` suffixes; `internal/benchreport` takes the median of each metric over all rounds of a side and turns the output into the table above.
+`make bench` runs root and `rudderopenai` `BenchmarkOverhead` against an in-process OpenAI `http.RoundTripper`, in-memory go-sdk MCP transports and an analytics client that drops events. No network time is counted. Each scenario has `baseline` and `sdk` sub-benchmarks. `BENCH_ROUNDS` (default 5) runs baseline then SDK per scenario to reduce drift. Repeated sub-benchmark names get Go's `#01`, `#02` suffixes; `internal/benchreport` takes each metric's median across rounds and generates the table.
 
 | Scenario                          | What runs                                                                                              |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -46,21 +46,15 @@ Each benchmark reports, beside `ns/op`, `B/op` and `allocs/op`, the p50 and p99 
 
 `make load` runs `TestLoad` in `internal/conformance` and `TestLoadMCPMaps` in the root package (build tag `load`). `TestLoad` runs 200 goroutines at 500 interactions per second. Nine in ten interactions make two wrapped OpenAI calls with a tool call between them, and every tenth makes one streamed call instead; every fiftieth provider request fails with HTTP 429. Each interaction is followed by an MCP `tools/call` carrying the interaction's ID. Events go through analytics-go to a local data plane. A second phase repeats the workload while the data plane answers HTTP 500.
 
-The run fails if any prompt, answer or tool-call event goes missing while the data plane is healthy, an interaction is still open at the end (`Shutdown` would end it as `incomplete`), the SDK reports an `internal` error, an MCP map grows past its cap or never reaches it (the cap is lowered to 2,000; `TestLoad` requires eviction only after more than 2,000 MCP calls; `TestLoadMCPMaps` in the root package reads the SDK's own maps and open-interaction count), the heap after garbage collection grows more than 25% (plus 8 MB) from the end of warm-up, the data plane rejected nothing in the second phase, or the flush after it recovers does not finish. On CI, 30 seconds at 500 interactions per second delivered all 15,000 answers and 15,000 tool calls; the heap went from 10.3 MB after warm-up to 4.2 MB at the end. Pull requests run 30 seconds; `main` and a nightly job run 5 minutes. `LOAD_SECONDS`, `LOAD_RATE` and `LOAD_WORKERS` change the run.
+The run fails on missing prompt, answer or tool-call events with a healthy data plane, interactions left open, an `internal` error, MCP maps exceeding their cap or never reaching it, or post-GC heap growth above 25% plus 8 MB from warm-up. The MCP cap is 2,000; `TestLoad` requires eviction only after more than 2,000 MCP calls. It also fails if the second phase rejects no data or recovery flush does not finish. On CI, 30 seconds at 500 interactions/second delivered all 15,000 answers and 15,000 tool calls. Heap fell from 10.3 MB after warm-up to 4.2 MB. PRs run 30 seconds; `main` and nightly jobs run 5 minutes. Override with `LOAD_SECONDS`, `LOAD_RATE` and `LOAD_WORKERS`.
 
 On the laptop, 5,000 interactions per second (about 15,000 events per second) went through without loss. While the data plane is down, analytics-go retries and then drops batches; the SDK's memory stays flat.
 
 ## Limits
 
-| Limit                                                | Default                                                                                                                                          | Set with                                                                            |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| Open interactions                                    | 10,000                                                                                                                                           | `WithLimits(Limits{MaxOpenInteractions: ...})` ([details](configuration.md#limits)) |
-| Interaction lifetime                                 | 1 hour                                                                                                                                           | `InteractionTTL`                                                                    |
-| Model and tool calls kept one by one per interaction | 1,000 each; tool calls still awaiting an outcome may keep up to that many more records, identity only (name, ID, agent, MCP server, parent tool) | `MaxCallsPerInteraction`                                                            |
-| Entries per in-memory map (MCP and integrations) | 10,000; MCP server names and resource templates per server: 1,000 each, fixed | `MaxMapEntries` |
-| Event properties                                     | 30,000 serialized bytes                                                                                                                          | fixed ([details](events.md))                                                        |
+Memory caps and their effects: [configuration](configuration.md#limits). Product-event trimming: [events](events.md#event-size). MCP state caps: [MCP limits](mcp.md#limits). Span budgets: [tracing](tracing.md#privacy-and-size).
 
-What happens at each cap is in [Limits](configuration.md#limits); an event over the size budget loses its captured text first ([events](events.md)). Nothing panics into your code. An interaction leaves nothing behind once it ends; MCP keeps a few entries per session or interaction (call positions and argument hashes for `retry_count`), up to `MaxMapEntries` per map.
+An interaction leaves nothing behind once it ends.
 
 ## Fuzz tests
 

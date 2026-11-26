@@ -22,7 +22,6 @@ func ClassifierClient(client openai.Client, model string) rudderstackai.Classifi
 	return &classifier{client: client, model: model}
 }
 
-// Classify sends the classifier prompt.
 func (c *classifier) Classify(ctx context.Context, system, user string) (rudderstackai.ClassifierReply, error) {
 	r, err := c.client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model: c.model,

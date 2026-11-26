@@ -14,8 +14,7 @@ import (
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
 
-// Both spans straddle the transition; follow-ups also cover the fixed-order
-// paused/restore-B and older-open-owner repros from SDK-6799.
+// Spans retain tenant ownership across pause, end, and restore transitions in either completion order.
 func TestDuplicateIDTenantTransitionMatrix(t *testing.T) {
 	type row struct {
 		duplicate                           bool

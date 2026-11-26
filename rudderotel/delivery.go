@@ -492,9 +492,8 @@ func (d *deliveredSpan) Parent() trace.SpanContext {
 
 // sentRaw records a span sent under its original IDs: its parent is never covered after that,
 // so a published tree keeps its parent.
-func sentRaw(s sdktrace.ReadOnlySpan) {
-	d, ok := s.(*deliveredSpan)
-	if !ok || !d.original {
+func sentRaw(d *deliveredSpan) {
+	if !d.original {
 		return
 	}
 	parent := d.treeParent()

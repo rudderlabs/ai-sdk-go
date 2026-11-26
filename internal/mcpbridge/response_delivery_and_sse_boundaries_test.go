@@ -95,7 +95,7 @@ func TestRound2DeliveredResultSize(t *testing.T) {
 	}
 }
 
-// Copilot thread lines.go:42: an oversized SSE frame whose "data:" prefix is split across writes.
+// An oversized SSE frame whose "data:" prefix is split across writes.
 func TestRound2SplitSSEPrefix(t *testing.T) {
 	r := NewResponses()
 	var lines []string
@@ -110,7 +110,7 @@ func TestRound2SplitSSEPrefix(t *testing.T) {
 	}
 }
 
-// Copilot thread envelope.go:43: every response of an oversized batch is acknowledged.
+// Every response of an oversized batch is acknowledged.
 func TestRound2OversizedBatchEnvelope(t *testing.T) {
 	r := NewResponses()
 	seen := map[string]any{}

@@ -8,8 +8,7 @@ import (
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
 )
 
-// Lists match the Node and Python tracing privacy constants, except error text
-// protections, which follow in SDK-6802.
+// Match the shared tracing privacy constants.
 var contentKeys = []string{
 	"exception.message", "exception.stacktrace",
 	"gen_ai.input.messages", "gen_ai.output.messages", "gen_ai.system_instructions",

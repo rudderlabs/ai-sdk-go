@@ -83,12 +83,7 @@ func sseBody(t testing.TB, cassette string) []byte {
 }
 
 // outcome is what the app sees: the response's JSON, or the error.
-func outcome(raw string, err error) string {
-	if err != nil {
-		return "error: " + err.Error()
-	}
-	return raw
-}
+var outcome = testkit.Outcome
 
 func track(t *testing.T) *recorder {
 	t.Helper()
@@ -120,21 +115,7 @@ func checkAnswer(t *testing.T, rec *recorder) []event {
 
 // plausible reports whether every number in the JSON is below 1e15 in magnitude: no provider
 // reports token counts beyond that, and sums of larger ones may overflow.
-func plausible(raw []byte) bool {
-	d := json.NewDecoder(bytes.NewReader(raw))
-	d.UseNumber()
-	for {
-		tok, err := d.Token()
-		if err != nil {
-			return err == io.EOF
-		}
-		if n, ok := tok.(json.Number); ok {
-			if f, err := n.Float64(); err != nil || math.Abs(f) >= 1e15 {
-				return false
-			}
-		}
-	}
-}
+var plausible = testkit.PlausibleJSONNumbers
 
 func FuzzChatUsage(f *testing.F) {
 	for _, s := range []string{
@@ -184,9 +165,7 @@ type streamCase struct {
 	consume  func(ctx context.Context, c openai.Client) ([]string, error)
 }
 
-func withBody(s string) option.RequestOption {
-	return option.WithRequestBody("application/json", []byte(s))
-}
+var withBody = body
 
 var streamCases = map[string]streamCase{
 	// The recorded stream ends with a usage chunk; without asking for it, the wrapper (which asks

@@ -3,6 +3,7 @@ package rudderstackai
 import (
 	"cmp"
 	"context"
+	"maps"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/auth"
@@ -183,9 +184,7 @@ func (w *wrapped) TrackSubscription(ctx context.Context, c any) {
 	put(p, "failure_reason", capLabel(change.FailureReason))
 	put(p, "mcp_session_id", capID(change.SessionID))
 	put(p, "client_name", clientText(change.ClientName))
-	for k, v := range base {
-		p[k] = v
-	}
+	maps.Copy(p, base)
 	emit(opts.Analytics, "mcp_event_subscription_changed", whom, p)
 
 	// The raw ID: the capped one would merge subscriptions that differ only past the cap.
@@ -292,8 +291,6 @@ func (w *wrapped) DeliveryDone(ctx context.Context, delivery, result any, failed
 	if d.Payload != nil {
 		p["payload_size_bytes"] = payloadSize(d.Payload)
 	}
-	for k, v := range base {
-		p[k] = v
-	}
+	maps.Copy(p, base)
 	emit(opts.Analytics, "mcp_event_delivered", whom, p)
 }

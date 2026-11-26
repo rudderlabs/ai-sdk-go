@@ -29,7 +29,7 @@ type config struct {
 	redact              bool
 	redactHook          func(string) (string, error)
 	toolRules           map[string]ToolEventRule
-	classifier          *classifierConfig
+	classifier          *ClassifierOptions
 	azureDeployments    map[string]string
 	serverFeedback      bool
 	evaluator           EvaluateFunc

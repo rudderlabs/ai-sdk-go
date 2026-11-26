@@ -1,9 +1,9 @@
 package rudderstackai
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"maps"
 	"math"
 	"net/http"
 	"net/url"
@@ -45,9 +45,7 @@ func parseCookieHeader(header string) map[string]string {
 // rudderstackCookies keeps only the RudderStack cookies of a header and a map (the map wins).
 func rudderstackCookies(header string, values map[string]string) map[string]string {
 	raw := parseCookieHeader(header)
-	for k, v := range values {
-		raw[k] = v
-	}
+	maps.Copy(raw, values)
 	out := map[string]string{}
 	for _, name := range rudderstackCookieNames {
 		if v, ok := raw[name]; ok {
@@ -60,7 +58,6 @@ func rudderstackCookies(header string, values map[string]string) map[string]stri
 	return out
 }
 
-// requestCookies returns a request's Cookie headers joined, or "".
 func requestCookies(r *http.Request) string {
 	if r == nil {
 		return ""
@@ -82,7 +79,7 @@ func decodeCookieValue(raw string) (any, bool) {
 		}
 		value = string(b)
 	}
-	dec := json.NewDecoder(bytes.NewReader([]byte(value)))
+	dec := json.NewDecoder(strings.NewReader(value))
 	dec.UseNumber()
 	var v any
 	if err := dec.Decode(&v); err != nil || dec.More() {
@@ -140,7 +137,6 @@ func sessionEnded(session map[string]any) bool {
 	return cut != nil && cut["enabled"] == true && past(cut["expiresAt"])
 }
 
-// identityInputs are explicit identity plus cookie inputs.
 type identityInputs struct {
 	userID, anonymousID string
 	cookies             map[string]string
@@ -200,9 +196,7 @@ func withSessionID(ctx map[string]any, sessionID int64) map[string]any {
 		return ctx
 	}
 	out := make(map[string]any, len(ctx)+1)
-	for k, v := range ctx {
-		out[k] = v
-	}
+	maps.Copy(out, ctx)
 	out["sessionId"] = sessionID
 	return out
 }

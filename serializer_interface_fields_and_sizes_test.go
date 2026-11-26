@@ -41,8 +41,7 @@ func round2Decoded(t *testing.T, v any) string {
 	return mustJSON(decoded)
 }
 
-// Copilot thread call_content.go:567: a field typed encoding.TextMarshaler is captured with the
-// method encoding/json picks for it (MarshalText on Go 1.26), so what MarshalJSON adds never leaks.
+// Interface fields use encoding/json's chosen serializer without leaking alternate representations.
 func TestRound2TextMarshalerInterfaceField(t *testing.T) {
 	calls := 0
 	value := struct {
@@ -68,8 +67,7 @@ func TestRound2TextMarshalerInterfaceField(t *testing.T) {
 	}
 }
 
-// Copilot thread call_content.go:547: a pointer held in an interface-typed field keeps its
-// identity, so one report runs it once; JSON and text selections of it never share output.
+// Interface pointers serialize once per report without sharing output between JSON and text selections.
 func TestRound2InterfacePointerIdentity(t *testing.T) {
 	setupAI(t)
 	calls := 0
@@ -96,7 +94,7 @@ func TestRound2InterfacePointerIdentity(t *testing.T) {
 	}
 }
 
-// round2EscapedJSON is a MarshalJSON built on json.Marshal, which HTML-escapes its output.
+// The JSON marshaler uses json.Marshal, which HTML-escapes its output.
 type round2EscapedJSON struct{ URL string }
 
 func (v round2EscapedJSON) MarshalJSON() ([]byte, error) {

@@ -79,13 +79,10 @@ func (s *Span) canSend() bool {
 	return a.sendable
 }
 
-// admit is the span's mandatory core under the given trace, span and parent IDs, and whether it
-// is admitted.
 func (s *Span) admit(traceID, spanID, parentID string) (*analytics.Track, bool) {
 	return s.admitAt(time.Now(), traceID, spanID, parentID)
 }
 
-// admitAt is admit for a span ending at ended, built as delivery builds it from what is known now.
 func (s *Span) admitAt(ended time.Time, traceID, spanID, parentID string) (*analytics.Track, bool) {
 	if s.client == nil {
 		return nil, false
@@ -495,7 +492,6 @@ func (s *Span) model(name, operation, source string, attrs, a map[string]any, er
 	return n
 }
 
-// send maps and enqueues a finished SDK span.
 func (s *Span) send(n spanmodel.Span, masked bool) {
 	if s.client == nil {
 		return

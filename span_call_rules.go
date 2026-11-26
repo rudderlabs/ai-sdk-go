@@ -2,7 +2,7 @@ package rudderstackai
 
 import (
 	"encoding/json"
-	"math"
+	"maps"
 	"slices"
 	"time"
 
@@ -45,7 +45,7 @@ func restoredSpanSource(value any) *hook.SpanSource {
 			return nil
 		}
 		var n float64
-		if json.Unmarshal(b, &n) != nil || n < 0 || math.IsInf(n, 0) || math.IsNaN(n) {
+		if json.Unmarshal(b, &n) != nil || n < 0 {
 			return nil
 		}
 	}
@@ -107,9 +107,7 @@ func (i *Interaction) recordSpanAncestry(traceID, spanID, parentID string) {
 
 func (i *Interaction) completeSpanAncestryLocked() {
 	parents := make(map[string]string, len(i.spanParents)+len(i.calls))
-	for k, v := range i.spanParents {
-		parents[k] = v
-	}
+	maps.Copy(parents, i.spanParents)
 	for _, c := range i.calls {
 		if s := c.spanSource; s != nil {
 			parents[s.TraceID+":"+s.SpanID] = s.ParentSpanID

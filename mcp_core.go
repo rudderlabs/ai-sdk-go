@@ -27,8 +27,7 @@ import (
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
 
-// The MCP engine: library-neutral event building shared by every MCP adapter (WrapMCPServer for
-// the go-sdk here, ruddermcpgo for mark3labs/mcp-go through internal/mcpbridge).
+// The MCP engine builds library-neutral events shared by every adapter.
 
 const (
 	capabilityTool            = "request_capability" // Deprecated: use FeedbackRequests.
@@ -165,7 +164,6 @@ const pendingInputTTL = time.Hour
 type pendingInput struct {
 	start     time.Time
 	requestID string
-	toolName  string
 	// position is the input_required leg's call_index and ms_since_previous_call, which the
 	// retry that completes the call takes over: the leg sends no event, so it leaves no gap.
 	position map[string]any
@@ -296,7 +294,7 @@ type reqCtxKey struct{}
 
 func clientFromMeta(v any) *mcpbridge.Client {
 	m, ok := toJSONValue(v).(map[string]any)
-	if !ok || v == nil {
+	if !ok {
 		return nil
 	}
 	return &mcpbridge.Client{Name: str(m["name"]), Title: str(m["title"]), Version: str(m["version"])}
@@ -307,7 +305,6 @@ func knownClient(client *mcpbridge.Client) bool {
 	return client != nil && (client.Name != "" || client.Version != "")
 }
 
-// Begin starts a request.
 func (w *wrapped) Begin(r mcpbridge.Request) mcpbridge.Call { return w.begin(r) }
 
 func (w *wrapped) begin(r mcpbridge.Request) *reqCtx {
@@ -464,7 +461,6 @@ func (rc *reqCtx) Succeeded(method string, discoverVersions []string) {
 	rc.clientSeen(rc.client, capabilityNames(rc.meta[metaClientCapabilities]))
 }
 
-// Initialized reports a successful initialize.
 func (rc *reqCtx) Initialized(client *mcpbridge.Client, capabilities any, version string) {
 	var notices []func()
 	defer func() { deliverMapNotices(notices) }()
@@ -536,7 +532,6 @@ func (rc *reqCtx) clientSeen(client *mcpbridge.Client, caps []string) {
 	emit(rc.opts.Analytics, "mcp_client_seen", rc.who, p)
 }
 
-// ToolCall records the start of a tools/call.
 func (rc *reqCtx) ToolCall(name string, args map[string]json.RawMessage, progress bool, answers []mcpbridge.Answer, requestState string) (strip, capability bool) {
 	var notices []func()
 	defer func() { deliverMapNotices(notices) }()
@@ -695,7 +690,6 @@ func cutUnexposed(masked string, limit int) string {
 	return cut
 }
 
-// Capability records a request_capability call and returns the reply.
 func (rc *reqCtx) Capability(args map[string]json.RawMessage) string {
 	capability := "other"
 	var c string
@@ -843,7 +837,6 @@ func (w *wrapped) RememberTemplates(templates []string) {
 	}
 }
 
-// ToolDone records the end of a tools/call.
 func (rc *reqCtx) ToolDone(o mcpbridge.Outcome) {
 	if rc.tool == nil || rc.tool.skip {
 		return
@@ -1004,7 +997,6 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 	rc.declaredEvent(result, status, resultContent)
 }
 
-// Finished records a resources/read or prompts/get.
 func (rc *reqCtx) Finished(method, name string, size int, errorType string) {
 	event, nameKey := "mcp_resource_read", "resource_name"
 	if method == "prompts/get" {
@@ -1126,8 +1118,6 @@ func (h *heldEvents) flush(response map[string]any) {
 
 var failureEvents = set("mcp_tool_called", "mcp_resource_read", "mcp_prompt_used")
 
-// send emits now, or holds a failed request's event (and those after it) for its response when
-// content capture is on and the application observes responses.
 // currentOptions are the wrapper's options now, else (no wrapper) the request's.
 func (rc *reqCtx) currentOptions() *options {
 	if rc.w != nil {
@@ -1304,7 +1294,7 @@ func (rc *reqCtx) inputRequired(keys []string, requestState string) {
 	defer rc.st.Unlock()
 	for _, key := range keys {
 		notices = append(notices, rc.st.inputRequired.setSilent(rc.inputKey(key, requestState), pendingInput{
-			start: time.Now(), requestID: rc.requestID, toolName: rc.toolName, position: position,
+			start: time.Now(), requestID: rc.requestID, position: position,
 		}))
 	}
 }

@@ -310,7 +310,6 @@ func systemInstructions(v any) rudderstackai.GenAIMessage {
 	return kit.Message("system", genAIPart(list)...)
 }
 
-// spanCallContent is what a model-call span says went in and what the model asked for.
 func spanCallContent(a map[string]attribute.Value) ([]rudderstackai.GenAIMessage, []rudderstackai.GenAIToolCall) {
 	input := inputOf(a)
 	system := systemInstructions(rawAttr(a, "gen_ai.system_instructions"))

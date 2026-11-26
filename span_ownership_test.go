@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/hook"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 func TestSpanIdentityCapturedFromOwner(t *testing.T) {
@@ -78,9 +79,4 @@ func TestSpanParentsStayWithinInteraction(t *testing.T) {
 	}
 }
 
-func testBoolName(v bool) string {
-	if v {
-		return "true"
-	}
-	return "false"
-}
+var testBoolName = testkit.BoolName

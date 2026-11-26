@@ -2,14 +2,14 @@ package rudderstackai
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 // delayedConn delays each write, like a slow transport; the server's response is the only
@@ -27,29 +27,12 @@ func (c delayedConn) Write(p []byte) (int, error) {
 // slowWire is app output whose JSON encoding takes a while, like a large structured result.
 type slowWire struct{ delay time.Duration }
 
-func (v slowWire) MarshalJSON() ([]byte, error) {
-	time.Sleep(v.delay)
-	return []byte(`{"public":"visible"}`), nil
-}
+func (v slowWire) MarshalJSON() ([]byte, error) { return testkit.SlowJSON(v.delay) }
 
 // propMS reads an integer millisecond property, whichever numeric type the event carries.
-func propMS(t *testing.T, v any) time.Duration {
-	t.Helper()
-	var n float64
-	if err := json.Unmarshal([]byte(fmt.Sprint(v)), &n); err != nil {
-		t.Fatalf("not a number: %v", v)
-	}
-	return time.Duration(n) * time.Millisecond
-}
+var propMS = testkit.PropertyMilliseconds
 
-func fixtureMS(t *testing.T, m map[string]any, key string) time.Duration {
-	t.Helper()
-	n, ok := m[key].(float64)
-	if !ok {
-		t.Fatalf("missing %s", key)
-	}
-	return time.Duration(n) * time.Millisecond
-}
+var fixtureMS = testkit.FixtureMilliseconds
 
 // serveFixtureMCP connects a real go-sdk client to a wrapped server over observed pipes.
 // The server writes through w, so a case can delay the wire.

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 // chatStream reads a chat-completions style stream into an Observer.
@@ -145,10 +146,7 @@ func (h *harness) post(ctx context.Context, body string) (*http.Response, error)
 	return h.client.Do(req)
 }
 
-func mustJSON(v any) string {
-	b, _ := json.Marshal(v)
-	return string(b)
-}
+var mustJSON = testkit.JSONString
 
 const completion = `{"id":"chatcmpl-1","object":"chat.completion","model":"gpt-4o-mini-2024-07-18","choices":[{"message":{"role":"assistant","content":"Hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":11,"completion_tokens":4}}`
 

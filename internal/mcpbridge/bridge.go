@@ -64,7 +64,6 @@ type Request struct {
 	Responses *Responses
 }
 
-// Client is a client implementation.
 type Client struct {
 	Name, Title, Version string
 }
@@ -92,7 +91,6 @@ type ToolAnnotations struct {
 	OpenWorldHint   bool
 }
 
-// Answer is one elicitation answer in a 2026-07-28 retry's inputResponses.
 type Answer struct {
 	Key, Action string
 }
@@ -123,7 +121,6 @@ type Elicitation struct {
 	HasDuration       bool
 }
 
-// Server is one wrapped server instance.
 type Server interface {
 	// Rewrap replaces the instance's options.
 	Rewrap(opts any) error
@@ -143,7 +140,6 @@ type Server interface {
 	DeliveryDone(ctx context.Context, d, outcome any, failed bool)
 }
 
-// Call is one request in flight.
 type Call interface {
 	// Started marks the start of the server's own handling.
 	Started()
@@ -168,8 +164,6 @@ type Call interface {
 	Initialized(client *Client, capabilities any, version string)
 	// Succeeded reports a successful request; on 2026-07-28 it may send mcp_client_seen.
 	Succeeded(method string, discoverVersions []string)
-	ToolName() string
-	RequestID() string
 	CallerKey(parts ...string) string
 }
 

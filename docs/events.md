@@ -1,8 +1,10 @@
 # Events
 
-Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md), including opt-in `mcp_feedback_submitted` through `FeedbackRequests`. `mcp_capability_requested` / `request_capability` are deprecated; use `FeedbackRequests`. The JSON Schema is [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json); a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
+AI interaction events, sample payloads and property rules. See [MCP](mcp.md) for server events and feedback options. JSON Schema: [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json). Data catalog and tracking plan: [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
 
-Product events' `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget first shrinks a call's `input_messages` (oldest after the system prompt, then the longest strings), then loses its captured text (`output_text`, `output_tool_calls`, `response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process. The whole message also stays within the RudderStack client's 32 KiB limit, since the client drops a larger one and logs it with its payload: when large IDs or `Context` leave less room, properties are trimmed into what is left, then the app's `Context` is left out (`context.wrapperLibrary` stays), and an event still over is dropped with a warning that names only the event. An analytics-go `MaxMessageBytes` set below 32 KiB, or a `BeforeEnqueue` hook that enlarges the message, is outside this. Tracing `ai_otel_span` events use a separate 32,000-byte whole-message budget and the [tracing](tracing.md) truncation policy.
+## Event size
+
+Product events' `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget first drops `output_text` and `output_tool_calls` that overflow without the input, then shrinks a call's `input_messages` (oldest after the system prompt, then the longest strings), then loses its captured text (`output_text`, `output_tool_calls`, `response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process. The whole message also stays within the RudderStack client's 32 KiB limit, since the client drops a larger one and logs it with its payload: when large IDs or `Context` leave less room, properties are trimmed into what is left, then the app's `Context` is left out (`context.wrapperLibrary` stays), and an event still over is dropped with a warning that names only the event. An analytics-go `MaxMessageBytes` set below 32 KiB, or a `BeforeEnqueue` hook that enlarges the message, is outside this. Tracing `ai_otel_span` events use the separate [span budget and truncation policy](tracing.md#privacy-and-size).
 
 - [Common fields](#common-fields)
 - [ai_user_prompt_created](#ai_user_prompt_created)
@@ -23,14 +25,14 @@ Product events' `properties`, AI, MCP and declared tool events alike, stay withi
 
 ## Common fields
 
-Every event is an analytics-go `Track` with `userId` or `anonymousId`; an event with neither is sent with `anonymousId: "ai_system"`. Identity, `context.sessionId` and the RudderStack client are resolved as described in [configuration.md](configuration.md#identity-and-cookies).
+Every event is an analytics-go `Track` with `userId` or `anonymousId`. Identity, `context.sessionId` and the RudderStack client are resolved as described in [configuration.md](configuration.md#identity-and-cookies).
 
 Properties on every interaction event (prompt, answer, per-call, declared tool, classified, scored, task started):
 
 | Property                | Source                                                                                              |
 | ----------------------- | --------------------------------------------------------------------------------------------------- |
-| `conversation_id`       | `InteractionOptions.ConversationID`, else the context's, else the `interaction_id` with `OneShot: true`, else a minted UUID v4       |
-| `interaction_id`        | `InteractionOptions.InteractionID`, else a UUID v4                                                  |
+| `conversation_id`       | [`InteractionOptions.ConversationID`](configuration.md#interactionoptions)       |
+| `interaction_id`        | [`InteractionOptions.InteractionID`](configuration.md#interactionoptions)                                                  |
 | `feature`               | `Feature` of the options, else the context's                                                        |
 | `surface`               | `Surface` of the options, else the context's; a value outside the `Surface` constants is dropped with a warning |
 | `account_id`            | `AccountID` of the options, else the context's                                                      |
@@ -66,11 +68,13 @@ The user asked something. Sent for an interaction with `Trigger: TriggerUser` (t
 - The event is held until the interaction's first model call starts (or a call is recorded, or the interaction ends), so it carries that call's integration in `context.wrapperLibrary` and the integration's client. Its timestamp is the moment `StartInteraction` ran.
 - `intent` is the one set by `InteractionOptions.Intent` or `SetIntent` before the event goes out; a later `SetIntent` lands on `ai_response_received` only.
 - `input_method`, `attachment_count` and `attachment_types` come from `InputMethod`, `AttachmentCount` and `AttachmentTypes`. Attachment kinds are `image`, `audio`, `video`, `pdf` or `file` (any other value becomes `file`), lower-cased and each sent once. Never file names or content.
-- `prompt_text`: `PromptText`, only with content capture on, [masked](configuration.md#privacy-and-masking).
+- `prompt_text`: `PromptText`, only with content capture on, [masked](privacy.md#privacy-and-masking).
 
 ## ai_response_received
 
-One per interaction, sent by `Interaction.End` (or when `RunInteraction` / `RunTask` returns), with totals across every call.
+Use `EndOptions{Status: StatusBlocked, BlockReason: BlockPolicy}` for intentional declines, `SetConfidence(ConfidenceHigh)` for app confidence, and `RecordCompaction()` for context compactions.
+
+Publication and segment totals: [Pauses](#pauses) and [Interaction lifecycle](configuration.md#interaction).
 
 ```json
 {
@@ -124,7 +128,7 @@ One per interaction, sent by `Interaction.End` (or when `RunInteraction` / `RunT
 | `pause_count`, `total_paused_ms` | Only on the final answer of a run that paused: how many times, and for how long in all; see [Pauses](#pauses) |
 | `end_reason`             | Only when the SDK ended the interaction itself, with status `incomplete`: `ttl_expired` (open longer than `Limits.InteractionTTL`) or `shutdown` (still open at `Shutdown`). Calls recorded before keep their usage. |
 | `trigger`                | `user` or `system`                                                                                           |
-| `client_disconnected`    | `true` only when `EndOptions.ClientDisconnected` was set                                                     |
+| `client_disconnected`    | `true` when `EndOptions.ClientDisconnected` was set or `Middleware` sees cancellation before the handler returns                                                     |
 | `primary_model`, `primary_provider` | The last successful call's, else the last call's                                                  |
 | `latency_ms`             | From `StartInteraction` (or the latest resume) to `End` or `Pause`, rounded                                   |
 | `time_to_first_token_ms` | From the same start to the first streamed token any integration saw; absent without a stream                |
@@ -134,16 +138,16 @@ One per interaction, sent by `Interaction.End` (or when `RunInteraction` / `RunT
 | `finish_reason`          | The last successful call's                                                                                   |
 | `error_type`             | Only when the status is not `success`; see [Error types](#error-types)                                      |
 | `intent`, `outcome`      | `InteractionOptions.Intent` / `SetIntent`, `SetOutcome`                                                      |
-| `usage_breakdown`        | One entry per agent, provider, model, requested model and service tier                                       |
+| `usage_breakdown` | See [Totals and usage_breakdown](#totals-and-usage_breakdown). |
 | `tool_breakdown`         | Only with tool breakdown on; see [tool_breakdown](#tool_breakdown)                                           |
 | `response_text`          | `EndOptions.ResponseText`, only with content capture on, masked                                              |
-| `trace_id`               | `TraceID` / `SetTraceID`, else the function registered with [`WithTraceIDFrom`](configuration.md#trace_id) (such as `rudderotel.TraceID`); absent otherwise |
+| `trace_id` | See [Product trace ID](tracing.md#product-trace-id). |
 
 `primary_model`, per-call `model` and `usage_breakdown.model` use canonical Claude family names: `us.anthropic.claude-haiku-4-5-20251001-v1:0` and `claude-haiku-4-5@20251001` both become `claude-haiku-4-5`. Cloud/vendor prefixes, deployment versions and trailing dates are removed; distinct families such as `claude-sonnet-5` and `claude-sonnet-5-5` stay distinct. OpenAI and Gemini IDs retain their original form. Price lookup still uses the original deployed ID.
 
-`EndOptions.ExtraProperties` adds your own properties; names the SDK owns (every property above, plus `spec_version`, `source`, `prompt_text`, `input_method`, `attachment_count`, `attachment_types`) are ignored, including camelCase, PascalCase, uppercase, hyphenated and space-separated variants.
+`EndOptions.ExtraProperties` adds your own properties; names the SDK owns (every property above, plus `spec_version`, `source`, `prompt_text`, `input_method`, `attachment_count`, `attachment_types`) are ignored, under the same [spellings as custom properties](privacy.md#custom-properties).
 
-A browser/client response copy may also report `incomplete` when it renders a partial terminal answer from a run that stopped at a cap. The client schema remains v0.2.
+Client response copies: [Client events](client-events.md).
 
 A background task's answer adds its system-actor fields:
 
@@ -179,7 +183,7 @@ A background task's answer adds its system-actor fields:
 
 ## Pauses
 
-A run can pause more than once. Each `Interaction.Pause` sends one `ai_response_received` with `response_status: paused`, its `pause_reason`, and the totals, `usage_breakdown` and `tool_breakdown` of the calls since the start or the last resume, so summing every `ai_response_received` of an interaction counts each call once. The run then resumes (in process, or from its stored snapshot in another one) under the same `interaction_id`, without a new prompt event, and ends with one answer of another status that adds:
+Pause publication and segment accounting: [Pauses and resumes](configuration.md#pauses-and-resumes). Each paused answer includes `usage_breakdown` and `tool_breakdown`; the final answer adds:
 
 ```json
 { "response_status": "success", "pause_count": 2, "total_paused_ms": 86400412 }
@@ -215,7 +219,7 @@ Token counts follow one convention for every provider: input includes cached and
 - `total_reasoning_tokens`: the sum over calls that reported reasoning tokens (a reported `0` counts); absent when none did.
 - A `cancelled` answer with no recorded call has no token totals: its usage is unknown, not zero.
 
-`usage_breakdown` groups calls by agent name, provider, model, requested model and service tier, in the order first seen:
+`usage_breakdown` groups calls by agent name, call purpose, provider, model, requested model and service tier, in the order first seen:
 
 | Entry field              | Meaning                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------- |
@@ -232,13 +236,13 @@ Token counts follow one convention for every provider: input includes cached and
 | `error_count`            | Failed calls, retries included                                                                            |
 | `cost_usd`               | Sum of the group's call costs, under the same rule as `total_cost_usd`                                    |
 
-A call reported twice with the same provider and `ResponseID` counts once (the second report only adds a missing `AgentName`), so an integration and a manual `RecordCall` of the same response do not double count.
-
-Gateways (provider `openrouter`, `litellm` or `gateway`) report a served model with a vendor prefix (`openai/gpt-4o`): the call is recorded under that vendor (`openai`, through the shared alias table in `spec/fixtures/providers-v0.1.json`), and `model` keeps the full served name.
+Deduplication and router models: [integrations](integrations.md#deduplication) and [gateways](integrations.md#gateways-and-openai-compatible-endpoints).
 
 ## Cost
 
-No prices ship with the SDK. A call's cost is, in order:
+Totals and usage entries omit credits when any successful call has no credit price; cancelled calls add none. Configure the [credits hook](configuration.md#pricing).
+
+A call's cost is, in order:
 
 1. `LLMCall.CostUSD`, a cost the provider or gateway reported (OpenRouter and LiteLLM `usage.cost`, the LiteLLM proxy's `x-litellm-response-cost` header);
 2. otherwise the [registered price](configuration.md#pricing) of the call's provider and model, with its tier multiplier, long-context rates and server-tool fees;
@@ -262,24 +266,15 @@ With `WithToolBreakdown(true)` (or `ToolBreakdown` on one interaction or task), 
 - `duration_ms` sums the measured durations, `measured_count` says how many calls were measured, `max_duration_ms` is the largest. Only `ToolCall.Duration` / `ToolResult.Duration` you report are measured; no Go integration measures tool execution.
 - Names and counts only: tool arguments and results are never sent.
 
-What each integration observes:
-
-| Integration     | Tool calls from                                                                         | Outcome (`error_count`) from                                                  |
-| --------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `rudderopenai`  | Chat Completions `tool_calls` of every choice; Responses output items named `*_call`   | Not observed: tool results carry no error flag                                |
-| `rudderanthropic` | `tool_use`, `server_tool_use` and `mcp_tool_use` blocks                               | `tool_result` blocks of a later request in the same interaction (`is_error`) |
-| `ruddergenai`   | `functionCall` parts; each `executableCode` part is a `code_execution` call             | `functionResponse` parts of a later request: an `error` key is a failure      |
-| `rudderbedrock` | `toolUse` blocks (streamed: by content block index)                                     | `toolResult` blocks of a later request (`status: error` is a failure)         |
-| Manual          | `RecordToolCalls`, `RecordToolCallCount`                                                | `ToolCall.Error`, `RecordToolResult`                                          |
+Provider tool observations: [OpenAI](integrations.md#openai), [Anthropic](integrations.md#anthropic), [Google Gen AI](integrations.md#google-gen-ai), [Amazon Bedrock](integrations.md#amazon-bedrock) and [manual recording](integrations.md#manual).
 
 ## ai_llm_response_received
 
 With `WithEmitSpans(true)`, a retained wrapper call carries `span_id`, matching its
 `ai_otel_span`. Pending events keep the ID across pause and JSON restoration without replaying
-spans. Two invocations with the same response ID each emit a span; the deduplicated call event
-keeps the first invocation's ID. Overflow aggregates omit `span_id`.
+spans. Two separate invocations returning the same response ID or reusing an error value emit two spans; the single call event keeps the first invocation's ID. Overflow aggregates omit `span_id`.
 
-Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is recorded. Totals belong on `ai_response_received`; do not add these to it. A call reported by both a wrapper and a span is sent once; when the other report arrives after the call's event was sent, totals and `usage_breakdown` merge it, but the sent event is not updated.
+Only with `WithLLMCallEvents(true)`: one per recorded call. Retained, timed span or unknown-usage reports emit after their twin arrives or at End/Pause; later call events wait behind them to keep call order. Otherwise known wrapper usage emits immediately. Totals belong on `ai_response_received`; do not add these to it. A call reported by both a wrapper and a span is sent once; when the other report arrives after the call's event was sent, totals and `usage_breakdown` merge it, but the sent event is not updated.
 
 ```json
 {
@@ -289,7 +284,7 @@ Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is record
     "conversation_id": "8f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f",
     "interaction_id": "3b9e5d0a-7c2f-4e18-9a6b-2c4d6e8f0a1b",
     "provider": "anthropic",
-    "model": "claude-haiku-4-5-20251001",
+    "model": "claude-haiku-4-5",
     "input_tokens": 1200,
     "output_tokens": 80,
     "total_tokens": 1280,
@@ -305,16 +300,19 @@ Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is record
 
 Also, when known: `agent_name`, `requested_model`, `reasoning_tokens`, `cache_write_1h_tokens`, `server_tool_call_count`, `server_tool_cost_usd`, `error_type`. `provider` and `model` are `null` when unknown. `finish_reason` is as the integration reports it (Anthropic's `end_turn` and `max_tokens` are kept as sent; the others are normalised, see [integrations.md](integrations.md)).
 
-- `call_index`: the 1-based order of the call in its interaction, across pauses and resumes. A report with `CallCount` n takes n places, so the next call starts n later; a call folded past `Limits.MaxCallsPerInteraction` keeps its own number. Always sent (it is not content). With `WithEmitSpans(true)`, retained wrapper call events also send `span_id`, matching that invocation's `ai_otel_span`.
+- `call_index`: the 1-based order of the call in its interaction, across pauses and resumes. A report with `CallCount` n takes n places, so the next call starts n later; a call folded past `Limits.MaxCallsPerInteraction` keeps its own number. Always sent (it is not content).
 - With both `WithLLMCallEvents(true)` and content capture (opt-in, personal data): `input_messages` (everything sent on the call: system prompt, history, tool results, in the OpenTelemetry GenAI `[{ role, parts }]` shape), `input_truncated`, `output_text` and `output_tool_calls` (`[{ name, arguments? }]`, JSON-string arguments parsed). Sent by every provider module and by `rudderotel` product-event spans; with `RecordCall` set `LLMCall.InputMessages`, `OutputText` and `OutputToolCalls`. A failed or cut-off call still sends its input and the output that arrived; the schema has no flag for a cut-off output.
 - Messages use roles `system`, `user`, `assistant` and `tool`; parts are `text`, `reasoning`, `tool_call` (`id`, `name`, `arguments`), `tool_call_response` (`id`, `response`), `uri` (`modality`, `uri`) and `file` (`modality`, `mime_type`?, `file_id`) and `blob` (`modality`, `mime_type`, never the bytes; `data:` URIs become blobs). Tool definitions are not sent.
 - Masking is the same as `prompt_text` (built-ins, then your redact hook) on every string in messages and tool arguments. A string over 32,000 code points is shortened first (`input_truncated` true); if the hook fails or drops a string, the whole field (`input_messages` with `input_truncated`, `output_text` or `output_tool_calls`) is left out.
 - Size: the event stays within 30,000 bytes. Over it, `output_text` and `output_tool_calls` that fit nowhere go first; then the oldest messages after the leading system messages are dropped (the last message always stays), then the longest string loses its tail; `input_truncated` is true. Calls folded past `MaxCallsPerInteraction` send no content. Tool results and media remove native bytes: native byte buffers are removed from captured containers after resolving app serializers; cyclic edges are omitted, `data:` URIs become `data:<media type>` and base64 payloads of media objects are dropped; media is `image`, `audio`, `video` or `document`, with `file` parts for provider-held file IDs. A pending call in a pause snapshot keeps its `call_index`.
 
-Serializer capture: with spans on or off, `MarshalJSON` / `MarshalText` output is captured once per value per report and reused by events, spans and sizes. Raw bytes are stripped, while bytes already encoded as ordinary serializer text, including base64, remain subject to existing masking. A failing serializer produces JSON null; its fields are never walked. See [content capture](configuration.md#content-capture) for timing and known limits.
-
+Serializer timing, byte stripping, failure behavior and known limits: [content capture](privacy.md#content-capture).
 
 ## Declared tool events
+
+Declared tool events include `mcp_server` and the UTF-8 `result_size_bytes` of observed results. Results are passed to rules and measured; their content is never copied into events. A tool result with `Error: Ptr(true), ErrorType: "denied"` emits `tool_status: denied`.
+
+A human handoff is outcome `escalated` plus its declared tool event.
 
 Turn tool calls into your own product events:
 
@@ -351,14 +349,14 @@ Each call of `create_ticket` then sends one `ticket_created`:
 
 - When: once per de-duplicated tool call, as soon as its outcome (`Error`) or output (`Result`) is known; otherwise when the interaction ends, with `tool_status: "unknown"`. Calls of tools without a rule send nothing.
 - SDK-owned properties: `tool_name`, `tool_call_id` (absent without a provider ID), `tool_status` (`success`, `error` or `unknown`), `tool_duration_ms` (only when a duration was reported), `agent_name` when known, `trigger` and the [common fields](#common-fields). They win over what `Properties` returns.
-- `args` is the call's arguments when they are a JSON object (JSON text is parsed), else nil; `result` is what the integration saw of the tool's output (a later request's tool message or result block, parsed when it is JSON), or `ToolResult.Result`. Neither is sent unless `Properties` returns it. What `Properties` returns is sent unmasked: pass free text, such as a user's comment, through [`MaskText`](configuration.md#privacy-and-masking) first.
+- `args` is the call's arguments when they are a JSON object (JSON text is parsed), else nil; `result` is what the integration saw of the tool's output (a later request's tool message or result block, parsed when it is JSON), or `ToolResult.Result`. Neither is sent unless `Properties` returns it. What `Properties` returns is sent unmasked: pass free text, such as a user's comment, through [`MaskText`](privacy.md#privacy-and-masking) first.
 - `When` returning false, or panicking, skips the event. If `Properties` panics, or its output would take the event over the 30,000-byte properties budget, the event is sent without your properties. Output that cannot fit any message once escaped as analytics-go escapes `<`, `>` and `&` is also left out, and the event still goes out; Node.js and Python, whose clients don't escape, never take this path.
 - Rule keys are tool names as the model calls them (`mcp__server__tool` for flat MCP names). Event names starting with `ai_` or `mcp_` are rejected by `Configure`. `WithEventRules` replaces earlier rules. These rules are separate from the `Options.EventRules` of [WrapMCPServer](mcp.md#declared-tool-events), which use the same types.
 - Outside an interaction each call is its own answer, so a tool's result, sent in the next request, never reaches the rule: the event goes out with `tool_status: "unknown"` and a nil `result`. Run the whole tool loop inside one `RunInteraction` when a rule needs results.
 
 ## ai_interaction_classified
 
-Opt-in with [`WithClassifier`](configuration.md#classifier-and-evaluator). After each successful answer of an interaction you opened, your classifier labels it; nothing waits for it.
+Classifier setup, labels, eligible interactions, input and failures: [configuration](configuration.md#classifier-and-evaluator).
 
 ```json
 {
@@ -378,13 +376,9 @@ Opt-in with [`WithClassifier`](configuration.md#classifier-and-evaluator). After
 }
 ```
 
-- `intent` is one of `ClassifierOptions.Intents`, else `other` (with your own `Classify` and no `Intents`, any non-empty value is kept). `outcome` is one of `Outcomes` (default `DefaultOutcomes`: `resolved`, `partial`, `unresolved`, `escalated`, `unclear`), else `unclear`. `other` and `unclear` are therefore always possible values, whatever your lists hold: plan reports and warehouse filters for them.
 - `classifier` is `model` for a `ClassifierClient`, `custom` for your `Classify` function. `classifier_model` is the model the reply named, else the configured one. `classifier_duration_ms` times the classification.
 - `classifier_cost_usd`: the classifier call priced with your registered prices, when its usage is known and its model priced. Never added to the interaction's totals; the classifier's own call is never tracked.
 - `intent_summary`: with `IntentSummary` (model client) or from your `Classify` result. One sentence, at most 25 words and 280 characters, masked, and withheld when it still matches a sensitive pattern.
-- Which interactions: one classification per successful interaction you open (`StartInteraction`, `RunInteraction`) with `Classify` on (the default for user-triggered ones). Tasks are off unless `TaskOptions.Classify` is set; interactions an integration opens on its own are never classified. Errors, cancellations and other non-success statuses are skipped.
-- Input: the prompt (`PromptText`, else the last user message of the request messages an integration kept), the answer (`EndOptions.ResponseText`, else the last successful call's answer text), the names of the tools called (never arguments or results) and earlier messages, within a 12,000-character budget that keeps the start and end of long text. The prompt fences the turn as untrusted data and asks for JSON from closed lists ([`ClassifierPrompt`](configuration.md#classifier-and-evaluator)). An interaction with neither prompt nor answer text is skipped with a warning.
-- Failures: a timeout (default 5 seconds), an error, a panic or an unparseable reply sends nothing and logs one warning per process. Up to 16 classifications and evaluations run at once and up to 1,000 wait; beyond that, work is dropped with a warning at most once a minute.
 
 ### Send your own classification
 
@@ -412,6 +406,15 @@ rudderstackai.TrackClassification(ctx, rudderstackai.TrackClassificationOptions{
 
 ## ai_interaction_scored
 
+```go
+rudderstackai.TrackScore(ctx, rudderstackai.TrackScoreOptions{
+	Score:          rudderstackai.Score{EvaluationName: "helpfulness", ScoreLabel: "pass", Evaluator: rudderstackai.EvaluatorHuman},
+	InteractionID:  interactionID,
+	ConversationID: chatID,
+	UserID:         userID,
+})
+```
+
 One event per score: from your evaluator after each successful answer, or from `TrackScore` for a score from elsewhere (a human review, an offline judge).
 
 ```json
@@ -432,8 +435,8 @@ One event per score: from your evaluator after each successful answer, or from `
 ```
 
 - `evaluation_name`, `evaluator` (`EvaluatorModel`, `EvaluatorCode` or `EvaluatorHuman`) and at least one of a finite `score_value` and a non-empty `score_label` are required; a score without them is dropped with a warning. `sampled` is sent when you set it.
-- `explanation`: `Score.Explanation`, only with content capture on, masked, trimmed and capped at 280 characters.
-- Evaluator: runs for every interaction that ended `success`, including tasks and interactions an integration opened, after `ai_response_received`, with a 5-second timeout and an untracked context. An error, panic or timeout sends nothing.
+- `explanation`: `Score.Explanation`, [captured and masked](privacy.md#privacy-and-masking), trimmed and capped at 280 characters.
+- Evaluator setup and failures: [configuration](configuration.md#classifier-and-evaluator).
 - `TrackScore` needs `InteractionID` and `ConversationID` (the latter falls back to the context); it adds `feature`, `surface`, `account_id`, `on_behalf_of` and `trigger` when given, and is tagged `integration: "manual"`.
 
 ## ai_user_action
@@ -457,9 +460,15 @@ What the user did with an answer, sent by `TrackAction`, typically from a feedba
 - `exported` uses `action_details.destination`, a snake_case label such as `download`, `dashboard`, `agent` or `ide` (1-64 ASCII characters: a lowercase letter first, then lowercase letters, digits or underscores).
 - `action_details`: your map, with `feedback_type`, `feedback_text`, `card_kind` and `target_type` dropped (with a warning) when not strings; `card_kind` and `target_type` also when empty. `feedback_text` is sent only with content capture on, masked.
 - Send `feedback_retracted` with the same `feedback_type` when a user takes feedback back: the latest event per `interaction_id` is the final state.
-- `InteractionID` and `ConversationID` (falling back to the context) are required; without them the event is dropped with a warning. For a one-shot interaction, pass its ID as both. `WithServerFeedback(false)` turns `TrackAction` off when the client app (web or mobile) sends its own copy (`source: "client"`).
+- `InteractionID` and `ConversationID` (falling back to the context) are required; without them the event is dropped with a warning. Pass the actual IDs from the interaction ([one-shot client joins](client-events.md)). `WithServerFeedback(false)` turns `TrackAction` off when the client app (web or mobile) sends its own copy (`source: "client"`).
+
+## ai_limit_reached
+
+`TrackLimitReached(ctx, TrackLimitReachedOptions{LimitType: "credits", Feature: "chat"})` records an app-enforced usage limit. Provider rate limits remain model errors.
 
 ## Error types
+
+Context overflow maps to `error_type: context_limit`.
 
 `error_type` on `ai_response_received` and `ai_llm_response_received` is one of:
 
@@ -486,7 +495,7 @@ Every event carries `context.wrapperLibrary` beside the `context.library` analyt
 {
   "wrapperLibrary": {
     "name": "ai-sdk-go",
-    "version": "0.1.0",
+    "version": "0.15.0",
     "specVersion": "0.4.0",
     "integration": "openai"
   }
@@ -496,31 +505,3 @@ Every event carries `context.wrapperLibrary` beside the `context.library` analyt
 `integration` is the integration that started or recorded the interaction's first model call (`openai`, `anthropic`, `google-genai`, `bedrock`), `manual` for `LLMCall.Integration` left empty, `TrackAction`, `TrackScore` and interactions without calls, or `mcp` for [MCP server events](mcp.md). If your own message context (`Context` of the options or `WithValues`) has a `wrapperLibrary`, it is nested inside the SDK's as `wrapperLibrary.wrapperLibrary`. Other keys of your context are sent as they are.
 
 Client events for web and mobile SDKs, including additions since v0.4: [client-events.md](client-events.md).
-
-## Server fields added since v0.4
-
-These additions are part of AI events spec v0.4.0. Events carry specVersion `0.4.0`; the client schema remains v0.2.
-`InteractionOptions`, `TaskOptions`, `ContextValues`, `TrackActionOptions`, `TrackScoreOptions`, and `TrackClassificationOptions`
-accept `AgentVersion` and `Variant`. Use `EndOptions{Status: StatusBlocked, BlockReason: BlockPolicy}`
-for intentional declines, `SetConfidence(ConfidenceHigh)` for app confidence, and
-`RecordCompaction()` for context compactions. A human handoff is outcome `escalated` plus its declared
-tool event. The default outcomes include `unsupported`.
-
-`WithCredits` accepts `func(CreditCall) (*float64, error)`. It prices successful calls with known usage
-after USD pricing; return nil for unknown credits. `LLMCall.Credits` overrides the hook. Totals and
-usage entries omit credits when any successful call has no credit price; cancelled calls add none.
-`TrackLimitReached(ctx, TrackLimitReachedOptions{LimitType: "credits", Feature: "chat"})` records an
-app-enforced usage limit. Provider rate limits remain model errors.
-
-The credits hook must be side-effect free and idempotent: it can run more than once for one call if usage or pricing metadata changes while it runs, through re-entrant enrichment inside the hook or concurrent enrichment from another thread/goroutine. After 3 attempts, continued changes omit the call's credits and report `credits_unstable` through the error hook (with `where: credits`), distinct from a throwing hook's `user_callback`.
-
-Every provider integration offers `WithCallPurpose`, `WithFallbackUsed`, and `WithBYOK`.
-`WithCallDetails` can scope metadata to calls made with a context. Manual `LLMCall` records accept
-these fields and `StartedAt`, `EndedAt`, and `FirstTokenAt`. Observed boundaries produce per-call
-`latency_ms` and streaming `time_to_first_token_ms`; unknown boundaries stay absent.
-Usage entries are grouped by call purpose as well as agent, provider, model, and service tier.
-
-Declared tool events include `mcp_server` and the UTF-8 `result_size_bytes` of observed results.
-Results are passed to rules and measured; their content is never copied into events. A tool result
-with `Error: Ptr(true), ErrorType: "denied"` emits `tool_status: denied`. Context overflow maps to
-`error_type: context_limit`.

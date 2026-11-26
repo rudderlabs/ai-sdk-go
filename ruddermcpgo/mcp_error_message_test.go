@@ -20,6 +20,7 @@ import (
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 func maskedErrorMessage(t *testing.T, s string) string {
@@ -500,12 +501,7 @@ func (w *capoffWriter) Write(p []byte) (int, error) {
 
 type capoffClient struct{ *recorder }
 
-func (c *capoffClient) Flush(context.Context) error {
-	if len(c.named("mcp_tool_called")) != 1 {
-		return errors.New("event missing at analytics flush")
-	}
-	return nil
-}
+func (c *capoffClient) Flush(context.Context) error { return testkit.RequireEventAtFlush(c.named) }
 
 func TestMCPGoErrorMessageNoWriteWait(t *testing.T) {
 	for _, transport := range []string{"stdio", "http"} {

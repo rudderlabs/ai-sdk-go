@@ -12,7 +12,6 @@ const (
 // Trigger is who started an interaction: a person (TriggerUser) or the app (TriggerSystem).
 type Trigger string
 
-// Triggers.
 const (
 	TriggerUser   Trigger = "user"
 	TriggerSystem Trigger = "system"
@@ -37,7 +36,6 @@ const (
 // PauseReason is what a paused run waits for, sent as pause_reason.
 type PauseReason string
 
-// Pause reasons.
 const (
 	PauseApproval     PauseReason = "approval"
 	PauseHumanInput   PauseReason = "human_input"
@@ -49,7 +47,6 @@ const (
 // Surface is where the user met the AI, sent as surface. Set by the app: the SDK cannot tell.
 type Surface string
 
-// Surfaces.
 const (
 	SurfaceWeb        Surface = "web"
 	SurfaceMobile     Surface = "mobile"
@@ -66,7 +63,6 @@ const (
 // ActionType is the kind of ai_user_action.
 type ActionType string
 
-// Standard action types.
 const (
 	ActionFeedbackGiven     ActionType = "feedback_given"
 	ActionFeedbackRetracted ActionType = "feedback_retracted"
@@ -78,7 +74,6 @@ const (
 	ActionRejected          ActionType = "rejected"
 	ActionEdited            ActionType = "edited"
 	ActionClickedThrough    ActionType = "clicked_through"
-	// Since v0.4: feedback dismissal, exports and suggestion reversion.
 	ActionFeedbackDismissed ActionType = "feedback_dismissed"
 	ActionExported          ActionType = "exported"
 	ActionReverted          ActionType = "reverted"
@@ -107,7 +102,6 @@ func Ptr[T any](v T) *T { return &v }
 // BlockReason names why an app intentionally declined an answer.
 type BlockReason string
 
-// Block reasons.
 const (
 	BlockGuardrail   BlockReason = "guardrail"
 	BlockPolicy      BlockReason = "policy"
@@ -119,7 +113,6 @@ const (
 // Confidence is the app's confidence in an answer.
 type Confidence string
 
-// Confidence levels.
 const (
 	ConfidenceLow    Confidence = "low"
 	ConfidenceMedium Confidence = "medium"

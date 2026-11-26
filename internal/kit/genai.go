@@ -26,7 +26,6 @@ func Messages(list ...rudderstackai.GenAIMessage) []rudderstackai.GenAIMessage {
 	return out
 }
 
-// Parts joins part lists.
 func Parts(lists ...[]rudderstackai.GenAIPart) []rudderstackai.GenAIPart {
 	var out []rudderstackai.GenAIPart
 	for _, l := range lists {

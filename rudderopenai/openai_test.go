@@ -27,16 +27,7 @@ type recorder struct {
 	msgs []analytics.Track
 }
 
-func (r *recorder) Enqueue(m analytics.Message) error {
-	t, ok := m.(analytics.Track)
-	if !ok {
-		return fmt.Errorf("unexpected %T", m)
-	}
-	r.mu.Lock()
-	r.msgs = append(r.msgs, t)
-	r.mu.Unlock()
-	return nil
-}
+func (r *recorder) Enqueue(m analytics.Message) error { return testkit.AppendTrack(&r.mu, &r.msgs, m) }
 
 func (r *recorder) Close() error { return nil }
 
@@ -105,15 +96,9 @@ func reply(t *testing.T, s string) testkit.Reply {
 	return r
 }
 
-func body(s string) option.RequestOption {
-	return option.WithRequestBody("application/json", []byte(s))
-}
-
 func inInteraction(t *testing.T, fn func(ctx context.Context) error) error {
 	t.Helper()
-	return rudderstackai.RunInteraction(context.Background(), rudderstackai.InteractionOptions{UserID: "u1"}, func(ctx context.Context, _ *rudderstackai.Interaction) error {
-		return fn(ctx)
-	})
+	return testkit.RunInteraction(t, rudderstackai.InteractionOptions{UserID: "u1"}, fn, rudderstackai.RunInteraction)
 }
 
 func num(v any) float64 { f, _ := v.(float64); return f }

@@ -1,6 +1,6 @@
 # Configuration
 
-Process-wide settings, per-interaction options, identity, pricing, classification and shutdown for the AI interaction events. `WrapMCPServer` takes its own `Options` and ignores these: see [mcp.md](mcp.md#options).
+Settings, interactions, identity, pricing, classification and shutdown. MCP has [separate options](mcp.md#options), with global sampling and content capture.
 
 - [Configure](#configure)
 - [Which client is used](#which-client-is-used)
@@ -11,7 +11,7 @@ Process-wide settings, per-interaction options, identity, pricing, classificatio
 - [Context values](#context-values)
 - [Identity and cookies](#identity-and-cookies)
 - [trace_id](#trace_id)
-- [Privacy and masking](#privacy-and-masking)
+- [Privacy and masking](privacy.md#privacy-and-masking)
 - [Pricing](#pricing)
 - [Classifier and evaluator](#classifier-and-evaluator)
 - [Flush and shutdown](#flush-and-shutdown)
@@ -22,10 +22,6 @@ Process-wide settings, per-interaction options, identity, pricing, classificatio
 - [API reference](#api-reference)
 
 ## Configure
-
-`WithEmitSpans(true)` enables wrapper and manual `ai_otel_span` events (default false). It is
-independent of `WithLLMCallEvents`; span content still follows `WithCaptureContent`.
-See [tracing](tracing.md) for nesting, transport and platform limits.
 
 ```go
 err := rudderstackai.Configure(
@@ -38,26 +34,26 @@ err := rudderstackai.Configure(
 )
 ```
 
-`Configure` changes only the settings passed, is safe to call concurrently, and validates every option first: an invalid one returns an error and changes nothing. A nil option is skipped.
+`Configure` changes only the settings passed and is safe to call concurrently. It validates all options before changing anything. An invalid option returns an error. Nil options are skipped.
 
 | Option                                  | Default | Meaning                                                                                                                       |
 | --------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `WithAnalytics(client)`                 | none    | Default RudderStack client. Nil clears it.                                                                                    |
-| `WithCaptureContent(on)`                | off     | Send `prompt_text`, `response_text`, `action_details.feedback_text`, score `explanation` and, with call events, per-call `input_messages`, `output_text` and `output_tool_calls`, [masked](#privacy-and-masking). |
-| `WithContentCapture(policy)`            | none    | The same per kind; its keys win over `WithCaptureContent`. See [Content capture](#content-capture). |
-| `WithEmitSpans(on)` | off | Emit wrapper and manual spans; independent of call events. |
+| `WithCaptureContent(on)` | see [capture policy](privacy.md#content-capture) | Content capture shorthand. |
+| `WithContentCapture(policy)` | none | [Per-kind capture policy](privacy.md#content-capture). |
+| `WithEmitSpans(on)` | see [tracing](tracing.md#wrapper-and-manual-spans) | Wrapper and manual spans. |
 | `WithLLMCallEvents(on)`                 | off     | Also send one [`ai_llm_response_received`](events.md#ai_llm_response_received) per model call.                                |
 | `WithTaskStartedEvents(on)`             | off     | Also send [`ai_task_started`](events.md#ai_task_started) when a `RunTask` run starts (not when it resumes).                   |
 | `WithToolBreakdown(on)`                 | off     | Add [`tool_breakdown`](events.md#tool_breakdown) to `ai_response_received`.                                                   |
 | `WithIdentityFromCookies(on)`           | on      | Read identity from RudderStack JavaScript SDK [cookies](#identity-and-cookies).                                               |
-| `WithRedaction(on)`                     | on      | Built-in [masking](#privacy-and-masking) of captured text. Off sends text as given and skips the hook.                       |
+| `WithRedaction(on)` | on | [Masking](privacy.md#privacy-and-masking). |
 | `WithRedactHook(fn)`                    | none    | `func(text string) (string, error)` run after the built-in patterns. Nil removes it.                                          |
-| `WithEventRules(rules)`                 | none    | [Declared tool events](events.md#declared-tool-events). Replaces earlier rules; event names starting with `ai_` or `mcp_` are rejected. |
+| `WithEventRules(rules)` | none | [Declared tool events](events.md#declared-tool-events). |
 | `WithClassifier(*ClassifierOptions)`    | none    | [Intent classification](#classifier-and-evaluator). Nil turns it off.                                                         |
 | `WithEvaluator(fn)`                     | none    | [Scoring](#classifier-and-evaluator) after each successful answer. Nil turns it off.                                          |
-| `WithServerFeedback(on)`                | on      | `TrackAction` sends `ai_user_action`. Off when the client app sends its own copy (`source: "client"`).                        |
+| `WithServerFeedback(on)`                | on      | [Server feedback](events.md#ai_user_action).                        |
 | `WithPrices(map[string]ModelPrice)`     | none    | Registers prices, as [`RegisterPrice`](#pricing) for each. Merged into the registered ones.                                   |
-| `WithTraceIDFrom(fn)`                   | none    | Reads [`trace_id`](#trace_id) from the context, for example `rudderotel.TraceID` for the active OpenTelemetry span.        |
+| `WithTraceIDFrom(fn)` | none | [Product trace ID](tracing.md#product-trace-id). |
 | `WithLimits(Limits)`                    | see [Limits](#limits) | Memory caps. A zero field keeps its default.                                                                  |
 | `WithOnError(fn)`                       | none    | `func(err error, info ErrorInfo)` sees [errors the SDK contained](#errors), at most once per kind a minute. Nil removes it.     |
 | `WithAzureDeploymentModels(map)`        | none    | Azure OpenAI deployment name to base model, used only to price calls with provider `azure.ai.openai`. Replaces the previous mapping; nil clears it; empty names or models are rejected; matched case-insensitively. |
@@ -69,7 +65,11 @@ For an interaction, the first that is set: `InteractionOptions.Analytics` (or `T
 
 ## InteractionOptions
 
+`InteractionOptions`, `TaskOptions`, `ContextValues`, `TrackActionOptions`, `TrackScoreOptions`, and `TrackClassificationOptions` accept `AgentVersion` and `Variant`.
+
 For `StartInteraction` and `RunInteraction`. Every field is optional.
+
+Use one interaction per user turn. Set `ConversationID` to your chat or thread ID to group turns. For a feature without a thread, such as a Generate button or suggested fix, set `OneShot: true`. With no explicit or context conversation ID, `OneShot` uses the interaction ID as `conversation_id`. Without `OneShot`, the default generates a separate conversation ID. Resending history is fine: each turn reports only its own calls.
 
 | Field                                       | Meaning                                                                                                     |
 | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -83,7 +83,7 @@ For `StartInteraction` and `RunInteraction`. Every field is optional.
 | `TriggerSource`, `TaskName`, `TriggerEventID`, `ParentInteractionID` | Background and chaining fields; [`RunTask`](#taskoptions) sets them for you          |
 | `Analytics`                                 | RudderStack client for this interaction                                                                     |
 | `CaptureContent`, `ToolBreakdown`, `IdentityFromCookies` | `*bool` overrides of the global settings                                                       |
-| `ContentCapture`                                         | `*ContentCapture`: [content capture](#content-capture) per kind for this interaction            |
+| `ContentCapture`                                         | `*ContentCapture`: [content capture](privacy.md#content-capture) per kind for this interaction            |
 | `Classify`                                  | `*bool`; default on for user-triggered interactions, off for system ones                                    |
 | `Context`                                   | Extra message context for every event of the interaction; replaces the context's `Context`                 |
 | `Request`, `Cookies`, `CookieValues`        | Cookie sources for [identity](#identity-and-cookies)                                                        |
@@ -92,11 +92,11 @@ For `StartInteraction` and `RunInteraction`. Every field is optional.
 | `NoPromptEvent`                             | Skip `ai_user_prompt_created`                                                                               |
 | `Resume`                                    | `*PausedInteraction` from [`Pause`](#pauses-and-resumes): continue that run; its IDs, identity and background fields win over the other options, and no prompt event is sent |
 
-`RunInteraction(ctx, o, fn)` also puts the options' identity, conversation, feature, surface, account, client and context into the context `fn` receives (as `WithValues` would), so `TrackAction`, `TrackScore` and nested tasks inside it inherit them.
+`RunInteraction(ctx, o, fn)` adds the options' identity, conversation, feature, surface, account, client and context to `fn`'s context, as `WithValues` does. `TrackAction`, `TrackScore` and nested tasks inherit them.
 
 ## Interaction
 
-`StartInteraction` returns a context carrying the interaction and the `*Interaction`; pass the context to every model call. `FromContext(ctx)` returns the interaction a context carries, or nil. All methods are safe for concurrent use and never panic.
+`StartInteraction` returns a context carrying the interaction and the `*Interaction`. Pass that context to every model call. Without a callback, call `End(rudderstackai.EndOptions{})` when the answer is out. `FromContext(ctx)` returns the interaction or nil. All methods are safe for concurrent use and never panic.
 
 | Method                          | Meaning                                                                                                   |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -126,9 +126,20 @@ Field reference for `LLMCall`, `ToolCall` and `ToolResult`: [integrations.md](in
 
 ## TaskOptions
 
+```go
+ctx = rudderstackai.WithValues(ctx, rudderstackai.ContextValues{AccountID: job.WorkspaceID, OnBehalfOf: job.CreatedBy})
+err := rudderstackai.RunTask(ctx, "alert-triage", rudderstackai.TaskOptions{TriggerSource: "schedule", ConversationID: "alert-triage:" + job.ID},
+	func(ctx context.Context, task *rudderstackai.Interaction) error {
+		if _, err := claude.Messages.New(ctx, params); err != nil {
+			return err
+		}
+		return rudderstackai.RunTask(ctx, "draft-status-update", rudderstackai.TaskOptions{}, draftUpdate) // a sub-agent, chained
+	})
+```
+
 `RunTask(ctx, taskName, TaskOptions, fn)` runs background work (a schedule, webhook, queue message, Slack mention or another agent) as one system-triggered interaction named `taskName`.
 
-- The actor is the system: `UserID` and `AnonymousID` come only from the options, never from the context or cookies, so events without them use `anonymousId: "ai_system"`. Put the customer in `AccountID` and the human the work is for in `OnBehalfOf`; both, and `Feature`, `Surface`, `Analytics` and `Context`, still fall back to the context. Set a stable, scoped `ConversationID` for bots and jobs, or each run gets a new one.
+- The actor is the system: `UserID` and `AnonymousID` come only from the options, never from the context or cookies, so events without them use the [identity fallback](#identity-and-cookies). Put the customer in `AccountID` and the human the work is for in `OnBehalfOf`; both, and `Feature`, `Surface`, `Analytics` and `Context`, still fall back to the context. Set a stable, scoped `ConversationID` for bots and jobs, or each run gets a new one.
 - Chaining: inside another interaction or task, `ParentInteractionID` and `ConversationID` default to it and `TriggerSource` to `agent`. Pass `ParentInteractionID` to link a run started elsewhere, or `NoParent: true` for none.
 - No prompt event. `Classify` is off unless set.
 - `Flush` (`*bool`): when the task ends, wait for its classification and score and flush its client, as [`Flush`](#flush-and-shutdown) does. Default on, except for a task chained to the interaction in its context.
@@ -138,9 +149,9 @@ Field reference for `LLMCall`, `ToolCall` and `ToolResult`: [integrations.md](in
 
 ## Pauses and resumes
 
-A run that waits for something outside it (an approval, a person's answer) pauses: `Pause` sends `ai_response_received` with `response_status: paused`, `pause_reason` and that segment's totals, and the next segment's totals start from zero. When the run ends, its final `ai_response_received` adds `pause_count` and `total_paused_ms`. Every event keeps the same `interaction_id`.
+Snapshot outcome hints prefer canonical keys even when their value is null; legacy aliases are read only if the canonical key is absent.
 
-`Pause` called from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError` (one warning without it). Credits/retries, analytics Enqueue, redactors, content serializers, and event rules are covered. It leaves the interaction unchanged and keeps credits; Pause never panics. Error handlers, application code, and callbacks for other interactions may pause normally. Another goroutine waits on a condition for pricing, including retries/capture, for an internal 5 s bound; expiry refuses with `Reason: pricing_in_flight`, and late credits stay in the open segment. Callback callers use the goroutine ID from the first runtime.Stack line; failed parsing falls back to waiting.
+A run that waits for something outside it (an approval, a person's answer) pauses: `Pause` sends `ai_response_received` with `response_status: paused`, `pause_reason` and that segment's totals, and the next segment's totals start from zero. When the run ends, its final `ai_response_received` adds `pause_count` and `total_paused_ms`. Every event keeps the same `interaction_id`.
 
 ```go
 err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{TriggerSource: "queue", Resume: saved},
@@ -157,14 +168,35 @@ err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{T
 ```
 
 - In process, `Resume()` continues the run; a model or tool call recorded while paused resumes it too.
-- Known limit: a span whose ID matches its live ambient (context) interaction belongs to that interaction. Otherwise, a span that starts while its interaction ID is ambiguous across live tenants, or unresolved, is dropped from product events; it is never resolved again and never reaches another tenant. Duplicate-identity snapshot restores never take over another tenant's paused object.
-- Known limit: a detached span (no interaction in its context) that names an interaction ID reused across tenants can reach the wrong tenant when a snapshot is restored while a same-identity interaction is open, or when a paused original stays in use after its snapshot is restored. Give each tenant its own interaction IDs, or start such spans from the interaction's context.
+- Span ownership and snapshot tenant limits: [Product events from spans](tracing.md#product-events-from-spans).
 - Across processes (a worker restart, a wait of days), store the `PausedInteraction` (JSON, keys as the event properties) with your own run state and pass it as `InteractionOptions.Resume` or `TaskOptions.Resume`. The optional `last_failed_call_type` field retains the latest failed model call’s category so a resumed `RunTask` that returns a generic error reports the same error type and status. Older snapshots without it remain valid and use `app_error` until another model call fails. The snapshot carries the IDs, identity, background fields, agent version, variant, confidence, intent, outcome, trace ID, integration, pause count and paused time, and when the pause started; the time until the resume counts as paused, by the wall clock. Calls before the pause are already sent, except tool calls the pause waits on; usage accepted during pause delivery is kept for the next segment, including credits and per-call fields.
 - A tool call the pause waits on, such as one awaiting approval, counts in the segment that runs it. It waits when it has a tool-call ID, no outcome yet, and its agent made no model call after it (a tool without its own `AgentName` belongs to the agent of the model call recorded before it). The paused answer leaves it out of `tool_call_count` and `tool_breakdown` and sends no declared tool event for it. When its execution or `RecordToolResult` is recorded after the resume, it counts once with its real outcome and its declared event is sent once; still unresolved at the final end, it counts there as `unknown`. A run that never resumes, or that ends while still paused, never counts it. Two costs: after a JSON restore, the `ToolEventRule` `When` and `Properties` see the tool's arguments only if the execution record repeats them, because snapshots carry no arguments or results; and an app that only uses provider wrappers (it never records tool results) and pauses after tools ran but before the next model call sees those tools counted only in the resumed answer, or never if the run is not resumed.
 - `RunInteraction` and `RunTask` leave a paused run paused when `fn` returns nil (an error still ends it). A paused run is off the open list: `Limits.InteractionTTL` and `Shutdown` never end it, and an abandoned one ends with its last `paused` event.
 - `PauseOptions`: `Reason` (default `PauseOther`), `ResponseText` (sent as `response_text` only with content capture on), `ExtraProperties`. Pausing again before a resume sends nothing and returns the same snapshot; after `End`, `ok` is false.
 - `End` while paused ends the run: the wait counts as paused time, and the final segment has no calls. A tool call the pause still waits on never ran, so it is not counted and sends no event; one whose outcome was recorded while paused counts in the final segment.
 - A call counted before a pause and reported again after the resume (a manual `RecordCall`, a late span) is deduplicated only when both reports carry the same response ID; otherwise it counts again, so counting is not exactly-once across a pause.
+
+### Callback re-entry
+
+User hooks and analytics client methods run after the SDK releases its bookkeeping locks, so a callback can re-enter tracking from another thread or goroutine.
+
+| Callback family | Go behavior |
+| --- | --- |
+| Error handlers | Notices and contained build failures detached in `unlock`, reported outside `mu` |
+| Redactors | Prompt/response masking outside `mu` |
+| Adapter finalizers | `beforeEnd` detached under `mu`, invoked outside it |
+| Tool filters/properties | Jobs copied and fired flag set under `mu`, hooks outside it |
+| Transport/delivery/flush | Outbox detached before `Enqueue`; flush outside `mu` |
+| Classifier/evaluator | Turn copied, work scheduled after response publication |
+| JSON serialization hooks | Tool properties normalized/sized outside `mu`; delivery serialization outside `mu` |
+| Identity/trace/disconnect/error classification | Startup or outside `mu` |
+| Credit/pricing | `WithCredits` invokes a side-effect-free, idempotent callback outside `mu`; pricing may retry |
+
+Interaction state publication must finish before application code runs. Pausing keeps its in-progress guard active through finalization, redaction, tool events and delivery.
+
+Calls accepted during finalization belong to the closing segment. Calls accepted during delivery belong to the next segment. Each accepted call is emitted and counted once.
+
+`Pause` from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError`, or one warning without it. This covers credits/retries, analytics Enqueue, redactors, content serializers and event rules. The interaction and credits stay unchanged. Pause never panics. Error handlers, application code and callbacks for other interactions may pause normally. Another goroutine waits up to 5 s for pricing, including retries/capture. Expiry refuses with `Reason: pricing_in_flight`. Late credits stay in the open segment. Callback callers use the goroutine ID from the first runtime.Stack line; failed parsing falls back to waiting.
 
 ## Context values
 
@@ -182,15 +214,19 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-Fields: `UserID`, `AnonymousID`, `ConversationID`, `Feature`, `AccountID`, `OnBehalfOf`, `Surface`, `Analytics`, `Context` (extra message context such as `{"app": {"build": "7"}}`), and the cookie sources `Request`, `Cookies`, `CookieValues`. A model call made with a context that carries identity but no interaction is reported as its own user-triggered answer; without identity it is system-triggered.
+Fields: `UserID`, `AnonymousID`, `ConversationID`, `Feature`, `AccountID`, `OnBehalfOf`, `Surface`, `Analytics`, `Context` (extra message context such as `{"app": {"build": "7"}}`), and the cookie sources `Request`, `Cookies`, `CookieValues`. Standalone model calls: [Interaction ownership](integrations.md#interaction-ownership).
 
-`Middleware(next http.Handler) http.Handler` does the cookie part for every request: handlers get a context as from `WithValues(r.Context(), ContextValues{Request: r})`, and an interaction that ends while the client is gone (the request context is cancelled before the handler returns) is sent with `client_disconnected: true`. An interaction that ends after the handler returned is never marked.
+`Middleware(next http.Handler) http.Handler` gives handlers the context of `WithValues(r.Context(), ContextValues{Request: r})`. An interaction ending after request cancellation but before the handler returns carries `client_disconnected: true`. Interactions ending after the handler returns are never marked.
 
 ```go
 http.Handle("/chat", rudderstackai.Middleware(http.HandlerFunc(chat)))
 ```
 
 ## Identity and cookies
+
+Runs with neither `UserID` nor `AnonymousID` use `anonymousId: "ai_system"`.
+
+With only a `UserID`, analytics-go fills a random `anonymousId` on every event, so it never matches the user's other events; pass a stable `AnonymousID` (or use the cookies below) when you join on it.
 
 Precedence for `userId` and `anonymousId`: the options of the call (`InteractionOptions`, `TrackActionOptions`, `TrackScoreOptions`), then `WithValues`, then cookies. When the browser runs the RudderStack JavaScript SDK (v3), its cookies join server-side AI events to the same user journey:
 
@@ -208,96 +244,17 @@ Precedence for `userId` and `anonymousId`: the options of the call (`Interaction
 
 ## trace_id
 
-`ai_response_received` carries `trace_id` from `InteractionOptions.TraceID` or `SetTraceID`; a value you set always wins. Use it to join an answer to a Langfuse, LangSmith or OpenTelemetry trace.
-
-The core module does not depend on OpenTelemetry. To take the trace ID of the active OpenTelemetry span, install the optional `rudderotel` module and register it:
-
-```sh
-go get github.com/rudderlabs/ai-sdk-go/rudderotel
-```
-
-```go
-err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID))
-```
-
-`WithTraceIDFrom(fn func(context.Context) string)` is consulted with the context given to `StartInteraction` / `RunInteraction`, then with the context of each integration call until it returns a non-empty ID. `rudderotel.TraceID(ctx)` returns the trace ID of the span in `ctx`, or "". No span is created or exported. Without `WithTraceIDFrom`, `trace_id` comes only from `TraceID` / `SetTraceID`.
-
-## Content capture
-
-Captured content honours `MarshalJSON` and `MarshalText` with `encoding/json` precedence, with spans on or off. The SDK resolves each value once per report, at its existing capture point, and stores a detached snapshot. Events, spans, sizes and rule-returned properties reuse that output; sizes count serializer output as `encoding/json` writes it, HTML escapes included. In-process resume reuses stored content; JSON restore currently drops the content of deferred call events. A later report captures the value again. Native raw bytes are stripped; ordinary text returned by a serializer, including base64, remains subject to masking and capture controls.
-
-A serializer error, panic, invalid JSON or re-entry produces JSON `null`; its fields are never walked and the event still arrives. A top-level event field that does not allow null is omitted to keep the event valid. MCP tool results reuse the written wire message after a successful write; a failed write captures no result, and its event keeps the handler's outcome and size. Transports without a write observer keep their existing release point, as do results whose response the observer never sees (closed first, timed out or a reused request id). Span context is captured at span start even with content capture off; admitted manual attributes are captured at End. Disabled content attributes run no serializers. Handler duration and completion time stay fixed at handler completion while MCP capture waits for the write. An oversized observed MCP message keeps no body: its result is captured from the handler's value after the write, with the written result size. OTel attributes keep their existing byte stripping.
-
-App callbacks, rules, classifiers, request controls and return values keep their previous inputs. Serializers an app serializer calls itself are outside the SDK's count. Go by-value receivers run once per occurrence because they have no identity.
-
-Content capture is off by default: no prompt, answer, feedback or failure text is sent. `WithCaptureContent(true)` turns every kind on. `ContentCapture` turns kinds on one at a time; a nil key takes `Default`, then the level above:
-
-```go
-err := rudderstackai.Configure(rudderstackai.WithContentCapture(rudderstackai.ContentCapture{
-	Default: rudderstackai.Ptr(false), CallReason: rudderstackai.Ptr(true), ErrorMessage: rudderstackai.Ptr(true),
-}))
-ctx, i := rudderstackai.StartInteraction(ctx, rudderstackai.InteractionOptions{
-	ContentCapture: &rudderstackai.ContentCapture{LLMCalls: rudderstackai.Ptr(false)}, // the rest follows Configure
-})
-```
-
-| Field              | Sends                                                                                                       |
-| ------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `Default`          | Every key not set at this level (not `IntentSummary` or `Spans.HTTP`).                                      |
-| `AnswerText`       | `prompt_text` and `response_text`.                                                                          |
-| `LLMCalls`         | `input_messages`, `input_truncated`, `output_text` and `output_tool_calls` (with `WithLLMCallEvents`).      |
-| `Spans`            | Span content: `&SpanCapture{Default, Messages, ToolCalls, HTTP}`, see below.                                |
-| `FeedbackText`     | `feedback_text` (`TrackAction`, MCP `submit_feedback`) and `capability_detail`.                             |
-| `ScoreExplanation` | Score `explanation`.                                                                                        |
-| `IntentSummary`    | `intent_summary`, only when set: false drops it; nil keeps the classifier's own `IntentSummary` option.      |
-| `CallReason`       | MCP `call_reason`, and its field in `request_context`.                                                      |
-| `ErrorMessage`     | MCP `error_message`.                                                                                        |
-
-`Spans` covers the [tracing exporter](tracing.md) and SDK spans:
-- `Messages` is prompt, completion, instruction, retrieval and error text, `gen_ai.*.message` and `gen_ai.choice` events and the status message.
-- `ToolCalls` is tool arguments and results, and all other content of a tool-execution span (`gen_ai.operation.name` `execute_tool`, OpenInference `TOOL`, Traceloop or LangSmith `tool`, or Vercel `ai.toolCall`) except error text.
-- Nil kinds take `Spans.Default`, then `Default`.
-- `HTTP: Ptr(true)` (off unless set) keeps `url.path` and `url.full` / `http.url` / `http.target` without the query string, masked. `url.query`, the user agent, client addresses and headers are never sent.
-
-Levels, most general first: `Configure`, then the interaction or task (resolved when it starts), the MCP wrapper, or the tracing exporter (both read `Configure` on each request or export). At each level the bool `CaptureContent` option is shorthand for `Default`, and `ContentCapture` keys win over it, so existing bool settings behave exactly as before. Custom properties named like a content field follow that field's key. Masking and length caps always apply. The MCP wrappers' `CaptureContent: false` (the default) now follows the global setting; turn one server off with `ContentCapture: &rudderstackai.ContentCapture{Default: rudderstackai.Ptr(false)}`.
-
-## Privacy and masking
-
-Sent by default: IDs, models, token counts, latency, cost, status, tool names. Never sent by default: prompt, answer and feedback text, score explanations, tool arguments and results.
-
-Custom response extras, declared tool properties and action details drop content-named keys when their kind of capture is off: `prompt_text`, `response_text`, `feedback_text`, `intent_summary`, `explanation`, `call_reason`, `capability_detail`, `error_message`, and `input_messages`, `output_text` and `output_tool_calls` (`LLMCalls`). The check recognizes camelCase, PascalCase, uppercase, hyphens and spaces, and warns once per original key. Unrelated names such as `promptLength` and `cardKinds` are kept. SDK-owned property names are reserved under those same spellings even with capture on. Use the dedicated prompt/response fields for those properties.
-
-With content capture on (`WithCaptureContent(true)`, or `CaptureContent` per interaction or task), `prompt_text`, `response_text`, `action_details.feedback_text` and `explanation` are sent, and, with `WithLLMCallEvents`, each call's `input_messages`, `output_text` and `output_tool_calls`. They, and the classifier's `intent_summary`, are masked first:
-
-| Pattern                                                                                                                                                                                  | Becomes    |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| Email addresses                                                                                                                                                                          | `[email]`  |
-| Phone numbers: `+` and 9-15 digits, or 10-12 digits in common groupings                                                                                                                  | `[phone]`  |
-| Payment card numbers that pass the Luhn check                                                                                                                                            | `[card]`   |
-| IPv4 and IPv6 addresses                                                                                                                                                                  | `[ip]`     |
-| API keys and tokens (`sk-`, Stripe `sk_live_` / `rk_live_`, Google `AIza`, Slack, GitHub, AWS access keys, JWTs, `Bearer`), passwords in connection URLs, values of `api_key=`, `token=`, `password=` and similar | `[secret]` |
-| US Social Security numbers                                                                                                                                                               | `[ssn]`    |
-| IBANs (checksum-validated)                                                                                                                                                               | `[iban]`   |
-
-```go
-err := rudderstackai.Configure(
-	rudderstackai.WithCaptureContent(true),
-	rudderstackai.WithRedactHook(func(text string) (string, error) {
-		return honorifics.ReplaceAllString(text, "[name]"), nil // runs after the built-in patterns
-	}),
-)
-```
-
-- Patterns catch fixed shapes only: names, postal addresses and free-form IDs are not caught, and some order numbers look like phone numbers. Use the hook, or leave capture off.
-- Fail closed: a hook that returns an error or panics drops the field. Text over 32,000 code points is withheld rather than masked.
-- One rule: `WithRedaction(false)` sends captured text unmasked and does not run the hook; MCP `Options.DisableRedaction` does the same for `Redact`. The patterns are defined in [`spec/fixtures/redaction-v0.1.json`](../spec/fixtures/redaction-v0.1.json).
-- `MaskText(text)` applies the same patterns to text you send yourself, such as free text a [declared tool event](events.md#declared-tool-events) rule's `Properties` returns: the SDK sends those as returned. It ignores `WithRedaction` and the hooks; `ok` is false for text over 32,000 code points, which you should not send.
+See [Product trace ID](tracing.md#product-trace-id).
 
 ## Pricing
 
-`WithCredits` prices each successful `CreditCall` in app credits after USD pricing. The credits hook must be side-effect free and idempotent: it can run more than once for one call if usage or pricing metadata changes while it runs, through re-entrant enrichment inside the hook or concurrent enrichment from another thread/goroutine. After 3 attempts, continued changes omit the call's credits and report `credits_unstable` through the error hook (with `where: credits`), distinct from a throwing hook's `user_callback`.
+`WithCredits` accepts `func(CreditCall) (*float64, error)`. It prices successful calls with known usage after USD pricing; return nil for unknown credits. `LLMCall.Credits` overrides the hook.
 
-No prices ship with the SDK: list prices change and many customers negotiate their own. Register the models you use; unpriced calls keep their tokens and have no cost ([rules](events.md#cost)).
+Credits retries preserve the newest retained call usage and metadata when a hook re-enters and matches a twin. The published credits belong to that same usage and metadata.
+
+The credits hook must be side-effect free and idempotent. It may run again if usage or pricing metadata changes during the hook, through re-entry or concurrent enrichment. After 3 attempts, continued changes omit credits and report `credits_unstable` with `where: credits`. A failing hook instead reports `user_callback`.
+
+Register the models you use: the SDK ships no prices, since list prices change and customers negotiate their own. Unpriced calls retain tokens and have no cost ([rules](events.md#cost)).
 
 ```go
 err := rudderstackai.RegisterPrice("claude-sonnet-4-5", rudderstackai.ModelPrice{
@@ -344,7 +301,14 @@ cost, ok := rudderstackai.EstimateCost("anthropic", "claude-sonnet-4-5", 12_000,
 
 ## Classifier and evaluator
 
-Both run after a successful answer is out, never block it, share one queue (16 at once, 1,000 waiting) and run with an untracked context: their own model calls send no events, also through a tracked client.
+- Evaluator: runs for every interaction that ended `success`, including tasks and interactions an integration opened, after `ai_response_received`, with a 5-second timeout and an untracked context. An error, panic or timeout sends nothing.
+
+- `intent` is one of `ClassifierOptions.Intents`, else `other` (with your own `Classify` and no `Intents`, any non-empty value is kept). `outcome` is one of `Outcomes` (default `DefaultOutcomes`: `resolved`, `partial`, `unresolved`, `escalated`, `unsupported`, `unclear`), else `unclear`. `other` and `unclear` are therefore always possible values, whatever your lists hold: plan reports and warehouse filters for them.
+- Which interactions: one classification per successful interaction you open (`StartInteraction`, `RunInteraction`) with `Classify` on (the default for user-triggered ones). Tasks are off unless `TaskOptions.Classify` is set; interactions an integration opens on its own are never classified. Errors, cancellations and other non-success statuses are skipped.
+- Input: the prompt (`PromptText`, else the last user message of the request messages an integration kept), the answer (`EndOptions.ResponseText`, else the last successful call's answer text), the names of the tools called (never arguments or results) and earlier messages, within a 12,000-character budget that keeps the start and end of long text. The prompt fences the turn as untrusted data and asks for JSON from closed lists ([`ClassifierPrompt`](#classifier-and-evaluator)). An interaction with neither prompt nor answer text is skipped with a warning.
+- Failures: a timeout (default 5 seconds), an error, a panic or an unparseable reply sends nothing and logs one warning per process. Up to 16 classifications and evaluations run at once and up to 1,000 wait; beyond that, work is dropped with a warning at most once a minute.
+
+Both run after a successful answer is out, never block it, and run with an untracked context: their own model calls and spans send no events, also through a tracked client. They share the queue above.
 
 ```go
 err := rudderstackai.Configure(rudderstackai.WithClassifier(&rudderstackai.ClassifierOptions{
@@ -362,7 +326,9 @@ err := rudderstackai.Configure(rudderstackai.WithClassifier(&rudderstackai.Class
 | `IntentSummary`     | With `Client`: also ask for and send a one-sentence, masked `intent_summary`                                       |
 | `Timeout`           | Per classification; zero means 5 seconds                                                                           |
 
-`rudderopenai.ClassifierClient(client openai.Client, model string)` sends a Chat Completions request in JSON mode, `rudderanthropic.ClassifierClient(client anthropic.Client, model string)` a Messages request; both cap the reply at 300 tokens and disable retries. For another provider, implement `ClassifierClient` yourself: the SDK passes the system and user prompts; return the reply text plus `Model`, `Provider` and usage (`UsageKnown`, tokens) so `classifier_cost_usd` can be priced. `rudderstackai.ClassifierPrompt(turn, intentSummary)` builds the same prompts for a `Classify` function that calls a model itself. Event and input details: [events.md](events.md#ai_interaction_classified).
+### Classifier clients
+
+`rudderopenai.ClassifierClient(client openai.Client, model string)` sends a Chat Completions request in JSON mode, `rudderanthropic.ClassifierClient(client anthropic.Client, model string)` a Messages request; both cap the reply at 300 tokens and disable retries. For Gemini or Bedrock, implement `ClassifierClient` yourself. The SDK passes the system and user prompts; return the reply text plus `Model`, `Provider` and usage (`UsageKnown`, tokens) so `classifier_cost_usd` can be priced. `rudderstackai.ClassifierPrompt(turn, intentSummary)` builds the same prompts for a `Classify` function that calls a model itself. Event and input details: [events.md](events.md#ai_interaction_classified).
 
 ```go
 err := rudderstackai.Configure(rudderstackai.WithEvaluator(func(ctx context.Context, turn rudderstackai.EvaluationTurn) ([]rudderstackai.Score, error) {
@@ -374,11 +340,11 @@ err := rudderstackai.Configure(rudderstackai.WithEvaluator(func(ctx context.Cont
 }))
 ```
 
-The evaluator gets an `EvaluationTurn` (`InteractionID`, `ConversationID`, `Prompt`, `Answer`, `ToolNames`, `History`), has 5 seconds, and each returned score becomes one [`ai_interaction_scored`](events.md#ai_interaction_scored). Prompt and answer text are kept in memory for these only while a classifier or evaluator is configured.
+The evaluator gets an `EvaluationTurn` (`InteractionID`, `ConversationID`, `Prompt`, `Answer`, `ToolNames`, `History`); each returned score becomes one [`ai_interaction_scored`](events.md#ai_interaction_scored). Prompt and answer text are kept in memory for these only while a classifier or evaluator is configured.
 
 ## Flush and shutdown
 
-The SDK installs no exit or signal hooks (Go has no reliable exit hook): call these yourself before the process exits.
+The SDK installs no exit or signal hooks. Call these before the process exits.
 
 ```go
 ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -389,10 +355,14 @@ rudderstackai.Shutdown(ctx)
 rudderstackai.CloseClient(ctx, client)
 ```
 
-- `Flush(ctx) bool` waits for pending classifications and scores and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), then flushes every RudderStack client the SDK has used, in parallel, all within one deadline: `ctx`'s, or 10 seconds when it has none. A client implementing `ContextFlusher` (`Flush(ctx) error`, analytics-go v4.4.0 and later) sends its whole queue; one implementing `Flusher` (`Flush() error`) is flushed as before; a client with neither (a custom client) has no flush, is reported once as `client_outdated` and sends its queue on `Close()`. It returns false, and reports `flush_timeout`, when the deadline passed first. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. It never ends open interactions. `FlushTimeout(d)` is the deprecated duration form.
+- `Flush(ctx) bool` waits for pending classifications and scores and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), then flushes every RudderStack client the SDK has used, in parallel, all within one deadline: `ctx`'s, or 10 seconds when it has none. A client implementing `ContextFlusher` (`Flush(ctx) error`, analytics-go v4.4.0 and later) sends its whole queue; one implementing `Flusher` (`Flush() error`) is flushed as before; a client with neither (a custom client) has no flush, is reported once as `client_outdated` and sends its queue on `Close()`. It returns false, and reports `flush_timeout`, when the deadline passed first.
+
+  Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged.
+
+  It never ends open interactions. `FlushTimeout(d)` is the deprecated duration form.
 - `Shutdown(ctx) bool` stops queueing new classifications and scores, ends every open interaction as `response_status: incomplete` with `end_reason: shutdown`, then calls `Flush(ctx)` and returns its result. It never closes a client: close yours afterwards. Shared clients remain available for non-AI events. Calling it again is safe. Call it from your SIGTERM handling.
 - `CloseClient(ctx, client) bool` closes a client you own after `Shutdown`; call it for each client you own. A nil client returns true. It runs `Close` in a goroutine and returns true when Close finishes without error. If ctx expires, it returns false and reports `flush_timeout`; Close continues in the background. A Close error is passed unchanged as `flush_failed`, including errors returned after the deadline. Without a deadline, it waits until Close finishes or ctx is canceled.
-- A top-level `RunTask` waits for its own classification and score and flushes its client, at most `TaskOptions.FlushTimeout` (default 2 seconds) for both; running out is reported as `flush_timeout`, and the client's own flush error as `flush_failed`.
+- Task flush settings: [`TaskOptions`](#taskoptions); deadline and client errors are reported as `flush_timeout` and `flush_failed`.
 - Serverless: on Lambda, `Flush` before returning with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` then `CloseClient` for your clients on SIGTERM.
 - Events are queued in analytics-go, so delivery errors are its own: handle them with its `Config.Callback`.
 
@@ -426,11 +396,15 @@ Sampling runs before the event reaches your analytics-go client, so it works wit
 | `MaxCallsPerInteraction` | 1,000    | Model calls and tool calls past it still count in the totals, `usage_breakdown` and `tool_breakdown`, but are no longer kept one by one: tool outcomes and declared tool events are dropped, even if the outcome came with the call. A tool call past it with an ID and no outcome is still kept, up to as many again, in case a pause waits on it: it is then counted once, in the segment that runs it, so at most twice that many tool calls are kept. |
 | `MaxMapEntries`          | 10,000   | Remembered clients, failed attempts held for a retry, each MCP map per server and mcp-go sessions: the oldest entry goes first (a held attempt is recorded at once). Open model-call spans tracked for [span dedup](tracing.md#one-span-per-call-with-the-span-processor): once full, a new one exports without dedup; none is evicted. |
 
-Captured text is masked with a 100 ms budget per pattern; a text that runs out of it is sent as `[redaction timed out]`, never unmasked (`redaction_timeout`). Events are sent outside the SDK's locks: when analytics-go's queue is full, only the goroutine sending waits.
+When analytics-go's queue is full, only the sending goroutine waits. Masking limits: [privacy](privacy.md#privacy-and-masking).
 
 ## Errors
 
-Tracking never panics into your code: a panic in the SDK, in an integration (including the AWS SDK's stream-decoding goroutine) or in a hook you configured is contained, and your call's own result or error is returned unchanged. Event values are encoded before they reach the RudderStack client, so serializer failures never reach your app. Content serializers follow the null and field omission rules above; a failed serializer on other extra event properties drops that property.
+Callback publication and lock guarantees: [Callback re-entry](#callback-re-entry).
+
+Tracking never panics into your code. SDK, integration and configured-hook panics are contained, including panics in the AWS SDK's stream-decoding goroutine. Your call's result or error is returned unchanged. Serializer failures never reach your app. Content serializers follow the [null and omission rules](privacy.md#serializer-behavior); a failed serializer on other extra event properties drops that property.
+
+Background hooks leave the ended interaction ended, reject new calls, retain prior usage and emit one classification or evaluation.
 
 Each contained error has an `ErrorInfo{Kind, Where}`. Kinds:
 
@@ -438,6 +412,7 @@ Each contained error has an `ErrorInfo{Kind, Where}`. Kinds:
 | ------------------- | ---------------------------------------------------------------------------------------------------- |
 | `internal`          | A panic in the SDK or an integration.                                                                |
 | `user_callback`     | A hook you configured (redact, identify, event rules, classifier, evaluator, trace ID, `MarshalJSON`) failed or panicked; its documented fallback was used. |
+| `credits_unstable` | Pricing changed during all three credits attempts. |
 | `pause_refused` | Pause left the interaction unchanged. `reason` (`Reason` in Go) is `in_callback` or `pricing_in_flight`; pricing waits are bounded at 5 s. |
 | `limit_reached`     | A memory cap was hit.                                                                                |
 | `redaction_timeout` | A masking pattern ran out of time; the field was sent as `[redaction timed out]`.                    |
@@ -470,4 +445,17 @@ RudderStack warehouse destinations create a column with the type of the first va
 | `.../rudderotel`                                 | `TraceID`, `NewSpanProcessor`, `NewExporter`, `RegisterTracing`, `SpanToTrack`, `IsAISpan` ([tracing](tracing.md))                                                                                           |
 | `.../ruddermcpgo` (in the root module)           | `WrapServer`, `Options`, `RequestElicitation`, `TrackMCPEventSubscription`, `WrapMCPEventSender`                                                                                                        |
 
-The root module (Go 1.26.11 or later) holds the core, the `net/http` middleware and MCP support (`ruddermcpgo` included). Each provider integration and `rudderotel` is a separate module you `go get` on its own, so MCP-only services do not pull provider SDKs. Minimum versions per module: [README](../README.md#compatibility).
+Module dependencies and tested versions: [Compatibility](integrations.md#compatibility).
+
+## Troubleshooting
+
+| Symptom                                    | Cause and fix                                                                                                                         |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| No events, warning `no RudderStack client` | No client anywhere: `Configure(WithAnalytics(client))`.                                                                               |
+| Events missing from a job or script        | The process exited before analytics-go sent its batch: `Shutdown(ctx)` then `CloseClient(ctx, client)` on exit, or `Flush(ctx)` while continuing to use the client.                      |
+| One answer split into many                 | Calls ran with a context that carries no interaction, or a stream was read after the interaction ended. Pass the interaction's `ctx`. |
+| No `total_cost_usd`                        | A model is not priced and no gateway reported a cost, a call failed or was cancelled, or a streamed call had no usage.                 |
+| No `ai_interaction_classified`             | No classifier, a call outside an interaction, an answer that failed, or a classifier error (logged once).                             |
+| Cost column is an integer in the warehouse | The first loaded value was `0`: see [warehouse column types](configuration.md#warehouse-column-types).                           |
+
+See [Logging](#logging) and [Errors](#errors) for diagnostics.

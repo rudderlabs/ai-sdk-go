@@ -53,7 +53,7 @@ func TestPauseRedactorAddedToolsEmitBeforeResponse(t *testing.T) {
 	r := setupAI(t, WithCaptureContent(true), WithToolBreakdown(true),
 		WithEventRules(EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "lookup_done"}}}),
 		WithRedactHook(func(text string) (string, error) {
-			// With an ID the pause would wait on it (SDK-6017); without one it is counted now.
+			// With an ID the pause would wait on it; without one it is counted now.
 			i.RecordToolCalls(ToolCall{Name: "lookup"})
 			return text, nil
 		}))
@@ -74,7 +74,7 @@ func TestPauseToolCallbacksAddedToolsEmitBeforeResponse(t *testing.T) {
 	for _, source := range []string{"when", "properties"} {
 		t.Run(source, func(t *testing.T) {
 			var i *Interaction
-			// No IDs: the pause does not wait on these tools (SDK-6017), so it counts them now.
+			// No IDs: the pause does not wait on these tools, so it counts them now.
 			addTool := func() {
 				i.RecordToolCalls(ToolCall{Name: "tool_b"})
 			}
@@ -1134,7 +1134,7 @@ func TestAllCallbackTypesReleaseLockAndAllowLifecycleReentry(t *testing.T) {
 			call := pauseCall
 			call.ResponseID = "initial"
 			i.RecordCall(call)
-			// No ID: the pause does not wait on it (SDK-6017), so its rules run at pause.
+			// No ID: the pause does not wait on it, so its rules run at pause.
 			i.RecordToolCalls(ToolCall{Name: "lookup"})
 			i.onBeforeEnd(func() {
 				if source == "finalizer" {

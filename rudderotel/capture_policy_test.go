@@ -11,7 +11,7 @@ import (
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
 
-// SDK-6888: the exporter's ContentCapture keeps span content per kind over its CaptureContent.
+// The exporter's ContentCapture keeps span content per kind over its CaptureContent.
 func TestExporterContentCapturePerKind(t *testing.T) {
 	source := tracetest.SpanStub{Attributes: []attribute.KeyValue{
 		attribute.String("gen_ai.input.messages", `[{"role":"user","content":"hi"}]`),

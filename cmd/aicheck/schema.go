@@ -30,7 +30,6 @@ var clientSchema []byte
 // dialect is the only JSON Schema draft the three SDKs' checkers implement.
 const dialect = "https://json-schema.org/draft/2020-12/schema"
 
-// schemaDoc is one schema file.
 type schemaDoc struct {
 	name string // the path, for errors
 	id   string
@@ -231,8 +230,6 @@ func message(k jsonschema.ErrorKind, schemaObj *Object) string {
 		return "matches none of anyOf"
 	case *kind.OneOf:
 		return "does not match exactly one of oneOf"
-	case *kind.FalseSchema:
-		return "not allowed"
 	case *kind.MinContains:
 		if len(k.Got) == 0 { // Python reports no match at all as contains
 			return "fails contains"
@@ -297,7 +294,6 @@ func location(instance any, path []string) string {
 	return b.String()
 }
 
-// walk follows an instance location.
 func walk(v any, path []string) any {
 	for _, tok := range path {
 		v = child(v, tok)
@@ -360,7 +356,7 @@ func split(v any) any {
 	for _, k := range o.keys {
 		val := o.vals[k]
 		switch {
-		case isShortCircuit(k) && hasOtherKeywords(o):
+		case slices.Contains(shortCircuit, k) && hasOtherKeywords(o):
 			one := newObject()
 			one.Set(k, val)
 			moved = append(moved, one)
@@ -395,15 +391,6 @@ func split(v any) any {
 func isList(v any) bool {
 	_, ok := v.([]any)
 	return ok
-}
-
-func isShortCircuit(k string) bool {
-	for _, s := range shortCircuit {
-		if k == s {
-			return true
-		}
-	}
-	return false
 }
 
 // hasOtherKeywords reports whether a short-circuiting keyword shares the schema with another

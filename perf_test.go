@@ -6,17 +6,14 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime"
-	"slices"
 	"strconv"
-	"syscall"
 	"testing"
-	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	analytics "github.com/rudderlabs/analytics-go/v4"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 // Per-interaction and per-MCP-call overhead of the core SDK: go test -run '^$' -bench . -benchmem .
@@ -31,34 +28,7 @@ func (nullAnalytics) Close() error                    { return nil }
 
 // measure runs op b.N times and reports, beside ns/op, B/op and allocs/op: the p50 and p99 of one
 // op, process CPU per op and GC runs per 10k ops.
-func measure(b *testing.B, op func(context.Context) error) {
-	ctx := context.Background()
-	b.ReportAllocs()
-	samples := make([]time.Duration, b.N)
-	var ru0, ru1 syscall.Rusage
-	var ms0, ms1 runtime.MemStats
-	_ = syscall.Getrusage(syscall.RUSAGE_SELF, &ru0)
-	runtime.ReadMemStats(&ms0)
-	b.ResetTimer()
-	for i := range b.N {
-		start := time.Now()
-		if err := op(ctx); err != nil {
-			b.Fatal(err)
-		}
-		samples[i] = time.Since(start)
-	}
-	b.StopTimer()
-	_ = syscall.Getrusage(syscall.RUSAGE_SELF, &ru1)
-	runtime.ReadMemStats(&ms1)
-	slices.Sort(samples)
-	cpu := func(ru syscall.Rusage) time.Duration {
-		return time.Duration(ru.Utime.Nano() + ru.Stime.Nano())
-	}
-	b.ReportMetric(float64(samples[len(samples)/2]), "p50-ns")
-	b.ReportMetric(float64(samples[min(len(samples)-1, len(samples)*99/100)]), "p99-ns")
-	b.ReportMetric(float64(cpu(ru1)-cpu(ru0))/float64(b.N), "cpu-ns/op")
-	b.ReportMetric(float64(ms1.NumGC-ms0.NumGC)*10_000/float64(b.N), "gc/10k-op")
-}
+var measure = testkit.Measure
 
 type lookupArgs struct {
 	Order string `json:"order"`

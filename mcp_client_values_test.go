@@ -5,22 +5,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/auth"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
 // Client-supplied IDs and client details through the go-sdk wrapper
 // (spec/fixtures/mcp-traceparent-v0.1.json, spec/fixtures/mcp-client-info-v0.1.json).
 
 // minted reports an interaction_id the SDK made itself: a canonical UUID v4.
-func minted(id any) bool {
-	s, _ := id.(string)
-	u, err := uuid.Parse(s)
-	return err == nil && u.String() == s && u.Version() == 4
-}
+var minted = testkit.MintedUUID
 
 // connectAs connects a real go-sdk client that initializes with client.
 func connectAs(t *testing.T, server *mcp.Server, client *mcp.Implementation) *mcp.ClientSession {

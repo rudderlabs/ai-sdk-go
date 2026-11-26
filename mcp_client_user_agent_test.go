@@ -15,15 +15,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
-type userAgentTransport struct{}
-
-func (userAgentTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.Header.Set("User-Agent", "Cursor/1.7.4")
-	return http.DefaultTransport.RoundTrip(req)
-}
+type userAgentTransport = testkit.UserAgentTransport
 
 func TestMCPUserAgentLegacySSEHeaderLimit(t *testing.T) {
 	s := workspaceServer(t.Name(), nil)

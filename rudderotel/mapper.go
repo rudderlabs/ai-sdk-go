@@ -17,7 +17,6 @@ const (
 	DefaultMaxEventBytes   = 32_000
 	AnonymousIDAttribute   = "rudderstack.anonymous_id"
 	InteractionIDAttribute = "rudderstack.interaction_id"
-	truncationSuffix       = "...[truncated]"
 )
 
 // Identity is the RudderStack identity of an exported span.

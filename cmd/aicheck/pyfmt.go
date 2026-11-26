@@ -100,18 +100,6 @@ func floatRepr(f Float) string {
 	return s
 }
 
-// isPrintable is Python's str.isprintable() for one character: letters, marks, numbers,
-// punctuation, symbols and the ASCII space.
-func isPrintable(r rune) bool {
-	if r == ' ' {
-		return true
-	}
-	if r >= 0xd800 && r <= 0xdfff {
-		return false
-	}
-	return unicode.In(r, unicode.L, unicode.M, unicode.N, unicode.P, unicode.S)
-}
-
 // reprStr is Python's repr() of a str.
 func reprStr(s string) string {
 	quote := byte('\'')
@@ -137,7 +125,7 @@ func reprStr(s string) string {
 			fmt.Fprintf(&b, `\x%02x`, r)
 		case r < 0x7f:
 			b.WriteRune(r)
-		case isPrintable(r):
+		case unicode.In(r, unicode.L, unicode.M, unicode.N, unicode.P, unicode.S):
 			b.WriteRune(r)
 		case r <= 0xff:
 			fmt.Fprintf(&b, `\x%02x`, r)

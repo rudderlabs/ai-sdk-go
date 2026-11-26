@@ -17,10 +17,9 @@ func Middleware(next http.Handler) http.Handler {
 		var served atomic.Bool
 		reqCtx := r.Context()
 		ctx := WithValues(reqCtx, ContextValues{Request: r})
-		if cv := valuesFrom(ctx); cv != nil {
-			// net/http also cancels the context once the handler returns: that is not a disconnect.
-			cv.disconnected = func() bool { return !served.Load() && reqCtx.Err() != nil }
-		}
+		cv := valuesFrom(ctx)
+		// net/http also cancels the context once the handler returns: that is not a disconnect.
+		cv.disconnected = func() bool { return !served.Load() && reqCtx.Err() != nil }
 		defer served.Store(true)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

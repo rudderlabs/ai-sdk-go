@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// Intent classification: after an answer, your classifier labels the interaction with an intent
-// and an outcome, sent as ai_interaction_classified.
-
 // DefaultOutcomes are the outcomes a classifier picks from unless [ClassifierOptions.Outcomes]
 // says otherwise.
 var DefaultOutcomes = []string{"resolved", "partial", "unresolved", "escalated", "unsupported", "unclear"}
@@ -51,17 +48,14 @@ type ClassifyTurn struct {
 	Outcomes []string
 }
 
-// ClassifyResult is what a classifier returns.
 type ClassifyResult struct {
 	Intent        string
 	Outcome       string
 	IntentSummary string
 }
 
-// ClassifyFunc is your own classifier.
 type ClassifyFunc func(ctx context.Context, turn ClassifyTurn) (ClassifyResult, error)
 
-// ClassifierReply is a model's reply to the classifier prompt.
 type ClassifierReply struct {
 	Text     string
 	Model    string
@@ -97,11 +91,7 @@ type ClassifierOptions struct {
 	Timeout time.Duration
 }
 
-type classifierConfig struct {
-	ClassifierOptions
-}
-
-func newClassifierConfig(o ClassifierOptions) (*classifierConfig, error) {
+func newClassifierConfig(o ClassifierOptions) (*ClassifierOptions, error) {
 	if (o.Client == nil) == (o.Classify == nil) {
 		return nil, errors.New("rudderstackai: classifier needs either Client or Classify")
 	}
@@ -123,7 +113,7 @@ func newClassifierConfig(o ClassifierOptions) (*classifierConfig, error) {
 		o.Outcomes = DefaultOutcomes
 	}
 	o.Intents, o.Outcomes = slices.Clone(o.Intents), slices.Clone(o.Outcomes)
-	return &classifierConfig{o}, nil
+	return &o, nil
 }
 
 // clip keeps the start and the end of a long text, in code points.
@@ -148,6 +138,16 @@ func partText(part any) string {
 		return text
 	}
 	return ""
+}
+
+func partsText(parts []any) string {
+	var texts []string
+	for _, p := range parts {
+		if t := partText(p); t != "" {
+			texts = append(texts, t)
+		}
+	}
+	return strings.Join(texts, "\n")
 }
 
 // textMessages reads chat messages as role and text from OpenAI, Anthropic, Responses API,
@@ -178,22 +178,10 @@ func textMessages(raw any) []TurnMessage {
 		case string:
 			content = c
 		case []any:
-			var parts []string
-			for _, p := range c {
-				if t := partText(p); t != "" {
-					parts = append(parts, t)
-				}
-			}
-			content = strings.Join(parts, "\n")
+			content = partsText(c)
 		}
 		if parts, ok := m["parts"].([]any); ok && content == "" {
-			var texts []string
-			for _, p := range parts {
-				if t := partText(p); t != "" {
-					texts = append(texts, t)
-				}
-			}
-			content = strings.Join(texts, "\n")
+			content = partsText(parts)
 		}
 		if content != "" {
 			out = append(out, TurnMessage{Role: role, Content: content})
@@ -342,8 +330,6 @@ func summaryOf(raw string) string {
 	return text
 }
 
-// ----------------------------------------------------------------- background work
-
 var background = struct {
 	mu       sync.Mutex
 	queue    []func()
@@ -460,7 +446,7 @@ func withTimeout[T any](d time.Duration, fn func(context.Context) (T, error)) (T
 	}
 }
 
-func scheduleClassification(i *Interaction, snap turnSnapshot, c *classifierConfig) chan struct{} {
+func scheduleClassification(i *Interaction, snap turnSnapshot, c *ClassifierOptions) chan struct{} {
 	turn := buildTurn(i, snap, c.Intents, c.Outcomes)
 	if turn.Prompt == "" && turn.Answer == "" {
 		warnOnce("classify-no-text", "intent classification needs prompt or answer text (PromptText, or captured content); interactions without either are left unclassified", dropWarnEvery)
@@ -472,7 +458,7 @@ func scheduleClassification(i *Interaction, snap turnSnapshot, c *classifierConf
 // normaliseLabels maps labels onto the classifier's closed lists: an intent outside Intents
 // becomes "other" (any intent is kept without Intents), an outcome outside Outcomes "unclear".
 // A nil c means no classifier is configured: the default outcomes.
-func normaliseLabels(c *classifierConfig, intent, outcome string) (string, string) {
+func normaliseLabels(c *ClassifierOptions, intent, outcome string) (string, string) {
 	outcomes := DefaultOutcomes
 	if c != nil {
 		outcomes = c.Outcomes
@@ -489,7 +475,7 @@ func normaliseLabels(c *classifierConfig, intent, outcome string) (string, strin
 	return intent, outcome
 }
 
-func classify(i *Interaction, turn ClassifyTurn, c *classifierConfig) {
+func classify(i *Interaction, turn ClassifyTurn, c *ClassifierOptions) {
 	started := time.Now()
 	type outcome struct {
 		parsed ClassifyResult

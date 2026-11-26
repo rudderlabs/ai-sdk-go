@@ -9,9 +9,8 @@ import (
 	"time"
 )
 
-func sdk6942Call() LLMCall {
-	return sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", ResponseID: "r", Integration: "tracing", InputTokens: 10}, 100)
-}
+var sdk6942Call = pendingPricingCall
+
 func TestSDK6942BlockedRepeatPreservesAuthoritativeTwin(t *testing.T) {
 	for _, mode := range []string{"segment", "in-process", "json"} {
 		for _, threaded := range []bool{false, true} {

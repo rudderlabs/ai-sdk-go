@@ -183,7 +183,7 @@ func spanCall(s sdktrace.ReadOnlySpan) rudderstackai.LLMCall {
 		default:
 			continue
 		}
-		if seconds >= 0 && !math.IsNaN(seconds) && !math.IsInf(seconds, 0) && seconds < float64(math.MaxInt64)/float64(time.Second) {
+		if seconds >= 0 && seconds < float64(math.MaxInt64)/float64(time.Second) {
 			call.FirstTokenAt = s.StartTime().Add(time.Duration(seconds * float64(time.Second)))
 			break
 		}

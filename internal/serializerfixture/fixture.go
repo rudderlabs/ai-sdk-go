@@ -28,9 +28,7 @@ func (c Case) AppliesToGo() bool { return slices.Contains(c.AppliesTo, "go") }
 // Clone maps so resolution does not change the shared default expectations.
 func (c Case) ResolveGo() (Case, error) {
 	c.Expect = maps.Clone(c.Expect)
-	for key, value := range c.ExpectBySDK["go"] {
-		c.Expect[key] = value
-	}
+	maps.Copy(c.Expect, c.ExpectBySDK["go"])
 	c.Setup = maps.Clone(c.Setup)
 	if bySDK, ok := c.Setup["sinks_by_sdk"].(map[string]any); ok {
 		if sinks, ok := bySDK["go"]; ok {

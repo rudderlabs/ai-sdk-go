@@ -11,7 +11,7 @@ import (
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
 )
 
-// SDK-6888: an unset CaptureContent follows the global setting; ContentCapture decides per kind.
+// An unset CaptureContent follows the global setting; ContentCapture decides per kind.
 func TestContentCaptureFollowsGlobalAndPolicy(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

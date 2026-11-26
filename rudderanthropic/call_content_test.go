@@ -6,16 +6,10 @@ import (
 	"testing"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/internal/testkit"
 )
 
-func mapOf(t *testing.T, s string) map[string]any {
-	t.Helper()
-	var m map[string]any
-	if err := json.Unmarshal([]byte(s), &m); err != nil {
-		t.Fatal(err)
-	}
-	return m
-}
+var mapOf = testkit.JSONMap
 
 func TestInputMessagesSplitsToolResults(t *testing.T) {
 	req := mapOf(t, `{

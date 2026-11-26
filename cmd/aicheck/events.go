@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -36,9 +37,7 @@ var (
 	knownEvents          = func() map[string]bool {                       // ai_otel_span: rudderstack.ai.tracing
 		m := set("ai_otel_span")
 		for _, s := range []map[string]bool{specEvents, mcpEvents, clientOnly} {
-			for k := range s {
-				m[k] = true
-			}
+			maps.Copy(m, s)
 		}
 		return m
 	}()

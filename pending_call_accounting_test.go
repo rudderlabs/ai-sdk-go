@@ -1,6 +1,6 @@
 package rudderstackai
 
-// SDK-6111: overflow call events behind a provisional call, dated-model twins, and writes during paused delivery.
+// Overflow call events behind a provisional call, dated-model twins, and writes during paused delivery.
 
 import (
 	"context"
@@ -207,8 +207,7 @@ func TestSDK6111OverflowGroupWithASuccessfulCallSendsNoErrorType(t *testing.T) {
 	}
 }
 
-// sdk6111ReenterClient records once from inside delivery of the first matching event, as an app's
-// synchronous transport callback can.
+// Record once inside delivery of the first matching event, like a synchronous transport callback.
 type sdk6111ReenterClient struct {
 	*recorder
 	event   string
@@ -231,7 +230,7 @@ func TestSDK6111ToolRecordedDuringPausedCallDeliveryIsCountedOnceWithItsEvent(t 
 	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
 	// A timed span's call event waits until pause delivers it.
 	i.RecordCall(sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "tracing", InputTokens: 10}, 100))
-	// No ID: the pause does not wait on it (SDK-6017), so it is counted now.
+	// No ID: the pause does not wait on it, so it is counted now.
 	client.reenter = func() { i.RecordToolCalls(ToolCall{Name: "lookup"}) }
 	if _, ok := i.Pause(PauseOptions{}); !ok {
 		t.Fatal("pause")
@@ -1626,7 +1625,7 @@ func TestSDK6111Review137TwinPricingRetainsNewerEnrichment(t *testing.T) {
 	}
 }
 
-// SDK-6948: marshaler output is plain data with spans off, even when it encodes native bytes.
+// Marshaler output is plain data with spans off, even when it encodes native bytes.
 type sdk6111Review137JSONPayload struct {
 	Body []byte `json:"body"`
 	Keep string `json:"keep"`

@@ -1,35 +1,33 @@
 # RudderStack AI SDK for Go
 
-Standard AI product events for Go services, sent through the RudderStack Go client you already use and following the [AI events spec v0.4](spec/ai-events-v0.4.schema.json):
+## What it is
 
-- AI interactions in chat apps and background agents: each answer becomes a small set of track events (prompt, answer with models, tokens, cost, latency and status, feedback, scores), however many model calls it took.
-- MCP servers: each request an AI client makes becomes a track event that says which client called, which tool, whether it worked, and for which customer.
+AI product events for Go services, sent through your RudderStack Go client using the
+[AI events spec v0.4](spec/ai-events-v0.4.schema.json):
 
-## How it fits
+- Chat apps and background agents: each answer produces track events for the prompt, answer (models, tokens, cost, latency, status), feedback and scores, across all its model calls.
+- MCP servers: each AI client request produces a track event with the client, tool, outcome and customer.
 
 ```
 your app ─ provider client + integration ─ RunInteraction ─ analytics-go ─ RudderStack ─ warehouse, destinations
 AI client ─ MCP ─ your MCP server (go-sdk or mcp-go) ─ wrapped ─ analytics-go ─ RudderStack
 ```
 
-This is product analytics, not observability: it puts AI usage next to the rest of your customer data and complements your tracing tool. It is private by default: no prompt, answer, tool argument or result text is sent unless you turn content capture on, and captured text is masked.
-
-Captured content honours Go app serializers with spans on or off, once per value per report. Events, spans, sizes and pause snapshots reuse detached output; failures become JSON null without walking hidden fields. MCP tool results reuse the written wire message after a successful response write. Serializers an app serializer calls itself are outside the SDK count; by-value receivers run once per occurrence. Details: [content capture](docs/configuration.md#content-capture).
+It puts AI usage next to the rest of your customer data and complements your tracing tool.
+Content capture is off by default; see [privacy](docs/privacy.md).
 
 Other language SDKs: [Node.js](https://github.com/rudderlabs/ai-sdk-node) and [Python](https://github.com/rudderlabs/ai-sdk-python).
 
 ## Install
 
 ```sh
-go get github.com/rudderlabs/ai-sdk-go github.com/rudderlabs/analytics-go/v4
-go get github.com/rudderlabs/ai-sdk-go/rudderopenai # plus the integration module for each provider SDK you use
+go get github.com/rudderlabs/ai-sdk-go@v0.15.0 github.com/rudderlabs/analytics-go/v4@v4.5.1
+go get github.com/rudderlabs/ai-sdk-go/rudderopenai@v0.6.0 # plus the integration module for each provider SDK you use
 ```
 
-Go 1.26.11 or later.
+See [module dependencies and tested versions](docs/integrations.md#compatibility).
 
-The root module holds the interaction API, the `net/http` middleware and MCP support. It depends on analytics-go, the MCP libraries (go-sdk and mcp-go), regexp2 (redaction patterns), google/uuid, and santhosh-tekuri/jsonschema (used only by the SDK's own schema tests, so it is not compiled into your binary). Each provider integration, and the OpenTelemetry helper `rudderotel`, is its own module, so an MCP-only service does not pull provider SDKs.
-
-## Quick start
+## Quickstart
 
 ```go
 import (
@@ -56,7 +54,9 @@ llm := openai.NewClient(rudderopenai.WithTracking())
 // One interaction per user turn: every model call inside it adds up into one answer.
 var answer, interactionID string
 err = rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{
-	UserID: userID, ConversationID: chatID, Feature: "support_bot",
+	UserID:         userID,
+	ConversationID: chatID,
+	Feature:        "support_bot",
 }, func(ctx context.Context, in *rudderstackai.Interaction) error {
 	completion, err := llm.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 		Model:    "gpt-4.1-mini",
@@ -71,419 +71,52 @@ err = rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{
 
 // Later, from your feedback endpoint:
 rudderstackai.TrackAction(ctx, rudderstackai.TrackActionOptions{
-	ActionType: rudderstackai.ActionFeedbackGiven, InteractionID: interactionID, ConversationID: chatID, UserID: userID,
+	ActionType:     rudderstackai.ActionFeedbackGiven,
+	InteractionID:  interactionID,
+	ConversationID: chatID,
+	UserID:         userID,
 	ActionDetails: map[string]any{"feedback_type": "thumbs", "feedback_value": 1},
 })
 ```
 
-This sends `ai_user_prompt_created`, `ai_response_received` (models, tokens, latency, status, and cost once the model is [priced](docs/configuration.md#pricing)) and `ai_user_action`. Pass the same context to every model call: a call made with a context that carries no interaction is reported as its own answer.
-
-## Choose your integration
-
-| Integration                                          | Module (`go get`)                                 | Attach with                                                       | Tracks                                                                                 |
-| ---------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| [OpenAI](docs/integrations.md#openai)                | `github.com/rudderlabs/ai-sdk-go/rudderopenai`    | `openai.NewClient(rudderopenai.WithTracking())`                   | Chat Completions and Responses API, streamed or not; OpenAI-compatible gateways        |
-| [Anthropic](docs/integrations.md#anthropic)          | `github.com/rudderlabs/ai-sdk-go/rudderanthropic` | `anthropic.NewClient(rudderanthropic.WithTracking())`             | Messages API, streamed or not, also through its Bedrock and Vertex AI clients          |
-| [Google Gen AI](docs/integrations.md#google-gen-ai)  | `github.com/rudderlabs/ai-sdk-go/ruddergenai`     | `genai.ClientConfig{HTTPClient: ruddergenai.HTTPClient(nil)}`     | `GenerateContent`, `GenerateContentStream` and chats, Gemini API and Vertex AI         |
-| [Amazon Bedrock](docs/integrations.md#amazon-bedrock) | `github.com/rudderlabs/ai-sdk-go/rudderbedrock`  | `bedrockruntime.NewFromConfig(cfg, rudderbedrock.WithTracking())` | `Converse` and `ConverseStream`                                                        |
-| [Manual](docs/integrations.md#manual)                | `github.com/rudderlabs/ai-sdk-go`                 | `in.RecordCall(...)`                                              | Calls and tool calls of any other client                                               |
-| [MCP servers](#mcp-servers)                          | `github.com/rudderlabs/ai-sdk-go` (go-sdk), `.../ruddermcpgo` (mcp-go) | `rudderstackai.WrapMCPServer`, `ruddermcpgo.WrapServer` | Clients, tool calls, resources, prompts, elicitations                    |
-
-Every integration records the model, tokens (input always includes cached and cache-write tokens), cost inputs, finish reason, errors and tool calls; streamed calls are recorded when the stream ends. Rules that apply to all of them:
-
-- One interaction per user turn, not per conversation or process. Pass your chat or thread ID as `ConversationID` so turns group into a conversation. A one-shot feature with no thread (a Generate button, a suggested fix) sets `OneShot: true`: without an explicit or context conversation ID, `conversation_id` is the interaction's ID. The default still mints a separate conversation ID. Resending the history each turn is fine: each turn reports only its own calls.
-- Read streams inside the `RunInteraction` function: a stream still open when the interaction ends is recorded as a cancelled call.
-- The last call decides the status: a failed final call fails the answer even if your code handled the error; a failed call followed by a successful retry is a success.
-- Provider SDK retries (openai-go, anthropic-sdk-go) count as one call, priced once ([Retries](docs/integrations.md#retries)).
-
-### Other clients
-
-For any other model client, report calls into the interaction:
-
-```go
-err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID: userID, ConversationID: chatID},
-	func(ctx context.Context, in *rudderstackai.Interaction) error {
-		res, err := myLLM.Complete(ctx, prompt)
-		if err != nil {
-			in.RecordCall(rudderstackai.LLMCall{Provider: "mistral_ai", Model: "mistral-large-latest", ErrorType: rudderstackai.ErrorTypeOf(err)})
-			return err
-		}
-		in.RecordCall(rudderstackai.LLMCall{
-			Provider: "mistral_ai", Model: res.Model,
-			InputTokens: res.Usage.Input, OutputTokens: res.Usage.Output, // input includes cached tokens
-		})
-		return nil
-	})
-```
-
-`StartInteraction` returns the context and the `*Interaction` for code that cannot use a callback; call `End(rudderstackai.EndOptions{})` when the answer is out. Every `LLMCall` and `ToolCall` field: [docs/integrations.md](docs/integrations.md#manual).
-
-### Gateways and pricing labels
-
-- OpenAI-compatible endpoints: `rudderopenai.WithTracking(rudderopenai.WithProvider("openrouter"))` (or `litellm`, `gateway`, `azure.ai.openai`, `vllm`, ...). A cost the gateway reports (`usage.cost`, LiteLLM's `x-litellm-response-cost`) wins over registered prices ([Gateways](docs/integrations.md#gateways-and-openai-compatible-endpoints)).
-- Provider labels follow OpenTelemetry `gen_ai.provider.name`: `openai`, `anthropic`, `aws.bedrock`, `gcp.gemini` (Gemini API), `gcp.vertex_ai` (Vertex AI, also for Anthropic on Vertex AI: `rudderanthropic.WithProvider("gcp.vertex_ai")`), `azure.ai.openai`.
-- Gemini API and Vertex AI are priced separately; `google` and `google.vertex` are accepted as aliases of `gcp.gemini` and `gcp.vertex_ai` in prices. Bedrock inference-profile and Vertex `@revision` model IDs match the base model's price; Azure deployments map to base models with `WithAzureDeploymentModels` ([Pricing](docs/configuration.md#pricing)).
-
-## Identity
-
-Every event needs `userId` or `anonymousId`. Pass them in `InteractionOptions`, or set them once per request with `WithValues(ctx, ContextValues{UserID, AccountID, ...})`; nested values inherit. Runs with neither use `anonymousId: "ai_system"`. With only a `UserID`, analytics-go fills a random `anonymousId` on every event, so it never matches the user's other events; pass a stable `AnonymousID` (or use the cookies below) when you join on it.
-
-When the browser runs the RudderStack JavaScript SDK (v3), its cookies give server-side AI events the browser's `anonymousId` and session, so they join the same user journey. Wrap your handlers:
-
-```go
-http.Handle("/chat", rudderstackai.Middleware(http.HandlerFunc(chat))) // chat passes r.Context() on
-```
-
-`Middleware` puts the request into each handler's context (as `WithValues(r.Context(), ContextValues{Request: r})`), and an interaction that ends while the client is gone (the request context is cancelled before the handler returns) is sent with `client_disconnected: true`. Without it, pass `Request`, `Cookies` (a raw `Cookie` header) or `CookieValues` to `InteractionOptions` or `ContextValues`, for example for queues and WebSockets.
-
-| Cookie            | Becomes             | Rule                                                                        |
-| ----------------- | ------------------- | --------------------------------------------------------------------------- |
-| `rl_anonymous_id` | `anonymousId`       | Unless set explicitly                                                       |
-| `rl_session`      | `context.sessionId` | Session ID only; none once the session has expired                          |
-| `rl_user_id`      | `userId`            | Fallback only: an explicit or context `UserID` or `AnonymousID` always wins |
-
-- Precedence: interaction options, then `WithValues`, then cookies.
-- `rl_user_id` after logout: the cookie stays until the browser SDK's `reset()` runs. Call `reset()` on logout, or pass `IdentityFromCookies: rudderstackai.Ptr(false)` or an explicit `AnonymousID` for signed-out requests. `WithIdentityFromCookies(false)` turns cookies off globally ([details](docs/configuration.md#identity-and-cookies)).
-
-## Background agents
-
-For LLM work with no user in front of it (a schedule, webhook, Slack mention, queue message or another agent), use `RunTask`:
-
-```go
-ctx = rudderstackai.WithValues(ctx, rudderstackai.ContextValues{AccountID: job.WorkspaceID, OnBehalfOf: job.CreatedBy})
-err := rudderstackai.RunTask(ctx, "alert-triage", rudderstackai.TaskOptions{TriggerSource: "schedule", ConversationID: "alert-triage:" + job.ID},
-	func(ctx context.Context, task *rudderstackai.Interaction) error {
-		if _, err := claude.Messages.New(ctx, params); err != nil {
-			return err
-		}
-		return rudderstackai.RunTask(ctx, "draft-status-update", rudderstackai.TaskOptions{}, draftUpdate) // a sub-agent, chained
-	})
-```
-
-- The system is the actor: task events have no user (`anonymousId: "ai_system"`) and never inherit the person of the context or cookies. Put the customer in `AccountID` and the human the work is for in `OnBehalfOf`, and set a stable, scoped `ConversationID`.
-- Chaining: a task inside another interaction or task defaults `parent_interaction_id`, `conversation_id` and `trigger_source: agent` from it. Each task sends its own `ai_response_received`.
-- Flush: a top-level task waits for its classification and score (the classifier timeout plus a second, as `Flush`) and flushes its client when the client implements `Flusher`; a chained sub-task does not (`TaskOptions.Flush` overrides).
-- No prompt event, and no classification unless `Classify` is set ([TaskOptions](docs/configuration.md#taskoptions)).
-- Waiting for an approval or a person: `task.Pause(PauseOptions{Reason: PauseApproval})` sends a `paused` answer for the work so far and returns a JSON snapshot; pass it as `TaskOptions.Resume` in the run that continues, in any process. The final answer carries `pause_count` and `total_paused_ms` ([Pauses and resumes](docs/configuration.md#pauses-and-resumes)).
-- `WithTaskStartedEvents(true)` also sends `ai_task_started` when a run starts, so runs in flight or abandoned show up.
-
-`Pause` called from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError` (one warning without it). Credits/retries, analytics Enqueue, redactors, content serializers, and event rules are covered. It leaves the interaction unchanged and keeps credits; Pause never panics. Error handlers, application code, and callbacks for other interactions may pause normally. Another goroutine waits on a condition for pricing, including retries/capture, for an internal 5 s bound; expiry refuses with `Reason: pricing_in_flight`, and late credits stay in the open segment. Callback callers use the goroutine ID from the first runtime.Stack line; failed parsing falls back to waiting.
-
-## MCP servers
-
-| MCP library | Import | Wrap with | Versions | Protocol revisions |
-| --- | --- | --- | --- | --- |
-| [`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk) (official) | `github.com/rudderlabs/ai-sdk-go` | `rudderstackai.WrapMCPServer` | v1.8.0 | 2025-06-18, 2025-11-25, 2026-07-28 |
-| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v0.55.1 and later | v0.x: 2025-06-18, 2025-11-25; v1.x: also 2026-07-28 |
-
-```go
-server := mcp.NewServer(&mcp.Implementation{Name: "workspace-mcp", Version: "1.4.0"}, nil)
-mcp.AddTool(server, &mcp.Tool{Name: "create_audience"}, createAudience)
-
-err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
-	Analytics: client,
-	Identify: func(ctx context.Context, tok *auth.TokenInfo) (rudderstackai.Identity, error) {
-		if tok == nil {
-			return rudderstackai.Identity{}, nil
-		}
-		workspace, _ := tok.Extra["workspace_id"].(string)
-		return rudderstackai.Identity{UserID: tok.UserID, AccountID: workspace}, nil
-	},
-	EventRules: rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
-		"create_audience": {Event: "audience_created"},
-	}},
-	RequestContext: rudderstackai.RequestContextOptions{Enabled: true, Intents: []string{"debug_delivery", "build_audience"}},
-})
-// Serve as usual: server.Run(ctx, &mcp.StdioTransport{}) or mcp.NewStreamableHTTPHandler(...).
-```
-
-- Events: `mcp_client_seen` (once per client, OAuth client and user per 24 hours), `mcp_tool_called` (status, error type, duration, argument names, invalid arguments, retries, result size), `mcp_elicitation_completed`, `mcp_resource_read`, `mcp_prompt_used` and your declared tool events. Never arguments, results, resource contents, prompt text or elicitation answers.
-- Both libraries take the same options and send the same events. On mcp-go, `Identify(ctx)` reads your own authentication from the context, and `ruddermcpgo.RequestElicitation` records elicitations; on the go-sdk, `rudderstackai.Elicit` records one the client cannot answer ([mcp.md](docs/mcp.md#elicitation)).
-- Protocol revisions: 2025-06-18 (client details from `initialize`, `Mcp-Session-Id` as `mcp_session_id`) and the stateless 2026-07-28 (client details from each request's `_meta`, elicitation by `input_required` and the client's retry), on mcp-go from v1.0. Streamable HTTP is detected; set `Options.Transport` for stdio and SSE.
-- Stateless HTTP and servers built per request remember client name and version from successful `initialize` requests, per server name and process, using an unambiguous composite key of OAuth client ID and user ID (else anonymous ID); both empty skips remembering. The latest initialize by request receipt order wins, even when `Identify` completes out of order. Initialize params, per-request `_meta` clientInfo, successful connection/session state, and `ClientInfo` take precedence. Expiry is fixed at initialize receipt time plus the `ClientSeenWindow` in force then (default 24 hours; zero keeps that default); reads, window changes and rewrapping never change it. Remembering has no opt-out and stores only name and version. One user running two clients under the same OAuth client can be attributed to whichever initialized last. `mcp_session_id` is still absent on stateless endpoints.
-- Request-scoped MCP events and declared tool events carry `oauth_client_id` and `auth_method` as on `mcp_client_seen`, without `token_scopes` or `country`. Experimental MCP Events helpers do not add these authentication fields.
-- `ClientInfoFallback` has the same signature as `ClientInfo` and runs only when initialize, per-call `_meta` clientInfo, session/connection state and `ClientInfo` provide no known client. Remembered clients take precedence only on non-initialize requests. Without one (or when it returns nothing), `WrapMCPServer` on Streamable HTTP and `ruddermcpgo` on Streamable HTTP or legacy SSE fall back to the `User-Agent` (the official Go SDK legacy SSE handler does not expose request headers): known clients by their own initialize name, anything else as `other`; the raw header is never sent. Panics are swallowed; its result feeds `mcp_client_seen` under the same reporting conditions as `ClientInfo` ([mcp.md](docs/mcp.md#identity)).
-- Joins: `com.rudderstack/interaction_id` and the W3C `traceparent` (else `com.rudderstack/trace_id`) in a request's `_meta` become `interaction_id` and `trace_id`. The two `com.rudderstack/` keys are used only when they are a UUID or 32 hex digits, so a join needs such an ID; anything else is absent and the server mints its own `interaction_id`. A Go agent sends `Interaction.ID()` itself.
-- Why it was called: request context is off by default. Opt in with `RequestContext: rudderstackai.RequestContextOptions{Enabled: true}`. When enabled, an optional `request_context` argument (`intent` from your list, `user_sentiment`, and `call_reason` with `CaptureContent`) is added to each tool's schema and removed before your handler runs. When off, schemas and client-sent `request_context` arguments pass through unchanged.
-- **Why it failed**: with `CaptureContent`, a failed call carries a masked `error_message` from the final JSON-RPC response, once you opt in by wrapping the output with `rudderstackai.ObserveMCPTransport` (go-sdk), `ruddermcpgo.ObserveHTTP` or `ruddermcpgo.ObserveStdio` (mcp-go). Without the opt-in, `error_message` is omitted ([mcp.md](docs/mcp.md#error-messages-observing-the-final-response)).
-- State is in memory, per server name, per process (at most 10,000 entries each, least recently used first): servers rebuilt per request keep counting; give each distinct server a unique name. Replicas and restarts each emit their own `mcp_client_seen`.
-- Opt-in: `FeedbackRequests` adds `submit_feedback` for problems, missing capabilities and positive feedback (`mcp_feedback_submitted`). `CapabilityRequests` / `request_capability` are deprecated; use `FeedbackRequests`. The two options cannot be combined. `MCPEvents: true` enables the experimental MCP Events helpers (`TrackMCPEventSubscription`, `WrapMCPEventSender`).
-
-MCP events keep only names registered on the server at call time (tools, prompts), top-level input property names and known client capability names, replacing anything else with `unknown`; `protocol_version` must be a `YYYY-MM-DD` date. `request_id` is an integer id as a decimal string, a string as `sha256:` plus 16 hex characters, and anything else `unknown`. Client name and title have control characters removed and whitespace collapsed, are masked with the built-in rules (never your `Redact` hook) and cut to 64 code points, and are left out when the cut leaves a pattern that the removed text had kept from matching; client version is left out unless it is version-shaped (`^[0-9][0-9A-Za-z.+-]{0,31}$`) with nothing to mask ([mcp.md](docs/mcp.md#events)). Session and interaction state is keyed by the raw account, user and session or interaction, and a pending elicitation expires after an hour.
-
-Call `WrapMCPServer` once, before serving; it takes its own options (`Configure` does not apply). Options, every property and limits: [docs/mcp.md](docs/mcp.md).
-
-## Product signals
-
-### Feedback
-
-`TrackAction(ctx, TrackActionOptions{...})` sends `ai_user_action`, typically from your feedback endpoint ([quick start](#quick-start)). Action types: `feedback_given`, `feedback_retracted`, `feedback_dismissed`, `copied_response`, `shared`, `exported`, `reported`, `regenerated`, `accepted`, `rejected`, `edited`, `reverted`, `clicked_through`. `InteractionID` and `ConversationID` are required (else the event is dropped with a warning); `feedback_text` in `ActionDetails` is sent only with content capture on. For a one-shot interaction, pass its ID as both. When the client app (web or mobile) sends its own copy, `WithServerFeedback(false)` turns the server copy off.
-
-### Scores
-
-```go
-rudderstackai.TrackScore(ctx, rudderstackai.TrackScoreOptions{
-	Score:          rudderstackai.Score{EvaluationName: "helpfulness", ScoreLabel: "pass", Evaluator: rudderstackai.EvaluatorHuman},
-	InteractionID:  interactionID,
-	ConversationID: chatID,
-	UserID:         userID,
-})
-```
-
-`TrackScore` sends `ai_interaction_scored` for a score from elsewhere (a human review, an offline judge). To score every successful answer as it happens, configure an evaluator with `WithEvaluator`; it runs after the answer is out and never blocks it ([details](docs/configuration.md#classifier-and-evaluator)).
-
-### Intent classification
-
-Opt-in. After each successful answer of an interaction you opened, your classifier labels it with one of your intents and an outcome, sent as `ai_interaction_classified`. Nothing waits for it.
-
-```go
-err := rudderstackai.Configure(rudderstackai.WithClassifier(&rudderstackai.ClassifierOptions{
-	Client:  rudderanthropic.ClassifierClient(anthropic.NewClient(), "claude-haiku-4-5"), // its calls are never tracked
-	Intents: []string{"refund_request", "order_status", "bug_report"},
-}))
-// Or your own function: &rudderstackai.ClassifierOptions{Classify: func(ctx context.Context, turn rudderstackai.ClassifyTurn) (rudderstackai.ClassifyResult, error) {...}}
-```
-
-`intent` is `other` and `outcome` is `unclear` when the label is not in your lists, so both values are always possible, even with your own `Intents` and `Outcomes`. Calls outside any interaction are never classified; tasks only with `Classify` set. Input, limits and cost: [docs/events.md](docs/events.md#ai_interaction_classified).
-
-To send classifications from your own pipeline, for any interaction (failed ones too), call `TrackClassification` ([details](docs/events.md#send-your-own-classification)):
-
-```go
-rudderstackai.TrackClassification(ctx, rudderstackai.TrackClassificationOptions{
-	InteractionID: interactionID, ConversationID: chatID,
-	Intent: "refund_request", Outcome: "resolved", UserID: userID,
-})
-```
-
-### Declared tool events
-
-```go
-err := rudderstackai.Configure(rudderstackai.WithEventRules(rudderstackai.EventRules{Tools: map[string]rudderstackai.ToolEventRule{
-	"save_memory":   {Event: "memory_captured"},
-	"create_ticket": {Event: "ticket_created", Properties: func(args map[string]any, _ any) map[string]any { return map[string]any{"priority": args["priority"]} }},
-}}))
-```
-
-Each call sends one track event with `tool_name`, `tool_call_id`, `tool_status`, the interaction's IDs and whatever `Properties` returns; tool arguments and results are never sent otherwise. Names starting with `ai_` or `mcp_` are reserved ([details](docs/events.md#declared-tool-events)).
-
-### Tool breakdown and multi-agent
-
-`WithToolBreakdown(true)` adds `tool_breakdown` entries to `ai_response_received` (per agent, MCP server, tool and parent tool: calls, failures, measured durations). `usage_breakdown` has one entry per agent, provider, model and service tier; set `LLMCall.AgentName` / `ToolCall.AgentName` to keep agents apart ([details](docs/events.md#tool_breakdown)).
-
-## Privacy
-
-Sent by default: IDs, models, token counts, latency, cost, status, tool names. Never sent by default: prompt, answer and feedback text, score explanations, tool arguments and results, MCP resource contents and elicitation answers.
-
-`WithCaptureContent(true)` (or `CaptureContent` per interaction) adds `prompt_text` (from `PromptText`), `response_text` (from `EndOptions.ResponseText`), `action_details.feedback_text` and score `explanation`, and, with `WithLLMCallEvents`, each call's `input_messages`, `output_text` and `output_tool_calls` (see [docs/events.md](docs/events.md#ai_llm_response_received)). Captured text and the classifier's `intent_summary` are masked before they leave the process: emails, phone numbers, payment cards, IP addresses, US SSNs, IBANs, and API keys, tokens and passwords become `[email]`, `[phone]`, `[card]`, `[ip]`, `[ssn]`, `[iban]` and `[secret]`.
-
-- `WithRedactHook` adds your own masking after the built-ins; a hook that fails or panics drops the field. Text over 32,000 code points is withheld rather than masked. Names and postal addresses are not caught.
-- One rule: `WithRedaction(false)` turns redaction off, the built-ins and the hook alike; MCP `Options.DisableRedaction` does the same for `Redact`, but agent-written MCP text (`call_reason`, `capability_detail`, `feedback_text`, `error_message`) that still matches a built-in rule is withheld.
-- `MaskText(text)` applies the built-ins to text you send yourself, such as a declared tool event's `Properties`, which are sent as returned.
-- MCP servers follow the global setting unless their own `Options.CaptureContent` or `ContentCapture` says otherwise. Per kind: [Content capture](docs/configuration.md#content-capture). Patterns are defined in [`spec/fixtures/redaction-v0.1.json`](spec/fixtures/redaction-v0.1.json); details: [docs/configuration.md](docs/configuration.md#privacy-and-masking).
-
-## Serverless and workers
-
-Before a script, worker or serverless handler exits, flush within a deadline; on SIGTERM, shut down. The SDK installs no exit or signal hooks.
-
-```go
-ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-defer cancel()
-rudderstackai.Flush(ctx)    // classifications, scores, held retries, then each client; false on timeout or a client flush error
-rudderstackai.Shutdown(ctx) // on SIGTERM: also ends open interactions; never closes clients
-rudderstackai.CloseClient(ctx, client) // afterwards, close each client you own within ctx
-```
-
-`Shutdown` never closes clients, so shared clients remain available for non-AI events. Call `CloseClient(ctx, client)` afterwards for each client you own: it returns false and reports `flush_timeout` when ctx expires while `Close` continues in the background; a Close error is reported unchanged as `flush_failed`, even after the deadline. Without a deadline, it waits until Close finishes or ctx is canceled.
-
-An analytics-go client (v4.5.1, the minimum) sends its queue on `Flush`; a custom client without `Flush(ctx)` or `Flush()` cannot be flushed (reported once as `client_outdated`) and sends on `Close()`, so close it before exit. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. On Lambda, `Flush` per invocation with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` then `CloseClient` for your clients on SIGTERM. A top-level `RunTask` flushes its own work and client, at most 2 seconds by default ([details](docs/configuration.md#flush-and-shutdown)).
-
-Overhead: the SDK adds about 23 µs to an interaction with one wrapped model call on a CI runner (19 µs on a laptop), against hundreds of milliseconds for the model call itself; content capture adds a few milliseconds of masking. Budget, measurements, the load test and limits: [docs/performance.md](docs/performance.md).
-
-## Events
-
-| Event                                                   | When                                                                         |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `ai_user_prompt_created`                                | A user-triggered interaction starts (sent when its first model call starts)  |
-| `ai_response_received`                                  | The interaction ends: status, models, tokens, cost, latency, tool counts     |
-| `ai_user_action`                                        | `TrackAction`: feedback, copy, share, report, regenerate                     |
-| `ai_interaction_classified`                             | After a classified answer, with `intent` and `outcome`; or from `TrackClassification` |
-| `ai_interaction_scored`                                 | One per score: from your evaluator, or `TrackScore`                          |
-| `ai_otel_span` | One per wrapped provider invocation or manual span, with `WithEmitSpans(true)` |
-| `ai_llm_response_received`                              | One per model call, only with `WithLLMCallEvents(true)`                      |
-| Your declared tool events                               | One per call of a tool listed in `WithEventRules` (or MCP `Options.EventRules`) |
-| `mcp_client_seen`, `mcp_tool_called`, `mcp_elicitation_completed`, `mcp_resource_read`, `mcp_prompt_used` | MCP server requests ([mcp.md](docs/mcp.md#events)) |
-| `mcp_feedback_submitted` | Opt-in: the agent called the injected `submit_feedback` tool |
-| `mcp_capability_requested`                              | Deprecated: use `FeedbackRequests` / `mcp_feedback_submitted`              |
-| `mcp_event_subscription_changed`, `mcp_event_delivered` | Experimental, opt-in: the MCP Events draft extension                         |
-
-Every event's properties stay within 30,000 serialized bytes (RudderStack rejects events over 32 KiB): captured text goes first, then breakdown entries, and a declared tool event loses its `Properties` output, so metrics still arrive. Every event carries `context.wrapperLibrary` (`name: "ai-sdk-go"`, `version`, `specVersion: "0.4.0"`, `integration`) beside analytics-go's own `context.library`. Sample payloads, every property and error types: [docs/events.md](docs/events.md). Schema: [`spec/ai-events-v0.4.schema.json`](spec/ai-events-v0.4.schema.json); tracking plan: [`spec/rudderstack-catalog/`](spec/rudderstack-catalog).
-
-## Configuration
-
-`Configure(options...)` changes only the settings passed; an invalid option returns an error and changes nothing.
-
-| Option                           | Default | Meaning                                                                                       |
-| -------------------------------- | ------- | --------------------------------------------------------------------------------------------- |
-| `WithAnalytics(client)`          | none    | Default RudderStack client (`analytics.Client`)                                               |
-| `WithPrices(map)`                | none    | Model prices in USD per million tokens; no prices ship with the SDK (also `RegisterPrice`)    |
-| `WithAzureDeploymentModels(map)` | none    | Azure OpenAI deployment name to base model, for pricing only                                  |
-| `WithCaptureContent(on)`         | off     | Send prompt, answer and feedback text (masked)                                                |
-| `WithContentCapture(policy)`     | none    | The same per kind ([Content capture](docs/configuration.md#content-capture))                  |
-| `WithRedaction(on)`              | on      | Masking of captured text; off also skips the hook                                             |
-| `WithRedactHook(fn)`             | none    | Your masking, run after the built-ins                                                         |
-| `WithIdentityFromCookies(on)`    | on      | Read identity from RudderStack JavaScript SDK cookies                                         |
-| `WithToolBreakdown(on)`          | off     | Add `tool_breakdown` to `ai_response_received`                                                |
-| `WithEmitSpans(on)` | off | Emit wrapper and manual `ai_otel_span` events; independent of call events. |
-| `WithLLMCallEvents(on)`          | off     | Also send `ai_llm_response_received` per model call                                           |
-| `WithEventRules(rules)`          | none    | Declared tool events                                                                          |
-| `WithClassifier(*opts)`          | none    | Intent classification; nil turns it off                                                       |
-| `WithEvaluator(fn)`              | none    | Your scoring function, run after each successful answer; nil turns it off                     |
-| `WithServerFeedback(on)`         | on      | Off: `TrackAction` sends nothing (the client app sends `ai_user_action`)                      |
-| `WithTraceIDFrom(fn)`            | none    | Where `trace_id` comes from, for example `rudderotel.TraceID`                                 |
-| `WithSampleRates(map)`           | none    | Send that share of each listed event, keyed on `interaction_id`; kept events carry `sample_rate` ([Sampling](docs/configuration.md#sampling)) |
-
-Go resolves one package instance for each import path in a build, including when dependencies use vendoring. Import aliases and repeated wrapping share invocation recognition, so they emit one span. Independently renamed forks use different package identities and internal context keys; cross-fork wrapper recognition is a platform limit. Lazy Go iterators retain the explicit context passed by the caller, and resolve active interaction ownership and capture policy when provider work starts.
-
-Integration options: `WithProvider` and `WithAnalytics` on every integration but Bedrock (`WithAnalytics` only), and `rudderopenai.WithStreamUsage(bool)` (streamed Chat Completions ask for usage, with a resend when a host rejects it; true always asks, false never). `EstimateCost(provider, model, input, output, cached, cacheWrite, opts ...CostOptions)` prices one call from the registered table, with `CostOptions{CacheWrite1hTokens, ServiceTier, ServerToolCalls}`. Per-interaction options, client precedence, cost rules, warehouse column types and the API reference: [docs/configuration.md](docs/configuration.md).
-
-## Advanced: trace_id from OpenTelemetry
-
-`trace_id` joins an answer to a Langfuse, LangSmith or OpenTelemetry trace. Pass it as `InteractionOptions.TraceID` or `SetTraceID`, or read it from the active span with the optional `rudderotel` module (the core does not depend on OpenTelemetry):
-
-```go
-err := rudderstackai.Configure(rudderstackai.WithTraceIDFrom(rudderotel.TraceID)) // go get github.com/rudderlabs/ai-sdk-go/rudderotel
-```
-
-A value you set always wins. Setting a product trace ID does not itself create or export a span
-([trace_id](docs/configuration.md#trace_id)); `WithEmitSpans(true)` separately enables SDK spans.
-
-## OpenTelemetry span input
-
-`rudderotel` can export your instrumented AI spans as `ai_otel_span` events with complete OTLP/JSON
-payloads. Add `rudderotel.NewSpanProcessor(rudderotel.Options{Analytics: client})` through
-`sdktrace.WithSpanProcessor`. Set `ProductEvents: true` to record model/tool spans in the active
-interaction, and `LinkTraceID: true` to link its trace. Content capture is off by default.
-For one-call global setup, use `rudderotel.RegisterTracing`; it refuses an existing provider.
-See [tracing](docs/tracing.md) and the [runnable example](examples/tracing). Three setups:
-product only (the default), traces only (your instrumentation and `rudderotel`), or both
-(`WithEmitSpans(true)`); see [choose a setup](docs/tracing.md#choose-a-setup). With
-`WithEmitSpans(true)` and the processor together, each model call is still sent as one span.
-
-## Checking a migration
-
-Moving AI events your app already sends through RudderStack to this SDK? `aicheck` checks a recording of what the app sends; it is its own module, so the app gains no dependency. Record the events while you drive the app, once per switch setting. In the test or harness, make `ruddertest.Recorder` the app's own analytics-go client where the app builds it, before the app calls `rudderstackai.Configure` and reads its switches, so legacy calls and switch-off runs are recorded too (configuring a recorder after start misses them):
-
-```go
-client, err := ruddertest.NewRecorder("events.jsonl") // github.com/rudderlabs/ai-sdk-go/ruddertest, instead of analytics.NewWithConfig(...)
-```
-
-The recorder creates the file in the current folder, where it's easy to commit by accident: record outside the repo (for example in a temp folder) or add the capture file to `.gitignore`.
-
-```bash
-go install github.com/rudderlabs/ai-sdk-go/cmd/aicheck@latest
-aicheck events.jsonl --expect-legacy chatTurnCompleted \
-  --feature support_bot --surface web --user-id demo_user_1 --expect-joins
-aicheck legacy-off.jsonl --absent chatTurnCompleted
-aicheck ai-off.jsonl --no-ai-events --expect-legacy chatTurnCompleted
-aicheck what-changes ai-off.jsonl events.jsonl  # redacted before/after diff for the PR
-```
-
-The check validates every event against the spec this version emits (and client copies against the client-event schema), and checks that legacy events keep sending (`--expect-legacy`) or stop when their switch is off (`--absent`, counted by provenance: events without an AI SDK's `context.wrapperLibrary`, so an AI event with the same name does not count), that no AI event is sent with the AI switch off (`--no-ai-events`), client/server joins in both directions (`--expect-joins`, feedback copies per action type included, honouring `--client-opt-out client_prompt|client_response|client_feedback|server_feedback`, `--feedback-endpoint` and `--client-surface` for surfaces with a browser client), that app-caught failures are not reported as success (`--failed-interaction <id>`), plus identity (`--user-id`, `--expect-session`, and `--mcp-user-id` or `--mcp-anonymous` for MCP servers), content capture and MCP flags (`aicheck --help`). Exit code 0 passes, 1 fails, 2 is bad usage or an unreadable file.
-
-## Troubleshooting
-
-| Symptom                                    | Cause and fix                                                                                                                         |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
-| No events, warning `no RudderStack client` | No client anywhere: `Configure(WithAnalytics(client))`.                                                                               |
-| Events missing from a job or script        | The process exited before analytics-go sent its batch: `Shutdown(ctx)` then `CloseClient(ctx, client)` on exit, or `Flush(ctx)` while continuing to use the client.                      |
-| One answer split into many                 | Calls ran with a context that carries no interaction, or a stream was read after the interaction ended. Pass the interaction's `ctx`. |
-| No `total_cost_usd`                        | A model is not priced and no gateway reported a cost, a call failed or was cancelled, or a streamed call had no usage.                 |
-| No `ai_interaction_classified`             | No classifier, a call outside an interaction, an answer that failed, or a classifier error (logged once).                             |
-| Cost column is an integer in the warehouse | The first loaded value was `0`: see [warehouse column types](docs/configuration.md#warehouse-column-types).                           |
-
-Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value turns it on; it is read on every log call) to log everything tracking drops or ignores at debug level through the default `log/slog` handler, whatever its level, prefixed `[rudderstack-ai]`: errors by type only, never event payloads or captured text. Warnings (same prefix) are logged mostly once per process without it; an option value outside its list (a surface, confidence, status, pause or block reason, or action type) is named by its type only, never the value. Tracking never panics into your code and returns provider errors unchanged; `WithOnError` sees what it contained ([errors](docs/configuration.md#errors)).
-
-## Compatibility
-
-Each module requires the oldest version it supports, so adding it never upgrades your SDK. CI runs every module's tests twice: alone, at the minimums in its `go.mod`, and in the workspace, with the newer versions the examples use.
-
-| Module                                        | Requires and tested at (minimum)                               | Also tested with |
-| --------------------------------------------- | -------------------------------------------------------------- | ---------------- |
-| All modules                                   | Go 1.26.11                                                      | Go 1.26, 1.27    |
-| `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.5.1, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.2.1 |
-| `.../rudderopenai`                            | `github.com/openai/openai-go/v3` v3.70.0                        | v3.77.0          |
-| `.../rudderanthropic`                         | `github.com/anthropics/anthropic-sdk-go` v1.78.0                | v1.80.0          |
-| `.../ruddergenai`                             | `google.golang.org/genai` v1.72.0                               | v1.73.0          |
-| `.../rudderbedrock`                           | `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` v1.63.1   | v1.63.4          |
-| `.../rudderotel`                              | `go.opentelemetry.io/otel` / `trace` / `sdk` v1.47.0           |                  |
-
-Every Go module runs the applicable shared fixtures in [`spec/fixtures/`](spec/fixtures).
-
-## Upgrading to AI events spec v0.4
-
-Events carry `specVersion` `0.4.0`. The server schema and conformance fixture are now `ai-events-v0.4.schema.json` and `conformance-v0.4.json`. The client schema remains `ai-client-events-v0.2.schema.json`, following the v0.3 release precedent. The migration checker accepts both 0.3.0 and 0.4.0 captures.
-
-- **One-shot and client events**: opt into `OneShot` for interactions without a thread. Shared client schemas cover prompts, suggestions, feedback, exports, conversation and agent controls, limits and declared tools on web and mobile.
-- **Server fields**: blocked answers, denied tools, confidence, credits, per-call timing and purpose, fallback and BYOK flags, agent versions, variants, MCP result sizes, compaction and `context_limit` errors.
-- **Sampling**: `WithSampleRates` controls each event; kept events carry `sample_rate`. Events of one interaction share a stable draw. Answers are unsampled by default.
-- **Pause/resume**: paused and final answer segments share an interaction ID, including after JSON restore. Final answers carry pause counts and total paused time. Optional `ai_task_started` fires once per new background run.
-
-## Upgrading to 0.3.0
-
-No API was removed.
-
-- **RudderStack client**: every module requires `github.com/rudderlabs/analytics-go/v4` v4.5.1, so `Flush` and `Shutdown` send its queue. A custom client without `Flush(ctx)` or `Flush()` is still reported once as `client_outdated`.
-- **`app_error`**: an answer that fails in your own code after a successful model call has `error_type: app_error`, not `api_error`. An error from a model call, or one that carries a provider signal (HTTP status, provider error code or provider error type), keeps its type. A generic `EndOptions{Status: StatusError, ErrorType: "app_error"}` also preserves the latest call's provider classification; a successful retry clears it. Call `in.AcceptOutput()` when you keep output that stopped at the token cap, so a later failure in your code is not reported as `length`. Update queries that count `api_error` as all failures.
-- **Usage on failed streams**: a streamed call that fails partway keeps the tokens it already reported and still counts in `llm_call_count` (unpriced). A Gemini stream that fails mid-way is now a failed call, no longer a success.
-
-## Known limitations
-
-- Mastra is a TypeScript framework, so this SDK has no Mastra integration; use `@rudderstack/ai` (Node.js).
-- Provider integrations: OpenAI, Anthropic, Google Gen AI and Bedrock clients. There are no OpenAI Agents SDK, Claude Agent SDK, LangChain, LangGraph or Vercel AI SDK integrations (they have no Go version). The optional `rudderotel` module provides an OpenTelemetry span processor and exporter.
-- Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `Interaction.Pause` or `EndOptions`.
-- Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint. A cancelled Chat Completions stream keeps 0 tokens (usage arrives only at the end).
-- Retries: with `WithEmitSpans(true)`, SDK retries share one invocation span within a bounded one-second retry grace; failed attempts settle when that grace expires. See [tracing](docs/tracing.md#go-platform-limits) and [Retries](docs/integrations.md#retries).
-- Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
-- MCP: only servers are tracked, on go-sdk and mcp-go. Neither library exposes the server name (nor the go-sdk the JSON-RPC request ID): they are read through reflection, tested against the versions above, falling back to `unknown`. Only streamable HTTP is detected as a transport. mcp-go has no hook for elicitations a handler answers through `InputRequests` on 2025-06-18. State is in memory per server name, per process ([details](docs/mcp.md#limits)).
-
-## Examples
-
-| Example                                               | Shows                                                                                          |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`openai`](examples/openai)                           | `rudderopenai`: a streamed Chat Completions answer, a registered price, `TrackAction` feedback |
-| [`anthropic`](examples/anthropic)                     | `rudderanthropic`: a streamed Messages answer with cache reads and writes                      |
-| [`google-genai`](examples/google-genai)               | `ruddergenai`: a tool call, then a streamed answer, with `tool_breakdown`                      |
-| [`bedrock-converse`](examples/bedrock-converse)       | `rudderbedrock`: `Converse` with a tool, then `ConverseStream`, priced through an inference profile |
-| [`background-agent`](examples/background-agent)       | `RunTask`: system-triggered work with a chained sub-task and `TrackScore`                      |
-| [`approval-loop`](examples/approval-loop)             | `RunTask` that pauses twice for approval and resumes from a stored snapshot; `ai_task_started` |
-| [`manual`](examples/manual)                           | `StartInteraction`, `RecordCall`, `RecordToolCalls`, a declared tool event, a custom classifier |
-| [`mcp-server`](examples/mcp-server)                   | stdio and streamable HTTP, `request_context`, a declared event, `submit_feedback`           |
-| [`mcp-server-mcpgo`](examples/mcp-server-mcpgo)       | The same server on mcp-go with `ruddermcpgo.WrapServer`, 2025-06-18 and 2026-07-28             |
-| [`mcp-stateless-http`](examples/mcp-stateless-http)   | Stateless streamable HTTP on 2026-07-28, confirmation through an `input_required` elicitation  |
-| [`mcp-auth`](examples/mcp-auth)                       | A bearer token check and `Identify`: `userId`, `account_id`, `oauth_client_id`, `token_scopes` |
-
-From the repository root: `go run ./examples/<name> --check` runs one end to end against a local mock data plane and a mock LLM (no credentials); `--live` sends the same events to `RUDDERSTACK_DATA_PLANE_URL` with `RUDDERSTACK_WRITE_KEY`; without flags a provider example makes one real call and an MCP example serves. Details: [examples/README.md](examples/README.md).
+This sends `ai_user_prompt_created`, `ai_response_received` (models, tokens, latency, status, and cost once the model is [priced](docs/configuration.md#pricing)) and `ai_user_action`.
+Pass the same context to every model call: a call made with a context that carries no interaction is reported as its own answer.
+See [event fields](docs/events.md) and [feedback](docs/events.md#ai_user_action).
+
+## Integrations
+
+| Integration | Entry point | Page |
+| --- | --- | --- |
+| OpenAI | `openai.NewClient(rudderopenai.WithTracking())` | [OpenAI](docs/integrations.md#openai) |
+| Anthropic | `anthropic.NewClient(rudderanthropic.WithTracking())` | [Anthropic](docs/integrations.md#anthropic) |
+| Google Gen AI | `genai.ClientConfig{HTTPClient: ruddergenai.HTTPClient(nil)}` | [Google Gen AI](docs/integrations.md#google-gen-ai) |
+| Amazon Bedrock | `bedrockruntime.NewFromConfig(cfg, rudderbedrock.WithTracking())` | [Amazon Bedrock](docs/integrations.md#amazon-bedrock) |
+| Manual | `in.RecordCall(...)` | [Manual recording](docs/integrations.md#manual) |
+| MCP (go-sdk) | `rudderstackai.WrapMCPServer` | [MCP setup](docs/mcp.md#setup) |
+| MCP (mcp-go) | `ruddermcpgo.WrapServer` | [MCP setup](docs/mcp.md#setup) |
+| OpenTelemetry | `rudderotel.NewSpanProcessor` | [Tracing](docs/tracing.md) |
 
 ## Documentation
 
-- [docs/events.md](docs/events.md): every AI interaction event and property, status, totals, `usage_breakdown`, `tool_breakdown`, cost, error types.
-- [docs/configuration.md](docs/configuration.md): `Configure` options, interaction and task options, context values and `Middleware`, cookies, `trace_id`, masking, pricing and `EstimateCost`, classifier and evaluator, flushing, logging, API reference.
-- [docs/integrations.md](docs/integrations.md): per-integration setup and behaviour, streaming, retries, gateways, manual recording, limits.
-- [docs/mcp.md](docs/mcp.md): MCP server tracking.
-- [docs/performance.md](docs/performance.md): what the SDK costs per interaction and MCP call, the load test, the fuzz tests and the limits.
+| Page | What it covers |
+| --- | --- |
+| [Configuration](docs/configuration.md) | Options, interactions, tasks, identity, pricing, classification, flushing and troubleshooting |
+| [Events](docs/events.md) | Event properties, status, totals, cost, tool events, feedback and scores |
+| [Integrations](docs/integrations.md) | Provider setup, streaming, retries, manual recording, versions, limits and examples |
+| [MCP](docs/mcp.md) | Server tracking, identity, request context, feedback, protocols and limits |
+| [Tracing](docs/tracing.md) | Wrapper and manual spans, OpenTelemetry input, joins and delivery |
+| [Privacy](docs/privacy.md) | Capture policy, serialization, custom properties, masking and limits |
+| [Migration](docs/migration.md) | Upgrade notes and recording-based migration checks |
+| [Client events](docs/client-events.md) | Browser and mobile event joins |
+| [Performance](docs/performance.md) | Overhead, load and fuzz tests |
 
-## Contributing
+## Compatibility
+
+Go 1.26.11 or later.
+See [module dependencies, minimums and CI-tested versions](docs/integrations.md#compatibility), [provider limits](docs/integrations.md#go-platform-limits) and [MCP limits](docs/mcp.md#limits).
+
+## Contributing, security and license
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [RELEASING.md](RELEASING.md). Report security issues as described in [SECURITY.md](SECURITY.md).
 
-## License
-
 [MIT](LICENSE.md)
-
-Wrapper and manual spans are opt-in with `rudderstackai.WithEmitSpans(true)`, independently of
-`WithLLMCallEvents`. See [tracing](docs/tracing.md) for `StartSpan`, call `span_id` joins, privacy,
-and Go platform limits.
-
-Credits retries preserve the newest retained call usage and metadata when a hook re-enters and matches a twin. The published credits belong to that same usage and metadata. Snapshot outcome hints prefer canonical keys even when their value is null; legacy aliases are read only if the canonical key is absent.
-
-User hooks and analytics client methods run after the SDK releases its bookkeeping locks, so a callback can re-enter tracking from another thread or goroutine. Credits hooks must still be side-effect free and idempotent because pricing may retry. Flush waits for in-flight terminal span reporting within its deadline.

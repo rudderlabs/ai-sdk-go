@@ -9,24 +9,8 @@ import (
 )
 
 func validSnapshotInteger(v any) bool {
-	var n float64
-	switch v := v.(type) {
-	case int:
-		n = float64(v)
-	case int64:
-		n = float64(v)
-	case float64:
-		n = v
-	case json.Number:
-		var err error
-		n, err = v.Float64()
-		if err != nil {
-			return false
-		}
-	default:
-		return false
-	}
-	return n >= 0 && n <= 9007199254740991 && math.Trunc(n) == n
+	n, ok := pendingSnapshotNumber(v)
+	return ok && n >= 0 && n <= 9007199254740991 && math.Trunc(n) == n
 }
 
 // The field lists and kinds match Node's validPending; unknown extensions are ignored.

@@ -7,9 +7,8 @@ import (
 	"testing"
 )
 
-func review137Call() LLMCall {
-	return sdk6111Window(LLMCall{Provider: "openai", Model: "gpt-4o", ResponseID: "r", Integration: "tracing", InputTokens: 10}, 100)
-}
+var review137Call = pendingPricingCall
+
 func TestReview137InnerTwin(t *testing.T) {
 	for _, mode := range []string{"segment", "in-process", "json"} {
 		t.Run(mode, func(t *testing.T) {
