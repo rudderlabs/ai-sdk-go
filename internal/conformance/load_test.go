@@ -10,7 +10,8 @@ package conformance
 //	go test -tags load -run TestLoad -v ./internal/conformance
 //
 // LOAD_SECONDS (phase 1; phase 2 runs half as long), LOAD_RATE (interactions per second, each
-// followed by one MCP call) and LOAD_WORKERS scale it. The rate is paced so the client keeps up.
+// followed by one MCP call) and LOAD_WORKERS scale it. In phase 2 every event must be delivered
+// or lost after analytics-go's retries; a full queue never refuses one.
 
 import (
 	"bytes"
@@ -151,6 +152,39 @@ type quietLogger struct{}
 func (quietLogger) Logf(string, ...any)   {}
 func (quietLogger) Errorf(string, ...any) {}
 
+// lostCounter counts, by event name, the messages analytics-go gave up on after its retries.
+type lostCounter struct {
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func (l *lostCounter) Success(analytics.Message) {}
+
+func (l *lostCounter) Failure(m analytics.Message, _ error) {
+	name := ""
+	switch t := m.(type) {
+	case analytics.Track:
+		name = t.Event
+	case *analytics.Track:
+		name = t.Event
+	}
+	l.mu.Lock()
+	l.counts[name]++
+	l.mu.Unlock()
+}
+
+func (l *lostCounter) count(name string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.counts[name]
+}
+
+func (l *lostCounter) reset() {
+	l.mu.Lock()
+	clear(l.counts)
+	l.mu.Unlock()
+}
+
 func heapAfterGC() uint64 {
 	runtime.GC()
 	var ms runtime.MemStats
@@ -167,10 +201,11 @@ func TestLoad(t *testing.T) {
 	const maxMapEntries = 2_000 // lowered from 10,000 so a short run fills the MCP maps and evicts
 	const server = "load-mcp"
 	plane := &countingPlane{counts: map[string]int{}}
+	lost := &lostCounter{counts: map[string]int{}}
 	dp := httptest.NewServer(plane)
 	defer dp.Close()
 	client, err := analytics.NewWithConfig("LOAD_WRITE_KEY", analytics.Config{
-		DataPlaneUrl: dp.URL, BatchSize: 200, Interval: time.Second, Logger: quietLogger{},
+		DataPlaneUrl: dp.URL, BatchSize: 200, Interval: time.Second, Logger: quietLogger{}, Callback: lost,
 		RetryAfter: func(int) time.Duration { return 50 * time.Millisecond },
 	})
 	if err != nil {
@@ -302,6 +337,7 @@ func TestLoad(t *testing.T) {
 	}
 
 	var warmHeap uint64
+	// Phase 1 needs no pacing wait: a full queue never refuses an event; Enqueue waits for room.
 	phase1 := phase(seconds, func() { warmHeap = heapAfterGC() })
 	sent := [3]int64{interactions.Load(), interactions.Load(), mcpCalls.Load()}
 	if !rudderstackai.Flush(ctx) {
@@ -311,10 +347,19 @@ func TestLoad(t *testing.T) {
 		int64(plane.count("ai_user_prompt_created")), int64(plane.count("ai_response_received")), int64(plane.count("mcp_tool_called")),
 	}
 
+	lost.reset()
 	plane.failing.Store(true)
 	phase2 := phase(seconds/2, nil)
 	plane.failing.Store(false)
 	recovered := rudderstackai.Flush(ctx)
+	// Counted before Shutdown, which sends the events of interactions still open.
+	p2 := interactions.Load() - sent[0]
+	sent2 := map[string]int64{"ai_user_prompt_created": p2, "ai_response_received": p2, "mcp_tool_called": mcpCalls.Load() - sent[2]}
+	deliveredBefore := map[string]int64{"ai_user_prompt_created": delivered[0], "ai_response_received": delivered[1], "mcp_tool_called": delivered[2]}
+	accounted2 := map[string]int64{}
+	for name := range sent2 {
+		accounted2[name] = int64(plane.count(name)) - deliveredBefore[name] + int64(lost.count(name))
+	}
 	// Shutdown ends every interaction still open as incomplete with end_reason shutdown: none may be.
 	rudderstackai.Shutdown(ctx)
 	for _, cs := range sessions {
@@ -322,14 +367,13 @@ func TestLoad(t *testing.T) {
 	}
 	endHeap := heapAfterGC()
 
-	p2 := interactions.Load() - sent[0]
 	summary := fmt.Sprintf("### Go load test (%s, %d workers, %.0f interactions/s target)\n\n"+
 		"| Phase | Seconds | Interactions | MCP calls | Interactions/s | Data plane |\n| --- | --- | --- | --- | --- | --- |\n"+
 		"| 1 healthy | %.0f | %d | %d | %.0f | %d prompts, %d answers, %d tool calls delivered |\n"+
-		"| 2 HTTP 500 | %.0f | %d | %d | %.0f | %d batches rejected |\n\n"+
+		"| 2 HTTP 500 | %.0f | %d | %d | %.0f | %d batches rejected; %d events lost after retries |\n\n"+
 		"Heap after GC: %.1f MB after warm-up, %.1f MB at the end. Contained errors: %v.\n",
 		runtime.Version(), workers, rate, phase1, sent[0], sent[2], float64(sent[0])/phase1, delivered[0], delivered[1], delivered[2],
-		phase2, p2, mcpCalls.Load()-sent[1], float64(p2)/phase2, plane.rejected, float64(warmHeap)/1e6, float64(endHeap)/1e6, errs)
+		phase2, p2, mcpCalls.Load()-sent[1], float64(p2)/phase2, plane.rejected, lost.count("ai_user_prompt_created")+lost.count("ai_response_received")+lost.count("mcp_tool_called"), float64(warmHeap)/1e6, float64(endHeap)/1e6, errs)
 	fmt.Println(summary)
 	if path := os.Getenv("GITHUB_STEP_SUMMARY"); path != "" {
 		if f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
@@ -343,6 +387,11 @@ func TestLoad(t *testing.T) {
 	}
 	if plane.rejected == 0 {
 		t.Error("phase 2 never reached a failing data plane")
+	}
+	for name, want := range sent2 {
+		if accounted2[name] != want {
+			t.Errorf("phase 2 %s: delivered + lost = %d, sent %d", name, accounted2[name], want)
+		}
 	}
 	if plane.shutdown > 0 {
 		t.Errorf("%d interactions were still open at the end", plane.shutdown)
