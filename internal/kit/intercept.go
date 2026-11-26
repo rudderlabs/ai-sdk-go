@@ -296,7 +296,7 @@ func (s *Spec) Intercept(req *http.Request, send func(*http.Request) (*http.Resp
 					body.mu.Lock()
 					body.end(req.Context().Err())
 					body.mu.Unlock()
-					body.drainCallbacks()
+					body.drain(hook.Caller())
 				})
 				body.mu.Unlock()
 			}
@@ -484,17 +484,23 @@ type sseBody struct {
 	callbacks        []func()
 	draining         bool
 	drained          chan struct{}
+	// canceller is the cancellation goroutine while it drains; Close waits for it.
+	canceller uint64
 }
 
-// drainCallbacks claims each notice or observer operation before calling it. Re-entry
-// can add work, but never waits for its own callback or holds a parser mutex.
-func (b *sseBody) drainCallbacks() {
+func (b *sseBody) drainCallbacks() { b.drain(0) }
+
+// drain claims each notice or observer operation before calling it. Re-entry can add work,
+// but never waits for its own callback or holds a parser mutex. canceller is the calling
+// cancellation goroutine, or 0.
+func (b *sseBody) drain(canceller uint64) {
 	b.mu.Lock()
 	if b.draining {
 		b.mu.Unlock()
 		return
 	}
 	b.draining = true
+	b.canceller = canceller
 	b.drained = make(chan struct{})
 	for len(b.callbacks) > 0 {
 		fn := b.callbacks[0]
@@ -505,6 +511,7 @@ func (b *sseBody) drainCallbacks() {
 		b.mu.Lock()
 	}
 	b.draining = false
+	b.canceller = 0
 	close(b.drained)
 	b.mu.Unlock()
 }
@@ -686,8 +693,26 @@ func (b *sseBody) Close() error {
 	}
 	b.mu.Unlock()
 	b.drainCallbacks()
-	return b.src.Close()
+	err := b.src.Close()
+	// The cancellation goroutine may be reporting this stream: an app step after Close (a
+	// tracing twin, End) must see the cancelled call. Its own re-entry does not wait, and the
+	// bound breaks a report that waits on another goroutine's Close.
+	b.mu.Lock()
+	canceller, done := b.canceller, b.drained
+	b.mu.Unlock()
+	if canceller != 0 && canceller != hook.Caller() {
+		bound := time.NewTimer(cancelReportWait)
+		select {
+		case <-done:
+		case <-bound.C:
+		}
+		bound.Stop()
+	}
+	return err
 }
+
+// cancelReportWait bounds Close's wait for an in-flight cancellation report; tests shorten it.
+var cancelReportWait = 5 * time.Second
 
 // RecordCall adds observed boundaries and app metadata before recording a call.
 func (c *Call) RecordCall(call rudderstackai.LLMCall) bool {

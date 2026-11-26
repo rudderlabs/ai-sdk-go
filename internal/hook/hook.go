@@ -49,6 +49,8 @@ var (
 	Report func(kind, where string, err error)
 	// MaxMapEntries is the configured cap of each SDK lookup map.
 	MaxMapEntries func() int
+	// Caller identifies the calling goroutine; 0 when unknown.
+	Caller func() uint64
 	// Reset restores the defaults (tests only).
 	Reset func()
 )
