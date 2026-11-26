@@ -135,9 +135,9 @@ MCP tool results reuse the written wire message after a successful write; a fail
 
 | Transport | `mcp_session_id` |
 | --- | --- |
-| go-sdk stateful Streamable HTTP | The ID the transport assigned at initialize (default or `ServerOptions.GetSessionID`), on every request of the session. On a header-less initialize, the ID go-sdk generates is sent on that request (`mcp_client_seen`); later requests are new sessions, so their header is sent only when it is a UUID or 32 hex digits, and a `GetSessionID` that returns UUIDs keeps the join |
+| go-sdk stateful Streamable HTTP | The ID the transport assigned at initialize (default or `ServerOptions.GetSessionID`), on every request of the session |
 | go-sdk `Stateless: true` | The header, only if UUID or 32 hex |
-| go-sdk `MCPGODEBUG=allowsessionsinstateless=1` | The header, only if UUID or 32 hex: the ID equals the client's header, so it is not treated as issued |
+| go-sdk `MCPGODEBUG=allowsessionsinstateless=1` | The ID go-sdk generates on a header-less initialize, on that request (`mcp_client_seen`). Later requests are new sessions whose ID equals the client's header, so it is sent only when it is a UUID or 32 hex; a `GetSessionID` that returns UUIDs keeps the join |
 | go-sdk SSE | Absent: the issued ID is hidden and request headers are not passed |
 | mcp-go default and `WithStateful(true)` managers | `mcp-session-<uuid>` on initialize and every later request |
 | mcp-go `WithStateLess(true)` | The header, only if UUID, 32 hex or `mcp-session-<uuid>`: that is mcp-go's own ID format, so it counts as issued, and it can only carry a UUID |
