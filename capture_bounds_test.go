@@ -862,7 +862,7 @@ func TestShareCopiesDeepGraphUnderManyWrapperDepthsOnce(t *testing.T) {
 	w := sw()
 	started := time.Now()
 	for k := range 8 {
-		var v any = graph
+		v := graph
 		for range k {
 			v = map[string]any{"w": v}
 		}
