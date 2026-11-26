@@ -1179,3 +1179,24 @@ func TestMCPEventFieldsEqualMains(t *testing.T) {
 		}
 	}
 }
+
+func TestSpanSummaryFinishReasonsStayLinearOnSharedGraphs(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	for _, depth := range []int{30, 40} {
+		bounded(t, func() {
+			got := captureSpanAttributes(map[string]any{"gen_ai.response.finish_reasons": sharedMaps(depth)})
+			if got["gen_ai.response.finish_reasons"] == nil {
+				t.Fatalf("depth %d: no finish reasons", depth)
+			}
+		})
+	}
+}
+
+func TestSpanSummaryFinishReasonsRunASerializerOnce(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	calls := 0
+	got := captureSpanAttributes(map[string]any{"gen_ai.response.finish_reasons": []any{&onceMarshaler{&calls}}, "other": 1})
+	if calls != 1 || got["gen_ai.response.finish_reasons"] == nil {
+		t.Fatalf("serializer ran %d times, finish reasons=%v", calls, got["gen_ai.response.finish_reasons"])
+	}
+}
