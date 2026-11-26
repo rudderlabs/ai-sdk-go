@@ -51,7 +51,7 @@ err := rudderstackai.Configure(
 | `WithEventRules(rules)` | none | [Declared tool events](events.md#declared-tool-events). |
 | `WithClassifier(*ClassifierOptions)`    | none    | [Intent classification](#classifier-and-evaluator). Nil turns it off.                                                         |
 | `WithEvaluator(fn)`                     | none    | [Scoring](#classifier-and-evaluator) after each successful answer. Nil turns it off.                                          |
-| `WithServerFeedback(on)`                | on      | `TrackAction` sends `ai_user_action`. Off when the client app sends its own copy (`source: "client"`).                        |
+| `WithServerFeedback(on)`                | on      | [Server feedback](events.md#ai_user_action).                        |
 | `WithPrices(map[string]ModelPrice)`     | none    | Registers prices, as [`RegisterPrice`](#pricing) for each. Merged into the registered ones.                                   |
 | `WithTraceIDFrom(fn)` | none | [Product trace ID](tracing.md#product-trace-id). |
 | `WithLimits(Limits)`                    | see [Limits](#limits) | Memory caps. A zero field keeps its default.                                                                  |
@@ -139,7 +139,7 @@ err := rudderstackai.RunTask(ctx, "alert-triage", rudderstackai.TaskOptions{Trig
 
 `RunTask(ctx, taskName, TaskOptions, fn)` runs background work (a schedule, webhook, queue message, Slack mention or another agent) as one system-triggered interaction named `taskName`.
 
-- The actor is the system: `UserID` and `AnonymousID` come only from the options, never from the context or cookies, so events without them use `anonymousId: "ai_system"`. Put the customer in `AccountID` and the human the work is for in `OnBehalfOf`; both, and `Feature`, `Surface`, `Analytics` and `Context`, still fall back to the context. Set a stable, scoped `ConversationID` for bots and jobs, or each run gets a new one.
+- The actor is the system: `UserID` and `AnonymousID` come only from the options, never from the context or cookies, so events without them use the [identity fallback](#identity-and-cookies). Put the customer in `AccountID` and the human the work is for in `OnBehalfOf`; both, and `Feature`, `Surface`, `Analytics` and `Context`, still fall back to the context. Set a stable, scoped `ConversationID` for bots and jobs, or each run gets a new one.
 - Chaining: inside another interaction or task, `ParentInteractionID` and `ConversationID` default to it and `TriggerSource` to `agent`. Pass `ParentInteractionID` to link a run started elsewhere, or `NoParent: true` for none.
 - No prompt event. `Classify` is off unless set.
 - `Flush` (`*bool`): when the task ends, wait for its classification and score and flush its client, as [`Flush`](#flush-and-shutdown) does. Default on, except for a task chained to the interaction in its context.
@@ -178,9 +178,25 @@ err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{T
 
 ### Callback re-entry
 
+User hooks and analytics client methods run after the SDK releases its bookkeeping locks, so a callback can re-enter tracking from another thread or goroutine.
+
+| Callback family | Go behavior |
+| --- | --- |
+| Error handlers | Notices and contained build failures detached in `unlock`, reported outside `mu` |
+| Redactors | Prompt/response masking outside `mu` |
+| Adapter finalizers | `beforeEnd` detached under `mu`, invoked outside it |
+| Tool filters/properties | Jobs copied and fired flag set under `mu`, hooks outside it |
+| Transport/delivery/flush | Outbox detached before `Enqueue`; flush outside `mu` |
+| Classifier/evaluator | Turn copied, work scheduled after response publication |
+| JSON serialization hooks | Tool properties normalized/sized outside `mu`; delivery serialization outside `mu` |
+| Identity/trace/disconnect/error classification | Startup or outside `mu` |
+| Credit/pricing | `WithCredits` invokes a side-effect-free, idempotent callback outside `mu`; pricing may retry |
+
+Interaction state publication must finish before application code runs. Pausing keeps its in-progress guard active through finalization, redaction, tool events and delivery.
+
 Calls accepted during finalization belong to the closing segment. Calls accepted during delivery belong to the next segment. Each accepted call is emitted and counted once.
 
-`Pause` from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError`, or one warning without it. This covers credits/retries, analytics Enqueue, redactors, content serializers and event rules. The interaction and credits stay unchanged. Pause never panics. Error handlers, application code and callbacks for other interactions may pause normally. Another goroutine waits up to 5 s for pricing, including retries/capture. Expiry refuses with `Reason: pricing_in_flight`. Late credits stay in the open segment. If callback-goroutine detection fails, Pause falls back to waiting.
+`Pause` from the same interaction's SDK callback on the same goroutine returns `ok=false` and reports `KindPauseRefused` (`pause_refused`) with `ErrorInfo.Reason: in_callback` to `WithOnError`, or one warning without it. This covers credits/retries, analytics Enqueue, redactors, content serializers and event rules. The interaction and credits stay unchanged. Pause never panics. Error handlers, application code and callbacks for other interactions may pause normally. Another goroutine waits up to 5 s for pricing, including retries/capture. Expiry refuses with `Reason: pricing_in_flight`. Late credits stay in the open segment. Callback callers use the goroutine ID from the first runtime.Stack line; failed parsing falls back to waiting.
 
 ## Context values
 
@@ -207,6 +223,8 @@ http.Handle("/chat", rudderstackai.Middleware(http.HandlerFunc(chat)))
 ```
 
 ## Identity and cookies
+
+Runs with neither `UserID` nor `AnonymousID` use `anonymousId: "ai_system"`.
 
 With only a `UserID`, analytics-go fills a random `anonymousId` on every event, so it never matches the user's other events; pass a stable `AnonymousID` (or use the cookies below) when you join on it.
 
@@ -337,10 +355,14 @@ rudderstackai.Shutdown(ctx)
 rudderstackai.CloseClient(ctx, client)
 ```
 
-- `Flush(ctx) bool` waits for pending classifications and scores and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), then flushes every RudderStack client the SDK has used, in parallel, all within one deadline: `ctx`'s, or 10 seconds when it has none. A client implementing `ContextFlusher` (`Flush(ctx) error`, analytics-go v4.4.0 and later) sends its whole queue; one implementing `Flusher` (`Flush() error`) is flushed as before; a client with neither (a custom client) has no flush, is reported once as `client_outdated` and sends its queue on `Close()`. It returns false, and reports `flush_timeout`, when the deadline passed first. Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged. It never ends open interactions. `FlushTimeout(d)` is the deprecated duration form.
+- `Flush(ctx) bool` waits for pending classifications and scores and for failed provider attempts still waiting on a retry ([Retries](integrations.md#retries)), then flushes every RudderStack client the SDK has used, in parallel, all within one deadline: `ctx`'s, or 10 seconds when it has none. A client implementing `ContextFlusher` (`Flush(ctx) error`, analytics-go v4.4.0 and later) sends its whole queue; one implementing `Flusher` (`Flush() error`) is flushed as before; a client with neither (a custom client) has no flush, is reported once as `client_outdated` and sends its queue on `Close()`. It returns false, and reports `flush_timeout`, when the deadline passed first.
+
+  Because it drains your client's queue, your own `client.Flush` afterwards has nothing left to fail on: when your client's flush fails, `Flush` and `Shutdown` return false and pass your client's error, unchanged, to `WithOnError` as `flush_failed` (also when it fails after the deadline), so handle flush errors there. The `RunTask` flush reports it the same way and returns the task's own error unchanged.
+
+  It never ends open interactions. `FlushTimeout(d)` is the deprecated duration form.
 - `Shutdown(ctx) bool` stops queueing new classifications and scores, ends every open interaction as `response_status: incomplete` with `end_reason: shutdown`, then calls `Flush(ctx)` and returns its result. It never closes a client: close yours afterwards. Shared clients remain available for non-AI events. Calling it again is safe. Call it from your SIGTERM handling.
 - `CloseClient(ctx, client) bool` closes a client you own after `Shutdown`; call it for each client you own. A nil client returns true. It runs `Close` in a goroutine and returns true when Close finishes without error. If ctx expires, it returns false and reports `flush_timeout`; Close continues in the background. A Close error is passed unchanged as `flush_failed`, including errors returned after the deadline. Without a deadline, it waits until Close finishes or ctx is canceled.
-- A top-level `RunTask` waits for its own classification and score and flushes its client, at most `TaskOptions.FlushTimeout` (default 2 seconds) for both; running out is reported as `flush_timeout`, and the client's own flush error as `flush_failed`.
+- Task flush settings: [`TaskOptions`](#taskoptions); deadline and client errors are reported as `flush_timeout` and `flush_failed`.
 - Serverless: on Lambda, `Flush` before returning with a short client `Interval`, or `Close` per invocation; on Cloud Run, `Shutdown` then `CloseClient` for your clients on SIGTERM.
 - Events are queued in analytics-go, so delivery errors are its own: handle them with its `Config.Callback`.
 
@@ -378,7 +400,7 @@ When analytics-go's queue is full, only the sending goroutine waits. Masking lim
 
 ## Errors
 
-User hooks and analytics client methods can re-enter tracking from another thread or goroutine.
+Callback publication and lock guarantees: [Callback re-entry](#callback-re-entry).
 
 Tracking never panics into your code. SDK, integration and configured-hook panics are contained, including panics in the AWS SDK's stream-decoding goroutine. Your call's result or error is returned unchanged. Serializer failures never reach your app. Content serializers follow the [null and omission rules](privacy.md#serializer-behavior); a failed serializer on other extra event properties drops that property.
 

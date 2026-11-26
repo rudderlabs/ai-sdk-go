@@ -21,7 +21,12 @@
 //
 // Vertex AI with Google Cloud credentials: genai skips its own credential setup when given an
 // HTTP client, so wrap an authenticated one, e.g.
-// ruddergenai.HTTPClient(google.DefaultClient(ctx, "https://www.googleapis.com/auth/cloud-platform")).
+//
+//	base, err := google.DefaultClient(ctx, "https://www.googleapis.com/auth/cloud-platform")
+//	if err != nil {
+//		return err
+//	}
+//	httpClient := ruddergenai.HTTPClient(base)
 //
 // Tokens follow Google's usageMetadata: input is promptTokenCount (which includes
 // cachedContentTokenCount) plus toolUsePromptTokenCount, output is candidatesTokenCount plus

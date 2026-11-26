@@ -183,7 +183,7 @@ A background task's answer adds its system-actor fields:
 
 ## Pauses
 
-A run can pause more than once. Each `Interaction.Pause` sends one `ai_response_received` with `response_status: paused`, its `pause_reason`, and the totals, `usage_breakdown` and `tool_breakdown` of the calls since the start or the last resume, so summing every `ai_response_received` of an interaction counts each call once. The run then resumes (in process, or from its stored snapshot in another one) under the same `interaction_id`, without a new prompt event, and ends with one answer of another status that adds:
+Pause publication and segment accounting: [Pauses and resumes](configuration.md#pauses-and-resumes). Each paused answer includes `usage_breakdown` and `tool_breakdown`; the final answer adds:
 
 ```json
 { "response_status": "success", "pause_count": 2, "total_paused_ms": 86400412 }
@@ -460,7 +460,7 @@ What the user did with an answer, sent by `TrackAction`, typically from a feedba
 - `exported` uses `action_details.destination`, a snake_case label such as `download`, `dashboard`, `agent` or `ide` (1-64 ASCII characters: a lowercase letter first, then lowercase letters, digits or underscores).
 - `action_details`: your map, with `feedback_type`, `feedback_text`, `card_kind` and `target_type` dropped (with a warning) when not strings; `card_kind` and `target_type` also when empty. `feedback_text` is sent only with content capture on, masked.
 - Send `feedback_retracted` with the same `feedback_type` when a user takes feedback back: the latest event per `interaction_id` is the final state.
-- `InteractionID` and `ConversationID` (falling back to the context) are required; without them the event is dropped with a warning. For a one-shot interaction, pass its ID as both. `WithServerFeedback(false)` turns `TrackAction` off when the client app (web or mobile) sends its own copy (`source: "client"`).
+- `InteractionID` and `ConversationID` (falling back to the context) are required; without them the event is dropped with a warning. Pass the actual IDs from the interaction ([one-shot client joins](client-events.md)). `WithServerFeedback(false)` turns `TrackAction` off when the client app (web or mobile) sends its own copy (`source: "client"`).
 
 ## ai_limit_reached
 

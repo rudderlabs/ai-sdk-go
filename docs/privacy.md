@@ -8,7 +8,7 @@ Captured content honours `MarshalJSON` and `MarshalText` with `encoding/json` pr
 
 A serializer error, panic, invalid JSON or re-entry produces JSON `null`; its fields are never walked and the event still arrives. Top-level fields that forbid null are omitted. Span context is captured at span start, even with content capture off; admitted manual attributes are captured at End. Disabled content attributes run no serializers. OTel attributes retain byte stripping. See [observed MCP results](mcp.md#observed-result-capture).
 
-App callbacks, rules, classifiers, request controls and return values keep their inputs. Serializers called by an app serializer are outside the SDK's count. Go by-value receivers without stable identity run once per occurrence; named maps and slices reuse serialized output.
+App callbacks, rules, classifiers, request controls and return values keep their inputs. Serializers an app serializer calls itself are outside the SDK's count. Go by-value receivers without stable identity run once per occurrence; named maps and slices reuse serialized output.
 
 Content capture is off by default: no prompt, answer, feedback or failure text is sent. `ContentCapture` turns kinds on one at a time; a nil key takes `Default`, then the level above:
 

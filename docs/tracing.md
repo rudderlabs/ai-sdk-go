@@ -95,11 +95,11 @@ when identity is absent. New spans ignore ended interactions and their spans as 
 parents, using current `WithValues` identity and client. Calls settling after interaction end
 still emit spans with their original interaction, trace and parent; late product calls are dropped.
 
-Accepted calls and totals are final before span delivery. Spans use the OTel exporter's mapping, masking, sensitive-attribute stripping and truncation. Product-event sampling does not apply. Transport or `WithOnError` failure cannot undo an accepted call. Span setup, capture, normalization and delivery failures are contained and reported through `WithOnError` or warnings; provider work continues.
+Accepted calls and totals are final before span delivery. Spans go directly to the analytics client's `Enqueue`, using the same normalized OTLP mapper, masking, sensitive attribute stripping and truncation as the OTel exporter. Product-event sampling does not apply. Transport or `WithOnError` failure cannot undo an accepted call. Span setup, capture, normalization and delivery failures are contained and reported through `WithOnError` or warnings; provider work continues.
 SDK retries and usage-parameter fallback share one span whose duration includes retries. Raw HTTP response access emits once through the same middleware. Streaming spans finish once on completion, early close, cancellation or errors. Ending an interaction leaves an unread wrapper stream pending until close, cancellation, or flush.
 Cancellation finishes even an unread stream and records the cancelled call, including when the provider decoder is blocked. With spans disabled, product bookkeeping follows the provider's read/Close path. At the latest, core `Flush` or `Shutdown` finishes every still-pending wrapper span exactly once as unread/cancelled, with unknown usage. This includes streaming responses arriving after interaction end that are never read, closed or aborted. Manual spans remain caller-owned.
 
-Call `span_id` joins: [`ai_llm_response_received`](events.md#ai_llm_response_received). Content follows the [capture and serializer policy](privacy.md#content-capture).
+Call `span_id` joins: [`ai_llm_response_received`](events.md#ai_llm_response_received). Content follows the [capture and serializer policy](privacy.md#content-capture), and captured call content is masked once.
 
 Numeric maps are preserved, map keys honour `MarshalText` with Go JSON precedence; other primitive keys become strings and unsupported keys are dropped, cycles are dropped, and other unrepresentable list entries keep null placeholders.
 
@@ -167,7 +167,7 @@ Matching uses context nesting only, never times or model names. Limits:
   model spans at the cap export without dedup (`limit_reached`). A span stays open until every
   `rudderotel` processor that saw its start ends it or shuts down. A processor behind an adapter
   that drops ends holds it until shutdown. Covered descendants remain tracked until End to keep
-  their tree intact. Nothing is evicted. Later processors, including those registered after
+  their tree intact. Nothing is evicted: a replaced or covered span's mark and a covered tree stay as long as your span object, or the snapshot OpenTelemetry passes to the processors at its end, is reachable, without keeping it alive. Later processors, including those registered after
   Start, still drop replaced or covered spans. Children started from an ended covered span
   still join the SDK owner's tree.
 - With two copies of the tracing module (for example a vendored fork under another import path),
@@ -230,14 +230,16 @@ without changing product-event behavior. Normal completion records request, resp
 ## Go platform limits
 
 - SDK span parents propagate through explicit `context.Context`. Pass the context returned by `StartSpan` to nested work.
-- OpenAI and Anthropic wrapper failures use normalized error categories. Decoding failures
+- OpenAI and Anthropic integrations run at HTTP middleware, below SDK response decoding.
+  Wrapper failures carry the normalized error category; the provider SDK constructs its Go error after middleware returns. Decoding failures
   after a successful HTTP response cannot change the completed HTTP span. Invalid JSON and
   JSON `null` are detected earlier and finish with error status.
 - Each Google GenAI `GenerateContent`/stream request emits one span. Applications
   managing a Go tool loop make separate requests; pass the manual span context explicitly to
   tools and subsequent requests.
 - Framework integrations and skipped cases: [Go platform limits](integrations.md#go-platform-limits). Bound-stream completion APIs also have no Go wrapper.
-- With spans enabled, every failed attempt has a one-second retry grace, even without
+- Retry grouping and interception constraints: [Retries](integrations.md#retries).
+  With spans enabled, every failed attempt has a one-second retry grace, even without
   cancellation. This settles calls with retries disabled or exhausted. Ending an interaction
   during that grace, or a later retry, can split spans. HTTP middleware measures individual
   requests and response consumption.
@@ -333,7 +335,7 @@ no personal identity from parent spans.
 
 Identity stays off non-AI spans and remains available to AI descendants. Other exporters see
 the original HTTP/database spans. AI attributes added after Start are recognized at End.
-Ended-parent identity is cached up to `Limits.MaxMapEntries` without retaining span objects.
+The processor retains active span state until End. Ended-parent identity is cached up to `Limits.MaxMapEntries` without retaining span objects.
 
 The event's `interaction_id` and `conversation_id` join it to product events. `LinkTraceID` fills
 an unset interaction trace ID; an explicit `TraceID` wins, and a later `SetTraceID` replaces the
@@ -405,10 +407,10 @@ Span mapping rules (shared cases in [`tracing-product-events-v0.1.json`](../spec
   `pending_calls[].span_source`, including ancestry through non-model spans, so End can apply
   the rules across resume. Older snapshots without tags count conservatively.
 - Cache writes: `gen_ai.usage.cache_write.input_tokens` takes precedence over `gen_ai.usage.cache_creation.input_tokens`, then `gen_ai.usage.cache_creation_input_tokens`, then `llm.token_count.prompt_details.cache_write`. Use the first valid nonnegative integer, including zero. Map it once to `cache_write_tokens` and apply the same cache-write price as cache creation; never sum aliases.
-- Provider API IDs: product calls map only `anthropic.messages` → `anthropic`, `openai.chat` / `openai.responses` → `openai`, and `google.generative-ai` → `gcp.gemini`. Match these names after lowercasing; never split other names at a dot. `aws.bedrock`, `gcp.vertex_ai`, `gcp.gemini`, `azure.ai.openai`, `azure.ai.inference` and unknown dotted names stay unchanged. Raw OTLP provider attributes and the GenAI provider summary keep the reported label.
+- Provider API IDs: product calls map only `anthropic.messages` → `anthropic`, `openai.chat` / `openai.responses` → `openai`, and `google.generative-ai` → `gcp.gemini`. The first three are provider IDs in AI SDK v7's `@ai-sdk/anthropic` 4.0.89 and `@ai-sdk/openai` 4.0.103 `src/*-provider.ts`; the Google ID is already documented in [`providers-v0.1.json`](../spec/fixtures/providers-v0.1.json). Match these names after lowercasing; never split other names at a dot. `aws.bedrock`, `gcp.vertex_ai`, `gcp.gemini`, `azure.ai.openai`, `azure.ai.inference` and unknown dotted names stay unchanged. Raw OTLP provider attributes and the GenAI provider summary keep the reported label.
 - Semantic Kernel: when `gen_ai.response.finish_reasons` is absent, read singular `gen_ai.response.finish_reason`. Strip the prefix through the last dot and lowercase the value: `FinishReason.STOP` / `STOP` → `stop`, `LENGTH` → `length`, `TOOL_CALLS` → `tool_calls`, `CONTENT_FILTER` → `content_filter`, case-insensitively. Unknown suffixes are lowercased too. Existing plural values keep their precedence and spelling.
 - Traceloop / OpenLLMetry: after GenAI and OpenInference classification, `traceloop.span.kind = "tool"` identifies one `execute_tool` execution. Read the tool name from `traceloop.entity.name` after `gen_ai.tool.name` / `tool.name`, and arguments/result from `traceloop.entity.input` / `traceloop.entity.output` after the existing tool content keys. Successful and failed executions count in `tool_breakdown`; these entity content keys follow `rudderstackai.WithCaptureContent(true)` and masking. The default `IsAISpan` filter also exports these tools and attaches interaction context when they start.
-- Mirascope native ops: parse `mirascope.response.usage` only if it is a JSON string of at most 64 KiB (65,536 UTF-8 bytes). Ignore malformed JSON, non-object JSON and invalid counts without throwing. Map `input_tokens`, `output_tokens`, `cache_read_tokens` and `cache_write_tokens` as independent fallbacks after existing GenAI and OpenInference usage keys. Zero counts are valid and existing counts win. Input tokens already include cache reads/writes; do not add them again. Ignore `reasoning_tokens` / `total_tokens` rather than deriving missing usage. Cache counts use registered cache pricing.
+- Mirascope native ops: parse `mirascope.response.usage` only if it is a JSON string of at most 64 KiB (65,536 UTF-8 bytes). Ignore malformed JSON, non-object JSON and invalid counts without throwing. Mirascope 2.8.2's `serialize_mirascope_usage` writes `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens` and `total_tokens`; map only the first four as independent fallbacks after existing GenAI and OpenInference usage keys. Zero counts are valid and existing counts win. Input tokens already include cache reads/writes; do not add them again. Ignore `reasoning_tokens` / `total_tokens` rather than deriving missing usage. Cache counts use registered cache pricing.
 
 OpenLLMetry Anthropic instrumentation 0.63.0 can overcount streamed output before emitting the span: it adds cumulative message-delta usage to message-start usage. The mapper copies the output count directly, without summing deltas or total-token attributes. Streamed output from that version can read one token high; it's an upstream issue.
 
@@ -478,5 +480,8 @@ go run ./examples/tracing --check
 
 ## Core integration API
 
-Sibling modules use `Interaction.RecordCall(LLMCall)` for model calls and
-`Interaction.SetTraceID` for trace linking. No exported core API or OTel dependency is added.
+`internal/hook.Tracing` is the integration API for sibling modules under this repository's module
+path. It exposes identity/suppression, open-interaction lookup, analytics adoption, measured tool
+recording, configured client/content policy, redaction, client registration, and background-work
+waiting and client flushing. It contains no OTel types and adds no exported core API. Span LLM calls use the existing
+`Interaction.RecordCall(LLMCall)` and trace linking preserves `Interaction.SetTraceID` behavior.

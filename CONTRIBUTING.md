@@ -19,7 +19,7 @@ Tools (golangci-lint, govulncheck) run through `go run` at the versions pinned i
 version.go              SDK version, bumped by release-please
 ruddermcpgo/            mcp-go support, in the root module
 ruddertest/             Recorder: an analytics-go client that records to JSONL for the migration check, in the root module
-cmd/aicheck/            module of the aicheck migration check command (go install ...@latest), with its own copy of the schemas
+cmd/aicheck/            module of the aicheck migration check command, with its own copy of the schemas
 rudderopenai/ rudderanthropic/ ruddergenai/ rudderbedrock/ rudderotel/
                         one Go module per provider integration, plus the OpenTelemetry trace_id helper
 internal/kit/           shared HTTP interception, stream and retry handling of the integrations
@@ -31,11 +31,13 @@ spec/                   AI events spec JSON Schema and cross-SDK fixtures shared
 examples/               module of runnable examples; each runs end to end in CI with --check, and nightly with --live
 ```
 
+Install aicheck with the [pinned migration command](docs/migration.md#checking-a-migration).
+
 `go.work` ties the modules together for development; every module also builds alone (`GOWORK=off`), as users build it.
 
 ## Everyday commands
 
-Each target covers every module of `go.work`.
+`build`, `lint`, `test`, `cover`, `vulncheck` and `tidy` cover every module of `go.work`. `bench` runs the root and `rudderopenai` benchmarks; `load` runs the root and `internal/conformance` load tests; `example` runs the example executables.
 
 | Command          | What it does                                                                     |
 | ---------------- | -------------------------------------------------------------------------------- |
@@ -62,7 +64,7 @@ CI also runs `gofmt -l .` and `go vet` on their own, tests on the latest support
 
 Everything is pinned exactly: `go.mod` versions, tool versions in the `Makefile` and CI, and GitHub Actions (by full commit SHA with a version comment). Dependabot proposes updates weekly after a 7-day cooldown.
 
-The library modules require the oldest MCP and provider SDK versions they are tested against, so adding one never upgrades a consumer's SDK. Raise those minimums deliberately; Dependabot ignores them there and keeps updating the examples, conformance runner and CI tools.
+Module minimums and dependency resolution: [Compatibility](docs/integrations.md#compatibility). Raise those minimums deliberately; Dependabot ignores them there and keeps updating the examples, conformance runner and CI tools.
 
 ## Tooling choices
 

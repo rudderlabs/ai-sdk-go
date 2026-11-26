@@ -17,9 +17,15 @@ How each integration attaches, what it records, and its edge cases. Event fields
 
 ## How integrations work
 
+Each integration is its own Go module and hooks into its provider SDK's own extension point (client middleware, an HTTP transport, or AWS middleware), so the client you construct stays your client.
+
 Every provider integration offers `WithCallPurpose`, `WithFallbackUsed`, and `WithBYOK`. `WithCallDetails` can scope metadata to calls made with a context.
 
-When a model request forces exactly one named tool, matching response calls without a tool result returned before the final End count as structured output, not tool calls: they are excluded from `tool_call_count`, `tool_breakdown` and unknown-outcome declared tool events; model calls and tokens still count. This covers OpenAI Chat and Responses named function choices, Anthropic named tool choices, Bedrock Converse named tool choices, Gemini `ANY` with one allowed function name, and Go provider wrappers used by structured-output frameworks, without library markers. A tool result or an already emitted tool event keeps the call real. Pause does not exclude candidates: their pending state survives JSON snapshots, and a result after resume keeps them real. Native OpenAI `response_format` / `json_schema` has no tool calls and is unchanged. Model spans apply the same rule when `gen_ai.request.tool_choice`, `gen_ai.request.toolChoice`, `ai.prompt.toolChoice` or JSON `llm.invocation_parameters` exposes the choice and message attributes expose tool identities; later input tool results or execution spans keep the tool real. Spans without that request choice retain existing accounting. Each exclusion logs the name, call ID and `structured output: forced tool with no result` through `RUDDERSTACK_AI_DEBUG`; the recording-based check command has no exclusion-reason field, so the debug log is the inspection path.
+When a model request forces exactly one named tool, matching response calls without a tool result returned before the final End count as structured output, not tool calls: they are excluded from `tool_call_count`, `tool_breakdown` and unknown-outcome declared tool events; model calls and tokens still count. This covers OpenAI Chat and Responses named function choices, Anthropic named tool choices, Bedrock Converse named tool choices, Gemini `ANY` with one allowed function name, and Go provider wrappers used by structured-output frameworks, without library markers.
+
+A tool result or an already emitted tool event keeps the call real. Pause does not exclude candidates: their pending state survives JSON snapshots, and a result after resume keeps them real. Native OpenAI `response_format` / `json_schema` has no tool calls and is unchanged.
+
+Model spans apply the same rule when `gen_ai.request.tool_choice`, `gen_ai.request.toolChoice`, `ai.prompt.toolChoice` or JSON `llm.invocation_parameters` exposes the choice and message attributes expose tool identities; later input tool results or execution spans keep the tool real. Spans without that request choice retain existing accounting. Each exclusion logs the name, call ID and `structured output: forced tool with no result` through `RUDDERSTACK_AI_DEBUG`; the recording-based check command has no exclusion-reason field, so the debug log is the inspection path.
 
 ## Interaction ownership
 
@@ -79,7 +85,7 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 `WithTracking(opts...)` is `option.WithMiddleware(Middleware(opts...))`. Options: `WithProvider(label)` (default `anthropic`) and `WithAnalytics(client)`.
 
 - Tracked: Messages API requests (`.../messages`), streamed or not, including beta messages. Token counting and batches pass through.
-- Bedrock and Vertex AI clients: pass the tracking option before `bedrock.WithLoadDefaultConfig` / `bedrock.WithConfig` / `vertex.WithGoogleAuth`, and set the provider label:
+- Bedrock and Vertex AI clients: pass the tracking option before `bedrock.WithLoadDefaultConfig` / `bedrock.WithConfig` / `vertex.WithGoogleAuth` (middleware runs in registration order, and those options rewrite the request after it), and set the provider label:
 
 ```go
 client := anthropic.NewClient(
@@ -98,7 +104,7 @@ client := anthropic.NewClient(
 
 Integration module: `github.com/rudderlabs/ai-sdk-go/ruddergenai`.
 
-`google.golang.org/genai` v1.72.0 or later. Tracking uses its HTTP client.
+`google.golang.org/genai` v1.72.0 or later. The genai client has no middleware hook, so tracking sits in its HTTP client.
 
 ```go
 client, err := genai.NewClient(ctx, &genai.ClientConfig{
@@ -138,7 +144,7 @@ err := rudderstackai.RunInteraction(ctx, rudderstackai.InteractionOptions{UserID
 	})
 ```
 
-`WithTracking(opts...)` returns a `func(*bedrockruntime.Options)`: pass it to `bedrockruntime.New` / `NewFromConfig`, or to a single call. Option: `WithAnalytics(client)`. There is no `WithProvider`: the provider is always `aws.bedrock`.
+`WithTracking(opts...)` returns a `func(*bedrockruntime.Options)`: pass it to `bedrockruntime.New` / `NewFromConfig`, or to a single call. It adds an `APIOptions` middleware (initialize step) that sees the typed input and output, and wraps the client's protocol to observe stream events as the SDK decodes them. Option: `WithAnalytics(client)`. There is no `WithProvider`: the provider is always `aws.bedrock`.
 
 - Tracked: `Converse` and `ConverseStream`. Other operations pass through.
 - `model` is the request `ModelId` (Converse responses carry none); `response_id` is the AWS request ID.
@@ -197,6 +203,8 @@ Tool calls streamed before a failure still count. A provider that reports usage 
 
 ## Retries
 
+HTTP middleware has no hook for the outer SDK method's completion. Retry grouping uses per-invocation request identity, retry headers and response-body probes.
+
 openai-go and anthropic-sdk-go retry inside the client, below the tracking middleware. One SDK method call is one model call, priced once: an attempt the client retries is not recorded, and the final attempt's outcome is. When retries run out, the answer has one failed call. When the context ends while the client waits to retry, the call is recorded as `cancelled` or `timeout`.
 
 With `WithEmitSpans(true)`, Google GenAI retries and connection-error retries also retain one
@@ -205,7 +213,7 @@ context never ends; a retry arriving later can start another span.
 
 A failed attempt counts as retried when the client sends it again or closes its response unread, which is how both clients behave. With spans disabled, a connection error (no response) outside an interaction is recorded per attempt. A retried failed response that a middleware added before `WithTracking` (outside it) reads is also recorded per attempt.
 
-Successful GenAI retries record one final call. Bedrock operations are recorded once with the final outcome. `ClassifierClient` calls disable retries.
+genai retries below the tracking transport and has no attempt number. The transport groups retries using per-invocation request identity; successful retries record one final call. The AWS SDK retries below the Bedrock tracker, so a Bedrock operation is recorded once, with the final outcome. `ClassifierClient` calls disable retries.
 
 ## Tool output failures
 

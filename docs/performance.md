@@ -28,7 +28,7 @@ Extra allocations per call repeat exactly from run to run and are gated in CI: a
 
 ## How it is measured
 
-`make bench` runs root and `rudderopenai` `BenchmarkOverhead` against an in-process OpenAI `http.RoundTripper`, in-memory go-sdk MCP transports and an analytics client that drops events. No network time is counted. Each scenario has `baseline` and `sdk` sub-benchmarks. `BENCH_ROUNDS` (default 5) runs baseline then SDK per scenario to reduce drift. `internal/benchreport` takes each metric's median across rounds and generates the table.
+`make bench` runs root and `rudderopenai` `BenchmarkOverhead` against an in-process OpenAI `http.RoundTripper`, in-memory go-sdk MCP transports and an analytics client that drops events. No network time is counted. Each scenario has `baseline` and `sdk` sub-benchmarks. `BENCH_ROUNDS` (default 5) runs baseline then SDK per scenario to reduce drift. Repeated sub-benchmark names get Go's `#01`, `#02` suffixes; `internal/benchreport` takes each metric's median across rounds and generates the table.
 
 | Scenario                          | What runs                                                                                              |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------ |
