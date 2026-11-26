@@ -623,7 +623,6 @@ type Interaction struct {
 	toolsByID              map[string]*recordedTool
 	countedToolIDs         []string            // IDs earlier segments counted, oldest first, at most MaxCallsPerInteraction
 	countedToolSet         map[string]struct{} // same IDs, for lookup
-	foldedToolIDs          []string            // IDs folded by identity in this segment; counted at the next pause
 	primary                *primarySelection
 	hint                   *outcomeHint
 	clientDisconnected     bool
@@ -1824,12 +1823,6 @@ func (i *Interaction) recordToolCalls(fromSpan, outputFailure bool, calls ...Too
 			i.mu.Unlock()
 			return
 		}
-		// A pause since the first lock may have counted these IDs; a report of only those must
-		// not resume the run either.
-		if !slices.ContainsFunc(calls, func(call ToolCall) bool { return !i.ignoredToolLocked(call.ID) }) {
-			i.mu.Unlock()
-			return
-		}
 		if fromSpan {
 			i.resumeAtLocked(calls[0].StartedAt)
 		} else {
@@ -1870,13 +1863,6 @@ func (i *Interaction) recordToolCalls(fromSpan, outputFailure bool, calls ...Too
 				if capped && (call.ID == "" || ran || call.StructuredCandidate || len(i.tools) >= 2*limit) {
 					// Counted in its tool_breakdown identity only: no declared event.
 					i.foldToolLocked(&recordedTool{name: name, mcpServer: server, parentTool: call.ParentTool, agentName: call.AgentName, calls: 1})
-					if call.ID != "" {
-						// A folded record keeps no ID; the next pause counts it.
-						i.foldedToolIDs = append(i.foldedToolIDs, call.ID)
-						if len(i.foldedToolIDs) > limit {
-							i.foldedToolIDs = i.foldedToolIDs[1:]
-						}
-					}
 					continue
 				}
 				if capped {
@@ -2599,10 +2585,6 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 			i.countToolIDLocked(tool.id)
 		}
 	}
-	for _, id := range i.foldedToolIDs {
-		i.countToolIDLocked(id)
-	}
-	i.foldedToolIDs = nil
 	i.tools, i.toolOverflow, i.toolsByID = carried, nil, map[string]*recordedTool{}
 	for _, tool := range carried {
 		// Carried into a new segment, it is an ordinary tool there, as after a JSON restore.

@@ -104,14 +104,13 @@ func TestToolReportedAgainAfterPauseCountsOnce(t *testing.T) {
 			t.Fatalf("events %v, summed %d", events, summedToolCalls(r, i.ID()))
 		}
 	})
-	t.Run("record while paused is ignored and does not resume", func(t *testing.T) {
+	t.Run("record while paused resumes the run and adds nothing", func(t *testing.T) {
 		r := countedToolSetup(t)
 		i, _ := pausedWithUnknownTool(t, "t1")
 		again(i)
-		if !i.Paused() {
-			t.Fatal("an ignored report resumed the run")
+		if i.Paused() {
+			t.Fatal("a repeated report must still resume the run")
 		}
-		i.Resume()
 		i.End(EndOptions{})
 		if events := lookupEventsByID(r, "t1"); len(events) != 1 || summedToolCalls(r, i.ID()) != 1 {
 			t.Fatalf("events %v, summed %d", events, summedToolCalls(r, i.ID()))
@@ -257,6 +256,16 @@ func TestCountedToolIDsAreBounded(t *testing.T) {
 		i.End(EndOptions{})
 		if n := summedToolCalls(r, i.ID()); n != 4 {
 			t.Fatalf("summed tool_call_count %d, want 4", n)
+		}
+	})
+	t.Run("known limit: a tool call folded past the cap is not remembered", func(t *testing.T) {
+		countedToolSetup(t, WithLimits(Limits{MaxCallsPerInteraction: 2}))
+		_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+		record(i, "a", "b", "c", "d", "e", "f", "g", "h")
+		i.RecordCall(pauseCall)
+		paused, ok := i.Pause(PauseOptions{})
+		if !ok || !slices.Equal(countedIDs(t, paused), []string{"a", "b"}) {
+			t.Fatalf("ok %v, counted ids %v, want only the stored a, b", ok, countedIDs(t, paused))
 		}
 	})
 	t.Run("after restore, the newest IDs are kept under the reader's limit", func(t *testing.T) {
