@@ -65,8 +65,8 @@ func emitAIRates(client analytics.Client, event, userID, anonymousID string, pro
 	})
 }
 
-// maxPropertiesBytes is the budget for an event's serialized properties: RudderStack rejects an
-// event over 32 KiB, and the rest of the message keeps about 2.7 KB. Identical in Node.js and Python.
+// maxPropertiesBytes is the budget for an event's serialized properties: the rest of the message
+// keeps about 2.7 KB of the client's 32 KiB limit. Identical in Node.js and Python.
 const maxPropertiesBytes = 30_000
 
 func propertiesBytes(p map[string]any) int {
