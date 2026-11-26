@@ -234,6 +234,9 @@ func TestLateInteractionIDRequiresUniqueOwner(t *testing.T) {
 								if err := json.Unmarshal(data, &snapshot); err != nil {
 									t.Fatal(err)
 								}
+								// Without a pause token (an older SDK version) the restore takes no slot,
+								// so B stays live and the late ID stays ambiguous.
+								snapshot.PauseToken = ""
 								_, restored := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{Resume: &snapshot, Analytics: clientB, Classify: rudderstackai.Ptr(false)})
 								restored.End(rudderstackai.EndOptions{})
 							}

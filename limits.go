@@ -5,16 +5,19 @@ import (
 	"container/list"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 	"weak"
+
+	"github.com/google/uuid"
 )
 
 // Limits caps the memory the SDK holds. A zero field keeps its default. Identical defaults in
 // Node.js and Python.
 type Limits struct {
 	// MaxOpenInteractions is how many interactions may be open or paused at once (default 10,000);
-	// a paused run holds its slot until it ends. Past it,
+	// a paused run holds its slot until it ends or the app drops it and it is garbage-collected. Past it,
 	// new interactions are not tracked: your code runs as usual and limit_reached is reported.
 	MaxOpenInteractions int
 	// InteractionTTL is how long an interaction may stay open (default 1 hour). Past it, the next
@@ -65,11 +68,12 @@ func limitReached(name string) {
 // must match the run's identity, not just an application-chosen interaction ID.
 type pausedSlot struct {
 	id, conversationID, userID, anonymousID string
+	token                                   string
 	order                                   uint64
 }
 
 func slotFor(i *Interaction) pausedSlot {
-	return pausedSlot{i.id, i.conversationID, i.userID, i.anonymousID, i.ownerOrder}
+	return pausedSlot{i.id, i.conversationID, i.userID, i.anonymousID, i.pauseToken, i.ownerOrder}
 }
 
 // open holds the open interactions, oldest first, for MaxOpenInteractions and the TTL sweep.
@@ -98,7 +102,10 @@ func opened(i *Interaction, limit int) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
 	if open.list.Len()+len(open.paused) >= limit {
-		return false
+		prunePausedLocked()
+		if open.list.Len()+len(open.paused) >= limit {
+			return false
+		}
 	}
 	open.nextOrder++
 	i.ownerOrder = open.nextOrder
@@ -127,12 +134,44 @@ func holdPausedSlot(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	open.paused[weak.Make(i)] = slotFor(i)
+	i.pauseToken = uuid.NewString()
+	if len(open.paused) >= cfg().limits.MaxOpenInteractions {
+		prunePausedLocked()
+	}
+	ref := weak.Make(i)
+	open.paused[ref] = slotFor(i)
+	// A dropped paused run frees its slot and token entry once collected. Registered once per
+	// object: the weak key is stable, so it removes whichever entry the run holds then.
+	if i.pauseCleanup {
+		return
+	}
+	i.pauseCleanup = true
+	if onPauseCleanup != nil {
+		onPauseCleanup()
+	}
+	runtime.AddCleanup(i, func(ref weak.Pointer[Interaction]) {
+		open.mu.Lock()
+		defer open.mu.Unlock()
+		delete(open.paused, ref)
+	}, ref)
 }
 
-// takePausedSlot transfers a counted slot only when the restored identity has a
-// unique match. Ambiguous matches leave every original registered and go through
-// ordinary admission, just like a snapshot from another process.
+// onPauseCleanup is a test seam counting cleanup registrations.
+var onPauseCleanup func()
+
+// prunePausedLocked drops the entries of paused runs that were garbage-collected; the cleanup
+// above does the same, but only after the GC cycle, so admission checks prune too.
+func prunePausedLocked() {
+	for ref := range open.paused {
+		if ref.Value() == nil {
+			delete(open.paused, ref)
+		}
+	}
+}
+
+// takePausedSlot transfers a counted slot only to the restore of the exact pause the
+// snapshot names: its token and identity both match. Anything else (an older snapshot
+// without a token, one from another process or tenant) goes through ordinary admission.
 func takePausedSlot(i *Interaction) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
@@ -140,7 +179,7 @@ func takePausedSlot(i *Interaction) bool {
 	var matchedSlot pausedSlot
 	found := false
 	for ref, slot := range open.paused {
-		if slot.id != i.id || slot.conversationID != i.conversationID ||
+		if ref.Value() == nil || i.pauseToken == "" || slot.token != i.pauseToken || slot.id != i.id || slot.conversationID != i.conversationID ||
 			slot.userID != i.userID || slot.anonymousID != i.anonymousID {
 			continue
 		}
@@ -153,6 +192,7 @@ func takePausedSlot(i *Interaction) bool {
 		return false
 	}
 	delete(open.paused, match)
+	match.Value().continueAs(i)
 	i.ownerOrder = matchedSlot.order
 	i.opened = time.Now()
 	i.elem = open.list.PushBack(i)

@@ -429,6 +429,9 @@ func TestRestoreDuplicateIdentityPreservesPausedSlots(t *testing.T) {
 					}
 					slots[n] = slotFor(originals[n])
 				}
+				// A snapshot without a pause token (an older SDK version) matches no slot, even
+				// by identity.
+				snapshots[restoreIndex].PauseToken = ""
 				_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshots[restoreIndex], Classify: Ptr(false)})
 				defer restored.End(EndOptions{})
 				if restored.Ended() != (limit == 2) {
@@ -502,4 +505,177 @@ func TestAgentTextWithheldOnMaskingTimeout(t *testing.T) {
 	if got := o.maskedText(strings.Repeat("a", 40)+"!", maxTextLength); got != "" {
 		t.Fatalf("maskedText = %q, want it withheld", got)
 	}
+}
+
+func TestRestoreWithPauseTokenTakesOnlyItsOwnPausedSlot(t *testing.T) {
+	for _, restoreIndex := range []int{0, 1} {
+		t.Run(fmt.Sprintf("restore=%d", restoreIndex), func(t *testing.T) {
+			setupAI(t, WithLimits(Limits{MaxOpenInteractions: 2}))
+			var originals [2]*Interaction
+			var snapshots [2]PausedInteraction
+			for n := range originals {
+				_, originals[n] = StartInteraction(context.Background(), InteractionOptions{
+					InteractionID: "shared", UserID: "user", AnonymousID: "anonymous", ConversationID: "conversation", Classify: Ptr(false),
+				})
+				defer originals[n].End(EndOptions{})
+				var ok bool
+				snapshots[n], ok = originals[n].Pause(PauseOptions{})
+				if !ok {
+					t.Fatal("pause failed")
+				}
+			}
+			if snapshots[0].PauseToken == "" || snapshots[0].PauseToken == snapshots[1].PauseToken {
+				t.Fatalf("pause tokens must be set and distinct: %q, %q", snapshots[0].PauseToken, snapshots[1].PauseToken)
+			}
+			_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snapshots[restoreIndex], Classify: Ptr(false)})
+			defer restored.End(EndOptions{})
+			if restored.Ended() {
+				t.Fatal("a restore holding its pause's token must take that pause's slot")
+			}
+			open.mu.Lock()
+			defer open.mu.Unlock()
+			if _, ok := open.paused[weak.Make(originals[restoreIndex])]; ok {
+				t.Error("the restored pause's slot was not transferred")
+			}
+			if _, ok := open.paused[weak.Make(originals[1-restoreIndex])]; !ok {
+				t.Error("the other pause lost its slot")
+			}
+		})
+	}
+}
+
+// countedSlots is what admission counts: open runs plus paused runs still in the registry.
+func countedSlots() (counted, paused int) {
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	return open.list.Len() + len(open.paused), len(open.paused)
+}
+
+func waitPausedRegistry(t *testing.T, want func(paused int) bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		runtime.GC()
+		if _, paused := countedSlots(); want(paused) {
+			return
+		}
+		if time.Now().After(deadline) {
+			_, paused := countedSlots()
+			t.Fatalf("paused registry holds %d entries", paused)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestCollectedPausesReleaseSlotsAndKeepRegistryBounded(t *testing.T) {
+	const limit = 10_000
+	setupAI(t)
+	maxSeen := 0
+	for n := range 2 * limit {
+		func() {
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true, Classify: Ptr(false)})
+			if i.Ended() {
+				t.Fatalf("pause %d: interaction not tracked", n)
+			}
+			if _, ok := i.Pause(PauseOptions{}); !ok {
+				t.Fatalf("pause %d failed", n)
+			}
+		}()
+		if n%500 == 499 {
+			runtime.GC()
+		}
+		if _, paused := countedSlots(); paused > maxSeen {
+			maxSeen = paused
+		}
+	}
+	if maxSeen > limit {
+		t.Fatalf("paused registry grew to %d, over the cap of %d", maxSeen, limit)
+	}
+	waitPausedRegistry(t, func(paused int) bool { return paused == 0 })
+	if counted, _ := countedSlots(); counted != 0 {
+		t.Fatalf("admission still counts %d collected pauses", counted)
+	}
+	_, next := StartInteraction(context.Background(), InteractionOptions{UserID: "u", NoPromptEvent: true})
+	defer next.End(EndOptions{})
+	if next.Ended() {
+		t.Fatal("new interaction untracked after the collected pauses")
+	}
+}
+
+func TestCollectedPauseRestoreUsesNormalAdmissionAndNeverReachesAnotherTenant(t *testing.T) {
+	setupAI(t, WithLimits(Limits{MaxOpenInteractions: 2}))
+	pause := func(user string) (PausedInteraction, *Interaction) {
+		_, i := StartInteraction(context.Background(), InteractionOptions{InteractionID: "shared", UserID: user, NoPromptEvent: true, Classify: Ptr(false)})
+		snap, ok := i.Pause(PauseOptions{})
+		if !ok {
+			t.Fatal("pause failed")
+		}
+		return snap, i
+	}
+	snapA, ref := func() (PausedInteraction, weak.Pointer[Interaction]) {
+		s, i := pause("tenant-a")
+		return s, weak.Make(i)
+	}()
+	requireCollected(t, ref)
+	_, b := pause("tenant-b") // Live: still counts.
+	waitPausedRegistry(t, func(paused int) bool { return paused == 1 })
+
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snapA, Classify: Ptr(false)})
+	if restored.Ended() || restored.userID != "tenant-a" {
+		t.Fatal("collected pause's restore was not admitted normally")
+	}
+	if !b.Paused() {
+		t.Fatal("restore of a collected pause reached another tenant's paused run")
+	}
+	if _, ok := open.paused[weak.Make(b)]; !ok {
+		t.Fatal("restore took over another tenant's paused slot")
+	}
+	if counted, _ := countedSlots(); counted != 2 {
+		t.Fatalf("counted slots = %d, want 2 (live pause + normal admission)", counted)
+	}
+	_, extra := StartInteraction(context.Background(), InteractionOptions{UserID: "extra"})
+	if !extra.Ended() {
+		t.Fatal("cap not enforced after the normal admission")
+	}
+	restored.End(EndOptions{})
+	b.End(EndOptions{})
+}
+
+func TestLivePausedRunKeepsCountingAmongCollectedOnes(t *testing.T) {
+	setupAI(t, WithLimits(Limits{MaxOpenInteractions: 3}))
+	for range 5 {
+		func() {
+			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "gone", NoPromptEvent: true, Classify: Ptr(false)})
+			i.Pause(PauseOptions{})
+		}()
+		runtime.GC()
+	}
+	_, live := StartInteraction(context.Background(), InteractionOptions{UserID: "live", NoPromptEvent: true, Classify: Ptr(false)})
+	snap, ok := live.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("pause failed")
+	}
+	waitPausedRegistry(t, func(paused int) bool { return paused == 1 })
+	runtime.KeepAlive(live)
+	if counted, _ := countedSlots(); counted != 1 {
+		t.Fatalf("counted = %d, want only the live pause", counted)
+	}
+	var others []*Interaction
+	for range 2 {
+		_, o := StartInteraction(context.Background(), InteractionOptions{UserID: "other", NoPromptEvent: true})
+		others = append(others, o)
+	}
+	_, over := StartInteraction(context.Background(), InteractionOptions{UserID: "over", NoPromptEvent: true})
+	if !over.Ended() {
+		t.Fatal("live paused run did not count toward the cap")
+	}
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &snap, Classify: Ptr(false)})
+	if restored.Ended() || restored.userID != "live" {
+		t.Fatal("live paused run's own restore refused at the cap")
+	}
+	restored.End(EndOptions{})
+	for _, o := range others {
+		o.End(EndOptions{})
+	}
+	runtime.KeepAlive(live)
 }

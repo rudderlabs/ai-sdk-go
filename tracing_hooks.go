@@ -28,6 +28,10 @@ func init() {
 	}
 
 	hook.Tracing.Identity = tracingIdentity
+	hook.Tracing.Latest = func(i any) any {
+		in, _ := i.(*Interaction)
+		return in.latest()
+	}
 	hook.Tracing.Open = func(id string) any {
 		open.mu.Lock()
 		defer open.mu.Unlock()

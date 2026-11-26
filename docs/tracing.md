@@ -80,6 +80,7 @@ return err // the original error, unchanged
 `TraceID` and `SpanID`, `SetAttributes(map[string]any)` and idempotent `End(error)`. When disabled,
 it returns the original context and a no-op handle. Pass the returned context to nested work:
 the nearest active SDK span in the same interaction becomes its parent. Ended spans are skipped.
+Where that context is lost, [`JoinInteraction`](integrations.md#how-integrations-work) passes the interaction and parent span IDs explicitly.
 Wrapper middleware passes its active span downstream; concurrent requests and streams keep
 independent contexts. No interaction root span is created.
 
@@ -132,7 +133,10 @@ and the SDK span follows its ordinary delivery path.
   Filters, sampling, batching, client failures and processor shutdown do not decide whether
   the call's span is sent. Reading a stream after OTel span End still sends the adopted span.
 - An outer model-call span with no wrapper call inside is exported normally. A newer SDK span in
-  between prevents adoption: the most recently started active SDK span decides.
+  between prevents adoption: the most recently started active SDK span decides. A
+  `JoinInteraction` synthetic parent counts as an SDK span: an OpenTelemetry model span started
+  inside it can be replaced by a direct wrapper call, while a newer join or manual span between
+  the OpenTelemetry span and that call prevents replacement.
 - An SDK span that replaced or covered an OpenTelemetry span sheds optional fields in this order
   after ordinary string truncation: (1) content span, resource and scope attributes and events
   identified by [`span-content-keys-v0.1.json`](../spec/fixtures/span-content-keys-v0.1.json), OTLP
