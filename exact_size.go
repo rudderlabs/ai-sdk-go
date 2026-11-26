@@ -2,6 +2,7 @@ package rudderstackai
 
 import (
 	"errors"
+	"math"
 	"reflect"
 	"strconv"
 )
@@ -62,6 +63,12 @@ func (z *sizer) size(rv reflect.Value) (int, error) {
 	}
 	if nonData(rv.Kind()) {
 		return 0, errUnsizable
+	}
+	if nonDataValue(rv) {
+		return 0, errUnsizable
+	}
+	if rv.Type() == serializedType {
+		return len(rv.Interface().(serialized).raw), nil // the bytes the serializer wrote
 	}
 	if rv.Type() == rawMessageType { // decoded by the walk, never run as app code
 		return z.leaf(rv.Interface())
@@ -130,9 +137,9 @@ func (z *sizer) list(rv reflect.Value) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		total += s
+		total = plus(total, s)
 	}
-	return total + max(rv.Len()-1, 0), nil
+	return plus(total, max(rv.Len()-1, 0)), nil
 }
 
 func (z *sizer) object(rv reflect.Value) (int, error) {
@@ -153,7 +160,7 @@ func (z *sizer) object(rv reflect.Value) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		total += k + 1 + s
+		total = plus(total, k, 1, s)
 	}
 	return total, nil
 }
@@ -192,10 +199,10 @@ func (z *sizer) fields(rv reflect.Value) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		total += k + 1 + s
+		total = plus(total, k, 1, s)
 		count++
 	}
-	return total + max(count-1, 0), nil
+	return plus(total, max(count-1, 0)), nil
 }
 
 // quotable is a field value ,string applies to: a bool, number or string, or a pointer to one.
@@ -234,7 +241,7 @@ func fieldSize(orig, copied any, fields bool, in *inspector, z *sizer) int {
 			return -1
 		}
 	}
-	return resolvedSize(orig, copied, fields)
+	return resolvedSize(orig, copied, z)
 }
 
 // inspector counts a value's JSON tree, a shared value at each place, once per identity: it says
@@ -282,7 +289,7 @@ func (in *inspector) count(rv reflect.Value, chain int) counted {
 	if chain > maxWalkDepth { // pointers alone, in a cycle
 		return over
 	}
-	if nonData(rv.Kind()) {
+	if nonDataValue(rv) {
 		return counted{n: 1}
 	}
 	if rv.Type() == rawMessageType {
@@ -371,6 +378,27 @@ func nonData(k reflect.Kind) bool {
 		return true
 	}
 	return false
+}
+
+// nonDataValue is nonData through pointers: a *T whose T is a func or chan type is left out too,
+// before a pointer-receiver MarshalJSON it has.
+func nonDataValue(rv reflect.Value) bool {
+	t := rv.Type()
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return nonData(t.Kind())
+}
+
+// plus adds sizes, saturating at the largest int rather than wrapping negative.
+func plus(total int, parts ...int) int {
+	for _, n := range parts {
+		if n < 0 || total > math.MaxInt-n {
+			return math.MaxInt
+		}
+		total += n
+	}
+	return total
 }
 
 // rawNodes is an upper bound on the values in a JSON document: one for the document, one for each

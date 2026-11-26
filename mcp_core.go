@@ -948,7 +948,9 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 			if original != nil {
 				source = original
 			}
-			seedMCPResult(&walk{memo: resultContent.memo}, source, resultContent.value)
+			if !resultContent.cut { // a value the budget cut is never reused for later content
+				seedMCPResult(&walk{memo: resultContent.memo}, source, resultContent.value)
+			}
 		} else {
 			// Nothing is stored: the base encoding gives the classification inputs and size.
 			b, _ := captureEncoded(o.Result)

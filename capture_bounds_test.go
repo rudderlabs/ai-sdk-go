@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -228,13 +229,7 @@ func TestCaptureBudgetSizesAndEncoding(t *testing.T) {
 				t.Fatalf("size=%d sizes=%v", r.size, r.sizes)
 			}
 		})
-		bounded(t, func() {
-			captureResolved(graph, func(resolved any) {
-				if b, _ := boundedJSON(resolved, false); len(b) == 0 {
-					t.Fatal("no encoding")
-				}
-			})
-		})
+		bounded(t, func() { captureResolved(graph, func(any) {}) })
 	}
 }
 
@@ -653,17 +648,6 @@ func TestSharedGraphSizesAreExactThroughCapture(t *testing.T) {
 	})
 }
 
-func TestBoundedJSONGivesEachFieldItsOwnBudget(t *testing.T) {
-	two := map[string]any{"a": filler(70000), "b": filler(70000)}
-	want, _ := compactJSON(two)
-	if got, _ := boundedJSON(two, true); len(got) != len(want) {
-		t.Fatalf("len=%d want %d", len(got), len(want))
-	}
-	if got, _ := boundedJSON(two, false); len(got) >= len(want) {
-		t.Fatalf("one budget kept everything: %d", len(got))
-	}
-}
-
 func TestMemoCopiesAreSharedAcrossEntries(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
 	shared := []any{1, 2, 3}
@@ -758,35 +742,36 @@ func (m *manyOnes) MarshalJSON() ([]byte, error) {
 	return append(b, ']'), nil
 }
 
-func TestSerializerResultIsSizedFromItsBudgetedCopy(t *testing.T) {
+func TestSerializerResultSizeIsMains(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
 	report := captureValueFields(map[string]any{"result": &manyOnes{n: 150000}})
-	copied, _ := compactJSON(report.value.(map[string]any)["result"])
-	if report.sizes["result"] != len(copied) || len(copied) >= 300001 {
-		t.Fatalf("size=%d, the copy is %d bytes", report.sizes["result"], len(copied))
+	if want := 2*150000 + 1; report.sizes["result"] != want {
+		t.Fatalf("size=%d, main's is the serializer's own %d bytes", report.sizes["result"], want)
 	}
 }
 
 func TestManyReferencesToOneSerializerAreCheap(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
-	m := &manyOnes{n: 90000}
-	timed := func(n int) time.Duration {
+	run := func(n int) (time.Duration, int) {
+		m := &manyOnes{n: 90000}
 		refs := make([]any, n)
 		for i := range refs {
 			refs[i] = m
 		}
 		started := time.Now()
-		report := captureValueFields(map[string]any{"result": refs})
-		if report.sizes["result"] <= 0 || report.sizes["result"] > 400000 {
-			t.Fatalf("size=%d", report.sizes["result"])
-		}
-		return time.Since(started)
+		size := captureValueFields(map[string]any{"result": refs}).sizes["result"]
+		return time.Since(started), size
 	}
-	// The cost is the budget's, not the references': 100,000 take about what 2 do, under any instrumentation.
-	timed(2)
-	one, many := timed(2), timed(100000)
-	if many > 5*one+100*time.Millisecond {
-		t.Fatalf("2 references took %v, 100000 took %v", one, many)
+	run(100)
+	few, _ := run(1000)
+	many, size := run(20000)
+	// Linear in the references, not in the bytes each stands for (that would be 20x slower still).
+	if many > 100*few+time.Second {
+		t.Fatalf("1000 references took %v, 20000 took %v", few, many)
+	}
+	// Main's size: every place carries the serializer's bytes, which are not expanded to count them.
+	if want := 2 + 20000*(2*90000+1) + 19999; size != want {
+		t.Fatalf("size=%d want %d", size, want)
 	}
 }
 
@@ -997,5 +982,44 @@ func TestSpanSummaryInputsSurviveALargeAttribute(t *testing.T) {
 	if got["gen_ai.usage.input_tokens"] != 7 || got["gen_ai.request.model"] != "m" || got["gen_ai.conversation.id"] != "c1" ||
 		got["rudderstack.interaction_id"] != "i1" || !reflect.DeepEqual(got["zzz.finish"], []any{"stop"}) {
 		t.Fatalf("attributes=%v", got)
+	}
+}
+
+func TestSizeArithmeticSaturatesInsteadOfWrapping(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	if n, err := exactSize(sharedMaps(100)); err != nil || n != math.MaxInt {
+		t.Fatalf("exactSize=%d, %v", n, err)
+	}
+	if got := captureValueFields(map[string]any{"k": sharedMaps(100)}).sizes["k"]; got != math.MaxInt {
+		t.Fatalf("size=%d", got)
+	}
+}
+
+type ptrMarshalFunc func()
+
+var ptrMarshalCalls int
+
+func (*ptrMarshalFunc) MarshalJSON() ([]byte, error) { ptrMarshalCalls++; return []byte(`"f"`), nil }
+
+func TestPointerToNonDataTypeIsLeftOutBeforeItsSerializer(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	ptrMarshalCalls = 0
+	f := ptrMarshalFunc(func() {})
+	got := captureContent(map[string]any{"f": &f, "keep": 1}).(map[string]any)
+	if _, err := exactSize(map[string]any{"f": &f}); err == nil || errors.Is(err, errSerializer) || len(got) != 1 || ptrMarshalCalls != 0 {
+		t.Fatalf("captured %v, serializers ran %d times", got, ptrMarshalCalls)
+	}
+	if within, custom := newInspector().shape(&f, false); !within || custom {
+		t.Fatalf("inspector: within=%t custom=%t", within, custom)
+	}
+}
+
+func TestReportSaysWhetherTheBudgetCutItsContent(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	if captureResolved(map[string]any{"a": 1}, nil).cut {
+		t.Error("a small result reported cut")
+	}
+	if !captureResolved(map[string]any{"a": filler(maxWalkNodes + 5)}, nil).cut {
+		t.Error("a cut result not reported cut, so MCP seeds would carry its cut copy")
 	}
 }

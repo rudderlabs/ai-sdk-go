@@ -420,6 +420,7 @@ type captureReport struct {
 	size  int
 	sizes map[string]int
 	memo  map[visit]any
+	cut   bool // the budget left values out of value
 }
 
 // The recursion guard contains only identities while app code is on the current stack. It
@@ -570,7 +571,9 @@ func captureValueFields(v any) captureReport { return captureResolvedWith(v, tru
 
 func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureSeed) captureReport {
 	defer enterCapture()()
-	resolved, w := resolveCaptureWith(v, fields, consume != nil, seeds)
+	// The resolve walk is whole: it is memoised, so linear in distinct containers, and sizes are
+	// main's. Only the content copy made from it below is budgeted.
+	resolved, w := resolveCaptureWith(v, fields, true, seeds)
 	if consume != nil {
 		consume(resolved)
 	}
@@ -585,7 +588,8 @@ func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureS
 			sizes[k] = fieldSize(value, rm[k], false, in, z)
 		}
 	}
-	out, _ := (&walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, fields: fields}).strip(resolved)
+	content := &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, fields: fields}
+	out, _ := content.strip(resolved)
 	// One pass copies every memoised container once and reuses it where it appears, so the work
 	// is linear in distinct containers however much they share.
 	memo := make(map[visit]any, len(w.memo))
@@ -593,17 +597,19 @@ func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureS
 	for key, value := range w.memo {
 		memo[key], _ = sw.strip(value)
 	}
-	return captureReport{value: out, size: size, sizes: sizes, memo: memo}
+	return captureReport{value: out, size: size, sizes: sizes, memo: memo, cut: content.cuts > 0}
 }
 
 // resolvedSize is base's encoded size: serializer output counts as the bytes encoding/json
 // wrote for it, HTML escapes included.
-func resolvedSize(original, resolved any, fields bool) int {
+func resolvedSize(original, resolved any, z *sizer) int {
 	if _, ok := original.(string); ok {
 		return captureSize(resolved)
 	}
-	if b, err := boundedJSON(resolved, fields); err == nil {
-		return len(b)
+	// What compactJSON gives main for the whole resolved tree, counting a shared value at each
+	// place without expanding it, and a serializer's output as the bytes it wrote.
+	if n, err := z.size(reflect.ValueOf(resolved)); err == nil {
+		return n
 	}
 	return -1
 }
@@ -613,7 +619,6 @@ func resolvedSize(original, resolved any, fields bool) int {
 type serialized struct {
 	value any
 	raw   []byte
-	cut   bool // the budget left values out of value
 }
 
 func (s serialized) MarshalJSON() ([]byte, error) { return s.raw, nil }
@@ -636,7 +641,7 @@ func captureSize(v any) int {
 // Seeds pair base-retained rule inputs with their report snapshots. They are inspected only
 // during this pass, and are never added to retained capture state.
 func (w *walk) seed(rv reflect.Value, captured any, depth int) {
-	if !rv.IsValid() || depth >= maxWalkDepth || nonData(rv.Kind()) {
+	if !rv.IsValid() || depth >= maxWalkDepth || nonDataValue(rv) {
 		return
 	}
 	if target, custom := customTarget(rv); custom {
@@ -853,7 +858,7 @@ func (w *walk) finishCustom(key visit, stable bool, decoded any, raw []byte) any
 	before := w.cuts
 	out, _ := w.strip(decoded)
 	if w.resolve && raw != nil {
-		out = serialized{value: out, raw: raw, cut: w.cuts != before}
+		out = serialized{value: out, raw: raw}
 	}
 	if stable {
 		if w.cuts != before {
@@ -935,7 +940,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		return nil, true
 	}
 	w.omitted = false
-	if nonData(rv.Kind()) {
+	if nonDataValue(rv) {
 		return nil, false // before any MarshalJSON or MarshalText its type has
 	}
 	if w.serializers {
@@ -1494,125 +1499,6 @@ func legacyMapKey(k reflect.Value) (string, bool) {
 		return strconv.FormatUint(k.Uint(), 10), true
 	}
 	return "", false
-}
-
-// boundedJSON is the compact JSON of a resolved tree under the walk's budget, so a shared
-// sub-tree is not expanded without limit. Within the budget it equals compactJSON.
-func boundedJSON(v any, fields bool) ([]byte, error) {
-	b, _, err := boundedJSONCut(v, fields)
-	return b, err
-}
-
-// boundedJSONCut is boundedJSON, also saying whether the budget left values out.
-func boundedJSONCut(v any, fields bool) ([]byte, bool, error) {
-	var buf bytes.Buffer
-	left := budgetLeft{n: maxWalkNodes - 1}
-	if err := encodeBounded(&buf, v, &left, fields); err != nil {
-		return nil, left.cut, err
-	}
-	return buf.Bytes(), left.cut, nil
-}
-
-type budgetLeft struct {
-	n   int
-	cut bool
-}
-
-func encodeBounded(buf *bytes.Buffer, v any, left *budgetLeft, fields bool) error {
-	switch x := v.(type) {
-	case []any:
-		if x == nil {
-			break
-		}
-		buf.WriteByte('[')
-		first := true
-		for _, e := range x {
-			if left.n <= 0 {
-				left.cut = true
-				break
-			}
-			left.n--
-			if !first {
-				buf.WriteByte(',')
-			}
-			first = false
-			if err := encodeBounded(buf, e, left, false); err != nil {
-				return err
-			}
-		}
-		buf.WriteByte(']')
-		return nil
-	case map[string]any:
-		if x == nil {
-			break
-		}
-		keys := make([]string, 0, len(x))
-		for k := range x {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		buf.WriteByte('{')
-		first := true
-		for _, k := range keys {
-			if fields {
-				left.n = maxWalkNodes - 1
-			} else if left.n <= 0 {
-				left.cut = true
-				break
-			} else {
-				left.n--
-			}
-			name, err := compactJSON(k)
-			if err != nil {
-				return err
-			}
-			if !first {
-				buf.WriteByte(',')
-			}
-			first = false
-			buf.Write(name)
-			buf.WriteByte(':')
-			if err := encodeBounded(buf, x[k], left, false); err != nil {
-				return err
-			}
-		}
-		buf.WriteByte('}')
-		return nil
-	}
-	if x, ok := v.(serialized); ok && x.raw != nil {
-		// A serializer's bytes are written as it wrote them only while its whole output fits what
-		// is left; otherwise its captured copy is encoded under the budget.
-		if n := jsonNodes(x.value, left.n+1); !x.cut && n <= left.n+1 {
-			left.n -= n - 1
-			buf.Write(x.raw)
-			return nil
-		}
-		left.cut = left.cut || x.cut
-		return encodeBounded(buf, x.value, left, false)
-	}
-	b, err := compactJSON(v)
-	buf.Write(b)
-	return err
-}
-
-// jsonNodes counts a decoded JSON tree's values, the root included, stopping past limit.
-func jsonNodes(v any, limit int) int {
-	n := 1
-	switch x := v.(type) {
-	case []any:
-		for _, e := range x {
-			if n += jsonNodes(e, limit-n); n > limit {
-				return n
-			}
-		}
-	case map[string]any:
-		for _, e := range x {
-			if n += jsonNodes(e, limit-n); n > limit {
-				return n
-			}
-		}
-	}
-	return n
 }
 
 // structMedia is whether a struct's JSON fields mark it as media, as stripMap reads a map's keys.
