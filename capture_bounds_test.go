@@ -425,3 +425,24 @@ func TestBudgetCountsEntriesWithDroppedKeys(t *testing.T) {
 		t.Fatalf("kept %v", got)
 	}
 }
+
+func TestOutputToolCallsShareOneBudget(t *testing.T) {
+	setupAI(t, WithEmitSpans(true), WithCaptureContent(true))
+	items := make([]any, 90000)
+	for n := range items {
+		items[n] = "v"
+	}
+	calls := make([]GenAIToolCall, 50)
+	for n := range calls {
+		calls[n] = GenAIToolCall{Name: "lookup", Arguments: items}
+	}
+	var content *callContent
+	bounded(t, func() { content = captureCallContent(nil, "", calls) })
+	total := 0
+	for _, c := range content.outputToolCalls {
+		total += nodeCount(c)
+	}
+	if total > maxWalkNodes {
+		t.Fatalf("kept %d values", total)
+	}
+}

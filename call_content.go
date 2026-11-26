@@ -1091,7 +1091,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
 		// An entry whose key is left out still counts; with no place in the order they count first.
-		for ; dropped > 0 && !(w.fields && w.depth == 1); dropped-- {
+		for ; dropped > 0 && (!w.fields || w.depth != 1); dropped-- {
 			if !w.take() {
 				break
 			}
