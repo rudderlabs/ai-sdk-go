@@ -6,7 +6,11 @@ import (
 	"strconv"
 )
 
-var errUnsizable = errors.New("rudderstackai: a value could not be encoded as JSON")
+var (
+	errUnsizable  = errors.New("rudderstackai: a value could not be encoded as JSON")
+	errCycle      = errors.New("rudderstackai: a cycle")
+	errSerializer = errors.New("rudderstackai: an app serializer is in the value")
+)
 
 // sizer is len(compactJSON(v)) for any value without expanding shared references: each map,
 // slice and pointer is measured once and its size added at every place it appears.
@@ -31,7 +35,7 @@ func (z *sizer) shared(rv reflect.Value, measure func() (int, error)) (int, erro
 		return n, nil
 	}
 	if z.active[key] {
-		return 0, errUnsizable // a cycle
+		return 0, errCycle
 	}
 	z.active[key] = true
 	defer delete(z.active, key)
@@ -46,8 +50,11 @@ func (z *sizer) size(rv reflect.Value) (int, error) {
 	if !rv.IsValid() {
 		return 4, nil
 	}
-	if target, custom := customTarget(rv); custom {
-		return z.leaf(target.Interface())
+	if rv.Type() == rawMessageType { // decoded by the walk, never run as app code
+		return z.leaf(rv.Interface())
+	}
+	if _, custom := customTarget(rv); custom {
+		return 0, errSerializer // never run an app serializer outside the report's cache
 	}
 	switch rv.Kind() {
 	case reflect.Interface:
@@ -111,6 +118,9 @@ func (z *sizer) list(rv reflect.Value) (int, error) {
 }
 
 func (z *sizer) object(rv reflect.Value) (int, error) {
+	if kt := rv.Type().Key(); kt.Kind() != reflect.String && kt.Implements(textType) {
+		return 0, errSerializer
+	}
 	total := 2 + max(rv.Len()-1, 0)
 	for it := rv.MapRange(); it.Next(); {
 		name, ok := legacyMapKey(it.Key())
@@ -143,8 +153,15 @@ func (z *sizer) fields(rv reflect.Value) (int, error) {
 		}
 		var s int
 		switch _, custom := customTarget(fv); {
-		case f.quoted && !custom && fv.Kind() != reflect.Interface && fv.Kind() != reflect.Pointer:
-			// ,string wraps a scalar's encoding in a JSON string.
+		case f.quoted && !custom && quotable(fv):
+			// ,string wraps a scalar's encoding, or a pointer to one, in a JSON string.
+			if fv.Kind() == reflect.Pointer && fv.IsNil() {
+				s = 4
+				break
+			}
+			for fv.Kind() == reflect.Pointer {
+				fv = fv.Elem()
+			}
 			b, encErr := compactJSON(fv.Interface())
 			if encErr == nil {
 				s, err = z.leaf(string(b))
@@ -161,4 +178,165 @@ func (z *sizer) fields(rv reflect.Value) (int, error) {
 		count++
 	}
 	return total + max(count-1, 0), nil
+}
+
+// quotable is a field value ,string applies to: a bool, number or string, or a pointer to one.
+func quotable(v reflect.Value) bool {
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return true
+		}
+		v = v.Elem()
+	}
+	switch v.Kind() {
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.String:
+		return true
+	}
+	return false
+}
+
+// fieldSize is base's encoded size of one captured value. orig is measured itself, exactly at
+// any size; a value with an app serializer in it, or a cycle, is sized from its captured copy.
+func fieldSize(orig, copied any, fields bool, in *inspector, z *sizer) int {
+	if _, ok := orig.(string); ok {
+		return captureSize(orig)
+	}
+	within, custom := in.shape(orig, fields)
+	if !custom {
+		if within {
+			return captureSize(orig)
+		}
+		n, err := z.size(reflect.ValueOf(orig))
+		if err == nil {
+			return n
+		}
+		if !errors.Is(err, errCycle) && !errors.Is(err, errSerializer) {
+			return -1
+		}
+	}
+	return resolvedSize(orig, copied, fields)
+}
+
+// inspector counts a value's JSON tree, a shared value at each place, once per identity: it says
+// whether the tree fits the budget (so encoding it directly is bounded) and whether an app
+// serializer is in it.
+type inspector struct {
+	memo   map[visit]counted
+	active map[visit]bool
+}
+
+type counted struct {
+	n      int
+	custom bool
+}
+
+func newInspector() *inspector {
+	return &inspector{memo: map[visit]counted{}, active: map[visit]bool{}}
+}
+
+// shape is within (at most maxWalkNodes values) and custom (a serializer, looked for while the
+// tree fits). With fields, each value of the map is its own captured value.
+func (in *inspector) shape(v any, fields bool) (within, custom bool) {
+	defer func() {
+		if recover() != nil {
+			within, custom = true, false
+		}
+	}()
+	if m, ok := v.(map[string]any); ok && fields {
+		within = true
+		for _, e := range m {
+			w, c := in.shape(e, false)
+			within, custom = within && w, custom || c
+		}
+		return within, custom
+	}
+	c := in.count(reflect.ValueOf(v), 0)
+	return c.n <= maxWalkNodes, c.custom
+}
+
+func (in *inspector) count(rv reflect.Value, chain int) counted {
+	over := counted{n: maxWalkNodes + 1}
+	if !rv.IsValid() {
+		return counted{n: 1}
+	}
+	if chain > maxWalkDepth { // pointers alone, in a cycle
+		return over
+	}
+	if rv.Type() == rawMessageType {
+		return counted{n: 1}
+	}
+	if _, custom := customTarget(rv); custom {
+		return counted{n: 1, custom: true}
+	}
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if rv.IsNil() {
+			return counted{n: 1}
+		}
+		if rv.Kind() == reflect.Interface {
+			return in.count(rv.Elem(), chain+1)
+		}
+		return in.shared(rv, over, func() counted { return in.count(rv.Elem(), chain+1) })
+	case reflect.Slice, reflect.Array:
+		if rv.Type().Elem().Kind() == reflect.Uint8 || rv.Len() == 0 {
+			return counted{n: 1}
+		}
+		measure := func() counted {
+			c := counted{n: 1}
+			for n := 0; n < rv.Len() && c.n <= maxWalkNodes; n++ {
+				c = add(c, in.count(rv.Index(n), 0))
+			}
+			return c
+		}
+		if rv.Kind() == reflect.Slice {
+			return in.shared(rv, over, measure)
+		}
+		return measure()
+	case reflect.Map:
+		return in.shared(rv, over, func() counted {
+			c := counted{n: 1}
+			if kt := rv.Type().Key(); kt.Kind() != reflect.String && kt.Implements(textType) {
+				c.custom = true
+			}
+			for it := rv.MapRange(); it.Next() && c.n <= maxWalkNodes; {
+				c = add(c, in.count(it.Value(), 0))
+			}
+			return c
+		})
+	case reflect.Struct:
+		c := counted{n: 1}
+		for _, f := range cachedJSONFields(rv.Type()) {
+			if fv, ok := jsonFieldValue(rv, f); ok {
+				if c = add(c, in.count(fv, 0)); c.n > maxWalkNodes {
+					break
+				}
+			}
+		}
+		return c
+	}
+	return counted{n: 1}
+}
+
+func add(c, child counted) counted {
+	return counted{n: min(c.n+child.n, maxWalkNodes+1), custom: c.custom || child.custom}
+}
+
+func (in *inspector) shared(rv reflect.Value, over counted, measure func() counted) counted {
+	key, stable := serializerIdentity(rv)
+	if !stable {
+		return measure()
+	}
+	if c, ok := in.memo[key]; ok {
+		return c
+	}
+	if in.active[key] {
+		return over
+	}
+	in.active[key] = true
+	defer delete(in.active, key)
+	c := measure()
+	in.memo[key] = c
+	return c
 }

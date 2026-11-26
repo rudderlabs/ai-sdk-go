@@ -120,7 +120,7 @@ func TestRound2SerializerOutputSizes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			report := captureValue(map[string]any{"v": value})
+			report := captureValueFields(map[string]any{"v": value})
 			if report.sizes["v"] != len(b) || captureValue(value).size != len(b) {
 				t.Errorf("%T spans=%v: size=%d/%d want %d", value, spans, report.sizes["v"], captureValue(value).size, len(b))
 			}

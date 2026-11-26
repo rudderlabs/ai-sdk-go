@@ -5,12 +5,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math"
 	"os"
 	"reflect"
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func nodeCount(v any) int {
@@ -343,8 +346,17 @@ type sizeTagged struct {
 	Ratio float32         `json:"ratio"`
 	Inner *sizeTagged     `json:"inner,omitempty"`
 	Raw   json.RawMessage `json:"raw"`
-	When  time.Time       `json:"when"`
 	Blob  []byte          `json:"blob"`
+}
+
+type stringPtrs struct {
+	I   *int         `json:",string"`
+	U   *uint8       `json:",string"`
+	F   *float64     `json:",string"`
+	B   *bool        `json:",string"`
+	S   *string      `json:",string"`
+	N   *json.Number `json:",string"`
+	Nil *int         `json:",string"`
 }
 
 func TestExactSizeMatchesCompactJSON(t *testing.T) {
@@ -352,9 +364,10 @@ func TestExactSizeMatchesCompactJSON(t *testing.T) {
 	values := []any{
 		nil, "text <>&", 1, -3.5, float32(0.1), true, []any{}, map[string]any{}, []string{"a", "b"},
 		map[int]string{2: "b", 10: "a"}, map[string]any{"k": []any{1, "x", nil, map[string]any{"z": false}}},
-		[]byte("abc"), json.Number("12.50"), time.Unix(0, 0).UTC(), shared,
+		[]byte("abc"), json.Number("12.50"), shared,
 		[]*sizeTagged{shared, shared, {Name: "n", Inner: shared}}, struct{ A, b int }{1, 2},
 		map[string]any{"p": shared, "q": shared}, [2]int{1, 2}, (*int)(nil),
+		stringPtrs{I: ptr(7), U: ptr(uint8(8)), F: ptr(1.5), B: ptr(true), S: ptr("a\"b"), N: ptr(json.Number("3"))},
 	}
 	for n, v := range values {
 		want, err := compactJSON(v)
@@ -391,7 +404,7 @@ func TestBudgetCutIsNotReusedByAnotherRoot(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
 	calls := 0
 	shared := map[string]any{"a": &countingMarshaler{&calls}, "b": 7}
-	first := make([]any, maxWalkNodes-4)
+	first := make([]any, maxWalkNodes-3)
 	for n := range first {
 		first[n] = "v"
 	}
@@ -404,7 +417,7 @@ func TestBudgetCutIsNotReusedByAnotherRoot(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("serializer ran %d times", calls)
 	}
-	if kept := got["first"].([]any); len(kept) != maxWalkNodes-3 {
+	if kept := got["first"].([]any); len(kept) != maxWalkNodes-2 {
 		t.Fatalf("first root kept %d", len(kept))
 	}
 }
@@ -446,3 +459,228 @@ func TestOutputToolCallsShareOneBudget(t *testing.T) {
 		t.Fatalf("kept %d values", total)
 	}
 }
+
+func filler(n int) []any {
+	out := make([]any, n)
+	for i := range out {
+		out[i] = "v"
+	}
+	return out
+}
+
+func TestMediaMapCutByBudgetLosesItsPayload(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	// Sorted, "padding" uses the budget before "type" is reached, so the marker is left out.
+	media := map[string]any{"base64": "SECRET", "padding": filler(maxWalkNodes), "type": "image"}
+	for name, got := range map[string]any{"captureContent": captureContent(media), "stripBinary": stripBinary(media)} {
+		if m, ok := got.(map[string]any); ok {
+			if _, leaked := m["base64"]; leaked {
+				t.Errorf("%s kept the payload", name)
+			}
+		}
+	}
+}
+
+func TestMCPControlFieldsSurviveTheBudget(t *testing.T) {
+	for _, rule := range []bool{false, true} {
+		opts := Options{}
+		if rule {
+			opts.EventRules = EventRules{Tools: map[string]ToolEventRule{"big": {Event: "big_called"}}}
+		}
+		server := mcp.NewServer(&mcp.Implementation{Name: "big", Version: "1"}, nil)
+		content := make([]mcp.Content, maxWalkNodes+10)
+		for i := range content {
+			content[i] = &mcp.TextContent{Text: "x"}
+		}
+		server.AddTool(&mcp.Tool{Name: "big", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			return &mcp.CallToolResult{Content: content, IsError: true}, nil
+		})
+		r := wrap(t, server, opts)
+		cs := connect(t, server, "2025-06-18", nil)
+		callTool(t, cs, "big", map[string]any{}, nil)
+		p := r.props(t, "mcp_tool_called")
+		if p["tool_status"] != "error" || p["is_error_result"] != true {
+			t.Errorf("rule=%t: an error result was reported as %v: %v", rule, p["tool_status"], p)
+		}
+	}
+}
+
+type onceMarshaler struct{ calls *int }
+
+func (m *onceMarshaler) MarshalJSON() ([]byte, error) {
+	*m.calls++
+	return []byte(`{"n":1}`), nil
+}
+
+func TestSizingNeverRunsSerializersOutsideTheCapture(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	calls := 0
+	m := &onceMarshaler{&calls}
+	// The budget stops before the marshalers, so the walk never sees them.
+	result := append(filler(maxWalkNodes), m, m)
+	report := captureValueFields(map[string]any{"result": result})
+	if calls > 1 {
+		t.Fatalf("serializer ran %d times", calls)
+	}
+	// A serializer-free sibling stays exact whatever the other field holds.
+	plain := filler(maxWalkNodes + 5)
+	args := captureValueFields(map[string]any{"args": &onceMarshaler{&calls}, "result": plain})
+	want, _ := compactJSON(plain)
+	if args.sizes["result"] != len(want) {
+		t.Fatalf("plain result size=%d want %d", args.sizes["result"], len(want))
+	}
+	if report.sizes["result"] <= 0 {
+		t.Fatalf("size=%d", report.sizes["result"])
+	}
+}
+
+func TestPlainResultDeeperThanTheDepthCapIsSizedExactly(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	var v any = "leaf"
+	for range 80 {
+		v = map[string]any{"c": v}
+	}
+	want, _ := compactJSON(v)
+	for name, got := range map[string]int{"root": captureValue(v).size, "field": captureValueFields(map[string]any{"result": v}).sizes["result"]} {
+		if got != len(want) {
+			t.Errorf("%s size=%d want %d", name, got, len(want))
+		}
+	}
+}
+
+func TestCutSerializerOutputTravelsWithTheReport(t *testing.T) {
+	setupAI(t, WithEmitSpans(true), WithCaptureContent(true))
+	calls := 0
+	result := map[string]any{"a": append(filler(maxWalkNodes-3), &onceMarshaler{&calls}), "b": 1}
+	rule := EventRules{Tools: map[string]ToolEventRule{"lookup": {Event: "looked_up", Properties: func(map[string]any, any) map[string]any {
+		return map[string]any{"again": result}
+	}}}}
+	setupAI(t, WithEmitSpans(true), WithCaptureContent(true), WithEventRules(rule))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Classify: Ptr(false)})
+	i.RecordToolCalls(ToolCall{ID: "t", Name: "lookup", Result: result, Error: Ptr(false)})
+	i.End(EndOptions{})
+	if calls != 1 {
+		t.Fatalf("serializer ran %d times", calls)
+	}
+}
+
+func TestSliceCaptureAllocatesWithinTheBudget(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	big := make([]int, 5_000_000)
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	out := captureContent(big)
+	runtime.ReadMemStats(&after)
+	if n := len(out.([]any)); n != maxWalkNodes-1 {
+		t.Fatalf("kept %d", n)
+	}
+	if mib := (after.TotalAlloc - before.TotalAlloc) >> 20; mib > 40 {
+		t.Fatalf("allocated %d MiB", mib)
+	}
+}
+
+type fieldHolder struct{ A, B, C, D int }
+
+func TestStructFieldsCountAgainstTheBudget(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	list := append(filler(maxWalkNodes-5), fieldHolder{1, 2, 3, 4})
+	got := captureContent(list).([]any)
+	last, ok := got[len(got)-1].(map[string]any)
+	if !ok || len(last) != 3 {
+		t.Fatalf("struct kept %v", got[len(got)-1])
+	}
+}
+
+func TestSpanAttributesAreSeparateRoots(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	got := captureAttributes(map[string]any{"a": filler(70000), "b": filler(70000)})
+	if len(got["a"].([]any)) != 70000 || len(got["b"].([]any)) != 70000 {
+		t.Fatal("an attribute's budget was shared")
+	}
+}
+
+func TestCustomPropertiesAreOneRoot(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	shared := filler(90000)
+	props := map[string]any{}
+	for i := range 100 {
+		props[fmt.Sprintf("p%03d", i)] = shared
+	}
+	got := captureProperties(props)
+	total := 0
+	for _, v := range got {
+		total += nodeCount(v)
+	}
+	if total > maxWalkNodes {
+		t.Fatalf("kept %d values", total)
+	}
+}
+
+func TestSizesOfManyKeysSharingOneValueAreCheap(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	shared := filler(90000)
+	m := map[string]any{}
+	for i := range 2000 {
+		m[fmt.Sprintf("k%d", i)] = shared
+	}
+	started := time.Now()
+	r := captureValue(m)
+	if d := time.Since(started); d > 2*time.Second {
+		t.Fatalf("took %v", d)
+	}
+	if r.size <= 0 {
+		t.Fatalf("size=%d", r.size)
+	}
+}
+
+func TestSharedGraphSizesAreExactThroughCapture(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	deep := sharedMaps(30)
+	want := 2
+	for range 30 {
+		want = 11 + 2*want
+	}
+	bounded(t, func() {
+		if got := captureValue(deep).size; got != want {
+			t.Errorf("root size=%d want %d", got, want)
+		}
+		if got := captureValueFields(map[string]any{"k": deep}).sizes["k"]; got != want {
+			t.Errorf("key size=%d want %d", got, want)
+		}
+	})
+}
+
+func TestBoundedJSONGivesEachFieldItsOwnBudget(t *testing.T) {
+	two := map[string]any{"a": filler(70000), "b": filler(70000)}
+	want, _ := compactJSON(two)
+	if got, _ := boundedJSON(two, true); len(got) != len(want) {
+		t.Fatalf("len=%d want %d", len(got), len(want))
+	}
+	if got, _ := boundedJSON(two, false); len(got) >= len(want) {
+		t.Fatalf("one budget kept everything: %d", len(got))
+	}
+}
+
+func TestMemoCopiesAreSharedAcrossEntries(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	shared := []any{1, 2, 3}
+	a, b := map[string]any{"x": shared}, map[string]any{"x": shared}
+	report := captureValue(map[string]any{"a": a, "b": b})
+	ka, _ := serializerIdentity(reflect.ValueOf(a))
+	kb, _ := serializerIdentity(reflect.ValueOf(b))
+	xa, xb := report.memo[ka].(map[string]any)["x"], report.memo[kb].(map[string]any)["x"]
+	if reflect.ValueOf(xa).Pointer() != reflect.ValueOf(xb).Pointer() {
+		t.Fatal("each memo entry copied the shared value again")
+	}
+}
+
+func TestProjectedToolInputWithinTheBudgetIsKeptWhole(t *testing.T) {
+	setupAI(t, WithEmitSpans(true), WithLLMCallEvents(true), WithCaptureContent(true))
+	content := captureCallContent(nil, "", []GenAIToolCall{{Name: "lookup", Arguments: map[string]any{"rows": filler(60000)}}})
+	args := content.outputToolCalls[0].(map[string]any)["arguments"].(map[string]any)
+	if n := len(args["rows"].([]any)); n != 60000 {
+		t.Fatalf("kept %d", n)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }

@@ -958,6 +958,7 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		if rc.wireResultSize > 0 {
 			size = rc.wireResultSize
 		}
+		result = withMCPControls(result, o.Result)
 
 		if requests, ok := result["inputRequests"].(map[string]any); ok {
 			var keys []string
@@ -1236,7 +1237,7 @@ func (rc *reqCtx) declaredEvent(result map[string]any, status string, captured .
 	}
 	var seeds []captureSeed
 	if len(captured) > 0 {
-		seeds = append(seeds, captureSeed{memo: captured[0].memo})
+		seeds = append(seeds, captureSeed{memo: captured[0].memo, dumped: captured[0].dumped})
 	}
 	sdk := map[string]any{}
 	for _, key := range []string{"argument_keys", "invalid_arguments", "request_id", "tool_name", "client_title"} {
@@ -1787,4 +1788,56 @@ func seedMCPResult(w *walk, original, captured any) {
 			w.seed(value, m[key], 0)
 		}
 	}
+}
+
+// mcpControlKeys steer a call's outcome. The budgeted copy of a large result can lose them, so
+// the ones it lacks are read from the result itself.
+var mcpControlKeys = []string{"isError", "inputRequests", "requestState"}
+
+func withMCPControls(result map[string]any, source any) map[string]any {
+	for _, key := range mcpControlKeys {
+		if _, ok := result[key]; ok {
+			continue
+		}
+		if value, ok := topLevelField(source, key); ok {
+			if result == nil {
+				result = map[string]any{}
+			}
+			result[key] = captureContent(value)
+		}
+	}
+	return result
+}
+
+// topLevelField is the value of a map entry or struct field encoding/json would write as key.
+func topLevelField(source any, key string) (any, bool) {
+	rv := reflect.ValueOf(source)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return nil, false
+		}
+		rv = rv.Elem()
+	}
+	if !rv.IsValid() {
+		return nil, false
+	}
+	switch rv.Kind() {
+	case reflect.Map:
+		if rv.Type().Key().Kind() != reflect.String {
+			return nil, false
+		}
+		if v := rv.MapIndex(reflect.ValueOf(key).Convert(rv.Type().Key())); v.IsValid() && v.CanInterface() {
+			return v.Interface(), true
+		}
+	case reflect.Struct:
+		for _, f := range cachedJSONFields(rv.Type()) {
+			if f.name != key {
+				continue
+			}
+			if v, ok := jsonFieldValue(rv, f); ok && v.CanInterface() {
+				return v.Interface(), true
+			}
+		}
+	}
+	return nil, false
 }

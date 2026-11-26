@@ -1854,11 +1854,11 @@ func (i *Interaction) recordToolCalls(fromSpan, outputFailure bool, calls ...Too
 			if tool.args == nil {
 				tool.args = call.Args
 				m, _ := captured[n].value.(map[string]any)
-				tool.argsContent = captureReport{value: m["args"], size: captured[n].sizes["args"], memo: captured[n].memo}
+				tool.argsContent = captureReport{value: m["args"], size: captured[n].sizes["args"], memo: captured[n].memo, dumped: captured[n].dumped}
 			}
 			if call.Result != nil && !tool.hasResult {
 				m, _ := captured[n].value.(map[string]any)
-				tool.resultContent = captureReport{value: m["result"], size: captured[n].sizes["result"], memo: captured[n].memo}
+				tool.resultContent = captureReport{value: m["result"], size: captured[n].sizes["result"], memo: captured[n].memo, dumped: captured[n].dumped}
 			}
 			mergeToolResult(tool, ToolResult{Error: call.Error, ErrorType: call.ErrorType, Duration: call.Duration, Result: call.Result}, call.Result != nil, outputFailure)
 			fire = append(fire, tool)
@@ -2110,7 +2110,7 @@ func evaluateToolRule(rule ToolEventRule, t recordedTool, capture capture.Resolv
 		}
 	}
 	// Rule callbacks see the originals above. Encoding sees their detached report snapshots.
-	properties := captureProperties(custom, captureSeed{memo: t.argsContent.memo}, captureSeed{memo: t.resultContent.memo})
+	properties := captureProperties(custom, captureSeed{memo: t.argsContent.memo, dumped: t.argsContent.dumped}, captureSeed{memo: t.resultContent.memo, dumped: t.resultContent.dumped})
 	resultSize := -1
 	if t.hasResult {
 		resultSize = t.resultContent.size
