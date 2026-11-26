@@ -41,6 +41,13 @@ var (
 	longPrompt = strings.Repeat("Where is my order? ", 100) + "Reach me at jane.doe@example.com or +1 415 555 0100. " +
 		strings.Repeat("Thanks. ", 260)
 	longAnswer = strings.Repeat("Your order ships tomorrow. ", 150)
+
+	// The same shape in CJK text with fullwidth punctuation and in emoji with ZWJ sequences: text the
+	// masking has to fold before it matches.
+	cjkText = strings.Repeat("我的订单在哪里？请尽快回复，谢谢。", 100) + "Reach me at jane.doe@example.com or +1 415 555 0100. " +
+		strings.Repeat("谢谢（再次）。", 300)
+	emojiText = strings.Repeat("Where is my order? 👩‍💻👍🏽 ", 100) + "Reach me at jane.doe@example.com or +1 415 555 0100. " +
+		strings.Repeat("Thanks 👨‍👩‍👧 ", 260)
 )
 
 func completion(content string) []byte {
@@ -139,10 +146,11 @@ func response(status int, contentType string, body [][]byte) *http.Response {
 	}
 }
 
-func newFakeOpenAI(streamChunks int, long bool, failEvery int64) *fakeOpenAI {
+// answer is the reply text; empty means the short default.
+func newFakeOpenAI(streamChunks int, answer string, failEvery int64) *fakeOpenAI {
 	text := completion("Your order ships tomorrow.")
-	if long {
-		text = completion(longAnswer)
+	if answer != "" {
+		text = completion(answer)
 	}
 	return &fakeOpenAI{text: text, stream: chatStreamEvents(streamChunks), failEvery: failEvery}
 }
@@ -188,14 +196,13 @@ func interaction(ctx context.Context, o rudderstackai.InteractionOptions, fn fun
 	})
 }
 
-// pair benchmarks the same call without the SDK (baseline) and with it (sdk).
-func pair(b *testing.B, id string, call func(context.Context, openai.Client) error, long bool, opts ...rudderstackai.ConfigOption) {
+// pair benchmarks the same call without the SDK (baseline) and with it (sdk). prompt and answer are
+// the long texts; both empty means the short call.
+func pair(b *testing.B, id string, call func(context.Context, openai.Client) error, prompt, answer string, opts ...rudderstackai.ConfigOption) {
 	start := benchUser
-	if long {
-		start.PromptText = longPrompt
-	}
-	raw := fakeClient(newFakeOpenAI(streamChunks, long, 0))
-	wrapped := fakeClient(newFakeOpenAI(streamChunks, long, 0), rudderopenai.WithTracking())
+	start.PromptText = prompt
+	raw := fakeClient(newFakeOpenAI(streamChunks, answer, 0))
+	wrapped := fakeClient(newFakeOpenAI(streamChunks, answer, 0), rudderopenai.WithTracking())
 	b.Run(id+"/baseline", func(b *testing.B) {
 		settings(b, opts...)
 		measure(b, func(ctx context.Context) error { return call(ctx, raw) })
@@ -229,23 +236,25 @@ func consumeStream(ctx context.Context, c openai.Client) error {
 
 func BenchmarkOverhead(b *testing.B) {
 	short := create("Where is my order?")
+	content := []rudderstackai.ConfigOption{rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true)}
 	rounds, err := strconv.Atoi(os.Getenv("BENCH_ROUNDS"))
 	if err != nil || rounds <= 0 {
 		rounds = 5
 	}
 	for range rounds {
-		pair(b, "interaction/openai", short, false)
-		pair(b, "interaction/openai-stream", consumeStream, false)
-		pair(b, "interaction/openai+content", create(longPrompt), true,
-			rudderstackai.WithCaptureContent(true), rudderstackai.WithLLMCallEvents(true))
-		pair(b, "interaction/openai+spans", short, false, rudderstackai.WithEmitSpans(true))
-		pair(b, "interaction/openai-stream+spans", consumeStream, false, rudderstackai.WithEmitSpans(true))
+		pair(b, "interaction/openai", short, "", "")
+		pair(b, "interaction/openai-stream", consumeStream, "", "")
+		pair(b, "interaction/openai+content", create(longPrompt), longPrompt, longAnswer, content...)
+		pair(b, "interaction/openai+content-cjk", create(cjkText), cjkText, cjkText, content...)
+		pair(b, "interaction/openai+content-emoji", create(emojiText), emojiText, emojiText, content...)
+		pair(b, "interaction/openai+spans", short, "", "", rudderstackai.WithEmitSpans(true))
+		pair(b, "interaction/openai-stream+spans", consumeStream, "", "", rudderstackai.WithEmitSpans(true))
 	}
 }
 
 // TestFakeOpenAIAnswers keeps the benchmark honest: the fake answers as the scenarios expect.
 func TestFakeOpenAIAnswers(t *testing.T) {
-	c := fakeClient(newFakeOpenAI(3, false, 0))
+	c := fakeClient(newFakeOpenAI(3, "", 0))
 	got, err := c.Chat.Completions.New(context.Background(), chatParams("hi"))
 	if err != nil || got.Choices[0].Message.Content != "Your order ships tomorrow." {
 		t.Fatalf("chat: %v %v", got, err)

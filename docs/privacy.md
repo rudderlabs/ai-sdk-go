@@ -71,6 +71,7 @@ err := rudderstackai.Configure(
 ```
 
 - Patterns catch fixed shapes only: names, postal addresses and free-form IDs are not caught, and some order numbers look like phone numbers. Use the hook, or leave capture off.
+- Masking sees through zero-width and other invisible format characters and through fullwidth and other compatibility forms (`４１５-５５５-０１００`, `jane.doe＠example.com`); the mask covers the value's own characters, and text that is not masked is sent exactly as written. Compatibility forms come from golang.org/x/text's Unicode tables, so a character newer than those tables is not folded.
 - Fail closed: a hook that returns an error or panics drops the field. Text over 32,000 code points is withheld rather than masked.
 - `WithRedaction(false)` sends captured text unmasked and does not run the hook; MCP `Options.DisableRedaction` does the same for `Redact`, but agent-written MCP text (`call_reason`, `capability_detail`, `feedback_text`, `error_message`) that still matches a built-in rule is withheld. The patterns are defined in [`spec/fixtures/redaction-v0.1.json`](../spec/fixtures/redaction-v0.1.json).
 - `MaskText(text)` applies the same patterns to text you send yourself, such as free text a [declared tool event](events.md#declared-tool-events) rule's `Properties` returns: the SDK sends those as returned. It ignores `WithRedaction` and the hooks; `ok` is false for text over 32,000 code points, which you should not send.
