@@ -814,17 +814,23 @@ func TestEncodedSerializerResultIsBudgetedAndRunsOnce(t *testing.T) {
 func TestManyReferencesToOneSerializerAreCheap(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
 	m := &manyOnes{n: 90000}
-	refs := make([]any, 100000)
-	for i := range refs {
-		refs[i] = m
+	timed := func(n int) time.Duration {
+		refs := make([]any, n)
+		for i := range refs {
+			refs[i] = m
+		}
+		started := time.Now()
+		report := captureValueFields(map[string]any{"result": refs})
+		if report.sizes["result"] <= 0 || report.sizes["result"] > 400000 {
+			t.Fatalf("size=%d", report.sizes["result"])
+		}
+		return time.Since(started)
 	}
-	started := time.Now()
-	report := captureValueFields(map[string]any{"result": refs})
-	if d := time.Since(started); d > 3*time.Second {
-		t.Fatalf("took %v", d)
-	}
-	if report.sizes["result"] <= 0 || report.sizes["result"] > 400000 {
-		t.Fatalf("size=%d", report.sizes["result"])
+	// The cost is the budget's, not the references': 100,000 take about what 2 do, under any instrumentation.
+	timed(2)
+	one, many := timed(2), timed(100000)
+	if many > 5*one+100*time.Millisecond {
+		t.Fatalf("2 references took %v, 100000 took %v", one, many)
 	}
 }
 
