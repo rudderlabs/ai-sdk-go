@@ -466,13 +466,13 @@ func captureEncoded(v any) (b []byte, size int, err error) {
 		}
 	}()
 	within, custom := newInspector().shape(v, false)
-	if within && !custom {
+	if within {
+		// A serializer's output is written whole either way, so it needs no capture of its own.
 		b, err = compactJSON(v)
 		return b, len(b), err
 	}
-	// Past the budget, or with an app serializer: the capture runs the serializer once, and the
-	// classification input comes from the budgeted tree. The size is exact unless a serializer
-	// produced part of the value.
+	// Past the budget: the capture runs any serializer once, and the classification input comes
+	// from the budgeted tree. The size is exact unless a serializer produced part of the value.
 	resolved, _ := resolveCapture(v, false, nil)
 	b, err = boundedJSON(resolved, false)
 	if !custom {
