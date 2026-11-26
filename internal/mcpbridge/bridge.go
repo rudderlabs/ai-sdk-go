@@ -30,8 +30,13 @@ type Request struct {
 	Meta map[string]any
 	// Token is the verified bearer token (*auth.TokenInfo from the go-sdk), or nil.
 	Token any
-	// SessionID is the reported mcp_session_id; empty when the transport has none.
+	// SessionID keys per-session state (call positions, pending elicitations); empty when the
+	// transport has none. A client-supplied header counts here even when it is not reported.
 	SessionID string
+	// IssuedSessionID is the session ID the server transport issued and checks for this request, or
+	// empty; ClientSessionID is the Mcp-Session-Id the client sent, or empty. Together they decide
+	// the reported mcp_session_id.
+	IssuedSessionID, ClientSessionID string
 	// Connection scopes the call counters when there is no session ID and no caller
 	// interaction_id, for a stdio or in-memory connection. Empty for HTTP.
 	Connection string

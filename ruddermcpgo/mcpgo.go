@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -438,6 +439,9 @@ func (t *tracked) beforeAny(ctx context.Context, id any, method mcp.MCPMethod, m
 	safely(func() { t.before(ctx, id, string(method), message) })
 }
 
+// mcpGoIssuedID is the format mcp-go's own session ID managers issue and validate.
+var mcpGoIssuedID = regexp.MustCompile(`(?i)^mcp-session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
 func (t *tracked) before(ctx context.Context, id any, method string, message any) {
 	if strings.HasPrefix(method, "notifications/") {
 		return
@@ -483,6 +487,15 @@ func (t *tracked) before(ctx context.Context, id any, method string, message any
 		sessionID = header.Get("Mcp-Session-Id")
 	}
 	r.SessionID = sessionID
+	clientSent := header.Get("Mcp-Session-Id")
+	// Issued: the transport assigned it (no header, or another one) or it is mcp-go's own checked format.
+	issued := ""
+	if session != nil {
+		if id := session.SessionID(); id != "" && id != "stdio" && (!r.HTTP || clientSent != id || mcpGoIssuedID.MatchString(id)) {
+			issued = id
+		}
+	}
+	r.IssuedSessionID, r.ClientSessionID = issued, clientSent
 	key := sessionID
 	if key == "" {
 		key = r.Connection

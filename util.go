@@ -107,6 +107,15 @@ func clientID(v any) string {
 	return s
 }
 
+// reportedSessionID is the mcp_session_id to send (spec/fixtures/mcp-session-id-v0.1.json): the ID
+// the server transport issued, whatever its shape, else the client-supplied one only if it is ID-shaped.
+func reportedSessionID(issued, clientSent string) string {
+	if id := capID(issued); id != "" {
+		return id
+	}
+	return clientID(clientSent)
+}
+
 // capID trims and caps an ID or name read off the wire or from Identify.
 func capID(s string) string { return capText(strings.TrimSpace(s), maxMetaLength) }
 

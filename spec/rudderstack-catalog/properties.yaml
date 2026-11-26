@@ -637,7 +637,7 @@ spec:
     - id: mcp_session_id
       name: mcp_session_id
       type: string
-      description: From the Mcp-Session-Id header or a host-provided session key; absent otherwise.
+      description: The session ID the server transport issued. Without one, a client-sent Mcp-Session-Id header that is a UUID or 32 hex digits, not all zeros; absent otherwise.
     - id: server_name
       name: server_name
       type: string
