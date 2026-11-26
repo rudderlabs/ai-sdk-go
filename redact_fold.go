@@ -127,10 +127,6 @@ func foldedView(text string) *view {
 	return v
 }
 
-func (v *view) same(i, j int) bool {
-	return v.start[i] == v.start[j] && v.end[i] == v.end[j] && v.tok[i] == v.tok[j]
-}
-
 type cut struct {
 	a, b  int
 	token string
@@ -155,17 +151,6 @@ func (v *view) spans(rules []redactRule, compiled []*regexp2.Regexp) (_ []span, 
 			}
 			a, b := m.Index+kept, m.Index+m.Length
 			if r.check != nil && !r.check(string(v.chars[a:b])) {
-				continue
-			}
-			// Never split one code point's NFKC form or an earlier replacement.
-			for a > 0 && v.same(a-1, a) {
-				a--
-			}
-			for b < len(v.chars) && v.same(b, b-1) {
-				b++
-			}
-			if n := len(cuts); n > 0 && a < cuts[n-1].b { // widened into the previous one: a single replacement
-				cuts[n-1].b = max(cuts[n-1].b, b)
 				continue
 			}
 			cuts = append(cuts, cut{a, b, "[" + r.token + "]"})

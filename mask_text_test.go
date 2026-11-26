@@ -9,6 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/dlclark/regexp2"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -142,5 +143,23 @@ func TestFoldedViewIsNFKCPerCodePoint(t *testing.T) {
 		if got := string(foldedView(string(c)).chars); got != want {
 			t.Fatalf("U+%04X folds to %q, want %q", c, got, want)
 		}
+	}
+}
+
+// Text that is not NFKC as a whole but folds to itself per code point ("é" written as "e" plus an
+// accent composes) takes the plain path: one pass, so a rule's check runs once per match.
+func TestMaskPlainPathWhenFoldedViewEqualsText(t *testing.T) {
+	calls := 0
+	rules := []redactRule{{name: "email", pattern: `\S+@example\.com`, token: "email", check: func(string) bool { calls++; return true }}}
+	compiled := []*regexp2.Regexp{regexp2.MustCompile(rules[0].pattern, regexp2.None)}
+	text := "Mail josé@example.com today"
+	if string(foldedView(text).chars) != text || norm.NFKC.IsNormalString(text) {
+		t.Fatal("fixture text must be non-NFKC as a whole yet fold to itself")
+	}
+	if got := maskWith(rules, compiled, text); got != "Mail josé[email] today" && got != "Mail [email] today" {
+		t.Fatalf("got %q", got)
+	}
+	if calls != 1 {
+		t.Fatalf("check ran %d times, want 1 (plain path)", calls)
 	}
 }

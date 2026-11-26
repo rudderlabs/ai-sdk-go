@@ -159,7 +159,11 @@ func maskWith(rules []redactRule, compiled []*regexp2.Regexp, text string) strin
 	if isFolded(text) {
 		return maskPlain(rules, compiled, text)
 	}
-	folded, ok := foldedView(text).spans(rules, compiled)
+	fv := foldedView(text)
+	if string(fv.chars) == text { // whole-string NFKC differs, but no code point folds on its own
+		return maskPlain(rules, compiled, text)
+	}
+	folded, ok := fv.spans(rules, compiled)
 	if !ok {
 		return redactionTimedOut
 	}

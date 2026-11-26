@@ -1,6 +1,6 @@
 {
   "fixture_version": 2,
-  "description": "Built-in masking of opt-in text fields (prompt_text, response_text, action_details.feedback_text, intent_summary) and of span content. Each SDK's built-in masking must turn every input into its expected output exactly. `rules` lists the rules in application order: `pattern` is the exact regular expression source both SDKs compile (no flags; applied globally, left to right, without overlaps); every match is replaced by `tokens[token]` unless `check` names a validation the match must pass (luhn: Luhn checksum; ipv6: 8 groups, or fewer with one `::`; phone: 10-12 digits, 9-15 after a leading +; ssn: area not 000/666/900-999, group not 00, serial not 0000; iban: 15-34 alphanumerics without spaces and ISO 7064 mod-97 == 1); with `keep_group: 1` only the text after capture group 1 is replaced. Each rule runs over the previous rule's output, so the first rule to match a span wins. Text longer than 32000 code points is not masked: the field is withheld (`expected: null`). A case with `repeat: n` means input and expected are each repeated n times. Masking also sees through format characters and compatibility forms. The folded view of a text drops every code point listed in `format_characters` (Unicode 17.0 category Cf) and replaces every other code point with that code point's own NFKC form (one code point at a time, so nothing composes across characters). When the folded view differs from the text, the rules run as above twice, independently: over the text and over its folded view. Each view's final replacements are mapped to the text's code points: a replacement covers the code point its first character came from through the one its last character came from, format characters between them included. Within a view, a replacement that would end inside one code point's NFKC form or inside an earlier replacement is widened to cover all of it, and widened replacements of one rule that overlap merge. Replacements from the two views that overlap merge too, and the merged span takes the token of the part that starts first (ties: the one that ends last, then the text's own view). The output is the text with each span replaced by its token; everything else keeps the text's own characters, so nothing the text's own view masks is left unmasked and unmasked text is never changed. NFKC comes from the runtime's Unicode tables, so a character newer than those tables is not folded. Names and postal addresses are not caught.",
+  "description": "Built-in masking of opt-in text fields (prompt_text, response_text, action_details.feedback_text, intent_summary) and of span content. Each SDK's built-in masking must turn every input into its expected output exactly. `rules` lists the rules in application order: `pattern` is the exact regular expression source both SDKs compile (no flags; applied globally, left to right, without overlaps); every match is replaced by `tokens[token]` unless `check` names a validation the match must pass (luhn: Luhn checksum; ipv6: 8 groups, or fewer with one `::`; phone: 10-12 digits, 9-15 after a leading +; ssn: area not 000/666/900-999, group not 00, serial not 0000; iban: 15-34 alphanumerics without spaces and ISO 7064 mod-97 == 1); with `keep_group: 1` only the text after capture group 1 is replaced. Each rule runs over the previous rule's output, so the first rule to match a span wins. Text longer than 32000 code points is not masked: the field is withheld (`expected: null`). A case with `repeat: n` means input and expected are each repeated n times. Masking also sees through format characters and compatibility forms. The folded view of a text drops every code point listed in `format_characters` (Unicode 17.0 category Cf) and replaces every other code point with that code point's own NFKC form (one code point at a time, so nothing composes across characters). When the folded view differs from the text, the rules run as above twice, independently: over the text and over its folded view. Each view's final replacements are mapped to the text's code points: a replacement covers the code point its first character came from through the one its last character came from, format characters between them included (a replacement that covers part of one code point's NFKC form covers that whole code point). Replacements that overlap, from either view, merge, and the merged span takes the token of the part that starts first (ties: the one that ends last, then the text's own view). The output is the text with each span replaced by its token; everything else keeps the text's own characters, so nothing the text's own view masks is left unmasked and unmasked text is never changed. NFKC comes from the runtime's Unicode tables, so a character newer than those tables is not folded. Names and postal addresses are not caught.",
   "tokens": {
     "email": "[email]",
     "phone": "[phone]",
@@ -541,14 +541,14 @@
       "expected": "Ｈｅｌｌｏ，世界！ 👩\u200d💻 ①② ｶﾀｶﾅ\u00a0ok\u00ad ﬁle Ⅳ 𝟏𝟐\u200b"
     },
     {
-      "name": "fold_widen_start_into_expansion",
+      "name": "fold_expansion_split_at_start",
       "input": "+1 415 555 01004¼111111111111111x",
-      "expected": "[phone][card]x"
+      "expected": "[phone]x"
     },
     {
-      "name": "fold_widen_end_into_expansion",
+      "name": "fold_expansion_split_at_end",
       "input": "sk-abcdefghijklmnop123½:db8::1",
-      "expected": "[secret]:db8::1"
+      "expected": "[secret]"
     },
     {
       "name": "fold_expansion_starts_value",
@@ -569,6 +569,16 @@
       "name": "fold_format_before_last_group",
       "input": "5500 0000 0000\u200b 0004",
       "expected": "[card]"
+    },
+    {
+      "name": "fold_expansion_shared_by_two_values",
+      "input": "AIzaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa℁k-abcdefghijklmnop1234",
+      "expected": "[secret]"
+    },
+    {
+      "name": "fold_only_own_view_masks",
+      "input": "Card 4111 1111 1111 1111\u200b2",
+      "expected": "Card [card]\u200b2"
     },
     {
       "name": "fold_check_still_applies",
