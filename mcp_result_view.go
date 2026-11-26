@@ -41,55 +41,48 @@ func mcpResultView(v any) (result map[string]any, size int) {
 	return nil, 0
 }
 
-// plainResult reads the top-level fields from a value with no serializer at its root.
+// plainResult reads the top-level fields from a value with no serializer at its root. Each field
+// is read as encoding/json writes it and decoded as main decoded it (a *int is a number, a field
+// with its own MarshalJSON is what it wrote): the field's value is small, so it is encoded alone.
 func plainResult(v any) map[string]any {
 	out := map[string]any{}
-	if x, ok := topLevelField(v, "isError"); ok {
-		if b, ok := jsonBool(x); ok {
-			out["isError"] = b
+	field := func(holder any, key string) any {
+		x, ok := topLevelField(holder, key)
+		if !ok {
+			return nil
 		}
+		return jsonOf(x)
+	}
+	if b, ok := field(v, "isError").(bool); ok {
+		out["isError"] = b
 	}
 	for _, key := range []string{"requestState", "nextCursor"} {
-		if x, ok := topLevelField(v, key); ok {
-			if s, ok := textOf(x); ok {
-				out[key] = s
-			}
+		if s, ok := field(v, key).(string); ok {
+			out[key] = s
 		}
 	}
 	if x, ok := topLevelField(v, "inputRequests"); ok {
 		if rv := reflect.ValueOf(x); rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
 			requests := map[string]any{}
 			for it := rv.MapRange(); it.Next(); {
-				entry := map[string]any{}
-				if method, ok := topLevelField(it.Value().Interface(), "method"); ok {
-					entry["method"] = method
-				}
-				requests[it.Key().String()] = entry
+				requests[it.Key().String()] = map[string]any{"method": field(it.Value().Interface(), "method")}
 			}
 			out["inputRequests"] = requests
 		}
 	}
-	if meta, ok := topLevelField(v, "_meta"); ok {
-		if status, ok := topLevelField(meta, "com.rudderstack/http_status"); ok {
-			if f, ok := numberOf(status); ok {
-				out["_meta"] = map[string]any{"com.rudderstack/http_status": f}
-			}
-		}
+	if status, ok := field(field2(v, "_meta"), "com.rudderstack/http_status").(float64); ok {
+		out["_meta"] = map[string]any{"com.rudderstack/http_status": status}
 	}
 	if sc, ok := topLevelField(v, "structuredContent"); ok && !isNilValue(sc) {
 		picked := map[string]any{}
 		for _, key := range []string{"status", "statusCode"} {
-			if x, ok := topLevelField(sc, key); ok {
-				if f, ok := numberOf(x); ok {
-					picked[key] = f
-				}
+			if f, ok := field(sc, key).(float64); ok {
+				picked[key] = f
 			}
 		}
 		for _, key := range []string{"nextCursor", "next_cursor"} {
-			if x, ok := topLevelField(sc, key); ok {
-				if s, ok := textOf(x); ok {
-					picked[key] = s
-				}
+			if str, ok := field(sc, key).(string); ok {
+				picked[key] = str
 			}
 		}
 		out["structuredContent"] = picked
@@ -111,6 +104,25 @@ func plainResult(v any) map[string]any {
 	return out
 }
 
+// field2 is a top-level field's value itself, for reading fields of it.
+func field2(holder any, key string) any {
+	x, _ := topLevelField(holder, key)
+	return x
+}
+
+// jsonOf is v as encoding/json writes it, decoded the way main decoded a result.
+func jsonOf(v any) any {
+	raw, err := compactJSON(v)
+	if err != nil {
+		return nil
+	}
+	var out any
+	if json.Unmarshal(raw, &out) != nil {
+		return nil
+	}
+	return out
+}
+
 // blockType is a content block's type: from its fields, or, for a block with its own serializer,
 // from the bytes of that one block.
 func blockType(block any) (string, bool) {
@@ -127,21 +139,8 @@ func blockType(block any) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return textOf(t)
-}
-
-func textOf(v any) (string, bool) {
-	rv := reflect.ValueOf(v)
-	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
-		if rv.IsNil() {
-			return "", false
-		}
-		rv = rv.Elem()
-	}
-	if rv.IsValid() && rv.Kind() == reflect.String {
-		return rv.String(), true
-	}
-	return "", false
+	name, ok := jsonOf(t).(string)
+	return name, ok
 }
 
 func isNilValue(v any) bool {
@@ -310,34 +309,4 @@ func topLevelField(source any, key string) (any, bool) {
 		}
 	}
 	return nil, false
-}
-
-// numberOf is a JSON number as a float64, from any Go number type.
-func numberOf(v any) (float64, bool) {
-	rv := reflect.ValueOf(v)
-	switch {
-	case !rv.IsValid():
-	case rv.CanFloat():
-		return rv.Float(), true
-	case rv.CanInt():
-		return float64(rv.Int()), true
-	case rv.CanUint():
-		return float64(rv.Uint()), true
-	}
-	return 0, false
-}
-
-// jsonBool is a bool as encoding/json sees it: through pointers, and for a named bool type.
-func jsonBool(v any) (bool, bool) {
-	rv := reflect.ValueOf(v)
-	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
-		if rv.IsNil() {
-			return false, false
-		}
-		rv = rv.Elem()
-	}
-	if rv.IsValid() && rv.Kind() == reflect.Bool {
-		return rv.Bool(), true
-	}
-	return false, false
 }

@@ -1078,6 +1078,29 @@ func TestMCPResultViewReadsTheSameFieldsFromBytesAndValues(t *testing.T) {
 	}
 }
 
+type namedCode int
+
+type namedFlag bool
+
+type namedBlock struct {
+	Type string `json:"type"`
+}
+
+type marshalCode struct{}
+
+func (marshalCode) MarshalJSON() ([]byte, error) { return []byte(`503`), nil }
+
+type embeddedStatus struct {
+	Status int `json:"status"`
+}
+
+type shapedResult struct {
+	IsError    any     `json:"isError"`
+	Structured any     `json:"structuredContent"`
+	NextCursor *string `json:"nextCursor,omitempty"`
+	Content    []any   `json:"content,omitempty"`
+}
+
 // TestMCPEventFieldsEqualMains reproduces main's computation (encode the whole result once,
 // decode it, read the fields) and compares every non-content field of the event.
 func TestMCPEventFieldsEqualMains(t *testing.T) {
@@ -1100,6 +1123,33 @@ func TestMCPEventFieldsEqualMains(t *testing.T) {
 			Content []map[string]any `json:"content"`
 		}{ptr(true), []map[string]any{{"type": "audio"}}},
 	}
+	shape := func(isError, structured any) shapedResult {
+		return shapedResult{IsError: isError, Structured: structured}
+	}
+	type taggedCode struct {
+		Code *int `json:"statusCode"`
+	}
+	type embedded struct {
+		embeddedStatus
+		NextCursor string `json:"nextCursor"`
+	}
+	cases["ptrStatusCode"] = shape(true, taggedCode{ptr(429)})
+	cases["ptrStatus"] = shape(ptr(true), map[string]any{"status": ptr(429)})
+	cases["ptrCursor"] = shapedResult{IsError: false, Structured: map[string]any{"next_cursor": ptr("c")}, NextCursor: ptr("n")}
+	cases["namedInt"] = shape(true, map[string]any{"statusCode": namedCode(401)})
+	cases["jsonNumber"] = shape(true, map[string]any{"statusCode": json.Number("408")})
+	cases["tagged"] = shape(true, struct {
+		S int    `json:"status"`
+		N string `json:"nextCursor"`
+	}{500, "x"})
+	cases["embedded"] = shape(true, embedded{embeddedStatus{504}, "e"})
+	cases["marshalField"] = shape(true, map[string]any{"statusCode": marshalCode{}})
+	cases["nilPointer"] = shape(true, taggedCode{nil})
+	cases["nilStructured"] = shape(ptr(true), (*taggedCode)(nil))
+	cases["namedBool"] = shape(namedFlag(true), nil)
+	cases["blocks"] = shapedResult{Content: []any{struct {
+		T *string `json:"type"`
+	}{ptr("text")}, namedBlock{"image"}}}
 	for name, result := range cases {
 		raw, err := compactJSON(result)
 		if err != nil {
@@ -1117,6 +1167,15 @@ func TestMCPEventFieldsEqualMains(t *testing.T) {
 		}
 		if p["is_error_result"] != isError || (p["tool_status"] == "error") != isError {
 			t.Errorf("%s: status=%v is_error=%v, main's isError=%v", name, p["tool_status"], p["is_error_result"], isError)
+		}
+		if isError {
+			kind := toolErrorType("", want)
+			if kind == "" {
+				kind = "api_error"
+			}
+			if p["error_type"] != kind {
+				t.Errorf("%s: error_type=%v, main's %v", name, p["error_type"], kind)
+			}
 		}
 	}
 }
