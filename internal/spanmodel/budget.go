@@ -24,7 +24,6 @@ var (
 	mandatorySummary = map[string]bool{"operation_name": true, "provider_name": true, "request_model": true, "conversation_id": true}
 )
 
-// otlpSpan is the one resource span, scope span and span of a message's OTLP payload.
 func otlpSpan(p object) (rs, ss, span object) {
 	rs = p["otlp"].(object)["resourceSpans"].([]object)[0]
 	ss = rs["scopeSpans"].([]object)[0]
