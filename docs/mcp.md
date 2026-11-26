@@ -5,9 +5,9 @@ The integration tracks an MCP server: which AI clients call it, which tools they
 | MCP library | Package | Entry point | Versions tested | Protocol revisions |
 | --- | --- | --- | --- | --- |
 | [`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk) (official) | `github.com/rudderlabs/ai-sdk-go` | `rudderstackai.WrapMCPServer` | v1.8.0 | 2025-06-18, 2025-11-25, 2026-07-28 |
-| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v0.55.1 (the minimum) to v1.2.1 | v0.55.1 to v0.x: 2025-06-18, 2025-11-25; v1.x: also 2026-07-28 |
+| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v0.55.1 (the minimum), v1.1.1 and v1.5.0 | v0.55.1 to v0.x: 2025-06-18, 2025-11-25; v1.x: also 2026-07-28 |
 
-Both send the same events with the same options, defaults and properties. `ruddermcpgo` requires mcp-go v0.55.1, the oldest version it supports, so adding it never upgrades a server's mcp-go; CI builds the module against v0.55.1 and runs the tests against v1.1.1 and v1.2.1. Each library lives in its own package, so a go-sdk server never compiles mcp-go; `ruddermcpgo` builds on the root package and so also compiles the go-sdk.
+Both send the same events with the same options, defaults and properties. `ruddermcpgo` requires mcp-go v0.55.1, the oldest version it supports, so Go may upgrade a server dependency below that minimum; CI builds the module against v0.55.1 and tests v1.1.1 explicitly and v1.5.0 in the workspace. Each library lives in its own package, so a go-sdk server never compiles mcp-go; `ruddermcpgo` builds on the root package and so also compiles the go-sdk.
 
 - [Setup](#setup)
 - [Options](#options)

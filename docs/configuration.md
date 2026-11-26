@@ -1,6 +1,6 @@
 # Configuration
 
-Process-wide settings, per-interaction options, identity, pricing, classification and shutdown for the AI interaction events. `WrapMCPServer` takes its own `Options` and ignores these: see [mcp.md](mcp.md#options).
+Process-wide settings, per-interaction options, identity, pricing, classification and shutdown for the AI interaction events. `WrapMCPServer` takes its own `Options`; global sampling and content capture also apply: see [mcp.md](mcp.md#options).
 
 - [Configure](#configure)
 - [Which client is used](#which-client-is-used)
@@ -228,7 +228,7 @@ Captured content honours `MarshalJSON` and `MarshalText` with `encoding/json` pr
 
 A serializer error, panic, invalid JSON or re-entry produces JSON `null`; its fields are never walked and the event still arrives. A top-level event field that does not allow null is omitted to keep the event valid. MCP tool results reuse the written wire message after a successful write; a failed write captures no result, and its event keeps the handler's outcome and size. Transports without a write observer keep their existing release point, as do results whose response the observer never sees (closed first, timed out or a reused request id). Span context is captured at span start even with content capture off; admitted manual attributes are captured at End. Disabled content attributes run no serializers. Handler duration and completion time stay fixed at handler completion while MCP capture waits for the write. An oversized observed MCP message keeps no body: its result is captured from the handler's value after the write, with the written result size. OTel attributes keep their existing byte stripping.
 
-App callbacks, rules, classifiers, request controls and return values keep their previous inputs. Serializers an app serializer calls itself are outside the SDK's count. Go by-value receivers run once per occurrence because they have no identity.
+App callbacks, rules, classifiers, request controls and return values keep their previous inputs. Serializers an app serializer calls itself are outside the SDK's count. Go by-value receivers without stable identity run once per occurrence; named maps and slices retain identity and reuse their serialized output.
 
 Content capture is off by default: no prompt, answer, feedback or failure text is sent. `WithCaptureContent(true)` turns every kind on. `ContentCapture` turns kinds on one at a time; a nil key takes `Default`, then the level above:
 
@@ -438,6 +438,7 @@ Each contained error has an `ErrorInfo{Kind, Where}`. Kinds:
 | ------------------- | ---------------------------------------------------------------------------------------------------- |
 | `internal`          | A panic in the SDK or an integration.                                                                |
 | `user_callback`     | A hook you configured (redact, identify, event rules, classifier, evaluator, trace ID, `MarshalJSON`) failed or panicked; its documented fallback was used. |
+| `credits_unstable` | Pricing changed during all three credits attempts. |
 | `pause_refused` | Pause left the interaction unchanged. `reason` (`Reason` in Go) is `in_callback` or `pricing_in_flight`; pricing waits are bounded at 5 s. |
 | `limit_reached`     | A memory cap was hit.                                                                                |
 | `redaction_timeout` | A masking pattern ran out of time; the field was sent as `[redaction timed out]`.                    |

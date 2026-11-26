@@ -14,7 +14,7 @@ AI client ─ MCP ─ your MCP server (go-sdk or mcp-go) ─ wrapped ─ analyti
 
 This is product analytics, not observability: it puts AI usage next to the rest of your customer data and complements your tracing tool. It is private by default: no prompt, answer, tool argument or result text is sent unless you turn content capture on, and captured text is masked.
 
-Captured content honours Go app serializers with spans on or off, once per value per report. Events, spans, sizes and pause snapshots reuse detached output; failures become JSON null without walking hidden fields. MCP tool results reuse the written wire message after a successful response write. Serializers an app serializer calls itself are outside the SDK count; by-value receivers run once per occurrence. Details: [content capture](docs/configuration.md#content-capture).
+Captured content honours Go app serializers with spans on or off, once per value per report. Events, spans, sizes and pause snapshots reuse detached output; failures become JSON null without walking hidden fields. MCP tool results reuse the written wire message after a successful response write. Serializers an app serializer calls itself are outside the SDK count; by-value receivers without stable identity run once per occurrence. Details: [content capture](docs/configuration.md#content-capture).
 
 Other language SDKs: [Node.js](https://github.com/rudderlabs/ai-sdk-node) and [Python](https://github.com/rudderlabs/ai-sdk-python).
 
@@ -162,7 +162,7 @@ err := rudderstackai.RunTask(ctx, "alert-triage", rudderstackai.TaskOptions{Trig
 
 - The system is the actor: task events have no user (`anonymousId: "ai_system"`) and never inherit the person of the context or cookies. Put the customer in `AccountID` and the human the work is for in `OnBehalfOf`, and set a stable, scoped `ConversationID`.
 - Chaining: a task inside another interaction or task defaults `parent_interaction_id`, `conversation_id` and `trigger_source: agent` from it. Each task sends its own `ai_response_received`.
-- Flush: a top-level task waits for its classification and score (the classifier timeout plus a second, as `Flush`) and flushes its client when the client implements `Flusher`; a chained sub-task does not (`TaskOptions.Flush` overrides).
+- Flush: a top-level task waits for its classification and score (2 seconds by default, bounded with the client flush by `TaskOptions.FlushTimeout`) and flushes its client when the client implements `Flusher`; a chained sub-task does not (`TaskOptions.Flush` overrides).
 - No prompt event, and no classification unless `Classify` is set ([TaskOptions](docs/configuration.md#taskoptions)).
 - Waiting for an approval or a person: `task.Pause(PauseOptions{Reason: PauseApproval})` sends a `paused` answer for the work so far and returns a JSON snapshot; pass it as `TaskOptions.Resume` in the run that continues, in any process. The final answer carries `pause_count` and `total_paused_ms` ([Pauses and resumes](docs/configuration.md#pauses-and-resumes)).
 - `WithTaskStartedEvents(true)` also sends `ai_task_started` when a run starts, so runs in flight or abandoned show up.
@@ -211,7 +211,7 @@ err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 
 MCP events keep only names registered on the server at call time (tools, prompts), top-level input property names and known client capability names, replacing anything else with `unknown`; `protocol_version` must be a `YYYY-MM-DD` date. `request_id` is an integer id as a decimal string, a string as `sha256:` plus 16 hex characters, and anything else `unknown`. Client name and title have control characters removed and whitespace collapsed, are masked with the built-in rules (never your `Redact` hook) and cut to 64 code points, and are left out when the cut leaves a pattern that the removed text had kept from matching; client version is left out unless it is version-shaped (`^[0-9][0-9A-Za-z.+-]{0,31}$`) with nothing to mask ([mcp.md](docs/mcp.md#events)). Session and interaction state is keyed by the raw account, user and session or interaction, and a pending elicitation expires after an hour.
 
-Call `WrapMCPServer` once, before serving; it takes its own options (`Configure` does not apply). Options, every property and limits: [docs/mcp.md](docs/mcp.md).
+Call `WrapMCPServer` once, before serving; it takes its own options (global sampling and content capture apply; other settings use its own options). Options, every property and limits: [docs/mcp.md](docs/mcp.md).
 
 ## Product signals
 
@@ -268,7 +268,7 @@ Each call sends one track event with `tool_name`, `tool_call_id`, `tool_status`,
 
 ### Tool breakdown and multi-agent
 
-`WithToolBreakdown(true)` adds `tool_breakdown` entries to `ai_response_received` (per agent, MCP server, tool and parent tool: calls, failures, measured durations). `usage_breakdown` has one entry per agent, provider, model and service tier; set `LLMCall.AgentName` / `ToolCall.AgentName` to keep agents apart ([details](docs/events.md#tool_breakdown)).
+`WithToolBreakdown(true)` adds `tool_breakdown` entries to `ai_response_received` (per agent, MCP server, tool and parent tool: calls, failures, measured durations). `usage_breakdown` has one entry per agent, call purpose, provider, model, requested model and service tier; set `LLMCall.AgentName` / `ToolCall.AgentName` to keep agents apart ([details](docs/events.md#tool_breakdown)).
 
 ## Privacy
 
@@ -316,7 +316,7 @@ Overhead: the SDK adds about 23 µs to an interaction with one wrapped model cal
 | `mcp_capability_requested`                              | Deprecated: use `FeedbackRequests` / `mcp_feedback_submitted`              |
 | `mcp_event_subscription_changed`, `mcp_event_delivered` | Experimental, opt-in: the MCP Events draft extension                         |
 
-Every event's properties stay within 30,000 serialized bytes (RudderStack rejects events over 32 KiB): captured text goes first, then breakdown entries, and a declared tool event loses its `Properties` output, so metrics still arrive. Every event carries `context.wrapperLibrary` (`name: "ai-sdk-go"`, `version`, `specVersion: "0.4.0"`, `integration`) beside analytics-go's own `context.library`. Sample payloads, every property and error types: [docs/events.md](docs/events.md). Schema: [`spec/ai-events-v0.4.schema.json`](spec/ai-events-v0.4.schema.json); tracking plan: [`spec/rudderstack-catalog/`](spec/rudderstack-catalog).
+Every event's properties stay within 30,000 serialized bytes (RudderStack rejects events over 32 KiB): input messages shrink and captured text is removed before breakdown entries, with oversized output removed before shrinking input, and a declared tool event loses its `Properties` output, so metrics still arrive. Every event carries `context.wrapperLibrary` (`name: "ai-sdk-go"`, `version`, `specVersion: "0.4.0"`, `integration`) beside analytics-go's own `context.library`. Sample payloads, every property and error types: [docs/events.md](docs/events.md). Schema: [`spec/ai-events-v0.4.schema.json`](spec/ai-events-v0.4.schema.json); tracking plan: [`spec/rudderstack-catalog/`](spec/rudderstack-catalog).
 
 ## Configuration
 
@@ -405,16 +405,16 @@ Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value turns it on; it is read on eve
 
 ## Compatibility
 
-Each module requires the oldest version it supports, so adding it never upgrades your SDK. CI runs every module's tests twice: alone, at the minimums in its `go.mod`, and in the workspace, with the newer versions the examples use.
+Each module requires the oldest version it supports; Go may upgrade a dependency below that minimum. CI tests the workspace with the newer versions the examples use. Isolated minimum-version tests run on main, release PRs and manual runs, excluding examples.
 
 | Module                                        | Requires and tested at (minimum)                               | Also tested with |
 | --------------------------------------------- | -------------------------------------------------------------- | ---------------- |
 | All modules                                   | Go 1.26.11                                                      | Go 1.26, 1.27    |
-| `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.5.1, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.2.1 |
-| `.../rudderopenai`                            | `github.com/openai/openai-go/v3` v3.70.0                        | v3.77.0          |
-| `.../rudderanthropic`                         | `github.com/anthropics/anthropic-sdk-go` v1.78.0                | v1.80.0          |
-| `.../ruddergenai`                             | `google.golang.org/genai` v1.72.0                               | v1.73.0          |
-| `.../rudderbedrock`                           | `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` v1.63.1   | v1.63.4          |
+| `github.com/rudderlabs/ai-sdk-go`             | `analytics-go/v4` v4.5.1, MCP `go-sdk` v1.8.0, `mcp-go` v0.55.1 | `mcp-go` v1.1.1, v1.5.0 |
+| `.../rudderopenai`                            | `github.com/openai/openai-go/v3` v3.70.0                        | v3.98.0          |
+| `.../rudderanthropic`                         | `github.com/anthropics/anthropic-sdk-go` v1.78.0                | v1.84.0          |
+| `.../ruddergenai`                             | `google.golang.org/genai` v1.72.0                               | v1.77.0          |
+| `.../rudderbedrock`                           | `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` v1.63.1   | v1.63.12          |
 | `.../rudderotel`                              | `go.opentelemetry.io/otel` / `trace` / `sdk` v1.47.0           |                  |
 
 Every Go module runs the applicable shared fixtures in [`spec/fixtures/`](spec/fixtures).

@@ -15,7 +15,7 @@ belong to the next segment. Each accepted call is emitted and counted once.
 | Classifier/evaluator | Turn copied, work scheduled after response publication |
 | JSON serialization hooks | Tool properties normalized/sized outside `mu`; delivery serialization outside `mu` |
 | Identity/trace/disconnect/error classification | Startup or outside `mu` |
-| Credit/pricing | No callable hook; static price registry |
+| Credit/pricing | `WithCredits` invokes a side-effect-free, idempotent callback outside `mu`; pricing may retry |
 
 Regression matrices in the pause tests exercise Pause, End and RecordCall in each callable
 family above that runs on an existing interaction, including separate call/tool cap notices.

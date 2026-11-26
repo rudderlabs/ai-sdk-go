@@ -2,7 +2,7 @@
 
 Every AI interaction event this SDK sends, with sample payloads and how each property is derived. MCP server events (`mcp_*`) are in [mcp.md](mcp.md), including opt-in `mcp_feedback_submitted` through `FeedbackRequests`. `mcp_capability_requested` / `request_capability` are deprecated; use `FeedbackRequests`. The JSON Schema is [`spec/ai-events-v0.4.schema.json`](../spec/ai-events-v0.4.schema.json); a RudderStack data catalog and tracking plan are in [`spec/rudderstack-catalog/`](../spec/rudderstack-catalog).
 
-Product events' `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget first shrinks a call's `input_messages` (oldest after the system prompt, then the longest strings), then loses its captured text (`output_text`, `output_tool_calls`, `response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process. The whole message also stays within the RudderStack client's 32 KiB limit, since the client drops a larger one and logs it with its payload: when large IDs or `Context` leave less room, properties are trimmed into what is left, then the app's `Context` is left out (`context.wrapperLibrary` stays), and an event still over is dropped with a warning that names only the event. An analytics-go `MaxMessageBytes` set below 32 KiB, or a `BeforeEnqueue` hook that enlarges the message, is outside this. Tracing `ai_otel_span` events use a separate 32,000-byte whole-message budget and the [tracing](tracing.md) truncation policy.
+Product events' `properties`, AI, MCP and declared tool events alike, stay within 30,000 serialized bytes, since RudderStack rejects an event over 32 KiB. An event over that budget first drops `output_text` and `output_tool_calls` that overflow without the input, then shrinks a call's `input_messages` (oldest after the system prompt, then the longest strings), then loses its captured text (`output_text`, `output_tool_calls`, `response_text`, `prompt_text`, `action_details.feedback_text`), then `tool_breakdown` and `usage_breakdown` entries from the end, so its metrics still arrive. A declared tool event over it is sent without the output of its rule's `Properties`. Each trim logs one warning per process. The whole message also stays within the RudderStack client's 32 KiB limit, since the client drops a larger one and logs it with its payload: when large IDs or `Context` leave less room, properties are trimmed into what is left, then the app's `Context` is left out (`context.wrapperLibrary` stays), and an event still over is dropped with a warning that names only the event. An analytics-go `MaxMessageBytes` set below 32 KiB, or a `BeforeEnqueue` hook that enlarges the message, is outside this. Tracing `ai_otel_span` events use a separate 32,000-byte whole-message budget and the [tracing](tracing.md) truncation policy.
 
 - [Common fields](#common-fields)
 - [ai_user_prompt_created](#ai_user_prompt_created)
@@ -124,7 +124,7 @@ One per interaction, sent by `Interaction.End` (or when `RunInteraction` / `RunT
 | `pause_count`, `total_paused_ms` | Only on the final answer of a run that paused: how many times, and for how long in all; see [Pauses](#pauses) |
 | `end_reason`             | Only when the SDK ended the interaction itself, with status `incomplete`: `ttl_expired` (open longer than `Limits.InteractionTTL`) or `shutdown` (still open at `Shutdown`). Calls recorded before keep their usage. |
 | `trigger`                | `user` or `system`                                                                                           |
-| `client_disconnected`    | `true` only when `EndOptions.ClientDisconnected` was set                                                     |
+| `client_disconnected`    | `true` when `EndOptions.ClientDisconnected` was set or `Middleware` sees cancellation before the handler returns                                                     |
 | `primary_model`, `primary_provider` | The last successful call's, else the last call's                                                  |
 | `latency_ms`             | From `StartInteraction` (or the latest resume) to `End` or `Pause`, rounded                                   |
 | `time_to_first_token_ms` | From the same start to the first streamed token any integration saw; absent without a stream                |
@@ -134,7 +134,7 @@ One per interaction, sent by `Interaction.End` (or when `RunInteraction` / `RunT
 | `finish_reason`          | The last successful call's                                                                                   |
 | `error_type`             | Only when the status is not `success`; see [Error types](#error-types)                                      |
 | `intent`, `outcome`      | `InteractionOptions.Intent` / `SetIntent`, `SetOutcome`                                                      |
-| `usage_breakdown`        | One entry per agent, provider, model, requested model and service tier                                       |
+| `usage_breakdown`        | One entry per agent, call purpose, provider, model, requested model and service tier                                       |
 | `tool_breakdown`         | Only with tool breakdown on; see [tool_breakdown](#tool_breakdown)                                           |
 | `response_text`          | `EndOptions.ResponseText`, only with content capture on, masked                                              |
 | `trace_id`               | `TraceID` / `SetTraceID`, else the function registered with [`WithTraceIDFrom`](configuration.md#trace_id) (such as `rudderotel.TraceID`); absent otherwise |
@@ -215,7 +215,7 @@ Token counts follow one convention for every provider: input includes cached and
 - `total_reasoning_tokens`: the sum over calls that reported reasoning tokens (a reported `0` counts); absent when none did.
 - A `cancelled` answer with no recorded call has no token totals: its usage is unknown, not zero.
 
-`usage_breakdown` groups calls by agent name, provider, model, requested model and service tier, in the order first seen:
+`usage_breakdown` groups calls by agent name, call purpose, provider, model, requested model and service tier, in the order first seen:
 
 | Entry field              | Meaning                                                                                                   |
 | ------------------------ | --------------------------------------------------------------------------------------------------------- |
@@ -232,7 +232,7 @@ Token counts follow one convention for every provider: input includes cached and
 | `error_count`            | Failed calls, retries included                                                                            |
 | `cost_usd`               | Sum of the group's call costs, under the same rule as `total_cost_usd`                                    |
 
-A call reported twice with the same provider and `ResponseID` counts once (the second report only adds a missing `AgentName`), so an integration and a manual `RecordCall` of the same response do not double count.
+A call reported twice with the same provider and `ResponseID` counts once (a repeated report can add missing `AgentName`, `CallPurpose`, credits, `FallbackUsed` and `BYOK`), so an integration and a manual `RecordCall` of the same response do not double count.
 
 Gateways (provider `openrouter`, `litellm` or `gateway`) report a served model with a vendor prefix (`openai/gpt-4o`): the call is recorded under that vendor (`openai`, through the shared alias table in `spec/fixtures/providers-v0.1.json`), and `model` keeps the full served name.
 
@@ -279,7 +279,7 @@ With `WithEmitSpans(true)`, a retained wrapper call carries `span_id`, matching 
 spans. Two invocations with the same response ID each emit a span; the deduplicated call event
 keeps the first invocation's ID. Overflow aggregates omit `span_id`.
 
-Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is recorded. Totals belong on `ai_response_received`; do not add these to it. A call reported by both a wrapper and a span is sent once; when the other report arrives after the call's event was sent, totals and `usage_breakdown` merge it, but the sent event is not updated.
+Only with `WithLLMCallEvents(true)`: one per recorded call. Retained, timed span or unknown-usage reports emit after their twin arrives or at End/Pause; later call events wait behind them to keep call order. Otherwise known wrapper usage emits immediately. Totals belong on `ai_response_received`; do not add these to it. A call reported by both a wrapper and a span is sent once; when the other report arrives after the call's event was sent, totals and `usage_breakdown` merge it, but the sent event is not updated.
 
 ```json
 {
@@ -289,7 +289,7 @@ Only with `WithLLMCallEvents(true)`: one per recorded call, sent as it is record
     "conversation_id": "8f1c2d3e-4b5a-4c6d-8e7f-9a0b1c2d3e4f",
     "interaction_id": "3b9e5d0a-7c2f-4e18-9a6b-2c4d6e8f0a1b",
     "provider": "anthropic",
-    "model": "claude-haiku-4-5-20251001",
+    "model": "claude-haiku-4-5",
     "input_tokens": 1200,
     "output_tokens": 80,
     "total_tokens": 1280,
@@ -378,7 +378,7 @@ Opt-in with [`WithClassifier`](configuration.md#classifier-and-evaluator). After
 }
 ```
 
-- `intent` is one of `ClassifierOptions.Intents`, else `other` (with your own `Classify` and no `Intents`, any non-empty value is kept). `outcome` is one of `Outcomes` (default `DefaultOutcomes`: `resolved`, `partial`, `unresolved`, `escalated`, `unclear`), else `unclear`. `other` and `unclear` are therefore always possible values, whatever your lists hold: plan reports and warehouse filters for them.
+- `intent` is one of `ClassifierOptions.Intents`, else `other` (with your own `Classify` and no `Intents`, any non-empty value is kept). `outcome` is one of `Outcomes` (default `DefaultOutcomes`: `resolved`, `partial`, `unresolved`, `escalated`, `unsupported`, `unclear`), else `unclear`. `other` and `unclear` are therefore always possible values, whatever your lists hold: plan reports and warehouse filters for them.
 - `classifier` is `model` for a `ClassifierClient`, `custom` for your `Classify` function. `classifier_model` is the model the reply named, else the configured one. `classifier_duration_ms` times the classification.
 - `classifier_cost_usd`: the classifier call priced with your registered prices, when its usage is known and its model priced. Never added to the interaction's totals; the classifier's own call is never tracked.
 - `intent_summary`: with `IntentSummary` (model client) or from your `Classify` result. One sentence, at most 25 words and 280 characters, masked, and withheld when it still matches a sensitive pattern.
@@ -486,7 +486,7 @@ Every event carries `context.wrapperLibrary` beside the `context.library` analyt
 {
   "wrapperLibrary": {
     "name": "ai-sdk-go",
-    "version": "0.1.0",
+    "version": "0.15.0",
     "specVersion": "0.4.0",
     "integration": "openai"
   }

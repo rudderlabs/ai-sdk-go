@@ -60,7 +60,7 @@ On the laptop, 5,000 interactions per second (about 15,000 events per second) we
 | Entries per in-memory map (MCP and integrations) | 10,000; MCP server names and resource templates per server: 1,000 each, fixed | `MaxMapEntries` |
 | Event properties                                     | 30,000 serialized bytes                                                                                                                          | fixed ([details](events.md))                                                        |
 
-What happens at each cap is in [Limits](configuration.md#limits); an event over the size budget loses its captured text first ([events](events.md)). Nothing panics into your code. An interaction leaves nothing behind once it ends; MCP keeps a few entries per session or interaction (call positions and argument hashes for `retry_count`), up to `MaxMapEntries` per map.
+What happens at each cap is in [Limits](configuration.md#limits); an event over the size budget shrinks input messages and removes captured text before breakdown entries, removing oversized output before shrinking input ([events](events.md)). Nothing panics into your code. An interaction leaves nothing behind once it ends; MCP keeps a few entries per session or interaction (call positions and argument hashes for `retry_count`), up to `MaxMapEntries` per map.
 
 ## Fuzz tests
 

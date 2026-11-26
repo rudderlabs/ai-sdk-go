@@ -28,7 +28,7 @@ Each integration is its own Go module and hooks into its provider SDK's own exte
 | Google Gen AI   | `github.com/rudderlabs/ai-sdk-go/ruddergenai`        | `genai.ClientConfig{HTTPClient: ruddergenai.HTTPClient(nil)}`     | 1.26.11     |
 | Amazon Bedrock  | `github.com/rudderlabs/ai-sdk-go/rudderbedrock`      | `bedrockruntime.NewFromConfig(cfg, rudderbedrock.WithTracking())` | 1.26.11     |
 
-Every module needs Go 1.26.11 or later, as the core does, and requires the oldest provider SDK version it supports, so adding it never upgrades yours ([Compatibility](../README.md#compatibility)).
+Every module needs Go 1.26.11 or later, as the core does, and requires the oldest provider SDK version it supports, so Go may upgrade a dependency below that minimum ([Compatibility](../README.md#compatibility)).
 
 - A call made with a context that carries an interaction (`RunInteraction`, `StartInteraction`, `RunTask`) reports into it. A call without one opens its own one-call interaction and ends it when the call (or its stream) ends: `trigger: system` unless the context carries an identity from `WithValues`, no prompt event, never classified. A call made after its interaction ended logs a warning and becomes such a separate answer, with `parent_interaction_id` set to the ended one.
 - Requests and responses reach the provider SDK unchanged, except that a streamed Chat Completions request asks for usage (see [OpenAI](#openai)). Provider errors are returned to your code unchanged.
@@ -112,7 +112,7 @@ client, err := genai.NewClient(ctx, &genai.ClientConfig{
 
 `HTTPClient(base, opts...)` returns a copy of `base` (nil: a zero `http.Client`) whose transport is wrapped; `Transport(base, opts...)` wraps an `http.RoundTripper` (nil: `http.DefaultTransport`) for clients you build yourself. Options: `WithProvider(label)` and `WithAnalytics(client)`.
 
-- Vertex AI with Google Cloud credentials: genai skips its own credential setup when given an `HTTPClient`, so the client must authenticate itself. Wrap an authenticated client, `ruddergenai.HTTPClient(google.DefaultClient(ctx, "https://www.googleapis.com/auth/cloud-platform"))` (`golang.org/x/oauth2/google`), or call `cfg.UseDefaultCredentials()` on the `ClientConfig` after setting `HTTPClient`. An API key (Gemini API, Vertex AI express mode) needs neither.
+- Vertex AI with Google Cloud credentials: genai skips its own credential setup when given an `HTTPClient`, so the client must authenticate itself. Obtain an authenticated client with `base, err := google.DefaultClient(ctx, "https://www.googleapis.com/auth/cloud-platform")` (`golang.org/x/oauth2/google`), check `err`, then wrap it with `ruddergenai.HTTPClient(base)`, or call and check the error from `cfg.UseDefaultCredentials()` on the `ClientConfig` after setting `HTTPClient`. An API key (Gemini API, Vertex AI express mode) needs neither.
 - Tracked: `Models.GenerateContent` and `Models.GenerateContentStream`, and chats, which call the same endpoints. Every other method passes through.
 - Provider: `gcp.gemini` for the Gemini API, `gcp.vertex_ai` for Vertex AI, detected from each request's URL; `WithProvider` overrides it. The two are [priced separately](configuration.md#pricing).
 - Model: `modelVersion` of the response, else the model in the request path (a tuned model's endpoint name).
@@ -269,8 +269,8 @@ An agent that calls MCP servers can join each `mcp_tool_called` to its answer by
   into nested calls, goroutines and streams; wait for workers before ending their parents.
   See the [manual agent/tool/stream example](tracing.md#framework-trees-with-manual-spans).
   The optional `rudderotel` module also provides an OpenTelemetry span processor and exporter.
-- genai retries are recorded per attempt, as are openai-go and anthropic-sdk-go connection-error retries outside an interaction ([Retries](#retries)).
-- Streams must be read inside the interaction; there is no `bind`. `paused` is set only through `EndOptions`; `client_disconnected` also by [`Middleware`](configuration.md#context-values).
+- With `WithEmitSpans(true)`, retries share one invocation within a one-second grace; a retry after the grace may split. With spans disabled, a connection error outside an interaction is recorded per attempt ([Retries](#retries)).
+- Streams must be read inside the interaction; there is no `bind`. `paused` is set through `Interaction.Pause` or `EndOptions`; `client_disconnected` also by [`Middleware`](configuration.md#context-values).
 - Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
 - `Flush` sends analytics-go's queue (v4.5.1, the minimum, has `Flush(ctx)`); a custom client without a flush method is reported as `client_outdated`, so close it before exiting. There is no exit hook: call `Flush` or `Shutdown` yourself. `Shutdown` never closes clients; afterwards, call `CloseClient(ctx, client)` for each client you own.
 - Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint.

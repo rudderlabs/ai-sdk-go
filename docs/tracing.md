@@ -461,7 +461,7 @@ With capture enabled, content strings and string arrays, and all string attribut
 events, plus error text, pass through the core's redaction and custom hook. Withheld values are
 removed; arrays are removed if any element is withheld. Header attributes (`ai.request.headers.*`,
 `http.request.header.*`, `http.response.header.*`), client addresses, user agents, and full
-URL/path/query attributes are always stripped from span, resource, scope, link, and event attributes.
+URL/path/query attributes are stripped from span, resource, scope, link, and event attributes, except `url.path`, `url.full`, `http.url` and `http.target` with explicit `Spans.HTTP` capture; full URLs lose query strings and fragments and are masked.
 `http.route` and identity attributes remain. `ai.response.providerMetadata` counts as content.
 
 Content stripping and redaction apply to span, resource, scope, link, and event attributes.
