@@ -231,8 +231,6 @@ func message(k jsonschema.ErrorKind, schemaObj *Object) string {
 		return "matches none of anyOf"
 	case *kind.OneOf:
 		return "does not match exactly one of oneOf"
-	case *kind.FalseSchema:
-		return "not allowed"
 	case *kind.MinContains:
 		if len(k.Got) == 0 { // Python reports no match at all as contains
 			return "fails contains"
@@ -360,7 +358,7 @@ func split(v any) any {
 	for _, k := range o.keys {
 		val := o.vals[k]
 		switch {
-		case isShortCircuit(k) && hasOtherKeywords(o):
+		case slices.Contains(shortCircuit, k) && hasOtherKeywords(o):
 			one := newObject()
 			one.Set(k, val)
 			moved = append(moved, one)
@@ -395,15 +393,6 @@ func split(v any) any {
 func isList(v any) bool {
 	_, ok := v.([]any)
 	return ok
-}
-
-func isShortCircuit(k string) bool {
-	for _, s := range shortCircuit {
-		if k == s {
-			return true
-		}
-	}
-	return false
 }
 
 // hasOtherKeywords reports whether a short-circuiting keyword shares the schema with another
