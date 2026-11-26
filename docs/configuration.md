@@ -202,8 +202,6 @@ Calls accepted during finalization belong to the closing segment. Calls accepted
 
 After restoring a snapshot in the same process, run follow-up work in the restored interaction's context; helpers on a context saved before the restore keep the old client and session.
 
-After restoring a snapshot in the same process, run follow-up work in the restored interaction's context; helpers on a context saved before the restore keep the old client and session.
-
 ## Context values
 
 `WithValues(ctx, ContextValues{...})` sets request-wide defaults for the interactions, integration calls, `TrackAction` and `TrackScore` made with the returned context. Empty fields inherit from an enclosing `WithValues`.

@@ -104,7 +104,7 @@ func (s *Span) trackOptions(masked bool) spanmodel.Options {
 // span, or is it. A manual span inside the call does not hide it; the walk stops at the
 // interaction boundary.
 func ownsCall(ctx context.Context, i any) *Span {
-	for s := activeSDKSpan(ctx); s != nil && any(s.interaction) == i; s = s.parent {
+	for s := activeSDKSpan(ctx); s != nil && any(s.interaction.latest()) == i; s = s.parent {
 		s.mu.Lock()
 		ended := s.ended
 		s.mu.Unlock()
@@ -516,7 +516,8 @@ func (s *Span) send(n spanmodel.Span, masked bool) {
 func (i *Interaction) recordWrapperCall(call LLMCall, s *Span, status int) bool {
 	call.wrapperSpan = s
 	call.httpStatus = status
-	return i.RecordCall(call)
+	// A call in flight across an in-process restore belongs to the run's newest segment.
+	return i.latest().RecordCall(call)
 }
 
 // capturesContent: the call's content is acquired, for this span or its call event.

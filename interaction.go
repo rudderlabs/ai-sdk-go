@@ -591,7 +591,9 @@ type Interaction struct {
 	opened time.Time
 	// ownerOrder preserves lookup precedence across pause and resume (guarded by open.mu).
 	ownerOrder uint64
-	elem       *list.Element
+	// pauseCleanup: the paused-slot cleanup is registered for this object (guarded by open.mu).
+	pauseCleanup bool
+	elem         *list.Element
 
 	mu sync.Mutex
 	// started is the start of the current segment: the run, or its latest resume.

@@ -275,7 +275,8 @@ func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudders
 	if id == "" {
 		return
 	}
-	i := owner
+	// A run restored in this process continues in its newest segment.
+	i, _ := hook.Tracing.Latest(owner).(*rudderstackai.Interaction)
 	// A late or changed ID cannot reroute an already-owned span.
 	if i == nil || i.ID() != id || i.Ended() {
 		return

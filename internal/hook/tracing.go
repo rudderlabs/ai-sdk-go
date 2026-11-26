@@ -27,16 +27,18 @@ var Tracing struct {
 	RecordWrapper            func(any, any, any, int) bool
 	Identity                 func(context.Context, string) (attributes map[string]string, system, suppressed bool, owner any)
 	Open                     func(string) any
-	AdoptAnalytics           func(any, analytics.Client)
-	RecordTool               func(any, any, bool)
-	Analytics                func() analytics.Client
-	CaptureLevel             func() *capture.Policy
-	Redact                   func(string) (string, bool)
-	StripBinary              func(any) any
-	NormalizeValue           func(any) (any, bool)
-	RememberClient           func(analytics.Client)
-	Wait                     func(context.Context) bool
-	FlushClient              func(context.Context, analytics.Client) bool
+	// Latest is the newest segment of an interaction's run in this process (itself unless restored).
+	Latest         func(any) any
+	AdoptAnalytics func(any, analytics.Client)
+	RecordTool     func(any, any, bool)
+	Analytics      func() analytics.Client
+	CaptureLevel   func() *capture.Policy
+	Redact         func(string) (string, bool)
+	StripBinary    func(any) any
+	NormalizeValue func(any) (any, bool)
+	RememberClient func(analytics.Client)
+	Wait           func(context.Context) bool
+	FlushClient    func(context.Context, analytics.Client) bool
 	// ProductOwner returns the live ambient interaction when its ID matches.
 	// Otherwise, it returns an owner only if exactly one live open or paused
 	// interaction matches the ID.

@@ -140,13 +140,24 @@ func holdPausedSlot(i *Interaction) {
 	}
 	ref := weak.Make(i)
 	open.paused[ref] = slotFor(i)
-	// A dropped paused run frees its slot and token entry once collected.
+	// A dropped paused run frees its slot and token entry once collected. Registered once per
+	// object: the weak key is stable, so it removes whichever entry the run holds then.
+	if i.pauseCleanup {
+		return
+	}
+	i.pauseCleanup = true
+	if onPauseCleanup != nil {
+		onPauseCleanup()
+	}
 	runtime.AddCleanup(i, func(ref weak.Pointer[Interaction]) {
 		open.mu.Lock()
 		defer open.mu.Unlock()
 		delete(open.paused, ref)
 	}, ref)
 }
+
+// onPauseCleanup is a test seam counting cleanup registrations.
+var onPauseCleanup func()
 
 // prunePausedLocked drops the entries of paused runs that were garbage-collected; the cleanup
 // above does the same, but only after the GC cycle, so admission checks prune too.

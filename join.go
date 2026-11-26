@@ -20,7 +20,7 @@ const joinWarnEvery = time.Minute
 // JoinInteraction returns ctx joined to the interaction open in this process under
 // interactionID, for work that runs on a context that lost it: a goroutine started from
 // context.Background(), a callback library, an in-process job queue. Wrapper calls, StartSpan
-// and RecordCall with the returned context report into that interaction, which wins over any
+// and FromContext(joined).RecordCall report into that interaction, which wins over any
 // interaction ctx carries. An unknown or ended ID logs a rate-limited warning and returns ctx
 // unchanged; a malformed ParentSpanID warns and is ignored. A nil ctx is
 // context.Background(). It never panics.
@@ -53,7 +53,13 @@ func JoinInteraction(ctx context.Context, interactionID string, o JoinOptions) (
 		}
 		return joined
 	}
-	return context.WithValue(joined, sdkSpanKey{}, joinedParent(i, o.ParentSpanID))
+	parent := joinedParent(i, o.ParentSpanID)
+	// Inside an active SDK span of this interaction, keep its ancestry so its calls still own
+	// the provider spans started under the joined context.
+	if active := activeSDKSpan(ctx); active != nil && active.interaction.latest() == i {
+		parent.parent = active
+	}
+	return context.WithValue(joined, sdkSpanKey{}, parent)
 }
 
 // joinedParent is a synthetic SDK parent in the interaction's SDK trace: never sent or ended.
@@ -115,10 +121,12 @@ func (i *Interaction) joinScope() (*contextValues, bool) {
 func openByID(id string) *Interaction {
 	open.mu.Lock()
 	defer open.mu.Unlock()
-	for e := open.list.Back(); e != nil; e = e.Prev() {
-		if i := e.Value.(*Interaction); i.id == id {
-			return i
+	// Highest ownerOrder, not list position: a resumed or restored run goes to the back.
+	var found *Interaction
+	for e := open.list.Front(); e != nil; e = e.Next() {
+		if i := e.Value.(*Interaction); i.id == id && (found == nil || i.ownerOrder > found.ownerOrder) {
+			found = i
 		}
 	}
-	return nil
+	return found
 }

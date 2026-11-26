@@ -371,7 +371,7 @@ func adoptable(s trace.Span, interaction any, activeSeq uint64) (*otelSpan, hook
 	}
 	sc := s.SpanContext()
 	e := otelSpans.open[key(sc)]
-	if e == nil || !e.candidate || any(e.interaction.Value()) != interaction || activeSeq > e.seq {
+	if e == nil || !e.candidate || hook.Tracing.Latest(e.interaction.Value()) != interaction || activeSeq > e.seq {
 		return nil, hook.OTelCall{}, false
 	}
 	return e, hook.OTelCall{TraceID: sc.TraceID().String(), SpanID: sc.SpanID().String(), ParentID: e.parentID, Adopted: !e.replaced}, true
