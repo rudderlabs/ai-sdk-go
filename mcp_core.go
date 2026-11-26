@@ -937,15 +937,20 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		extra["error_type"] = "api_error"
 	default:
 		size := 0
-		cut := false // the budget left values out of the result copy
+		var complete any // the whole result, when the budget left values out of its copy
 		if _, declared := rc.declaredRule(); declared && !failed {
 			// Rule properties reuse this report's content instead of serializing again.
+			var cut bool
+			var root any
 			resultContent = captureResolved(o.Result, func(resolved any) {
 				var b []byte
 				b, cut, _ = boundedJSONCut(resolved, false)
+				root = resolved
 				_ = json.Unmarshal(b, &result)
 			})
-			cut = cut || resultContent.cut
+			if cut || resultContent.cut {
+				complete = completeResult(o.Result, root)
+			}
 			size = resultContent.size
 			source := o.Result
 			if original != nil {
@@ -955,14 +960,14 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		} else {
 			// Nothing is stored: the base encoding gives the classification inputs and size.
 			var b []byte
-			b, size, cut, _ = captureEncoded(o.Result)
+			b, size, complete, _ = captureEncoded(o.Result)
 			_ = json.Unmarshal(b, &result)
 		}
 		if rc.wireResultSize > 0 {
 			size = rc.wireResultSize
 		}
-		if cut {
-			result = withMCPControls(result, o.Result)
+		if complete != nil {
+			result = withMCPControls(result, complete)
 		}
 
 		if requests, ok := result["inputRequests"].(map[string]any); ok {
@@ -1795,21 +1800,87 @@ func seedMCPResult(w *walk, original, captured any) {
 	}
 }
 
-// mcpControlKeys steer a call's outcome. The budgeted copy of a large result can lose them, so
-// the ones it lacks are read from the result itself.
-var mcpControlKeys = []string{"isError", "inputRequests", "requestState"}
-
-func withMCPControls(result map[string]any, source any) map[string]any {
-	for _, key := range mcpControlKeys {
-		if _, ok := result[key]; ok {
+// mcpControls reads what decides a call's status and pending input from a whole result: the
+// captured copy of a large one can lose it, so a cut result is read before the budget touched it.
+func mcpControls(source any) map[string]any {
+	out := map[string]any{}
+	if v, ok := topLevelField(source, "isError"); ok {
+		if b, ok := v.(bool); ok {
+			out["isError"] = b
+		}
+	}
+	if v, ok := topLevelField(source, "requestState"); ok {
+		if str, ok := v.(string); ok {
+			out["requestState"] = str
+		}
+	}
+	if v, ok := topLevelField(source, "inputRequests"); ok {
+		if rv := reflect.ValueOf(v); rv.Kind() == reflect.Map && rv.Type().Key().Kind() == reflect.String {
+			requests := map[string]any{}
+			for it := rv.MapRange(); it.Next(); {
+				entry := map[string]any{}
+				if method, ok := topLevelField(it.Value().Interface(), "method"); ok {
+					entry["method"] = method
+				}
+				requests[it.Key().String()] = entry
+			}
+			out["inputRequests"] = requests
+		}
+	}
+	for field, keys := range map[string][]string{
+		"_meta":             {"com.rudderstack/http_status"},
+		"structuredContent": {"status", "statusCode"},
+	} {
+		holder, ok := topLevelField(source, field)
+		if !ok {
 			continue
 		}
-		if value, ok := topLevelField(source, key); ok {
-			if result == nil {
-				result = map[string]any{}
+		picked := map[string]any{}
+		for _, key := range keys {
+			if v, ok := topLevelField(holder, key); ok {
+				if n, ok := numberOf(v); ok {
+					picked[key] = n
+				}
 			}
-			result[key] = captureContent(value)
 		}
+		if len(picked) > 0 {
+			out[field] = picked
+		}
+	}
+	return out
+}
+
+func numberOf(v any) (float64, bool) {
+	if n, ok := v.(json.Number); ok {
+		f, err := n.Float64()
+		return f, err == nil
+	}
+	rv := reflect.ValueOf(v)
+	switch {
+	case !rv.IsValid():
+	case rv.CanFloat():
+		return rv.Float(), true
+	case rv.CanInt():
+		return float64(rv.Int()), true
+	case rv.CanUint():
+		return float64(rv.Uint()), true
+	}
+	return 0, false
+}
+
+// withMCPControls puts the controls of the whole result over its captured copy's.
+func withMCPControls(result map[string]any, complete any) map[string]any {
+	if result == nil {
+		result = map[string]any{}
+	}
+	for key, value := range mcpControls(complete) {
+		picked, isMap := value.(map[string]any)
+		held, heldMap := result[key].(map[string]any)
+		if (key == "_meta" || key == "structuredContent") && isMap && heldMap {
+			maps.Copy(held, picked)
+			continue
+		}
+		result[key] = value
 	}
 	return result
 }

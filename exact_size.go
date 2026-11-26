@@ -60,6 +60,9 @@ func (z *sizer) size(rv reflect.Value) (int, error) {
 	if !rv.IsValid() {
 		return 4, nil
 	}
+	if nonData(rv.Kind()) {
+		return 0, errUnsizable
+	}
 	if rv.Type() == rawMessageType { // decoded by the walk, never run as app code
 		return z.leaf(rv.Interface())
 	}
@@ -279,8 +282,12 @@ func (in *inspector) count(rv reflect.Value, chain int) counted {
 	if chain > maxWalkDepth { // pointers alone, in a cycle
 		return over
 	}
-	if rv.Type() == rawMessageType {
+	if nonData(rv.Kind()) {
 		return counted{n: 1}
+	}
+	if rv.Type() == rawMessageType {
+		// Its values count as the walk's do: a raw document is capped like any other.
+		return counted{n: min(rawNodes(rv.Bytes()), maxWalkNodes+1)}
 	}
 	if _, custom := customTarget(rv); custom {
 		return counted{n: 1, custom: true}
@@ -354,4 +361,32 @@ func (in *inspector) shared(rv reflect.Value, over counted, measure func() count
 	c := measure()
 	in.memo[key] = c
 	return c
+}
+
+// nonData is a kind JSON cannot hold: such a value is left out before any serializer its type
+// has is called.
+func nonData(k reflect.Kind) bool {
+	switch k {
+	case reflect.Func, reflect.Chan, reflect.UnsafePointer, reflect.Complex64, reflect.Complex128:
+		return true
+	}
+	return false
+}
+
+// rawNodes is an upper bound on the values in a JSON document: one for the document, one for each
+// separator and one for each container, found without decoding it.
+func rawNodes(raw []byte) int {
+	n, inString := 1, false
+	for i := 0; i < len(raw); i++ {
+		switch c := raw[i]; {
+		case inString && c == '\\':
+			i++
+		case c == '"':
+			inString = !inString
+		case inString:
+		case c == ',' || c == '{' || c == '[':
+			n++
+		}
+	}
+	return n
 }

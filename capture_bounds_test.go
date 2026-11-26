@@ -11,11 +11,14 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	analytics "github.com/rudderlabs/analytics-go/v4"
+
+	"github.com/rudderlabs/ai-sdk-go/internal/mcpbridge"
 )
 
 func nodeCount(v any) int {
@@ -759,10 +762,10 @@ func TestCaptureReportsWhetherTheBudgetCut(t *testing.T) {
 	if !captureValue(filler(maxWalkNodes + 5)).cut {
 		t.Error("big value not reported cut")
 	}
-	if _, _, cut, _ := captureEncoded(map[string]any{"a": 1}); cut {
+	if _, _, complete, _ := captureEncoded(map[string]any{"a": 1}); complete != nil {
 		t.Error("small encoding reported cut")
 	}
-	if _, _, cut, _ := captureEncoded(filler(maxWalkNodes + 5)); !cut {
+	if _, _, complete, _ := captureEncoded(filler(maxWalkNodes + 5)); complete == nil {
 		t.Error("big encoding not reported cut")
 	}
 }
@@ -805,9 +808,9 @@ func TestSerializerResultIsSizedFromItsBudgetedCopy(t *testing.T) {
 func TestEncodedSerializerResultIsBudgetedAndRunsOnce(t *testing.T) {
 	setupAI(t, WithEmitSpans(true))
 	calls := 0
-	b, size, cut, err := captureEncoded(&manyOnes{n: 150000, calls: &calls})
-	if err != nil || !cut || size != len(b) || size >= 300001 || calls != 1 {
-		t.Fatalf("size=%d len=%d cut=%t calls=%d err=%v", size, len(b), cut, calls, err)
+	b, size, complete, err := captureEncoded(&manyOnes{n: 150000, calls: &calls})
+	if err != nil || complete == nil || size != len(b) || size >= 300001 || calls != 1 {
+		t.Fatalf("size=%d len=%d complete=%v calls=%d err=%v", size, len(b), complete != nil, calls, err)
 	}
 }
 
@@ -870,5 +873,124 @@ func TestShareCopiesDeepGraphUnderManyWrapperDepthsOnce(t *testing.T) {
 	}
 	if all := time.Since(started); all > 100*single+200*time.Millisecond {
 		t.Fatalf("one depth took %v, eight took %v", single, all)
+	}
+}
+
+// serResult is a tool result whose own MarshalJSON writes the wire bytes; its fields are not them.
+type serResult struct {
+	calls   *int
+	raw     string
+	IsError bool `json:"isError,omitempty"`
+}
+
+func (s *serResult) MarshalJSON() ([]byte, error) {
+	*s.calls++
+	return []byte(s.raw), nil
+}
+
+func ones(n int) string { return "[" + strings.TrimSuffix(strings.Repeat("1,", n), ",") + "]" }
+
+// toolOutcome runs one MCP tools/call whose result is result and returns the emitted
+// mcp_tool_called properties and the call's context.
+func toolOutcome(t *testing.T, result any) (map[string]any, *reqCtx) {
+	t.Helper()
+	s := workspaceServer("controls", nil)
+	r := wrap(t, s, Options{})
+	w, _ := instances.get(s)
+	tools := []mcpbridge.Tool{{Name: "t", Schema: map[string]any{"type": "object"}}}
+	rc := w.begin(mcpbridge.Request{Ctx: context.Background(), RegisteredTools: tools})
+	rc.ToolCall("t", nil, false, nil, "")
+	rc.ToolDone(mcpbridge.Outcome{Result: result})
+	events := r.named("mcp_tool_called")
+	if len(events) == 0 {
+		return nil, rc
+	}
+	return events[len(events)-1].Properties, rc
+}
+
+func TestSerializerResultKeepsItsErrorWhenTheCopyIsCut(t *testing.T) {
+	calls := 0
+	p, _ := toolOutcome(t, &serResult{calls: &calls, raw: `{"_meta":{"pad":` + ones(150000) + `},"isError":true}`})
+	if p["tool_status"] != "error" || p["is_error_result"] != true || calls != 1 {
+		t.Fatalf("status=%v is_error=%v, serializer ran %d times", p["tool_status"], p["is_error_result"], calls)
+	}
+}
+
+func TestSerializerOmittedErrorStaysOmittedWhenTheCopyIsCut(t *testing.T) {
+	calls := 0
+	// The receiver says isError, the serializer's bytes do not: the bytes are the result.
+	p, _ := toolOutcome(t, &serResult{calls: &calls, raw: `{"content":` + ones(150000) + `}`, IsError: true})
+	if p["tool_status"] != "success" || p["is_error_result"] != false {
+		t.Fatalf("status=%v is_error=%v", p["tool_status"], p["is_error_result"])
+	}
+}
+
+func TestInputRequestCutToAnEmptyMapStillRegistersItsKey(t *testing.T) {
+	calls := 0
+	// The copy's budget ends before the entry's method, leaving it an empty map.
+	raw := `{"content":` + ones(maxWalkNodes-4) + `,"inputRequests":{"k":{"method":"elicitation/create"}},"requestState":"s"}`
+	_, rc := toolOutcome(t, &serResult{calls: &calls, raw: raw})
+	if _, found := rc.st.inputRequired.get(rc.inputKey("k", "s")); !found {
+		t.Fatal("the pending key was not registered")
+	}
+}
+
+func TestRawMessageBeyondTheBudgetIsCut(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	raw := json.RawMessage(ones(150000))
+	b, size, complete, err := captureEncoded(raw)
+	if err != nil || complete == nil || size != len(raw) || len(b) >= len(raw) {
+		t.Fatalf("size=%d (want %d) copy=%d complete=%v err=%v", size, len(raw), len(b), complete != nil, err)
+	}
+}
+
+func TestCustomPropertiesCountEntriesTheCaptureLeavesOut(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	props := map[string]any{"z": 1}
+	for i := range maxWalkNodes - 1 {
+		props[fmt.Sprintf("a%06d", i)] = func() {}
+	}
+	if _, kept := captureProperties(props)["z"]; kept {
+		t.Fatal("a scalar survived after functions spent the whole budget")
+	}
+}
+
+type bufferShaped struct {
+	Data []int  `json:"data"`
+	Type string `json:"type"`
+}
+
+func TestCutBufferLosesItsBytes(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	pad := make([]int, maxWalkNodes)
+	for name, v := range map[string]any{
+		"map":    map[string]any{"data": filler(maxWalkNodes), "type": "Buffer"},
+		"struct": bufferShaped{pad, "Buffer"},
+	} {
+		got := captureContent(map[string]any{"content": v}).(map[string]any)
+		if m, ok := got["content"].(map[string]any); ok {
+			if _, leaked := m["data"]; leaked {
+				t.Errorf("%s kept the bytes", name)
+			}
+		}
+	}
+}
+
+type marshalFunc func()
+
+var marshalFuncCalls int
+
+func (marshalFunc) MarshalJSON() ([]byte, error) { marshalFuncCalls++; return []byte(`"f"`), nil }
+
+type marshalChan chan int
+
+func (marshalChan) MarshalText() ([]byte, error) { marshalFuncCalls++; return []byte("c"), nil }
+
+func TestNonDataValuesAreLeftOutBeforeTheirSerializer(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	marshalFuncCalls = 0
+	got := captureContent(map[string]any{"f": marshalFunc(func() {}), "c": make(marshalChan), "keep": 1}).(map[string]any)
+	if len(got) != 1 || marshalFuncCalls != 0 {
+		t.Fatalf("captured %v, serializers ran %d times", got, marshalFuncCalls)
 	}
 }

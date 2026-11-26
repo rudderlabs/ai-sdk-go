@@ -464,40 +464,57 @@ func enterCapture() (leave func()) {
 
 // captureEncoded is base's encoding of a report value that stores no content, such as an MCP
 // result without a declared rule: one serializer run, for classification and size only.
-func captureEncoded(v any) (b []byte, size int, cut bool, err error) {
+func captureEncoded(v any) (b []byte, size int, complete any, err error) {
 	defer enterCapture()()
 	defer func() {
 		if r := recover(); r != nil {
-			b, size, cut, err = nil, 0, false, fmt.Errorf("panic: %v", r)
+			b, size, complete, err = nil, 0, nil, fmt.Errorf("panic: %v", r)
 		}
 	}()
 	within, custom := newInspector().shape(v, false)
 	if within {
 		b, err = compactJSON(v)
 		if err != nil || !custom || len(b) <= maxWalkNodes {
-			return b, len(b), false, err
+			return b, len(b), nil, err
 		}
 		// A serializer wrote more than the budget could hold (a value takes a byte at least):
-		// its bytes, already written once, give the budgeted copy without running it again.
+		// its bytes, already written once, give the budgeted copy without running it again, and
+		// the whole decoded result for what the copy may lose.
 		var tree any
 		dec := json.NewDecoder(bytes.NewReader(b))
 		dec.UseNumber()
 		if dec.Decode(&tree) != nil {
-			return b, len(b), false, nil
+			return b, len(b), nil, nil
 		}
-		bounded, cut, err := boundedJSONCut(tree, false)
-		return bounded, len(bounded), cut, err
+		bounded, _, err := boundedJSONCut(tree, false)
+		return bounded, len(bounded), tree, err
 	}
 	// Past the budget: the capture runs any serializer once, and the classification input comes
 	// from the budgeted tree. The size is exact unless a serializer produced part of the value.
 	resolved, _ := resolveCapture(v, false, nil)
 	b, err = boundedJSON(resolved, false)
+	complete = completeResult(v, resolved)
 	if !custom {
 		if n, sizeErr := exactSize(v); sizeErr == nil {
-			return b, n, true, err
+			return b, n, complete, err
 		}
 	}
-	return b, len(b), true, err
+	return b, len(b), complete, err
+}
+
+// completeResult is the whole result a budgeted copy was made from: the original, or for a
+// serializer's result its own decoded output (never the receiver, whose omitted fields stay omitted).
+func completeResult(original, resolved any) any {
+	if s, ok := resolved.(serialized); ok {
+		var tree any
+		dec := json.NewDecoder(bytes.NewReader(s.raw))
+		dec.UseNumber()
+		if s.raw == nil || dec.Decode(&tree) != nil {
+			return map[string]any{}
+		}
+		return tree
+	}
+	return original
 }
 
 func resolveCapture(v any, fields bool, seeds []captureSeed) (any, *walk) {
@@ -530,44 +547,36 @@ func captureAttributes(p map[string]any) map[string]any { return captureProps(p,
 
 func captureProps(p map[string]any, fields bool, seeds []captureSeed) map[string]any {
 	out := make(map[string]any, len(p))
-	// Plain values run no app code; the rest resolve in one pass.
-	var typed map[string]any
-	plain := make(map[string]any, len(p))
-	for k, value := range p {
+	// Everything resolves together, scalars included: the properties are one captured value, so
+	// one budget covers all of them, in key order (span attributes are each their own).
+	resolved := p
+	needsWalk := false
+	for _, value := range p {
 		switch value.(type) {
 		case nil, string, bool, int, int64, float64:
-			plain[k] = value
 		default:
-			if typed == nil {
-				typed = map[string]any{}
-			}
-			typed[k] = value
+			needsWalk = true
 		}
 	}
-	var resolved map[string]any
-	if typed != nil {
+	if needsWalk {
 		defer enterCapture()()
-		r, _ := resolveCapture(typed, fields, seeds)
+		r, _ := resolveCapture(p, fields, seeds)
 		resolved, _ = r.(map[string]any)
 	}
-	// Custom properties are one captured value, so one budget covers all of them, in key order;
-	// span attributes are each their own.
 	var shared *walk
 	if !fields {
 		shared = &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}
 	}
 	for _, k := range slices.Sorted(maps.Keys(p)) {
-		value, ok := plain[k]
-		if !ok {
-			if value, ok = resolved[k]; !ok {
-				continue
-			}
-		}
 		w := shared
 		if w == nil {
 			w = &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}
 		} else if !w.take() {
 			break
+		}
+		value, ok := resolved[k] // a value the capture left out still used its place in the budget
+		if !ok {
+			continue
 		}
 		if v, keep := w.strip(value); keep {
 			out[k] = v
@@ -668,7 +677,7 @@ func captureSize(v any) int {
 // Seeds pair base-retained rule inputs with their report snapshots. They are inspected only
 // during this pass, and are never added to retained capture state.
 func (w *walk) seed(rv reflect.Value, captured any, depth int) {
-	if !rv.IsValid() || depth >= maxWalkDepth {
+	if !rv.IsValid() || depth >= maxWalkDepth || nonData(rv.Kind()) {
 		return
 	}
 	if target, custom := customTarget(rv); custom {
@@ -967,6 +976,9 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		return nil, true
 	}
 	w.omitted = false
+	if nonData(rv.Kind()) {
+		return nil, false // before any MarshalJSON or MarshalText its type has
+	}
 	if w.serializers {
 		if key, stable := serializerIdentity(rv); stable {
 			if value, seen := w.memo[key]; seen {
@@ -1138,7 +1150,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 			for v.Kind() == reflect.Interface && !v.IsNil() {
 				v = v.Elem()
 			}
-			media = media || mediaKeys[e.name] || (e.name == "type" && v.Kind() == reflect.String && mediaTypes[v.String()])
+			media = media || mediaKeys[e.name] || (e.name == "type" && v.Kind() == reflect.String && (mediaTypes[v.String()] || v.String() == "Buffer"))
 		}
 		for _, entry := range entries {
 			if w.fields && w.depth == 1 {
@@ -1616,6 +1628,7 @@ func encodeBounded(buf *bytes.Buffer, v any, left *budgetLeft, fields bool) erro
 			buf.Write(x.raw)
 			return nil
 		}
+		left.cut = left.cut || x.cut
 		return encodeBounded(buf, x.value, left, false)
 	}
 	b, err := compactJSON(v)
@@ -1656,7 +1669,7 @@ func structMedia(rv reflect.Value) bool {
 			}
 			fv = fv.Elem()
 		}
-		if mediaKeys[f.name] || (f.name == "type" && fv.Kind() == reflect.String && mediaTypes[fv.String()]) {
+		if mediaKeys[f.name] || (f.name == "type" && fv.Kind() == reflect.String && (mediaTypes[fv.String()] || fv.String() == "Buffer")) {
 			return true
 		}
 	}
