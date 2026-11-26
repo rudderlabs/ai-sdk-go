@@ -226,7 +226,7 @@ func TestCaptureBudgetSizesAndEncoding(t *testing.T) {
 			}
 		})
 		bounded(t, func() {
-			if b, _, _ := captureEncoded(graph); len(b) == 0 {
+			if b, _, _, _ := captureEncoded(graph); len(b) == 0 {
 				t.Fatal("no encoding")
 			}
 		})
@@ -706,3 +706,135 @@ func TestProjectedToolInputWithinTheBudgetIsKeptWhole(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+type taggedMedia struct {
+	Base64  string   `json:"base64"`
+	Padding []string `json:"padding"`
+	Type    string   `json:"type"`
+}
+
+func TestStructCutBeforeItsMediaMarkerLosesItsPayload(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	pad := make([]string, maxWalkNodes)
+	for name, got := range map[string]any{"captureContent": captureContent(taggedMedia{"SECRET", pad, "image"}), "stripBinary": stripBinary(taggedMedia{"SECRET", pad, "image"})} {
+		if m, ok := got.(map[string]any); ok {
+			if _, leaked := m["base64"]; leaked {
+				t.Errorf("%s kept the payload", name)
+			}
+		}
+	}
+}
+
+func TestCustomPropertiesKeepExactlyTheBudget(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	got := captureProperties(map[string]any{"v": filler(maxWalkNodes - 2)})
+	if n := len(got["v"].([]any)); n != maxWalkNodes-2 {
+		t.Fatalf("kept %d of %d", n, maxWalkNodes-2)
+	}
+}
+
+func TestShareCopyCutByDepthIsNotReusedHigherUp(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	var shared any = "leaf"
+	for range 28 {
+		shared = map[string]any{"c": shared}
+	}
+	deep := shared
+	for range 5 {
+		deep = map[string]any{"w": deep}
+	}
+	v := []any{deep, shared} // shared is cut by depth in the first place and fits whole in the second
+	plain := (&walk{path: map[visit]bool{}, legacy: false, preserve: true}).stripValue(v)
+	copied := (&walk{path: map[visit]bool{}, legacy: false, preserve: true, share: true, copies: map[visit]any{}}).stripValue(v)
+	if !reflect.DeepEqual(plain, copied) {
+		t.Fatalf("the shared pass differs from the plain walk")
+	}
+}
+
+func TestCaptureReportsWhetherTheBudgetCut(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	if captureValue(map[string]any{"a": 1}).cut {
+		t.Error("small value reported cut")
+	}
+	if !captureValue(filler(maxWalkNodes + 5)).cut {
+		t.Error("big value not reported cut")
+	}
+	if _, _, cut, _ := captureEncoded(map[string]any{"a": 1}); cut {
+		t.Error("small encoding reported cut")
+	}
+	if _, _, cut, _ := captureEncoded(filler(maxWalkNodes + 5)); !cut {
+		t.Error("big encoding not reported cut")
+	}
+}
+
+func (w *walk) stripValue(v any) any {
+	out, _ := w.strip(v)
+	return out
+}
+
+// manyOnes is an app serializer whose output is n ones; it counts its runs.
+type manyOnes struct {
+	n     int
+	calls *int
+}
+
+func (m *manyOnes) MarshalJSON() ([]byte, error) {
+	if m.calls != nil {
+		*m.calls++
+	}
+	b := make([]byte, 0, 2*m.n+2)
+	b = append(b, '[')
+	for i := range m.n {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = append(b, '1')
+	}
+	return append(b, ']'), nil
+}
+
+func TestSerializerResultIsSizedFromItsBudgetedCopy(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	report := captureValueFields(map[string]any{"result": &manyOnes{n: 150000}})
+	copied, _ := compactJSON(report.value.(map[string]any)["result"])
+	if report.sizes["result"] != len(copied) || len(copied) >= 300001 {
+		t.Fatalf("size=%d, the copy is %d bytes", report.sizes["result"], len(copied))
+	}
+}
+
+func TestEncodedSerializerResultIsBudgetedAndRunsOnce(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	calls := 0
+	b, size, cut, err := captureEncoded(&manyOnes{n: 150000, calls: &calls})
+	if err != nil || !cut || size != len(b) || size >= 300001 || calls != 1 {
+		t.Fatalf("size=%d len=%d cut=%t calls=%d err=%v", size, len(b), cut, calls, err)
+	}
+}
+
+func TestManyReferencesToOneSerializerAreCheap(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	m := &manyOnes{n: 90000}
+	refs := make([]any, 100000)
+	for i := range refs {
+		refs[i] = m
+	}
+	started := time.Now()
+	report := captureValueFields(map[string]any{"result": refs})
+	if d := time.Since(started); d > 3*time.Second {
+		t.Fatalf("took %v", d)
+	}
+	if report.sizes["result"] <= 0 || report.sizes["result"] > 400000 {
+		t.Fatalf("size=%d", report.sizes["result"])
+	}
+}
+
+func TestCustomPropertiesKeepEveryKeyWithinTheBudget(t *testing.T) {
+	setupAI(t, WithEmitSpans(true))
+	props := map[string]any{}
+	for i := range maxWalkNodes - 1 {
+		props[strconv.Itoa(i)] = i
+	}
+	if n := len(captureProperties(props)); n != maxWalkNodes-1 {
+		t.Fatalf("kept %d of %d", n, maxWalkNodes-1)
+	}
+}

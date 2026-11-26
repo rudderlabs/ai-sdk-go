@@ -937,12 +937,15 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		extra["error_type"] = "api_error"
 	default:
 		size := 0
+		cut := false // the budget left values out of the result copy
 		if _, declared := rc.declaredRule(); declared && !failed {
 			// Rule properties reuse this report's content instead of serializing again.
 			resultContent = captureResolved(o.Result, func(resolved any) {
-				b, _ := boundedJSON(resolved, false)
+				var b []byte
+				b, cut, _ = boundedJSONCut(resolved, false)
 				_ = json.Unmarshal(b, &result)
 			})
+			cut = cut || resultContent.cut
 			size = resultContent.size
 			source := o.Result
 			if original != nil {
@@ -952,13 +955,15 @@ func (rc *reqCtx) toolDoneSeed(o mcpbridge.Outcome, original any, failed bool) {
 		} else {
 			// Nothing is stored: the base encoding gives the classification inputs and size.
 			var b []byte
-			b, size, _ = captureEncoded(o.Result)
+			b, size, cut, _ = captureEncoded(o.Result)
 			_ = json.Unmarshal(b, &result)
 		}
 		if rc.wireResultSize > 0 {
 			size = rc.wireResultSize
 		}
-		result = withMCPControls(result, o.Result)
+		if cut {
+			result = withMCPControls(result, o.Result)
+		}
 
 		if requests, ok := result["inputRequests"].(map[string]any); ok {
 			var keys []string

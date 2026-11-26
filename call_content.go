@@ -254,6 +254,7 @@ type walk struct {
 	memo           map[visit]any
 	nodes          int            // values this walk has counted; the root counts itself
 	cuts           int            // times the budget stopped a loop
+	depthCuts      int            // values left out for depth or a cycle
 	cut            map[visit]bool // containers on the path when it did: never memoised
 	dumped         map[visit]serializerOutput
 	share          bool // one pass over a resolved tree: each container is copied once and reused, so no budget
@@ -418,6 +419,7 @@ type captureReport struct {
 	// dumped is the serializer output of values the budget cut, so a later capture of the report
 	// reads it without running the serializer again.
 	dumped map[visit]serializerOutput
+	cut    bool // the budget left values out of value
 }
 
 // The recursion guard contains only identities while app code is on the current stack. It
@@ -458,18 +460,29 @@ func enterCapture() (leave func()) {
 
 // captureEncoded is base's encoding of a report value that stores no content, such as an MCP
 // result without a declared rule: one serializer run, for classification and size only.
-func captureEncoded(v any) (b []byte, size int, err error) {
+func captureEncoded(v any) (b []byte, size int, cut bool, err error) {
 	defer enterCapture()()
 	defer func() {
 		if r := recover(); r != nil {
-			b, size, err = nil, 0, fmt.Errorf("panic: %v", r)
+			b, size, cut, err = nil, 0, false, fmt.Errorf("panic: %v", r)
 		}
 	}()
 	within, custom := newInspector().shape(v, false)
 	if within {
-		// A serializer's output is written whole either way, so it needs no capture of its own.
 		b, err = compactJSON(v)
-		return b, len(b), err
+		if err != nil || !custom || len(b) <= maxWalkNodes {
+			return b, len(b), false, err
+		}
+		// A serializer wrote more than the budget could hold (a value takes a byte at least):
+		// its bytes, already written once, give the budgeted copy without running it again.
+		var tree any
+		dec := json.NewDecoder(bytes.NewReader(b))
+		dec.UseNumber()
+		if dec.Decode(&tree) != nil {
+			return b, len(b), false, nil
+		}
+		bounded, cut, err := boundedJSONCut(tree, false)
+		return bounded, len(bounded), cut, err
 	}
 	// Past the budget: the capture runs any serializer once, and the classification input comes
 	// from the budgeted tree. The size is exact unless a serializer produced part of the value.
@@ -477,10 +490,10 @@ func captureEncoded(v any) (b []byte, size int, err error) {
 	b, err = boundedJSON(resolved, false)
 	if !custom {
 		if n, sizeErr := exactSize(v); sizeErr == nil {
-			return b, n, err
+			return b, n, true, err
 		}
 	}
-	return b, len(b), err
+	return b, len(b), true, err
 }
 
 func resolveCapture(v any, fields bool, seeds []captureSeed) (any, *walk) {
@@ -537,7 +550,7 @@ func captureProps(p map[string]any, fields bool, seeds []captureSeed) map[string
 	// span attributes are each their own.
 	var shared *walk
 	if !fields {
-		shared = &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true, nodes: 1}
+		shared = &walk{path: map[visit]bool{}, legacy: !cfg().emitSpans, preserve: true}
 	}
 	for _, k := range slices.Sorted(maps.Keys(p)) {
 		value, ok := plain[k]
@@ -608,7 +621,7 @@ func captureResolvedWith(v any, fields bool, consume func(any), seeds []captureS
 	for key, value := range w.memo {
 		memo[key], _ = sw.strip(value)
 	}
-	return captureReport{value: out, size: size, sizes: sizes, memo: memo, dumped: w.dumped}
+	return captureReport{value: out, size: size, sizes: sizes, memo: memo, dumped: w.dumped, cut: w.cuts > 0}
 }
 
 // resolvedSize is base's encoded size: serializer output counts as the bytes encoding/json
@@ -628,6 +641,7 @@ func resolvedSize(original, resolved any, fields bool) int {
 type serialized struct {
 	value any
 	raw   []byte
+	cut   bool // the budget left values out of value
 }
 
 func (s serialized) MarshalJSON() ([]byte, error) { return s.raw, nil }
@@ -867,7 +881,7 @@ func (w *walk) finishCustom(key visit, stable bool, decoded any, raw []byte) any
 	before := w.cuts
 	out, _ := w.strip(decoded)
 	if w.resolve && raw != nil {
-		out = serialized{value: out, raw: raw}
+		out = serialized{value: out, raw: raw, cut: w.cuts != before}
 	}
 	if stable {
 		if w.cuts != before {
@@ -989,6 +1003,7 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 	if !ok {
 		w.omitted = true
 		w.incomplete = true
+		w.depthCuts++
 		return nil, false
 	}
 	defer w.leave(key)
@@ -996,8 +1011,10 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		if c, ok := w.copies[key]; ok {
 			return c, true
 		}
+		before := w.depthCuts
 		defer func() {
-			if keep {
+			// A copy cut by depth fits less than the same value higher up, so it is not reused.
+			if keep && w.depthCuts == before {
 				w.copies[key] = out
 			}
 		}()
@@ -1150,7 +1167,13 @@ func (w *walk) typed(rv reflect.Value) (out any, keep bool) {
 		return stripMap(m), true
 	case reflect.Struct:
 		m := map[string]any{}
+		cutsBefore := w.cuts
 		w.structFields(rv, m)
+		if w.cuts != cutsBefore && structMedia(rv) {
+			for k := range payloadKeys {
+				delete(m, k)
+			}
+		}
 		if !w.resolve && !w.legacy && isBytes(m) {
 			w.omitted = true
 			return nil, false
@@ -1502,15 +1525,26 @@ func legacyMapKey(k reflect.Value) (string, bool) {
 // boundedJSON is the compact JSON of a resolved tree under the walk's budget, so a shared
 // sub-tree is not expanded without limit. Within the budget it equals compactJSON.
 func boundedJSON(v any, fields bool) ([]byte, error) {
-	var buf bytes.Buffer
-	left := maxWalkNodes - 1
-	if err := encodeBounded(&buf, v, &left, fields); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	b, _, err := boundedJSONCut(v, fields)
+	return b, err
 }
 
-func encodeBounded(buf *bytes.Buffer, v any, left *int, fields bool) error {
+// boundedJSONCut is boundedJSON, also saying whether the budget left values out.
+func boundedJSONCut(v any, fields bool) ([]byte, bool, error) {
+	var buf bytes.Buffer
+	left := budgetLeft{n: maxWalkNodes - 1}
+	if err := encodeBounded(&buf, v, &left, fields); err != nil {
+		return nil, left.cut, err
+	}
+	return buf.Bytes(), left.cut, nil
+}
+
+type budgetLeft struct {
+	n   int
+	cut bool
+}
+
+func encodeBounded(buf *bytes.Buffer, v any, left *budgetLeft, fields bool) error {
 	switch x := v.(type) {
 	case []any:
 		if x == nil {
@@ -1519,10 +1553,11 @@ func encodeBounded(buf *bytes.Buffer, v any, left *int, fields bool) error {
 		buf.WriteByte('[')
 		first := true
 		for _, e := range x {
-			if *left <= 0 {
+			if left.n <= 0 {
+				left.cut = true
 				break
 			}
-			*left--
+			left.n--
 			if !first {
 				buf.WriteByte(',')
 			}
@@ -1546,11 +1581,12 @@ func encodeBounded(buf *bytes.Buffer, v any, left *int, fields bool) error {
 		first := true
 		for _, k := range keys {
 			if fields {
-				*left = maxWalkNodes - 1
-			} else if *left <= 0 {
+				left.n = maxWalkNodes - 1
+			} else if left.n <= 0 {
+				left.cut = true
 				break
 			} else {
-				*left--
+				left.n--
 			}
 			name, err := compactJSON(k)
 			if err != nil {
@@ -1569,7 +1605,57 @@ func encodeBounded(buf *bytes.Buffer, v any, left *int, fields bool) error {
 		buf.WriteByte('}')
 		return nil
 	}
+	if x, ok := v.(serialized); ok && x.raw != nil {
+		// A serializer's bytes are written as it wrote them only while its whole output fits what
+		// is left; otherwise its captured copy is encoded under the budget.
+		if n := jsonNodes(x.value, left.n+1); !x.cut && n <= left.n+1 {
+			left.n -= n - 1
+			buf.Write(x.raw)
+			return nil
+		}
+		return encodeBounded(buf, x.value, left, false)
+	}
 	b, err := compactJSON(v)
 	buf.Write(b)
 	return err
+}
+
+// jsonNodes counts a decoded JSON tree's values, the root included, stopping past limit.
+func jsonNodes(v any, limit int) int {
+	n := 1
+	switch x := v.(type) {
+	case []any:
+		for _, e := range x {
+			if n += jsonNodes(e, limit-n); n > limit {
+				return n
+			}
+		}
+	case map[string]any:
+		for _, e := range x {
+			if n += jsonNodes(e, limit-n); n > limit {
+				return n
+			}
+		}
+	}
+	return n
+}
+
+// structMedia is whether a struct's JSON fields mark it as media, as stripMap reads a map's keys.
+func structMedia(rv reflect.Value) bool {
+	for _, f := range cachedJSONFields(rv.Type()) {
+		fv, ok := jsonFieldValue(rv, f)
+		if !ok {
+			continue
+		}
+		for fv.Kind() == reflect.Interface || fv.Kind() == reflect.Pointer {
+			if fv.IsNil() {
+				break
+			}
+			fv = fv.Elem()
+		}
+		if mediaKeys[f.name] || (f.name == "type" && fv.Kind() == reflect.String && mediaTypes[fv.String()]) {
+			return true
+		}
+	}
+	return false
 }
