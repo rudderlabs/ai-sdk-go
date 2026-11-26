@@ -626,8 +626,10 @@ func (rt plainSSETransport) RoundTrip(req *http.Request) (*http.Response, error)
 	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(string(rt))), Request: req}, nil
 }
 
-// terminalThenCancel streams sse, cancels the context after the last event the app sees, drains to the end, and checks the call stays billed.
-func terminalThenCancel(t *testing.T, sse string, chunks int, stream func(ctx context.Context, c openai.Client) interface {
+// terminalThenCancel streams sse, cancels the context once the wrapper has seen the terminal
+// event (after the last event the app sees, or, when the SDK consumes the terminal event itself,
+// after the stream ends and before Close), and checks the call stays billed.
+func terminalThenCancel(t *testing.T, sse string, chunks int, sdkTerminal bool, stream func(ctx context.Context, c openai.Client) interface {
 	Next() bool
 	Err() error
 	Close() error
@@ -645,9 +647,12 @@ func terminalThenCancel(t *testing.T, sse string, chunks int, stream func(ctx co
 			s := stream(ctx, client)
 			n := 0
 			for s.Next() {
-				if n++; n == chunks {
+				if n++; n == chunks && !sdkTerminal {
 					cancel()
 				}
+			}
+			if sdkTerminal {
+				cancel()
 			}
 			if n != chunks {
 				t.Fatalf("got %d chunks, want %d", n, chunks)
@@ -678,7 +683,7 @@ data: {"id":"c1","model":"gpt-4.1-mini","choices":[],"usage":{"prompt_tokens":7,
 data: [DONE]
 
 `
-	terminalThenCancel(t, sse, 2, func(ctx context.Context, c openai.Client) interface {
+	terminalThenCancel(t, sse, 2, true, func(ctx context.Context, c openai.Client) interface {
 		Next() bool
 		Err() error
 		Close() error
@@ -700,7 +705,7 @@ event: response.completed
 data: {"type":"response.completed","response":{"id":"r1","model":"gpt-4.1-mini","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":5,"output_tokens":2}}}
 
 `
-	terminalThenCancel(t, sse, 3, func(ctx context.Context, c openai.Client) interface {
+	terminalThenCancel(t, sse, 3, false, func(ctx context.Context, c openai.Client) interface {
 		Next() bool
 		Err() error
 		Close() error
