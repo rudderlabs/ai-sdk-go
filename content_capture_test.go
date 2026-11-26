@@ -34,7 +34,7 @@ func offered(t *testing.T, cs *mcp.ClientSession, key string) bool {
 	return ok
 }
 
-// SDK-6888: an unset MCP CaptureContent follows the global setting, and the policy decides per kind.
+// An unset MCP CaptureContent follows the global setting, and the policy decides per kind.
 func TestMCPContentCaptureFollowsGlobalAndPolicy(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
@@ -72,7 +72,7 @@ func TestMCPContentCaptureFollowsGlobalAndPolicy(t *testing.T) {
 	}
 }
 
-// SDK-6888 D2: only an explicit IntentSummary key withholds intent_summary; the bool form does not.
+// Only an explicit IntentSummary key withholds intent_summary; the bool form does not.
 func TestIntentSummaryOnlyExplicitKeyGates(t *testing.T) {
 	for _, tc := range []struct {
 		name string

@@ -1,6 +1,6 @@
 package rudderstackai
 
-// SDK-6017 (D2): a tool call the pause waits on is counted once, in the segment that runs it.
+// A tool call the pause waits on is counted once, in the segment that runs it.
 
 import (
 	"context"
@@ -23,7 +23,7 @@ func sdk6017Start() *Interaction {
 	return i
 }
 
-// sdk6017Continue pauses, then continues in process or in an interaction restored from the JSON snapshot.
+// The continuation helper pauses, then continues in process or in an interaction restored from the JSON snapshot.
 func sdk6017Continue(t *testing.T, i *Interaction, restore bool) *Interaction {
 	t.Helper()
 	snapshot, ok := i.Pause(PauseOptions{})
@@ -253,8 +253,7 @@ func TestSDK6017CallRecordedDuringPauseDeliveryEndsTheWait(t *testing.T) {
 	sdk6017Expect(t, "Looked Up", sdk6017ToolEvents(r, "Looked Up"), [][2]any{{"t1", "unknown"}})
 }
 
-// sdk6017RestoredWithoutAgentKey restores from a snapshot whose pending tool lacks agent_key, as
-// snapshots written before that field do.
+// Restore pending tools from legacy snapshots that omit agent_key.
 func sdk6017RestoredWithoutAgentKey(t *testing.T, agentName string) *Interaction {
 	t.Helper()
 	first := sdk6017Start()
@@ -393,7 +392,7 @@ func TestSDK6017NeverCountsAnAwaitedToolWhenTheRunEndsWhilePaused(t *testing.T) 
 	})
 }
 
-// sdk6017ResultRule passes only the real result, so an outcome frozen without it suppresses the event.
+// The result rule passes only the real result, so an outcome frozen without it suppresses the event.
 func sdk6017ResultRule(calls *[]any) ConfigOption {
 	return WithEventRules(EventRules{Tools: map[string]ToolEventRule{"search": {Event: "Searched", When: func(_ map[string]any, result any) bool {
 		*calls = append(*calls, result)
@@ -516,7 +515,7 @@ func TestSDK6017CallAfterTheLastToolPassStillFiresTheToolItCounts(t *testing.T) 
 	}
 }
 
-// sdk6017EventClient runs fn once, inside delivery of the first track event named event.
+// The event client runs fn once, inside delivery of the first track event named event.
 type sdk6017EventClient struct {
 	*recorder
 	event string

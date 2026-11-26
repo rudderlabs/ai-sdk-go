@@ -25,7 +25,7 @@ type unhashableDoc struct {
 
 type comparableDoc struct{ document.Interface }
 
-// round2Call sends a Converse request whose history carries a json tool result for "t".
+// The helper sends a Converse request whose history carries a json tool result for "t".
 func round2Call(t *testing.T, result document.Interface) (*recorder, []any) {
 	t.Helper()
 	r := setup(t)
@@ -54,8 +54,7 @@ func round2Call(t *testing.T, result document.Interface) (*recorder, []any) {
 	return r, ruleInputs
 }
 
-// Copilot thread bedrock.go:163: the rule gets its own copy of the decoded document, so a rule
-// that changes it never changes the call's captured input.
+// Rules mutate their own decoded document without changing the captured call input.
 func TestRound2BedrockRuleMutationStaysOutOfInput(t *testing.T) {
 	r, inputs := round2Call(t, document.NewLazyDocument(map[string]any{"rows": 1}))
 	calls := r.named(t, "ai_llm_response_received")
@@ -65,8 +64,7 @@ func TestRound2BedrockRuleMutationStaysOutOfInput(t *testing.T) {
 	}
 }
 
-// Copilot thread bedrock.go:158: a document of a comparable type holding an unhashable value
-// is decoded without the cache; its tool result and the call input are still recorded.
+// Documents with unhashable values bypass the cache while preserving tool results and call input.
 func TestRound2BedrockUnhashableDocument(t *testing.T) {
 	doc := comparableDoc{unhashableDoc{Interface: document.NewLazyDocument(map[string]any{"rows": 1}), tags: []string{"x"}}}
 	r, inputs := round2Call(t, doc)

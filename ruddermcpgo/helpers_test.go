@@ -58,8 +58,7 @@ func validateEvent(event string, props map[string]any) error {
 	if err != nil {
 		return err
 	}
-	// SDK-6791 requires omission; the frozen v0.4 schema still requires request_id.
-	// Validate all other fields against that schema without changing recorded properties.
+	// Validate the frozen v0.4 schema with a placeholder request_id while preserving recorded properties.
 	if event == "mcp_tool_called" || event == "mcp_resource_read" || event == "mcp_prompt_used" {
 		if _, present := props["request_id"]; !present {
 			copyProps := map[string]any{}

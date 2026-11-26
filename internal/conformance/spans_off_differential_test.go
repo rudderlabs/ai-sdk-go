@@ -33,7 +33,7 @@ func TestSpansOffOriginMainDifferential(t *testing.T) {
 		if unsupported(sc.Steps) != "" || gaps[sc.Name] != "" || (!hasProviderCall(sc.Steps) && sc.Name != "per_call_content_binary_never_sent") {
 			continue
 		}
-		// An object capture_content (SDK-6888) did not exist on origin/main: no recording.
+		// The baseline recording has no object-valued capture_content policies.
 		if _, policy := sc.Config["capture_content"].(obj); policy {
 			continue
 		}
@@ -96,7 +96,7 @@ func TestSpansOffOriginMainDifferential(t *testing.T) {
 				if err := json.Unmarshal(want, &mainEvents); err != nil {
 					t.Fatal(err)
 				}
-				// SDK-6948 intentionally replaces the old omitted serializer failure with JSON null.
+				// Serializer failures produce JSON null rather than an omitted content field.
 				// Keep the origin recording unchanged and adjust only this documented content leaf.
 				if edge == "content_marshaler_throws" {
 					for _, event := range mainEvents {

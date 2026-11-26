@@ -120,9 +120,7 @@ func TestRound2MCPOversizedRuleInput(t *testing.T) {
 	}
 }
 
-// Copilot thread mcp_core.go:1181: a rule whose properties look like a Node Buffer, spans on.
-// The event is sent with the properties base sent; on the observed transport this panicked in
-// the application's Write.
+// Buffer-shaped rule properties remain a container when spans are enabled.
 func TestRound2MCPRuleBufferShapedProperties(t *testing.T) {
 	for _, observe := range []bool{false, true} {
 		t.Run(fmt.Sprintf("observe=%t", observe), func(t *testing.T) {
@@ -157,9 +155,7 @@ func (c *round2Child) MarshalJSON() ([]byte, error) {
 	return []byte(`{"v":1}`), nil
 }
 
-// Copilot thread mcp_core.go:1644: seeding an observed result never pairs a value with the
-// wrong map entry. A key named by MarshalText is not seeded, so a rule returning its value
-// emits the value instead of null; a plain key reuses the written value.
+// Observed results reuse plain-key values without confusing keys named by MarshalText.
 func TestRound2MCPSeedMapKeys(t *testing.T) {
 	for _, key := range []string{"text", "string"} {
 		t.Run(key, func(t *testing.T) {
