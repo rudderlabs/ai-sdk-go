@@ -161,3 +161,66 @@ func TestRestoreLegacyOrStaleSnapshotDoesNotLink(t *testing.T) {
 		})
 	}
 }
+
+// A snapshot key this version does not know (counted_tool_ids, written by a newer SDK) is
+// ignored: the run restores with the same totals as without it.
+func TestRestoreIgnoresUnknownSnapshotKeys(t *testing.T) {
+	totals := func(t *testing.T, extra bool, inProcess bool) map[string]any {
+		r := setupAI(t, WithLimits(Limits{MaxOpenInteractions: 2}))
+		_, source := StartInteraction(context.Background(), InteractionOptions{InteractionID: "run", UserID: "u", Classify: Ptr(false)})
+		source.RecordCall(pauseCall)
+		snapshot, ok := source.Pause(PauseOptions{})
+		if !ok {
+			t.Fatal("pause failed")
+		}
+		raw, err := json.Marshal(snapshot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			t.Fatal(err)
+		}
+		if fields["pause_token"] == nil {
+			t.Fatal("snapshot carries no pause_token")
+		}
+		if extra {
+			fields["counted_tool_ids"] = json.RawMessage(`["call_1"]`)
+		}
+		if raw, err = json.Marshal(fields); err != nil {
+			t.Fatal(err)
+		}
+		var stored PausedInteraction
+		if err := json.Unmarshal(raw, &stored); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if !inProcess {
+			source.End(EndOptions{})
+		}
+		_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &stored, Classify: Ptr(false)})
+		if restored.Ended() {
+			t.Fatal("restore was refused")
+		}
+		restored.RecordCall(pauseCall)
+		restored.End(EndOptions{})
+		source.End(EndOptions{})
+		events := r.named("ai_response_received")
+		if len(events) == 0 {
+			t.Fatal("no response event")
+		}
+		last := events[len(events)-1].Properties
+		return map[string]any{"calls": last["llm_call_count"], "input": last["total_input_tokens"], "output": last["total_output_tokens"], "tools": last["tool_call_count"]}
+	}
+	for _, inProcess := range []bool{false, true} {
+		t.Run(fmt.Sprintf("in-process=%v", inProcess), func(t *testing.T) {
+			without := totals(t, false, inProcess)
+			with := totals(t, true, inProcess)
+			if fmt.Sprint(with) != fmt.Sprint(without) {
+				t.Errorf("totals with counted_tool_ids = %v, without = %v", with, without)
+			}
+			if without["calls"] == nil {
+				t.Errorf("no totals read: %v", without)
+			}
+		})
+	}
+}

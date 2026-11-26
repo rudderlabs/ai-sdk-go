@@ -53,6 +53,9 @@ func TestDuplicateIdentitySnapshotNeverTakesForeignOwner(t *testing.T) {
 					if err := json.Unmarshal(data, &snapshot); err != nil {
 						t.Fatal(err)
 					}
+					// A snapshot without a pause token (an older SDK version) takes no slot, so both
+					// same-identity owners stay live and the restore is ambiguous.
+					snapshot.PauseToken = ""
 					_, restored := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{Resume: &snapshot, Analytics: restoreClient, Classify: rudderstackai.Ptr(false)})
 					restored.End(rudderstackai.EndOptions{})
 					secret := followupTenant + "_PRIVATE_IDENTICAL_SNAPSHOT_FIELDS"
