@@ -1,6 +1,6 @@
 package rudderstackai
 
-// Shared fixture: events sent while the client's queue is full. analytics-go blocks, never drops.
+// Shared fixture: events sent while the client's queue is full. analytics-go's Enqueue waits for room and never refuses one.
 
 import (
 	"context"

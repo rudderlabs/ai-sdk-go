@@ -1,6 +1,6 @@
 package rudderotel
 
-// Shared fixture, tracing path: the exporter blocks on a full client queue and never drops.
+// Shared fixture, tracing path: the exporter waits on a full client queue; no event is refused.
 
 import (
 	"context"

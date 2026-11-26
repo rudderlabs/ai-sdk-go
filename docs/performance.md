@@ -54,9 +54,9 @@ On the laptop, 5,000 interactions per second (about 15,000 events per second) we
 
 ### Delivery
 
-Events leave through the analytics-go client you pass to `Configure`. It holds them in a 100-slot queue and uploads batches in the background. When the queue is full, `Enqueue` blocks the sending goroutine until there is room: analytics-go applies backpressure instead of dropping, so the SDK never reports a full queue as `limit_reached`, unlike the Node.js and Python SDKs. Your calls slow down to the client's upload rate rather than losing events, which is why the first load phase needs no pacing wait.
+Events leave through the analytics-go client you pass to `Configure`. `Enqueue` puts each event on a 100-slot queue, which one goroutine drains into batches; each batch uploads, and retries, in its own goroutine. `Enqueue` never refuses an event: if that goroutine falls behind and the queue fills, the sending goroutine waits for room. So the SDK never reports a full queue as `limit_reached`, unlike the Node.js and Python SDKs, and the first load phase needs no pacing wait.
 
-While the data plane is down, analytics-go retries each batch, then drops it and passes every message in it to `Config.Callback`'s `Failure`; meanwhile the queue fills and senders wait. The load test's second phase counts each event by name: delivered plus lost after retries equals sent. The SDK's memory stays flat either way.
+analytics-go drops whole batches instead, passing every message in them to `Config.Callback`'s `Failure`: a batch that still fails after 10 attempts (backing off from 100 ms to 30 s by default), and a batch that arrives while 1,000 uploads are already in flight (`ErrTooManyRequests`). While the data plane is down, retrying batches hold their events, so the client's memory grows until the outage ends or that cap is reached; the SDK's own memory stays flat. The load test's second phase counts each event by name: delivered plus lost after retries equals sent.
 
 ## Limits
 

@@ -337,7 +337,7 @@ func TestLoad(t *testing.T) {
 	}
 
 	var warmHeap uint64
-	// Phase 1 needs no pacing wait: Enqueue blocks on a full queue, so the queue applies backpressure.
+	// Phase 1 needs no pacing wait: Enqueue never refuses an event; it waits while the queue is full.
 	phase1 := phase(seconds, func() { warmHeap = heapAfterGC() })
 	sent := [3]int64{interactions.Load(), interactions.Load(), mcpCalls.Load()}
 	if !rudderstackai.Flush(ctx) {

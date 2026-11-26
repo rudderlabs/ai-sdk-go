@@ -12,11 +12,12 @@ import (
 const queueFullWait = 10 * time.Second
 
 // QueueFull is a client that accepts capacity events, then blocks in Enqueue until Run makes
-// room: what analytics-go does on a full queue: it blocks the caller and never drops.
+// room, as analytics-go's Enqueue does on a full queue: it waits and never refuses the event.
 type QueueFull struct {
 	capacity int
 	blocked  chan struct{}
 	release  chan struct{}
+	freed    sync.Once
 	mu       sync.Mutex
 	names    []string
 }
@@ -34,14 +35,18 @@ func (q *QueueFull) Enqueue(m analytics.Message) error {
 	}
 	q.mu.Lock()
 	full := len(q.names) >= q.capacity
-	q.mu.Unlock()
-	if full {
-		select {
-		case q.blocked <- struct{}{}:
-		default:
-		}
-		<-q.release
+	if !full {
+		q.names = append(q.names, t.Event) // under the same lock, so concurrent sends can't overfill
 	}
+	q.mu.Unlock()
+	if !full {
+		return nil
+	}
+	select {
+	case q.blocked <- struct{}{}:
+	default:
+	}
+	<-q.release
 	q.mu.Lock()
 	q.names = append(q.names, t.Event)
 	q.mu.Unlock()
@@ -51,11 +56,15 @@ func (q *QueueFull) Enqueue(m analytics.Message) error {
 // Close implements [analytics.Client].
 func (q *QueueFull) Close() error { return nil }
 
+// free makes room once; also run at cleanup so a failed test leaves no goroutine blocked.
+func (q *QueueFull) free() { q.freed.Do(func() { close(q.release) }) }
+
 // Run runs path in a goroutine. When it sends more than capacity events, Run waits for an
 // Enqueue to block, then makes room. It waits for path to finish and returns the accepted
 // event names in order.
 func (q *QueueFull) Run(t *testing.T, sends int, path func()) []string {
 	t.Helper()
+	t.Cleanup(q.free)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -70,7 +79,7 @@ func (q *QueueFull) Run(t *testing.T, sends int, path func()) []string {
 			t.Fatal("no Enqueue blocked on the full queue")
 		}
 	}
-	close(q.release)
+	q.free()
 	select {
 	case <-done:
 	case <-time.After(queueFullWait):
