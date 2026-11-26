@@ -49,7 +49,7 @@ func TestExecutingSerializedStringSizes(t *testing.T) {
 		if got.size != len(b) {
 			t.Errorf("root size=%d want=%d", got.size, len(b))
 		}
-		got = captureValue(map[string]any{"v": v})
+		got = captureValueFields(map[string]any{"v": v})
 		if got.sizes["v"] != len(b) {
 			t.Errorf("field size=%d want=%d", got.sizes["v"], len(b))
 		}
