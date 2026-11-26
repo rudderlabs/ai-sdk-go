@@ -23,10 +23,6 @@ Process-wide settings, per-interaction options, identity, pricing, classificatio
 
 ## Configure
 
-`WithEmitSpans(true)` enables wrapper and manual `ai_otel_span` events (default false). It is
-independent of `WithLLMCallEvents`; span content still follows `WithCaptureContent`.
-See [tracing](tracing.md) for nesting, transport and platform limits.
-
 ```go
 err := rudderstackai.Configure(
 	rudderstackai.WithAnalytics(client), // analytics.Client from github.com/rudderlabs/analytics-go/v4
@@ -43,21 +39,21 @@ err := rudderstackai.Configure(
 | Option                                  | Default | Meaning                                                                                                                       |
 | --------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `WithAnalytics(client)`                 | none    | Default RudderStack client. Nil clears it.                                                                                    |
-| `WithCaptureContent(on)`                | off     | Send `prompt_text`, `response_text`, `action_details.feedback_text`, score `explanation` and, with call events, per-call `input_messages`, `output_text` and `output_tool_calls`, [masked](privacy.md#privacy-and-masking). |
-| `WithContentCapture(policy)`            | none    | The same per kind; its keys win over `WithCaptureContent`. See [Content capture](privacy.md#content-capture). |
-| `WithEmitSpans(on)` | off | Emit wrapper and manual spans; independent of call events. |
+| `WithCaptureContent(on)` | see [capture policy](privacy.md#content-capture) | Content capture shorthand. |
+| `WithContentCapture(policy)` | none | [Per-kind capture policy](privacy.md#content-capture). |
+| `WithEmitSpans(on)` | see [tracing](tracing.md#wrapper-and-manual-spans) | Wrapper and manual spans. |
 | `WithLLMCallEvents(on)`                 | off     | Also send one [`ai_llm_response_received`](events.md#ai_llm_response_received) per model call.                                |
 | `WithTaskStartedEvents(on)`             | off     | Also send [`ai_task_started`](events.md#ai_task_started) when a `RunTask` run starts (not when it resumes).                   |
 | `WithToolBreakdown(on)`                 | off     | Add [`tool_breakdown`](events.md#tool_breakdown) to `ai_response_received`.                                                   |
 | `WithIdentityFromCookies(on)`           | on      | Read identity from RudderStack JavaScript SDK [cookies](#identity-and-cookies).                                               |
-| `WithRedaction(on)`                     | on      | Built-in [masking](privacy.md#privacy-and-masking) of captured text. Off sends text as given and skips the hook.                       |
+| `WithRedaction(on)` | on | [Masking](privacy.md#privacy-and-masking). |
 | `WithRedactHook(fn)`                    | none    | `func(text string) (string, error)` run after the built-in patterns. Nil removes it.                                          |
-| `WithEventRules(rules)`                 | none    | [Declared tool events](events.md#declared-tool-events). Replaces earlier rules; event names starting with `ai_` or `mcp_` are rejected. |
+| `WithEventRules(rules)` | none | [Declared tool events](events.md#declared-tool-events). |
 | `WithClassifier(*ClassifierOptions)`    | none    | [Intent classification](#classifier-and-evaluator). Nil turns it off.                                                         |
 | `WithEvaluator(fn)`                     | none    | [Scoring](#classifier-and-evaluator) after each successful answer. Nil turns it off.                                          |
 | `WithServerFeedback(on)`                | on      | `TrackAction` sends `ai_user_action`. Off when the client app sends its own copy (`source: "client"`).                        |
 | `WithPrices(map[string]ModelPrice)`     | none    | Registers prices, as [`RegisterPrice`](#pricing) for each. Merged into the registered ones.                                   |
-| `WithTraceIDFrom(fn)`                   | none    | Reads [`trace_id`](#trace_id) from the context, for example `rudderotel.TraceID` for the active OpenTelemetry span.        |
+| `WithTraceIDFrom(fn)` | none | [Product trace ID](tracing.md#product-trace-id). |
 | `WithLimits(Limits)`                    | see [Limits](#limits) | Memory caps. A zero field keeps its default.                                                                  |
 | `WithOnError(fn)`                       | none    | `func(err error, info ErrorInfo)` sees [errors the SDK contained](#errors), at most once per kind a minute. Nil removes it.     |
 | `WithAzureDeploymentModels(map)`        | none    | Azure OpenAI deployment name to base model, used only to price calls with provider `azure.ai.openai`. Replaces the previous mapping; nil clears it; empty names or models are rejected; matched case-insensitively. |
@@ -68,6 +64,8 @@ err := rudderstackai.Configure(
 For an interaction, the first that is set: `InteractionOptions.Analytics` (or `TaskOptions.Analytics`), then `ContextValues.Analytics` of [`WithValues`](#context-values), then the client given to the integration (`rudderopenai.WithAnalytics`, `rudderanthropic.WithAnalytics`, `ruddergenai.WithAnalytics`, `rudderbedrock.WithAnalytics`), then `WithAnalytics` of `Configure`. `TrackAction` and `TrackScore` use their own `Analytics` option, then the context's, then the configured one. Without any client, events are dropped with one warning per process.
 
 ## InteractionOptions
+
+`InteractionOptions`, `TaskOptions`, `ContextValues`, `TrackActionOptions`, `TrackScoreOptions`, and `TrackClassificationOptions` accept `AgentVersion` and `Variant`.
 
 For `StartInteraction` and `RunInteraction`. Every field is optional.
 
@@ -155,8 +153,6 @@ Snapshot outcome hints prefer canonical keys even when their value is null; lega
 
 A run that waits for something outside it (an approval, a person's answer) pauses: `Pause` sends `ai_response_received` with `response_status: paused`, `pause_reason` and that segment's totals, and the next segment's totals start from zero. When the run ends, its final `ai_response_received` adds `pause_count` and `total_paused_ms`. Every event keeps the same `interaction_id`.
 
-
-
 ```go
 err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{TriggerSource: "queue", Resume: saved},
 	func(ctx context.Context, task *rudderstackai.Interaction) error {
@@ -172,8 +168,7 @@ err := rudderstackai.RunTask(ctx, "refund-approval", rudderstackai.TaskOptions{T
 ```
 
 - In process, `Resume()` continues the run; a model or tool call recorded while paused resumes it too.
-- Known limit: a span whose ID matches its live ambient (context) interaction belongs to that interaction. Otherwise, a span that starts while its interaction ID is ambiguous across live tenants, or unresolved, is dropped from product events; it is never resolved again and never reaches another tenant. Duplicate-identity snapshot restores never take over another tenant's paused object.
-- Known limit: a detached span (no interaction in its context) that names an interaction ID reused across tenants can reach the wrong tenant when a snapshot is restored while a same-identity interaction is open, or when a paused original stays in use after its snapshot is restored. Give each tenant its own interaction IDs, or start such spans from the interaction's context.
+- Span ownership and snapshot tenant limits: [Product events from spans](tracing.md#product-events-from-spans).
 - Across processes (a worker restart, a wait of days), store the `PausedInteraction` (JSON, keys as the event properties) with your own run state and pass it as `InteractionOptions.Resume` or `TaskOptions.Resume`. The optional `last_failed_call_type` field retains the latest failed model call’s category so a resumed `RunTask` that returns a generic error reports the same error type and status. Older snapshots without it remain valid and use `app_error` until another model call fails. The snapshot carries the IDs, identity, background fields, agent version, variant, confidence, intent, outcome, trace ID, integration, pause count and paused time, and when the pause started; the time until the resume counts as paused, by the wall clock. Calls before the pause are already sent, except tool calls the pause waits on; usage accepted during pause delivery is kept for the next segment, including credits and per-call fields.
 - A tool call the pause waits on, such as one awaiting approval, counts in the segment that runs it. It waits when it has a tool-call ID, no outcome yet, and its agent made no model call after it (a tool without its own `AgentName` belongs to the agent of the model call recorded before it). The paused answer leaves it out of `tool_call_count` and `tool_breakdown` and sends no declared tool event for it. When its execution or `RecordToolResult` is recorded after the resume, it counts once with its real outcome and its declared event is sent once; still unresolved at the final end, it counts there as `unknown`. A run that never resumes, or that ends while still paused, never counts it. Two costs: after a JSON restore, the `ToolEventRule` `When` and `Properties` see the tool's arguments only if the execution record repeats them, because snapshots carry no arguments or results; and an app that only uses provider wrappers (it never records tool results) and pauses after tools ran but before the next model call sees those tools counted only in the resumed answer, or never if the run is not resumed.
 - `RunInteraction` and `RunTask` leave a paused run paused when `fn` returns nil (an error still ends it). A paused run is off the open list: `Limits.InteractionTTL` and `Shutdown` never end it, and an abandoned one ends with its last `paused` event.
@@ -206,7 +201,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-Fields: `UserID`, `AnonymousID`, `ConversationID`, `Feature`, `AccountID`, `OnBehalfOf`, `Surface`, `Analytics`, `Context` (extra message context such as `{"app": {"build": "7"}}`), and the cookie sources `Request`, `Cookies`, `CookieValues`. A model call made with a context that carries identity but no interaction is reported as its own user-triggered answer; without identity it is system-triggered.
+Fields: `UserID`, `AnonymousID`, `ConversationID`, `Feature`, `AccountID`, `OnBehalfOf`, `Surface`, `Analytics`, `Context` (extra message context such as `{"app": {"build": "7"}}`), and the cookie sources `Request`, `Cookies`, `CookieValues`. Standalone model calls: [Interaction ownership](integrations.md#interaction-ownership).
 
 `Middleware(next http.Handler) http.Handler` does the cookie part for every request: handlers get a context as from `WithValues(r.Context(), ContextValues{Request: r})`, and an interaction that ends while the client is gone (the request context is cancelled before the handler returns) is sent with `client_disconnected: true`. An interaction that ends after the handler returned is never marked.
 
@@ -237,6 +232,8 @@ Precedence for `userId` and `anonymousId`: the options of the call (`Interaction
 See [Product trace ID](tracing.md#product-trace-id).
 
 ## Pricing
+
+`WithCredits` accepts `func(CreditCall) (*float64, error)`. It prices successful calls with known usage after USD pricing; return nil for unknown credits. `LLMCall.Credits` overrides the hook.
 
 Credits retries preserve the newest retained call usage and metadata when a hook re-enters and matches a twin. The published credits belong to that same usage and metadata.
 
@@ -289,7 +286,14 @@ cost, ok := rudderstackai.EstimateCost("anthropic", "claude-sonnet-4-5", 12_000,
 
 ## Classifier and evaluator
 
-Both run after a successful answer is out, never block it, share one queue (16 at once, 1,000 waiting) and run with an untracked context: their own model calls send no events, also through a tracked client.
+- Evaluator: runs for every interaction that ended `success`, including tasks and interactions an integration opened, after `ai_response_received`, with a 5-second timeout and an untracked context. An error, panic or timeout sends nothing.
+
+- `intent` is one of `ClassifierOptions.Intents`, else `other` (with your own `Classify` and no `Intents`, any non-empty value is kept). `outcome` is one of `Outcomes` (default `DefaultOutcomes`: `resolved`, `partial`, `unresolved`, `escalated`, `unsupported`, `unclear`), else `unclear`. `other` and `unclear` are therefore always possible values, whatever your lists hold: plan reports and warehouse filters for them.
+- Which interactions: one classification per successful interaction you open (`StartInteraction`, `RunInteraction`) with `Classify` on (the default for user-triggered ones). Tasks are off unless `TaskOptions.Classify` is set; interactions an integration opens on its own are never classified. Errors, cancellations and other non-success statuses are skipped.
+- Input: the prompt (`PromptText`, else the last user message of the request messages an integration kept), the answer (`EndOptions.ResponseText`, else the last successful call's answer text), the names of the tools called (never arguments or results) and earlier messages, within a 12,000-character budget that keeps the start and end of long text. The prompt fences the turn as untrusted data and asks for JSON from closed lists ([`ClassifierPrompt`](#classifier-and-evaluator)). An interaction with neither prompt nor answer text is skipped with a warning.
+- Failures: a timeout (default 5 seconds), an error, a panic or an unparseable reply sends nothing and logs one warning per process. Up to 16 classifications and evaluations run at once and up to 1,000 wait; beyond that, work is dropped with a warning at most once a minute.
+
+Both run after a successful answer is out, never block it, and run with an untracked context: their own model calls and spans send no events, also through a tracked client. They share the queue above.
 
 ```go
 err := rudderstackai.Configure(rudderstackai.WithClassifier(&rudderstackai.ClassifierOptions{
@@ -307,7 +311,9 @@ err := rudderstackai.Configure(rudderstackai.WithClassifier(&rudderstackai.Class
 | `IntentSummary`     | With `Client`: also ask for and send a one-sentence, masked `intent_summary`                                       |
 | `Timeout`           | Per classification; zero means 5 seconds                                                                           |
 
-`rudderopenai.ClassifierClient(client openai.Client, model string)` sends a Chat Completions request in JSON mode, `rudderanthropic.ClassifierClient(client anthropic.Client, model string)` a Messages request; both cap the reply at 300 tokens and disable retries. For another provider, implement `ClassifierClient` yourself: the SDK passes the system and user prompts; return the reply text plus `Model`, `Provider` and usage (`UsageKnown`, tokens) so `classifier_cost_usd` can be priced. `rudderstackai.ClassifierPrompt(turn, intentSummary)` builds the same prompts for a `Classify` function that calls a model itself. Event and input details: [events.md](events.md#ai_interaction_classified).
+### Classifier clients
+
+`rudderopenai.ClassifierClient(client openai.Client, model string)` sends a Chat Completions request in JSON mode, `rudderanthropic.ClassifierClient(client anthropic.Client, model string)` a Messages request; both cap the reply at 300 tokens and disable retries. For Gemini or Bedrock, implement `ClassifierClient` yourself. The SDK passes the system and user prompts; return the reply text plus `Model`, `Provider` and usage (`UsageKnown`, tokens) so `classifier_cost_usd` can be priced. `rudderstackai.ClassifierPrompt(turn, intentSummary)` builds the same prompts for a `Classify` function that calls a model itself. Event and input details: [events.md](events.md#ai_interaction_classified).
 
 ```go
 err := rudderstackai.Configure(rudderstackai.WithEvaluator(func(ctx context.Context, turn rudderstackai.EvaluationTurn) ([]rudderstackai.Score, error) {
@@ -319,7 +325,7 @@ err := rudderstackai.Configure(rudderstackai.WithEvaluator(func(ctx context.Cont
 }))
 ```
 
-The evaluator gets an `EvaluationTurn` (`InteractionID`, `ConversationID`, `Prompt`, `Answer`, `ToolNames`, `History`), has 5 seconds, and each returned score becomes one [`ai_interaction_scored`](events.md#ai_interaction_scored). Prompt and answer text are kept in memory for these only while a classifier or evaluator is configured.
+The evaluator gets an `EvaluationTurn` (`InteractionID`, `ConversationID`, `Prompt`, `Answer`, `ToolNames`, `History`); each returned score becomes one [`ai_interaction_scored`](events.md#ai_interaction_scored). Prompt and answer text are kept in memory for these only while a classifier or evaluator is configured.
 
 ## Flush and shutdown
 
@@ -371,7 +377,7 @@ Sampling runs before the event reaches your analytics-go client, so it works wit
 | `MaxCallsPerInteraction` | 1,000    | Model calls and tool calls past it still count in the totals, `usage_breakdown` and `tool_breakdown`, but are no longer kept one by one: tool outcomes and declared tool events are dropped, even if the outcome came with the call. A tool call past it with an ID and no outcome is still kept, up to as many again, in case a pause waits on it: it is then counted once, in the segment that runs it, so at most twice that many tool calls are kept. |
 | `MaxMapEntries`          | 10,000   | Remembered clients, failed attempts held for a retry, each MCP map per server and mcp-go sessions: the oldest entry goes first (a held attempt is recorded at once). Open model-call spans tracked for [span dedup](tracing.md#one-span-per-call-with-the-span-processor): once full, a new one exports without dedup; none is evicted. |
 
-Captured text is masked with a 100 ms budget per pattern; a text that runs out of it is sent as `[redaction timed out]`, never unmasked (`redaction_timeout`). Events are sent outside the SDK's locks: when analytics-go's queue is full, only the goroutine sending waits.
+Events are sent outside the SDK's locks: when analytics-go's queue is full, only the goroutine sending waits. Masking limits: [privacy](privacy.md#privacy-and-masking).
 
 ## Errors
 
@@ -432,7 +438,7 @@ RudderStack warehouse destinations create a column with the type of the first va
 | `.../rudderotel`                                 | `TraceID`, `NewSpanProcessor`, `NewExporter`, `RegisterTracing`, `SpanToTrack`, `IsAISpan` ([tracing](tracing.md))                                                                                           |
 | `.../ruddermcpgo` (in the root module)           | `WrapServer`, `Options`, `RequestElicitation`, `TrackMCPEventSubscription`, `WrapMCPEventSender`                                                                                                        |
 
-The root module (Go 1.26.11 or later) holds the core, the `net/http` middleware and MCP support (`ruddermcpgo` included). Each provider integration and `rudderotel` is a separate module you `go get` on its own, so MCP-only services do not pull provider SDKs. Minimum versions per module: [README](../README.md#compatibility).
+Module dependencies and tested versions: [Compatibility](integrations.md#compatibility).
 
 ## Troubleshooting
 
@@ -445,4 +451,4 @@ The root module (Go 1.26.11 or later) holds the core, the `net/http` middleware 
 | No `ai_interaction_classified`             | No classifier, a call outside an interaction, an answer that failed, or a classifier error (logged once).                             |
 | Cost column is an integer in the warehouse | The first loaded value was `0`: see [warehouse column types](configuration.md#warehouse-column-types).                           |
 
-Set `RUDDERSTACK_AI_DEBUG=1` (any non-empty value turns it on; it is read on every log call) to log everything tracking drops or ignores at debug level through the default `log/slog` handler, whatever its level, prefixed `[rudderstack-ai]`: errors by type only, never event payloads or captured text. Warnings (same prefix) are logged mostly once per process without it; an option value outside its list (a surface, confidence, status, pause or block reason, or action type) is named by its type only, never the value. Tracking never panics into your code and returns provider errors unchanged; `WithOnError` sees what it contained ([errors](configuration.md#errors)).
+See [Logging](#logging) and [Errors](#errors) for diagnostics.

@@ -93,7 +93,7 @@ parent belonging to the same interaction; the core still has no OTel dependency.
 or a task with `NoParent: true` uses the active OTel parent, or its own fresh interaction trace.
 Span identity is captured from the owning interaction when the span starts. Standalone manual
 spans capture identity, track context and the analytics client from their start context;
-without identity they use the product-event fallback `anonymousId: "ai_system"`.
+without identity they use the [product-event fallback](configuration.md#identity-and-cookies).
 A new span ignores an ended interaction and its spans as owners or parents, and captures the
 current `WithValues` identity and analytics client. A call settling after
 its interaction ended still emits its span with the original interaction, trace and parent; its late
@@ -114,11 +114,9 @@ With spans disabled, product bookkeeping follows the provider's read/Close path.
 as unread/cancelled, with unknown usage, including a streaming response that arrives after its
 interaction ended and is never read, closed or aborted. Manual spans remain caller-owned.
 
-With `WithLLMCallEvents(true)`, retained call events carry the wrapper's `span_id`; delayed
-pending events preserve it through pause/JSON restoration. Overflow aggregates omit it. Two
-separate invocations returning the same response ID or reusing an error value emit two spans and the single call event
-keeps the first invocation's ID. Span content follows `WithCaptureContent` even with call events
-off, and captured call content is masked once. With spans on or off, content honours `MarshalJSON` / `MarshalText` before inspecting fields, once per report. Each span reads the report's detached output; serializer failures become null without walking hidden fields. Native bytes are stripped. Bytes an app serializer has already encoded as ordinary text, including base64, remain subject to masking and capture controls. Numeric maps are preserved, map keys honour `MarshalText` with Go JSON precedence; other primitive keys become strings and unsupported keys are dropped, cycles are dropped, and other unrepresentable list entries keep null placeholders.
+Call `span_id` joins: [`ai_llm_response_received`](events.md#ai_llm_response_received). Content follows the [capture and serializer policy](privacy.md#content-capture).
+
+Numeric maps are preserved, map keys honour `MarshalText` with Go JSON precedence; other primitive keys become strings and unsupported keys are dropped, cycles are dropped, and other unrepresentable list entries keep null placeholders.
 
 ### One span per call with the span processor
 
@@ -208,11 +206,7 @@ Matching uses context nesting only, never times or model names. Limits:
 
 ## Framework trees with manual spans
 
-LangChain, OpenAI Agents SDK, Claude Agent SDK and Vercel AI SDK framework integration spans
-(`rudderstack.span_source: integration`) are unavailable in Go because Go has no integrations
-for those frameworks. This is a platform limit. Build the same agent/tool/model tree with
-manual spans and wrapped provider calls instead. Enable `WithEmitSpans(true)` and pass the
-context returned by `StartInteraction` and each `StartSpan` into every goroutine and call:
+Framework integration limits: [Go platform limits](integrations.md#go-platform-limits). Build the same agent/tool/model tree with manual spans and wrapped provider calls instead. Enable `WithEmitSpans(true)` and pass the context returned by `StartInteraction` and each `StartSpan` into every goroutine and call:
 
 ```go
 // client is an OpenAI client configured with rudderopenai.WithTracking().
@@ -274,17 +268,13 @@ with error status while preserving product-event behavior. Normal wrapper comple
 - Each Google GenAI `GenerateContent`/stream request emits one span. Applications
   managing a Go tool loop make separate requests; pass the manual span context explicitly to
   tools and subsequent requests.
-- LangChain, OpenAI Agents SDK, Claude Agent SDK and Vercel AI SDK framework integrations have
-  no Go wrapper. Their integration fixture cases are explicitly skipped in Go. Bound-stream completion APIs also have no Go wrapper.
+- Framework integrations and skipped cases: [Go platform limits](integrations.md#go-platform-limits). Bound-stream completion APIs also have no Go wrapper.
 - HTTP middleware has no hook for the outer SDK method's completion. Retry grouping uses
   per-invocation request identity, retry headers and response-body probes. With spans enabled,
   every failed attempt has a bounded one-second retry grace, even without context cancellation.
   This settles calls with no configured retries or an exhausted retry budget. Ending an interaction
   while an attempt is held, or a retry arriving after that grace, can split spans. HTTP middleware measures individual requests and response consumption.
-- Go has no native tuple or set type; portable tuple/set fixtures use arrays/slices. Foreign
-  runtime exception class fixtures use native Go errors. `MaxTurnsExceededError`,
-  `LengthFinishReasonError` and `ContentFilterFinishReasonError` have no existing Go Agent SDK or
-  response-parser exception equivalent and are skipped by the classification fixture driver.
+- Shared fixture substitutions and skips: [Compatibility](integrations.md#compatibility).
 - An unread wrapper stream settles on close, cancellation, or flush (`Flush` or `Shutdown`). Go has
   no deterministic iterator finalization when an open stream is simply abandoned.
 
@@ -411,10 +401,9 @@ Spans must name an open interaction through `rudderstack.interaction_id`. Spans 
 or ending after its final End, do not produce product events. An in-flight span retains its owner
 if the interaction pauses before the span ends, and accepted work resumes it.
 The interaction's explicit/context client wins; otherwise it adopts tracing's client.
-When the live ambient (context) interaction's ID matches the ID present at span start,
-that interaction owns the span, even if other live interactions share the ID. Otherwise,
-exactly one live open or paused interaction must match. Ambiguous or unresolved IDs are
-dropped from product events and never looked up again at End. A span with no ID at start
+- Known limit: a span whose ID matches its live ambient (context) interaction belongs to that interaction. Otherwise, a span that starts while its interaction ID is ambiguous across live tenants, or unresolved, is dropped from product events; it is never resolved again and never reaches another tenant. Duplicate-identity snapshot restores never take over another tenant's paused object.
+- Known limit: a detached span (no interaction in its context) that names an interaction ID reused across tenants can reach the wrong tenant when a snapshot is restored while a same-identity interaction is open, or when a paused original stays in use after its snapshot is restored. Give each tenant its own interaction IDs, or start such spans from the interaction's context.
+Exactly one live open or paused interaction must match when the ambient interaction does not own the span. A span with no ID at start
 may acquire one through `SetAttributes`; it records only if exactly one owner matches at End.
 
 The first convention present decides the role:
@@ -440,22 +429,21 @@ Span mapping rules (shared cases in [`tracing-product-events-v0.1.json`](../spec
 - Counting at End: every model-call span records immediately, retaining internal trace/span IDs, parent/ancestor IDs, raw request/response model, response ID, timing, usage/output presence, ERROR status and OpenInference LLM kind. These tags never appear in product or exported span events. After interaction finalizers, the interaction's synchronous end path applies both rules once to recorded span calls, before pending call events, totals, costs, breakdowns, primary model and answer selection. Skipped calls cannot provide evidence. Cycles are handled conservatively so a group retains a call. A call whose event was already emitted by an earlier adapter match is kept and counted, even if later spans make it redundant; published call events must agree with answer totals. Remaining pending calls close skipped positions in `call_index`. Processor/SDK flush and processor shutdown do not settle or hold model calls. At `maxCallsPerInteraction`, folded calls count conservatively and cannot provide individual span evidence; non-model ancestry is bounded by `maxMapEntries`.
 - Pause/resume: pause finalizes and filters its segment before publishing its totals and pending calls, then clears that segment's calls and ancestry. Its calls do not count again after resume. Calls recorded during call/tool delivery passes before totals are captured join the paused segment. Calls accepted after capture remain pending for the next segment before the pause snapshot is returned. Those pending calls carry the same internal tags, including resolved ancestors through non-model spans, in `pending_calls[].span_source`; JSON restoration retains and validates them, so End can apply the rules across resume. Older snapshots without tags count conservatively.
 - Cache writes: `gen_ai.usage.cache_write.input_tokens` takes precedence over `gen_ai.usage.cache_creation.input_tokens`, then `gen_ai.usage.cache_creation_input_tokens`, then `llm.token_count.prompt_details.cache_write`. Use the first valid nonnegative integer, including zero. Map it once to `cache_write_tokens` and apply the same cache-write price as cache creation; never sum aliases.
-- Provider API IDs: product calls map only `anthropic.messages` → `anthropic`, `openai.chat` / `openai.responses` → `openai`, and `google.generative-ai` → `gcp.gemini`. The first three are provider IDs in AI SDK v7's `@ai-sdk/anthropic` 4.0.89 and `@ai-sdk/openai` 4.0.103 `src/*-provider.ts`; the Google ID is already documented in [`providers-v0.1.json`](../spec/fixtures/providers-v0.1.json). Apply this explicit allow-list after the existing lowercase step; never split arbitrary names at a dot. `aws.bedrock`, `gcp.vertex_ai`, `gcp.gemini`, `azure.ai.openai`, `azure.ai.inference` and unknown dotted names stay unchanged. Raw OTLP provider attributes and the GenAI provider summary keep the reported label.
+- Provider API IDs: product calls map only `anthropic.messages` → `anthropic`, `openai.chat` / `openai.responses` → `openai`, and `google.generative-ai` → `gcp.gemini`. Apply this explicit allow-list after the existing lowercase step; never split arbitrary names at a dot. `aws.bedrock`, `gcp.vertex_ai`, `gcp.gemini`, `azure.ai.openai`, `azure.ai.inference` and unknown dotted names stay unchanged. Raw OTLP provider attributes and the GenAI provider summary keep the reported label.
 - Semantic Kernel: when `gen_ai.response.finish_reasons` is absent, read singular `gen_ai.response.finish_reason`. Strip the prefix through the last dot and lowercase the value: `FinishReason.STOP` / `STOP` → `stop`, `LENGTH` → `length`, `TOOL_CALLS` → `tool_calls`, `CONTENT_FILTER` → `content_filter`, case-insensitively. Unknown suffixes are lowercased too. Existing plural values keep their precedence and spelling.
 - Traceloop / OpenLLMetry: after GenAI and OpenInference classification, `traceloop.span.kind = "tool"` identifies one `execute_tool` execution. Read the tool name from `traceloop.entity.name` after `gen_ai.tool.name` / `tool.name`, and arguments/result from `traceloop.entity.input` / `traceloop.entity.output` after the existing tool content keys. Successful and failed executions count in `tool_breakdown`; these entity content keys follow `rudderstackai.WithCaptureContent(true)` and masking. The default `IsAISpan` filter also exports these tools and attaches interaction context when they start.
-- Mirascope native ops: parse `mirascope.response.usage` only if it is a JSON string of at most 64 KiB (65,536 UTF-8 bytes). Ignore malformed JSON, non-object JSON and invalid counts without throwing. Mirascope 2.8.2's `serialize_mirascope_usage` writes `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `reasoning_tokens` and `total_tokens`; map only the first four as independent fallbacks after existing GenAI and OpenInference usage keys. Zero counts are valid and existing counts win. Input tokens already include cache reads/writes; do not add them again. Ignore reasoning/total counts rather than deriving missing usage. Cache counts use registered cache pricing.
+- Mirascope native ops: parse `mirascope.response.usage` only if it is a JSON string of at most 64 KiB (65,536 UTF-8 bytes). Ignore malformed JSON, non-object JSON and invalid counts without throwing. Map `input_tokens`, `output_tokens`, `cache_read_tokens` and `cache_write_tokens` as independent fallbacks after existing GenAI and OpenInference usage keys. Zero counts are valid and existing counts win. Input tokens already include cache reads/writes; do not add them again. Ignore `reasoning_tokens` / `total_tokens` rather than deriving missing usage. Cache counts use registered cache pricing.
 
 OpenLLMetry Anthropic instrumentation 0.63.0 can overcount streamed output before emitting the span: it adds cumulative message-delta usage to message-start usage. The mapper copies the output count directly, without summing deltas or total-token attributes. Streamed output from that version can read one token high; it's an upstream issue.
 
-The core merges wrapper/span calls with the same provider response ID, or the closest overlapping
-call from the other source with matching provider/model, preserving wrapper usage. A tool span
+Wrapper/span matching: [Deduplication](integrations.md#deduplication). A tool span
 without an ID settles a pending matching named wrapper tool. Span-only
 tool executions still count individually. Opt-in captured response text comes from the last
 successful model span when End supplies no `ResponseText`; prompts never come from spans.
 
 ## Privacy and size
 
-Content capture is off by default. Export strips GenAI input/output messages, instructions, tool
+Without [content capture](privacy.md#content-capture), export strips GenAI input/output messages, instructions, tool
 arguments/results, retrieval content and legacy prompt/completion prefixes; OpenInference inputs,
 outputs, messages, prompt templates, retrieval/embedding/reranker documents; Vercel content fields;
 OpenLLMetry entity input/output; Pydantic AI messages, final results, tool arguments/responses,
@@ -494,17 +482,18 @@ preserved, including floating-point values. Attribute order can differ across SD
 
 ## Lifecycle and diagnostics
 
+Flush waits for in-flight terminal span reporting within its deadline.
+
 `SpanProcessor.ForceFlush(ctx)` waits for pending classifications, exports the batch, and flushes
 the configured RudderStack client. `Shutdown(ctx)` does the same before stopping export. Both use one context
 deadline (10 seconds when none was supplied), return errors on failure, and never close the app's
-client or end interactions. Core `Flush` also reaches the tracing client. SDK classifier and
-evaluator calls carry suppressed contexts: their spans are neither recorded nor exported.
+client or end interactions. Core `Flush` also reaches the tracing client. Classifier and evaluator suppression: [configuration](configuration.md#classifier-and-evaluator).
 
 Mapping failures and callback panics are contained and reported through the core's `WithOnError`;
 enqueue errors become OTel export errors, with the remaining batch still attempted. Size drops
 use `log/slog`. Delivery errors after enqueue follow analytics-go's own error handling.
 
-Tested with OTel API/trace/SDK **v1.47.0** and analytics-go **v4.5.1**. The runnable
+Tested versions: [Compatibility](integrations.md#compatibility). The runnable
 [example](../examples/tracing) uses a local recorder and needs no credentials:
 
 ```sh

@@ -2,12 +2,12 @@
 
 The integration tracks an MCP server: which AI clients call it, which tools they call, whether calls succeed, and for which customer. The agents are the users. Events are sent from the server; they never carry tool arguments, results, resource contents, prompt text or elicitation answers.
 
-| MCP library | Package | Entry point | Versions tested | Protocol revisions |
-| --- | --- | --- | --- | --- |
-| [`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk) (official) | `github.com/rudderlabs/ai-sdk-go` | `rudderstackai.WrapMCPServer` | v1.8.0 | 2025-06-18, 2025-11-25, 2026-07-28 |
-| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v0.55.1 (the minimum), v1.1.1 and v1.5.0 | v0.55.1 to v0.x: 2025-06-18, 2025-11-25; v1.x: also 2026-07-28 |
+| MCP library | Package | Entry point | Protocol revisions |
+| --- | --- | --- | --- |
+| [`github.com/modelcontextprotocol/go-sdk`](https://github.com/modelcontextprotocol/go-sdk) (official) | `github.com/rudderlabs/ai-sdk-go` | `rudderstackai.WrapMCPServer` | 2025-06-18, 2025-11-25, 2026-07-28 |
+| [`github.com/mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) | `github.com/rudderlabs/ai-sdk-go/ruddermcpgo` | `ruddermcpgo.WrapServer` | v0.55.1 to v0.x: 2025-06-18, 2025-11-25; v1.x: also 2026-07-28 |
 
-Both send the same events with the same options, defaults and properties. `ruddermcpgo` requires mcp-go v0.55.1, the oldest version it supports, so Go may upgrade a server dependency below that minimum; CI builds the module against v0.55.1 and tests v1.1.1 explicitly and v1.5.0 in the workspace. Each library lives in its own package, so a go-sdk server never compiles mcp-go; `ruddermcpgo` builds on the root package and so also compiles the go-sdk.
+Both send the same events with the same options, defaults and properties. Module dependencies and tested versions: [Compatibility](integrations.md#compatibility).
 
 - [Setup](#setup)
 - [Options](#options)
@@ -49,7 +49,7 @@ if err := rudderstackai.WrapMCPServer(server, rudderstackai.Options{
 }
 ```
 
-Call it once, before serving: it adds a receiving middleware (`AddReceivingMiddleware`) and a sending middleware (`AddSendingMiddleware`), so it works with every transport the go-sdk offers. Wrapping the same server again replaces its options and keeps its state. `WrapMCPServer` returns an error for invalid options. When the process stops, call `rudderstackai.Shutdown(ctx)` then `rudderstackai.CloseClient(ctx, client)` for each analytics client you own. Shutdown ends open interactions and flushes without closing clients; `rudderstackai.Flush` also reaches the clients MCP servers use.
+Call it once, before serving: it adds a receiving middleware (`AddReceivingMiddleware`) and a sending middleware (`AddSendingMiddleware`), so it works with every transport the go-sdk offers. Wrapping the same server again replaces its options and keeps its state. `WrapMCPServer` returns an error for invalid options. `rudderstackai.Flush` also reaches the clients MCP servers use. Exit handling: [Flush and shutdown](configuration.md#flush-and-shutdown).
 
 ### mcp-go
 
@@ -103,6 +103,10 @@ err := server.NewStdioServer(s).Listen(ctx, in, out)
 
 Messages pass through unchanged, and the libraries' own connections and protocol handling stay in place: the go-sdk wrapper observes the transport's reader and writer, not its connection. A failed request's event, and any declared tool event after it, is held until its response is written. **The hold lasts at most 10 seconds: if no response is written by then, the event goes out without `error_message`**, as it does when the connection, the context or the HTTP request ends first. If a client reuses a request id (MCP forbids it) before the earlier response is written, the earlier event also goes out without it; later matches are not guaranteed for such a client. Cancelled requests never carry it. `ObserveHTTP` reads JSON responses and SSE `data:` frames of the request it wraps (mcp-go's legacy SSE transport answers on another stream, so it gets no `error_message`); content buffering is capped at 1 MiB, while oversized messages still acknowledge successful writes and retain protocol outcome metadata and result size. The go-sdk's `StreamableHTTPHandler` builds its transports internally, so go-sdk HTTP servers cannot opt in yet. On the go-sdk, other transports (in-memory, SSE, streamable HTTP, custom) are returned unchanged.
 
+### Observed result capture
+
+MCP tool results reuse the written wire message after a successful write; a failed write captures no result, and its event keeps the handler's outcome and size. Transports without a write observer keep their existing release point, as do results whose response the observer never sees (closed first, timed out or a reused request id). Handler duration and completion time stay fixed at handler completion while MCP capture waits for the write. An oversized observed MCP message keeps no body: its result is captured from the handler's value after the write, with the written result size.
+
 ## Options
 
 | Field                | Default    | What it does                                                                                                                                                                      |
@@ -116,7 +120,7 @@ Messages pass through unchanged, and the libraries' own connections and protocol
 | `RequestContext`     | off        | `Enabled: true` injects `request_context`; `Intents` and `DisableUserSentiment` apply only when enabled.                                                                          |
 | `ClientSeenWindow`   | 24 hours   | Window in which a (client, OAuth client, user) is reported once by `mcp_client_seen`, per server name and process.                                                                                               |
 | `CaptureContent`     | global setting | Sends masked `call_reason` and `capability_detail` capped at 200 characters, `feedback_text` capped at 2,000, and `error_message` capped at 200 when the [final response is observed](#error-messages-observing-the-final-response). False follows `Configure`'s setting.                                                                                                |
-| `ContentCapture`     | none       | Per kind (`CallReason`, `FeedbackText`, `ErrorMessage`, see [Content capture](privacy.md#content-capture)); its keys win over `CaptureContent`. `&ContentCapture{Default: Ptr(false)}` turns this server off when the global setting is on. |
+| `ContentCapture` | none | [Per-kind capture policy](privacy.md#content-capture). |
 | `CapabilityRequests` | off (nil)  | Deprecated: use `FeedbackRequests`. Existing `request_capability` behavior remains available.                                                                         |
 | `FeedbackRequests` | off (nil) | `&FeedbackRequestOptions{Capabilities: []string{"bulk_export"}}` adds `submit_feedback`. Cannot be combined with `CapabilityRequests`. |
 | `MCPEvents`          | off        | Enables the experimental [MCP Events](#mcp-events-experimental) helpers.                                                                                                          |
@@ -154,6 +158,8 @@ How the `mcp_tool_called` signals are derived:
 - **Result**: `result_size_bytes` is the UTF-8 size of the result's compact JSON (no HTML escaping), `result_tokens_estimate` that size divided by 4 (rounded down), `result_content_types` the content block types plus `structured` for `structuredContent`, `result_paginated` whether the result or its `structuredContent` carries a `nextCursor` (or `next_cursor`).
 
 ## Protocol revisions
+
+A pending elicitation expires after an hour.
 
 The go-sdk v1.8 and mcp-go v1.x serve both revisions; both are tested end to end with a real go-sdk client, over stdio and streamable HTTP. mcp-go v0.x serves up to 2025-11-25 only: a 2026-07-28 client falls back to `initialize` with it, and the `input_required` row below does not apply.
 

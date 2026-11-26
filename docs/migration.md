@@ -25,15 +25,15 @@ The check validates every event against the spec this version emits (and client 
 
 Events carry `specVersion` `0.4.0`. The server schema and conformance fixture are now `ai-events-v0.4.schema.json` and `conformance-v0.4.json`. The client schema remains `ai-client-events-v0.2.schema.json`, following the v0.3 release precedent. The migration checker accepts both 0.3.0 and 0.4.0 captures.
 
-- **One-shot and client events**: opt into `OneShot` for interactions without a thread. Shared client schemas cover prompts, suggestions, feedback, exports, conversation and agent controls, limits and declared tools on web and mobile.
-- **Server fields**: blocked answers, denied tools, confidence, credits, per-call timing and purpose, fallback and BYOK flags, agent versions, variants, MCP result sizes, compaction and `context_limit` errors.
-- **Sampling**: `WithSampleRates` controls each event; kept events carry `sample_rate`. Events of one interaction share a stable draw. Answers are unsampled by default.
-- **Pause/resume**: paused and final answer segments share an interaction ID, including after JSON restore. Final answers carry pause counts and total paused time. Optional `ai_task_started` fires once per new background run.
+- [One-shot and client events](client-events.md).
+- Server fields: [response fields](events.md#ai_response_received), [credits](configuration.md#pricing), [call metadata](integrations.md#how-integrations-work), [agent versions and variants](configuration.md#interactionoptions), [MCP results](mcp.md#events), [tool events](events.md#declared-tool-events) and [error types](events.md#error-types).
+- [Sampling](configuration.md#sampling).
+- [Pause/resume](configuration.md#pauses-and-resumes) and [`ai_task_started`](events.md#ai_task_started).
 
 ## Upgrading to 0.3.0
 
 No API was removed.
 
-- **RudderStack client**: every module requires `github.com/rudderlabs/analytics-go/v4` v4.5.1, so `Flush` and `Shutdown` send its queue. A custom client without `Flush(ctx)` or `Flush()` is still reported once as `client_outdated`.
-- **`app_error`**: an answer that fails in your own code after a successful model call has `error_type: app_error`, not `api_error`. An error from a model call, or one that carries a provider signal (HTTP status, provider error code or provider error type), keeps its type. A generic `EndOptions{Status: StatusError, ErrorType: "app_error"}` also preserves the latest call's provider classification; a successful retry clears it. Call `in.AcceptOutput()` when you keep output that stopped at the token cap, so a later failure in your code is not reported as `length`. Update queries that count `api_error` as all failures.
-- **Usage on failed streams**: a streamed call that fails partway keeps the tokens it already reported and still counts in `llm_call_count` (unpriced). A Gemini stream that fails mid-way is now a failed call, no longer a success.
+- RudderStack client: [minimum version](integrations.md#compatibility) and [custom-client flushing](configuration.md#flush-and-shutdown).
+- **`app_error`**: Update queries that count `api_error` as all failures. Provider classification and `AcceptOutput`: [Status](events.md#status).
+- **Usage on failed streams**: A Gemini stream that fails mid-way is now a failed call, no longer a success. Retained usage and pricing: [Streaming and cancellation](integrations.md#streaming-and-cancellation) and [Cost](events.md#cost).

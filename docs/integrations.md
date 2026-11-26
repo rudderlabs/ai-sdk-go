@@ -11,17 +11,20 @@ How each integration attaches, what it records, and its edge cases. Event fields
 - [Streaming and cancellation](#streaming-and-cancellation)
 - [Retries](#retries)
 - [Tool output failures](#tool-output-failures)
-- [Classifier clients](#classifier-clients)
+- [Classifier clients](configuration.md#classifier-clients)
 - [Manual](#manual)
 - [Go platform limits](#go-platform-limits)
 
 ## How integrations work
 
+Every provider integration offers `WithCallPurpose`, `WithFallbackUsed`, and `WithBYOK`. `WithCallDetails` can scope metadata to calls made with a context.
+
 When a model request forces exactly one named tool, matching response calls without a tool result returned before the final End count as structured output, not tool calls: they are excluded from `tool_call_count`, `tool_breakdown` and unknown-outcome declared tool events; model calls and tokens still count. This covers OpenAI Chat and Responses named function choices, Anthropic named tool choices, Bedrock Converse named tool choices, Gemini `ANY` with one allowed function name, and Go provider wrappers used by structured-output frameworks, without library markers. A tool result or an already emitted tool event keeps the call real. Pause does not exclude candidates: their pending state survives JSON snapshots, and a result after resume keeps them real. Native OpenAI `response_format` / `json_schema` has no tool calls and is unchanged. Model spans apply the same rule when `gen_ai.request.tool_choice`, `gen_ai.request.toolChoice`, `ai.prompt.toolChoice` or JSON `llm.invocation_parameters` exposes the choice and message attributes expose tool identities; later input tool results or execution spans keep the tool real. Spans without that request choice retain existing accounting. Each exclusion logs the name, call ID and `structured output: forced tool with no result` through `RUDDERSTACK_AI_DEBUG`; the recording-based check command has no exclusion-reason field, so the debug log is the inspection path.
+
+## Interaction ownership
 
 - A call made with a context that carries an interaction (`RunInteraction`, `StartInteraction`, `RunTask`) reports into it. A call without one opens its own one-call interaction and ends it when the call (or its stream) ends: `trigger: system` unless the context carries an identity from `WithValues`, no prompt event, never classified. A call made after its interaction ended logs a warning and becomes such a separate answer, with `parent_interaction_id` set to the ended one.
 - Requests and responses reach the provider SDK unchanged, except that a streamed Chat Completions request asks for usage (see [OpenAI](#openai)). Provider errors are returned to your code unchanged.
-- A client with the tracking option applied twice tracks each call once.
 - Only model calls are tracked; every other request (embeddings, file uploads, token counting, batches) passes through.
 
 ## OpenAI
@@ -160,7 +163,7 @@ client := openai.NewClient(
 )
 ```
 
-- `openrouter`, `litellm` and `gateway` are routers: a served model with a vendor prefix (`openai/gpt-4o`) is reported under that vendor (`openai`), with the full name in `model`, and `requested_model` holds the requested model when another one served the call.
+- `openrouter`, `litellm` and `gateway` are routers: a served model with a vendor prefix (`openai/gpt-4o`) is reported under that vendor (`openai`, through the shared alias table in `spec/fixtures/providers-v0.1.json`), with the full name in `model`, and `requested_model` holds the requested model when another one served the call.
 - Cost: `usage.cost` (OpenRouter, LiteLLM, in a body or a stream chunk) or the LiteLLM proxy's `x-litellm-response-cost` header is the call's cost, ahead of registered prices. The proxy's `x-litellm-model-name` header is the served model.
 - Azure OpenAI: `WithProvider("azure.ai.openai")` plus [`WithAzureDeploymentModels`](configuration.md#pricing) for pricing. Other labels (`vllm`, `groq`, ...) are sent as given.
 
@@ -202,7 +205,7 @@ context never ends; a retry arriving later can start another span.
 
 A failed attempt counts as retried when the client sends it again or closes its response unread, which is how both clients behave. With spans disabled, a connection error (no response) outside an interaction is recorded per attempt. A retried failed response that a middleware added before `WithTracking` (outside it) reads is also recorded per attempt.
 
-genai retries below the tracking transport and has no attempt number. The transport groups retries using per-invocation request identity; successful retries record one final call. With spans disabled, a connection error outside an interaction is recorded per attempt. The AWS SDK retries below the Bedrock tracker, so a Bedrock operation is recorded once, with the final outcome. `ClassifierClient` calls turn retries off.
+genai retries below the tracking transport and has no attempt number. The transport groups retries using per-invocation request identity; successful retries record one final call. The AWS SDK retries below the Bedrock tracker, so a Bedrock operation is recorded once, with the final outcome. `ClassifierClient` calls turn retries off.
 
 ## Tool output failures
 
@@ -210,11 +213,18 @@ The one vendor output convention the integrations read is top-level boolean `suc
 
 String `"false"`, arrays, missing keys, true, nested `successful: false` and non-JSON strings retain their existing outcomes. Provider failure signals (`is_error`, `status: error`, a Gemini `error` key, a failed span) keep their existing categories and a call counts once. Returned content, duration and tool identity are preserved.
 
-## Classifier clients
+## Deduplication
 
-`rudderopenai.ClassifierClient(client openai.Client, model string)` and `rudderanthropic.ClassifierClient(client anthropic.Client, model string)` turn your own client into a `rudderstackai.ClassifierClient` for [`WithClassifier`](configuration.md#classifier-and-evaluator). Their calls are never tracked, also through a client with `WithTracking`. For Gemini or Bedrock, implement `ClassifierClient` yourself.
+The core merges wrapper/span calls with the same provider response ID, or the closest overlapping
+call from the other source with matching provider/model, preserving wrapper usage.
+
+A call reported twice with the same provider and `ResponseID` counts once (a repeated report can add missing `AgentName`, `CallPurpose`, credits, `FallbackUsed` and `BYOK`), so an integration and a manual `RecordCall` of the same response do not double count.
+
+A client with the tracking option applied twice tracks each call once.
 
 ## Manual
+
+Manual `LLMCall` records accept `CallPurpose`, `FallbackUsed`, `BYOK`, `Credits`, `StartedAt`, `EndedAt`, and `FirstTokenAt`. Observed boundaries produce per-call `latency_ms` and streaming `time_to_first_token_ms`; unknown boundaries stay absent.
 
 For any other model client, report calls yourself:
 
@@ -262,6 +272,13 @@ An agent that calls MCP servers can join each `mcp_tool_called` to its answer by
 
 ## Go platform limits
 
+- Endpoint coverage: [How integrations work](#how-integrations-work) and [OpenAI](#openai).
+- Process exit and custom-client flushing: [Flush and shutdown](configuration.md#flush-and-shutdown).
+
+- Bedrock read-ahead: [Amazon Bedrock](#amazon-bedrock).
+- Streams and cancellation: [Streaming and cancellation](#streaming-and-cancellation). Pausing: [Pauses and resumes](configuration.md#pauses-and-resumes). Disconnection: [Middleware](configuration.md#context-values).
+- Retry limits: [Retries](#retries).
+
 Go resolves one package instance for each import path in a build, including when dependencies use vendoring. Import aliases and repeated wrapping share invocation recognition, so they emit one span. Independently renamed forks use different package identities and internal context keys; cross-fork wrapper recognition is a platform limit. Lazy Go iterators retain the explicit context passed by the caller, and resolve active interaction ownership and capture policy when provider work starts.
 
 - Mastra is a TypeScript framework, so this SDK has no Mastra integration; use `@rudderstack/ai` (Node.js).
@@ -271,13 +288,10 @@ Go resolves one package instance for each import path in a build, including when
   into nested calls, goroutines and streams; wait for workers before ending their parents.
   See the [manual agent/tool/stream example](tracing.md#framework-trees-with-manual-spans).
   The optional `rudderotel` module also provides an OpenTelemetry span processor and exporter.
-- With `WithEmitSpans(true)`, retries share one invocation within a one-second grace; a retry after the grace may split. With spans disabled, a connection error outside an interaction is recorded per attempt ([Retries](#retries)).
-- Streams must be read inside the interaction; there is no `bind`. `paused` is set through `Interaction.Pause` or `EndOptions`; `client_disconnected` also by [`Middleware`](configuration.md#context-values).
-- Bedrock stream read-ahead can leave the last one or two decoded events of an early-closed stream uncounted.
-- `Flush` sends analytics-go's queue (v4.5.1, the minimum, has `Flush(ctx)`); a custom client without a flush method is reported as `client_outdated`, so close it before exiting. There is no exit hook: call `Flush` or `Shutdown` yourself. `Shutdown` never closes clients; afterwards, call `CloseClient(ctx, client)` for each client you own.
-- Not tracked: OpenAI background responses that are only queued, embeddings, and every non-generation endpoint.
 
 ## Compatibility
+
+Each library lives in its own package, so a go-sdk server never compiles mcp-go; `ruddermcpgo` builds on the root package and so also compiles the go-sdk.
 
 Each module requires the oldest version it supports; Go may upgrade a dependency below that minimum. CI tests the workspace with the newer versions the examples use. Isolated minimum-version tests run on main, release PRs and manual runs, excluding examples.
 
@@ -293,6 +307,11 @@ Each module requires the oldest version it supports; Go may upgrade a dependency
 
 Every Go module runs the applicable shared fixtures in [`spec/fixtures/`](../spec/fixtures).
 
+- Go has no native tuple or set type; portable tuple/set fixtures use arrays/slices. Foreign
+  runtime exception class fixtures use native Go errors. `MaxTurnsExceededError`,
+  `LengthFinishReasonError` and `ContentFilterFinishReasonError` have no existing Go Agent SDK or
+  response-parser exception equivalent and are skipped by the classification fixture driver.
+- LangChain, OpenAI Agents SDK, Claude Agent SDK and Vercel AI SDK integration fixture cases are explicitly skipped in Go.
 
 The root module holds the interaction API, the `net/http` middleware and MCP support. It depends on analytics-go, the MCP libraries (go-sdk and mcp-go), regexp2 (redaction patterns), google/uuid, and santhosh-tekuri/jsonschema (used only by the SDK's own schema tests, so it is not compiled into your binary). Each provider integration, and the OpenTelemetry helper `rudderotel`, is its own module, so an MCP-only service does not pull provider SDKs.
 

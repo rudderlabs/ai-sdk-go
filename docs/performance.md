@@ -52,15 +52,9 @@ On the laptop, 5,000 interactions per second (about 15,000 events per second) we
 
 ## Limits
 
-| Limit                                                | Default                                                                                                                                          | Set with                                                                            |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| Open interactions                                    | 10,000                                                                                                                                           | `WithLimits(Limits{MaxOpenInteractions: ...})` ([details](configuration.md#limits)) |
-| Interaction lifetime                                 | 1 hour                                                                                                                                           | `InteractionTTL`                                                                    |
-| Model and tool calls kept one by one per interaction | 1,000 each; tool calls still awaiting an outcome may keep up to that many more records, identity only (name, ID, agent, MCP server, parent tool) | `MaxCallsPerInteraction`                                                            |
-| Entries per in-memory map (MCP and integrations) | 10,000; MCP server names and resource templates per server: 1,000 each, fixed | `MaxMapEntries` |
-| Event properties                                     | 30,000 serialized bytes                                                                                                                          | fixed ([details](events.md))                                                        |
+Memory caps and their effects: [configuration](configuration.md#limits). Product-event trimming: [events](events.md#event-size). MCP state caps: [MCP limits](mcp.md#limits). Span budgets: [tracing](tracing.md#privacy-and-size).
 
-What happens at each cap is in [Limits](configuration.md#limits); an event over the size budget shrinks input messages and removes captured text before breakdown entries, removing oversized output before shrinking input ([events](events.md)). Nothing panics into your code. An interaction leaves nothing behind once it ends; MCP keeps a few entries per session or interaction (call positions and argument hashes for `retry_count`), up to `MaxMapEntries` per map.
+An interaction leaves nothing behind once it ends.
 
 ## Fuzz tests
 
