@@ -491,10 +491,10 @@ func (i *Interaction) messageContext() map[string]any {
 
 // snapshotContext is the message context in the JSON form events send it, without the cookie
 // session and the keys the SDK sets itself. It can run app MarshalJSON: never call it under i.mu.
-func (i *Interaction) snapshotContext() map[string]any {
+func (i *Interaction) snapshotContext() (form map[string]any, sessionHidden bool) {
 	msgContext := i.messageContext()
 	if len(msgContext) == 0 {
-		return nil
+		return nil, false
 	}
 	leave := i.enterCallback(false) // a serializer that pauses is refused, as during delivery
 	defer leave()
@@ -507,16 +507,19 @@ func (i *Interaction) snapshotContext() map[string]any {
 		// Values the events drop (and report) are dropped here too.
 		if c, ok := jsonSafe(v); ok {
 			out[k] = c
+		} else if k == "sessionId" {
+			// The app's key hides the cookie session in events; the restore must not bring it back.
+			sessionHidden = true
 		}
 	}
 	if len(out) == 0 {
-		return nil
+		return nil, sessionHidden
 	}
 	// No event can carry a larger one: fitMessage drops it.
 	if b, err := compactJSON(out); err != nil || len(b) >= maxMessageBytes {
-		return nil
+		return nil, sessionHidden
 	}
-	return out
+	return out, sessionHidden
 }
 
 // resumeFrom applies a Resume snapshot's fields to o; false (with a warning) when it is not one.
@@ -663,6 +666,8 @@ type Interaction struct {
 	// says it was. Guarded by mu.
 	pauseContext    map[string]any
 	pauseContextSet bool
+	// pauseSessionHidden: the app's sessionId key hides the cookie session and the form leaves it out.
+	pauseSessionHidden bool
 	// scope is the context values in effect when it started, restored by JoinInteraction.
 	scope *contextValues
 	// resumed: continued from a Resume snapshot.
@@ -2663,7 +2668,7 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	i.pausing = true
 	i.pauseCount++
-	i.pauseContext, i.pauseContextSet = nil, false // this pause takes its own form
+	i.pauseContext, i.pauseContextSet, i.pauseSessionHidden = nil, false, false // this pause takes its own form
 	hooks := i.beforeEnd
 	i.beforeEnd = nil
 	// Move to the paused slot now, so callbacks below never see a free slot.
@@ -2677,9 +2682,9 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		taking := !i.ended && !i.pausedAt.IsZero()
 		i.mu.Unlock()
 		if taking {
-			form := i.snapshotContext()
+			form, hidden := i.snapshotContext()
 			i.mu.Lock()
-			i.pauseContext, i.pauseContextSet = form, true
+			i.pauseContext, i.pauseContextSet, i.pauseSessionHidden = form, true, hidden
 			i.mu.Unlock()
 		}
 		// Includes writes accepted while unlocked delivery was in progress.
@@ -2936,6 +2941,9 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		snapshot.PendingTools = append(snapshot.PendingTools, p)
 	}
 	snapshot.CountedToolIDs = slices.Clone(i.countedToolIDs)
+	if i.pauseSessionHidden {
+		snapshot.SessionID = 0
+	}
 	if i.pauseContextSet && i.pauseContext != nil {
 		snapshot.Context, _ = deepCopyJSON(i.pauseContext).(map[string]any) // never the live form
 	}

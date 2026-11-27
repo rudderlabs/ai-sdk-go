@@ -386,3 +386,32 @@ func TestSDK6945SnapshotContextSizeBound(t *testing.T) {
 		i.End(EndOptions{})
 	}
 }
+
+func TestSDK6945HiddenAppSessionIDStaysHiddenAfterRestore(t *testing.T) {
+	r := setupAI(t)
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Cookies: sdk6945Cookie, IdentityFromCookies: Ptr(true),
+		Context: map[string]any{"sessionId": make(chan int), "k": "v"}})
+	s, ok := i.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("not paused")
+	}
+	if got := sdk6945Context(t, r.named("ai_response_received")[0]); got["sessionId"] != nil {
+		t.Fatalf("in-process sessionId = %v", got["sessionId"])
+	}
+	if written, _ := pauseSegmentsJSON(t, s).(map[string]any); written["session_id"] != nil {
+		t.Fatalf("session_id written = %v", written["session_id"])
+	}
+	stored := sdk6945Stored(t, s, nil)
+	r.reset()
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	restored.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4.1", InputTokens: 1})
+	restored.End(EndOptions{})
+	if len(r.all()) == 0 {
+		t.Fatal("no events")
+	}
+	for _, e := range r.all() {
+		if v, has := sdk6945Context(t, e)["sessionId"]; has {
+			t.Errorf("%s: restored sessionId = %v", e.Event, v)
+		}
+	}
+}
