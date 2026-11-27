@@ -36,12 +36,16 @@ func jsonText(v any) string {
 	return string(raw)
 }
 
-// checkToolOutcome checks lookup_done and the one-call tool_breakdown for a success or a vendor failure.
-func checkToolOutcome(t *testing.T, rec *recorder, failed bool) {
+// checkToolOutcome checks lookup_done and the one-call tool_breakdown for a success or a failure;
+// only a vendor failure sets the declared event's error_type.
+func checkToolOutcome(t *testing.T, rec *recorder, failed, vendor bool) {
 	t.Helper()
 	event, breakdown := map[string]any{"tool_status": "success", "error_type": nil, "tool_call_id": "call-1"}, `[{"call_count":1,"error_count":0,"tool_name":"lookup"}]`
 	if failed {
-		event = map[string]any{"tool_status": "error", "error_type": "api_error", "tool_call_id": "call-1"}
+		event = map[string]any{"tool_status": "error", "error_type": nil, "tool_call_id": "call-1"}
+		if vendor {
+			event["error_type"] = "api_error"
+		}
 		breakdown = `[{"call_count":1,"error_count":1,"error_types":{"api_error":1},"tool_name":"lookup"}]`
 	}
 	want(t, rec.props(t, "lookup_done"), event)
@@ -54,7 +58,8 @@ func checkToolOutcome(t *testing.T, rec *recorder, failed bool) {
 func TestToolOutputFixture(t *testing.T) {
 	for _, c := range testkit.ToolOutputCases() {
 		t.Run(c.Name, func(t *testing.T) {
-			if c.Expected.Error != (c.Expected.ErrorType == "api_error") {
+			vendor := c.Expected.ErrorType == "api_error"
+			if c.Expected.Error != (vendor || c.FrameworkFailure) || (vendor && c.FrameworkFailure) {
 				t.Fatalf("fixture expected %+v", c.Expected)
 			}
 			for _, mode := range []ToolOutput{RawOutput, DecodedOutput} {
@@ -63,16 +68,17 @@ func TestToolOutputFixture(t *testing.T) {
 					// Wrappers that decode for rules classify that decoded value.
 					result = ParseToolValue(c.Output)
 				}
-				if got := ToolOutputFailed(result, mode); got != c.Expected.Error {
+				// The convention reads the output alone; RecordToolOutput keeps a framework failure.
+				if got := ToolOutputFailed(result, mode); !c.FrameworkFailure && got != c.Expected.Error {
 					t.Errorf("mode %d: ToolOutputFailed = %t", mode, got)
 				}
 				rec := newRecorder(t)
 				seen := toolOutputRules(t)
 				_, i := interaction(rec)
 				i.RecordToolCalls(rudderstackai.ToolCall{ID: "call-1", Name: "lookup"})
-				RecordToolOutput(i, "call-1", rudderstackai.ToolResult{Error: rudderstackai.Ptr(false), Result: result}, true, mode)
+				RecordToolOutput(i, "call-1", rudderstackai.ToolResult{Error: rudderstackai.Ptr(c.FrameworkFailure), Result: result}, true, mode)
 				i.End(rudderstackai.EndOptions{})
-				checkToolOutcome(t, rec, c.Expected.Error)
+				checkToolOutcome(t, rec, c.Expected.Error, vendor)
 				// Rules see the wrapper's result as it was, never the convention's own decode.
 				if len(*seen) != 1 || jsonText((*seen)[0]) != jsonText(result) {
 					t.Errorf("mode %d: rule saw %v, want %v", mode, *seen, result)

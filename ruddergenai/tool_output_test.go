@@ -14,13 +14,21 @@ import (
 // Gemini passes a function response's output as it is, so a JSON string is decoded for the check only.
 func TestToolOutputFailureFixture(t *testing.T) {
 	type tc struct {
-		name     string
-		response map[string]any
-		failed   bool
+		name      string
+		response  map[string]any
+		failed    bool
+		errorType any
 	}
-	cases := []tc{{"whole response successful false", map[string]any{"successful": false}, true}}
+	cases := []tc{{"whole response successful false", map[string]any{"successful": false}, true, "api_error"}}
 	for _, c := range testkit.ToolOutputCases() {
-		cases = append(cases, tc{c.Name, map[string]any{"output": c.Output}, c.Expected.Error})
+		key, errorType := "output", any(nil)
+		if c.FrameworkFailure {
+			key = "error" // Google's failure convention
+		}
+		if c.Expected.ErrorType != "" {
+			errorType = c.Expected.ErrorType
+		}
+		cases = append(cases, tc{c.Name, map[string]any{key: c.Output}, c.Expected.Error, errorType})
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -43,7 +51,7 @@ func TestToolOutputFailureFixture(t *testing.T) {
 			}
 			status, errorType, breakdown := "success", any(nil), m{"tool_name": "lookup", "call_count": 1, "error_count": 0}
 			if c.failed {
-				status, errorType = "error", "api_error"
+				status, errorType = "error", c.errorType
 				breakdown = m{"tool_name": "lookup", "call_count": 1, "error_count": 1, "error_types": m{"api_error": 1}}
 			}
 			events := 0
@@ -51,7 +59,11 @@ func TestToolOutputFailureFixture(t *testing.T) {
 				if e.Event == "lookup_done" {
 					events++
 					want(t, e.Properties, "tool_status", status)
-					want(t, e.Properties, "error_type", errorType)
+					if v, ok := e.Properties["error_type"]; errorType == nil && ok {
+						t.Errorf("error_type: want absent, got %v", v)
+					} else if errorType != nil {
+						want(t, e.Properties, "error_type", errorType)
+					}
 					want(t, e.Properties, "tool_call_id", "call-1")
 				}
 			}
@@ -66,8 +78,10 @@ func TestToolOutputFailureFixture(t *testing.T) {
 }
 
 func first(response map[string]any) any {
-	if v, ok := response["output"]; ok {
-		return v
+	for _, key := range []string{"error", "output"} {
+		if v, ok := response[key]; ok {
+			return v
+		}
 	}
 	return response
 }

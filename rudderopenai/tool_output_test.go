@@ -16,6 +16,9 @@ import (
 // Chat and Responses outputs carry no error flag: a vendor failure is an error, anything else unknown.
 func TestToolOutputFailureFixture(t *testing.T) {
 	for _, c := range testkit.ToolOutputCases() {
+		if c.FrameworkFailure {
+			continue // no failure flag to set
+		}
 		for _, api := range []string{"chat", "responses"} {
 			t.Run(api+"/"+c.Name, func(t *testing.T) {
 				var seen []any
