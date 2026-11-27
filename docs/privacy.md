@@ -4,7 +4,7 @@
 
 ### Serializer behavior
 
-Captured content honours `MarshalJSON` and `MarshalText` with `encoding/json` precedence, with spans on or off. Each value is captured once per report; events, spans, sizes and rule-returned properties reuse that output. Sizes count JSON serializer output, including HTML escapes. In-process resume reuses captured content; JSON restore currently drops deferred call-event content. A later report captures the value again. Native raw bytes are stripped. Ordinary serializer text, including base64, follows masking and capture controls.
+Captured content honours `MarshalJSON` and `MarshalText` with `encoding/json` precedence, with spans on or off. Each value is captured once per report; events, spans, sizes and rule-returned properties reuse that output. Sizes count JSON serializer output, including HTML escapes. In-process resume reuses captured content; a JSON snapshot carries the stored, masked content of a call whose event is still pending, and the restored event sends it without capturing or masking it again. A later report captures the value again. Native raw bytes are stripped. Ordinary serializer text, including base64, follows masking and capture controls.
 
 A serializer error, panic, invalid JSON or re-entry produces JSON `null`; its fields are never walked and the event still arrives. Top-level fields that forbid null are omitted. Span context is captured at span start, even with content capture off; admitted manual attributes are captured at End. Disabled content attributes run no serializers. OTel attributes retain byte stripping. See [observed MCP results](mcp.md#observed-result-capture).
 

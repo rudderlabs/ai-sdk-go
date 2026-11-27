@@ -23,6 +23,7 @@ var pendingCallKinds = map[string]string{
 	"latency_ms": "f", "time_to_first_token_ms": "f", "finish_reason": "s", "error_type": "s", "response_id": "s", "service_tier": "s",
 	"server_tool_call_count": "i", "server_tool_cost_usd": "f", "usage_known": "b", "from_span": "b", "matched": "b",
 	"started_at": "f", "ended_at": "f", "last": "b", "last_ok": "b", "history_only": "b", "unpriced": "b", "fees_unknown": "b",
+	"input_truncated": "b", "output_text": "s",
 }
 var pendingToolKinds = map[string]string{
 	"tool_name": "s", "raw_name": "s", "tool_call_id": "s", "agent_name": "s", "agent_key": "s", "mcp_server": "s", "parent_tool": "s",
@@ -107,6 +108,13 @@ func validPendingRecords(records []map[string]any, kinds map[string]string, call
 		if v, exists := p["span_source"]; exists && restoredSpanSource(v) == nil {
 			return false
 		}
+		if calls {
+			for _, key := range []string{"input_messages", "output_tool_calls"} {
+				if v, exists := p[key]; exists && !objectList(v) {
+					return false
+				}
+			}
+		}
 		if v, exists := p["rule_outcome"]; exists {
 			outcome, ok := v.(map[string]any)
 			if !ok {
@@ -129,8 +137,22 @@ func validPendingRecords(records []map[string]any, kinds map[string]string, call
 	return true
 }
 
+// objectList: a JSON array of objects, as stored call content is.
+func objectList(v any) bool {
+	list, ok := v.([]any)
+	if !ok {
+		return false
+	}
+	for _, e := range list {
+		if m, ok := e.(map[string]any); !ok || m == nil {
+			return false
+		}
+	}
+	return true
+}
+
 func validPendingSnapshot(s *PausedInteraction) bool {
-	if s.invalidSnapshot {
+	if s.invalidSnapshot || s.SessionID < 0 || s.SessionID > 9007199254740991 {
 		return false
 	}
 	for _, v := range []*int{s.ReportCount, s.SuccessfulCallSequence, s.PendingCompactions, s.CallSequence} {
@@ -146,10 +168,26 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 	return validPendingRecords(s.PendingCalls, pendingCallKinds, true) && validPendingRecords(s.PendingTools, pendingToolKinds, false)
 }
 
+// jsonNumbers decodes raw keeping numbers as json.Number, so none loses precision; nil when invalid.
+func jsonNumbers(raw []byte) any {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil {
+		return nil
+	}
+	return v
+}
+
 // UnmarshalJSON distinguishes an omitted optional counter from an explicit null.
 func (s *PausedInteraction) UnmarshalJSON(data []byte) error {
 	type snapshot PausedInteraction
-	var decoded snapshot
+	var decoded struct {
+		snapshot
+		// Read below, so a malformed value makes the snapshot unusable instead of failing to decode.
+		Context   json.RawMessage `json:"context"`
+		SessionID json.RawMessage `json:"session_id"`
+	}
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		*s = PausedInteraction{invalidSnapshot: true}
 		return err
@@ -158,7 +196,33 @@ func (s *PausedInteraction) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
-	*s = PausedInteraction(decoded)
+	*s = PausedInteraction(decoded.snapshot)
+	if decoded.Context != nil {
+		if m, ok := jsonNumbers(decoded.Context).(map[string]any); ok {
+			s.Context = m
+		} else {
+			s.invalidSnapshot = true
+		}
+	}
+	if decoded.SessionID != nil {
+		n, _ := jsonNumbers(decoded.SessionID).(json.Number)
+		if f, err := n.Float64(); err == nil && f > 0 && validSnapshotInteger(n) {
+			s.SessionID = int64(f)
+		} else {
+			s.invalidSnapshot = true
+		}
+	}
+	// Stored call content keeps its numbers exact; the other pending fields decode as before.
+	var records []map[string]json.RawMessage
+	if json.Unmarshal(fields["pending_calls"], &records) == nil && len(records) == len(s.PendingCalls) {
+		for n, record := range records {
+			for _, key := range []string{"input_messages", "output_tool_calls"} {
+				if raw, ok := record[key]; ok && s.PendingCalls[n] != nil {
+					s.PendingCalls[n][key] = jsonNumbers(raw)
+				}
+			}
+		}
+	}
 	// A missing or null timing field would decode as zero and count the wait from the Unix epoch.
 	for _, key := range []string{"paused_at", "total_paused_ms"} {
 		if raw := bytes.TrimSpace(fields[key]); len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
