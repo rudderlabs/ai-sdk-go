@@ -1092,6 +1092,11 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 		// every send), never the cookie session, which only helpers' own events add.
 		cv.contextFill, cv.sessionID = i.ctxFill, i.sessionID
 		ctx = context.WithValue(ctx, keyValues, &cv)
+	} else if cv := valuesFrom(ctx); cv != nil && cv.sessionID != 0 {
+		// An enclosing restored run's session is not this run's, for its helpers either.
+		c := *cv
+		c.sessionID = 0
+		ctx = context.WithValue(ctx, keyValues, &c)
 	}
 	completed := false
 	defer func() {
