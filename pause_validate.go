@@ -23,6 +23,7 @@ var pendingCallKinds = map[string]string{
 	"latency_ms": "f", "time_to_first_token_ms": "f", "finish_reason": "s", "error_type": "s", "response_id": "s", "service_tier": "s",
 	"server_tool_call_count": "i", "server_tool_cost_usd": "f", "usage_known": "b", "from_span": "b", "matched": "b",
 	"started_at": "f", "ended_at": "f", "last": "b", "last_ok": "b", "history_only": "b", "unpriced": "b", "fees_unknown": "b",
+	"input_truncated": "b", "output_text": "s",
 }
 var pendingToolKinds = map[string]string{
 	"tool_name": "s", "raw_name": "s", "tool_call_id": "s", "agent_name": "s", "agent_key": "s", "mcp_server": "s", "parent_tool": "s",
@@ -107,6 +108,14 @@ func validPendingRecords(records []map[string]any, kinds map[string]string, call
 		if v, exists := p["span_source"]; exists && restoredSpanSource(v) == nil {
 			return false
 		}
+		if calls {
+			if v, exists := p["input_messages"]; exists && !validInputMessages(v) {
+				return false
+			}
+			if v, exists := p["output_tool_calls"]; exists && !validToolCalls(v) {
+				return false
+			}
+		}
 		if v, exists := p["rule_outcome"]; exists {
 			outcome, ok := v.(map[string]any)
 			if !ok {
@@ -129,8 +138,41 @@ func validPendingRecords(records []map[string]any, kinds map[string]string, call
 	return true
 }
 
+// objectList: a JSON array whose elements are all objects, each passing check.
+func objectList(v any, check func(map[string]any) bool) bool {
+	list, ok := v.([]any)
+	if !ok {
+		return false
+	}
+	for _, e := range list {
+		if m, ok := e.(map[string]any); !ok || m == nil || !check(m) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasString(m map[string]any, key string) bool {
+	_, ok := m[key].(string)
+	return ok
+}
+
+// validInputMessages: stored input messages as the event schema has them, each an object with a
+// string role and an array of parts, each an object with a string type.
+func validInputMessages(v any) bool {
+	return objectList(v, func(m map[string]any) bool {
+		parts, ok := m["parts"]
+		return hasString(m, "role") && ok && objectList(parts, func(part map[string]any) bool { return hasString(part, "type") })
+	})
+}
+
+// validToolCalls: stored output tool calls, each an object with a string name.
+func validToolCalls(v any) bool {
+	return objectList(v, func(m map[string]any) bool { return hasString(m, "name") })
+}
+
 func validPendingSnapshot(s *PausedInteraction) bool {
-	if s.invalidSnapshot {
+	if s.invalidSnapshot || s.SessionID < 0 || s.SessionID > 9007199254740991 {
 		return false
 	}
 	for _, v := range []*int{s.ReportCount, s.SuccessfulCallSequence, s.PendingCompactions, s.CallSequence} {
@@ -146,19 +188,78 @@ func validPendingSnapshot(s *PausedInteraction) bool {
 	return validPendingRecords(s.PendingCalls, pendingCallKinds, true) && validPendingRecords(s.PendingTools, pendingToolKinds, false)
 }
 
+// jsonNumbers decodes raw keeping numbers as json.Number, so none loses precision; nil when invalid.
+func jsonNumbers(raw []byte) any {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if dec.Decode(&v) != nil {
+		return nil
+	}
+	return v
+}
+
 // UnmarshalJSON distinguishes an omitted optional counter from an explicit null.
 func (s *PausedInteraction) UnmarshalJSON(data []byte) error {
 	type snapshot PausedInteraction
-	var decoded snapshot
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		*s = PausedInteraction{invalidSnapshot: true}
-		return err
+	var decoded struct {
+		snapshot
+		// Read below, so a malformed value makes the snapshot unusable instead of failing to decode.
+		Context   json.RawMessage `json:"context"`
+		SessionID json.RawMessage `json:"session_id"`
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
+		*s = PausedInteraction{invalidSnapshot: true}
 		return err
 	}
-	*s = PausedInteraction(decoded)
+	// Stored call content is read losslessly below, so a number float64 can't hold doesn't fail the rest.
+	var records []map[string]json.RawMessage
+	first := data
+	recordsOK := json.Unmarshal(fields["pending_calls"], &records) == nil
+	if recordsOK && hasPendingContent(records) {
+		stripped := make([]map[string]json.RawMessage, len(records))
+		for n, record := range records {
+			if record != nil {
+				stripped[n] = maps.Clone(record)
+				delete(stripped[n], "input_messages")
+				delete(stripped[n], "output_tool_calls")
+			}
+		}
+		rest := maps.Clone(fields)
+		rest["pending_calls"], _ = json.Marshal(stripped)
+		first, _ = json.Marshal(rest)
+	}
+	if err := json.Unmarshal(first, &decoded); err != nil {
+		*s = PausedInteraction{invalidSnapshot: true}
+		return err
+	}
+	*s = PausedInteraction(decoded.snapshot)
+	if decoded.Context != nil {
+		if m, ok := jsonNumbers(decoded.Context).(map[string]any); ok {
+			s.Context = m
+		} else {
+			s.invalidSnapshot = true
+		}
+	}
+	if decoded.SessionID != nil {
+		n, _ := jsonNumbers(decoded.SessionID).(json.Number)
+		if f, err := n.Float64(); err == nil && f > 0 && validSnapshotInteger(n) {
+			s.SessionID = int64(f)
+		} else {
+			s.invalidSnapshot = true
+		}
+	}
+	// Stored call content keeps its numbers exact; the other pending fields decode as before.
+	if recordsOK && len(records) == len(s.PendingCalls) {
+		for n, record := range records {
+			for _, key := range []string{"input_messages", "output_tool_calls"} {
+				if raw, ok := record[key]; ok && s.PendingCalls[n] != nil {
+					s.PendingCalls[n][key] = jsonNumbers(raw)
+				}
+			}
+		}
+	}
 	// A missing or null timing field would decode as zero and count the wait from the Unix epoch.
 	for _, key := range []string{"paused_at", "total_paused_ms"} {
 		if raw := bytes.TrimSpace(fields[key]); len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
@@ -171,4 +272,13 @@ func (s *PausedInteraction) UnmarshalJSON(data []byte) error {
 		}
 	}
 	return nil
+}
+
+func hasPendingContent(records []map[string]json.RawMessage) bool {
+	for _, record := range records {
+		if record["input_messages"] != nil || record["output_tool_calls"] != nil {
+			return true
+		}
+	}
+	return false
 }

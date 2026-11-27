@@ -88,6 +88,15 @@ func fitProperties(event string, properties map[string]any) map[string]any {
 
 // fitPropertiesWithin is fitProperties with a byte budget of its own.
 func fitPropertiesWithin(event string, properties map[string]any, budget int) map[string]any {
+	return fitPropertiesBudget(event, properties, budget, true)
+}
+
+// fitPropertiesQuiet is fitProperties without the once-only warning: for a preview that sends nothing.
+func fitPropertiesQuiet(event string, properties map[string]any) map[string]any {
+	return fitPropertiesBudget(event, properties, maxPropertiesBytes, false)
+}
+
+func fitPropertiesBudget(event string, properties map[string]any, budget int, warn bool) map[string]any {
 	if propertiesBytes(properties) <= budget {
 		return properties
 	}
@@ -97,7 +106,9 @@ func fitPropertiesWithin(event string, properties map[string]any, budget int) ma
 	}
 	fits := func() bool { return propertiesBytes(p) <= budget }
 	trimmed := func() map[string]any {
-		warnOnce("event-too-large", fmt.Sprintf("%s was over %d bytes; trimmed it", event, budget), 0)
+		if warn {
+			warnOnce("event-too-large", fmt.Sprintf("%s was over %d bytes; trimmed it", event, budget), 0)
+		}
 		return p
 	}
 	if input, ok := p["input_messages"].([]any); ok {

@@ -645,3 +645,42 @@ func TestInteractionSavedContextFollowsAJSONRestore(t *testing.T) {
 		}
 	}
 }
+
+// A snapshot without a session restored inside another restored run's scope joins with no session
+// of its own: helpers must not send the enclosing run's.
+func TestSDK6945JoinRestoredWithoutSessionIgnoresEnclosingScopeSession(t *testing.T) {
+	r := setupAI(t)
+	snapshotOf := func(o InteractionOptions) PausedInteraction {
+		_, i := StartInteraction(context.Background(), o)
+		s, ok := i.Pause(PauseOptions{})
+		if !ok {
+			t.Fatal("pause failed")
+		}
+		var stored PausedInteraction
+		if err := json.Unmarshal([]byte(mustJSON(s)), &stored); err != nil {
+			t.Fatal(err)
+		}
+		return stored
+	}
+	outer := snapshotOf(InteractionOptions{UserID: "u", Classify: Ptr(false), Context: map[string]any{"app": "outer"}, CookieValues: map[string]string{"rl_session": `{"id":1700000000000}`}})
+	inner := snapshotOf(InteractionOptions{UserID: "u", Classify: Ptr(false)})
+	if inner.SessionID != 0 {
+		t.Fatalf("inner snapshot has session %v", inner.SessionID)
+	}
+	err := RunInteraction(context.Background(), InteractionOptions{Resume: &outer}, func(ctx context.Context, _ *Interaction) error {
+		_, restored := StartInteraction(ctx, InteractionOptions{Resume: &inner, Classify: Ptr(false)})
+		from := len(r.all())
+		joined := JoinInteraction(ctx, restored.ID(), JoinOptions{})
+		TrackAction(joined, TrackActionOptions{ActionType: ActionAccepted, InteractionID: restored.ID()})
+		for _, e := range r.all()[from:] {
+			if got := e.Context.Extra["sessionId"]; got != nil {
+				t.Errorf("%s carries the enclosing run's session %v", e.Event, got)
+			}
+		}
+		restored.End(EndOptions{})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

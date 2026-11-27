@@ -106,7 +106,7 @@ func RunTask(ctx context.Context, taskName string, o TaskOptions, fn func(contex
 	// A task acts as the system: identity and conversation come only from its own options.
 	if cv := valuesFrom(ctx); cv != nil {
 		c := *cv
-		c.userID, c.anonymousID, c.conversationID, c.cookies = "", "", "", nil
+		c.userID, c.anonymousID, c.conversationID, c.cookies, c.sessionID = "", "", "", nil, 0
 		c.disconnected = nil // a task outlives the request that started it
 		ctx = context.WithValue(ctx, keyValues, &c)
 	}

@@ -214,7 +214,7 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time, captured
 		s.TraceID = i.sdkTraceID
 		s.userID, s.anonymousID, s.interactionID, s.conversationID = i.userID, i.anonymousID, i.id, i.conversationID
 		s.client, s.capture, s.llmCalls = i.analytics(), i.capture.Spans, i.capture.LLMCalls
-		msgContext = i.msgContext
+		msgContext = i.messageContext()
 		i.mu.Unlock()
 	} else {
 		cv := valuesFrom(ctx)
@@ -222,7 +222,7 @@ func newSDKSpan(ctx context.Context, i *Interaction, started time.Time, captured
 		s.userID, s.anonymousID = id.userID, id.anonymousID
 		if cv != nil {
 			s.conversationID = cv.conversationID
-			msgContext = withSessionID(cv.context, id.sessionID)
+			msgContext = withSessionID(cv.appContext(), id.sessionID)
 			if cv.analytics != nil {
 				s.client = cv.analytics
 			}
@@ -275,7 +275,7 @@ func otelReplacementSpan(ctx context.Context, i *Interaction, started time.Time,
 	i.mu.Lock()
 	s.userID, s.anonymousID, s.interactionID, s.conversationID = i.userID, i.anonymousID, i.id, i.conversationID
 	s.client, s.capture, s.llmCalls = i.analytics(), i.capture.Spans, i.capture.LLMCalls
-	msgContext := i.msgContext
+	msgContext := i.messageContext()
 	i.mu.Unlock()
 
 	// An SDK span that cannot be sent under the IDs it would take never replaces the OTel span:

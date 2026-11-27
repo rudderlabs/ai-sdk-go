@@ -1797,6 +1797,512 @@
             "total_input_tokens": 0
           }
         }
+      },
+      {
+        "name": "context-not-object",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "context": [
+            "a"
+          ],
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "context-null",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "context": null,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "session_id-not-integer",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "session_id": "1760342400123",
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "session_id-zero",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "session_id": 0,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "session_id-fraction",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "session_id": 1.5,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "session_id-unsafe",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "session_id": 9007199254740992,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-output_text-not-string",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "output_text": 5
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-output_text-null",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "output_text": null
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-input_truncated-not-boolean",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "input_truncated": "yes"
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-input_messages-not-array",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "input_messages": {
+                "role": "user",
+                "parts": []
+              }
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-input_messages-non-object",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "input_messages": [
+                "hi"
+              ]
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-output_tool_calls-not-array",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "output_tool_calls": "lookup"
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-output_tool_calls-non-object",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "output_tool_calls": [
+                1
+              ]
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-input_messages-no-role",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "input_messages": [
+                {
+                  "parts": []
+                }
+              ]
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-input_messages-part-no-type",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "input_messages": [
+                {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "content": "hi"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
+      },
+      {
+        "name": "pending-output_tool_calls-no-name",
+        "snapshot": {
+          "interaction_id": "malformed-pending",
+          "conversation_id": "pending-conversation",
+          "user_id": "u",
+          "trigger": "user",
+          "pause_count": 1,
+          "total_paused_ms": 0,
+          "paused_at": 1794862440158,
+          "pending_calls": [
+            {
+              "provider": "openai",
+              "model": "example-model",
+              "call_count": 1,
+              "input_tokens": 3,
+              "call_event_pending": true,
+              "output_tool_calls": [
+                {
+                  "arguments": {}
+                }
+              ]
+            }
+          ]
+        },
+        "expected": {
+          "kept_id": false,
+          "response": {
+            "llm_call_count": 0,
+            "tool_call_count": 0,
+            "total_input_tokens": 0
+          }
+        }
       }
     ],
     "roundtrip": {
