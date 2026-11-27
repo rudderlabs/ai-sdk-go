@@ -5,6 +5,7 @@ package rudderstackai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -23,6 +24,13 @@ type pauseSegmentsStep struct {
 	FallbackUsed         *bool               `json:"fallback_used"`
 	PendingCallOverrides map[string]any      `json:"pending_call_overrides"`
 	PendingCallOmit      []string            `json:"pending_call_omit"`
+	SnapshotMatch        map[string]any      `json:"snapshot_match"`
+	PendingCallMatch     map[string]any      `json:"pending_call_match"`
+	SnapshotOmit         []string            `json:"snapshot_omit"`
+	ResumeContext        map[string]any      `json:"resume_context"`
+	ResumeCaptureContent *bool               `json:"resume_capture_content"`
+	InputMessages        []GenAIMessage      `json:"input_messages"`
+	OutputToolCalls      []GenAIToolCall     `json:"output_tool_calls"`
 	ErrorType            string              `json:"error_type"`
 	CallPurpose          string              `json:"call_purpose"`
 	Credits              *float64            `json:"credits"`
@@ -106,6 +114,22 @@ func pauseSegmentsJSON(t *testing.T, v any) any {
 	return out
 }
 
+// pauseSegmentsMatch checks each wanted key against got, a JSON form; null means the key is absent.
+func pauseSegmentsMatch(t *testing.T, what string, got any, want map[string]any) {
+	t.Helper()
+	m, _ := got.(map[string]any)
+	for k, v := range want {
+		value, present := m[k]
+		if v == nil {
+			if present {
+				t.Errorf("%s %s = %v, want absent", what, k, value)
+			}
+		} else if !present || !reflect.DeepEqual(value, v) {
+			t.Errorf("%s %s = %v, want %v", what, k, value, v)
+		}
+	}
+}
+
 func TestPauseSegmentsFixture(t *testing.T) {
 	raw, err := os.ReadFile("spec/fixtures/pause-segments-v0.1.json")
 	if err != nil {
@@ -128,16 +152,21 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				EventRules     *struct {
 					Tools map[string]string `json:"tools"`
 				} `json:"event_rules"`
-				PricingWaitMS int `json:"pricing_wait_ms"`
+				PricingWaitMS int            `json:"pricing_wait_ms"`
+				Context       map[string]any `json:"context"`
+				Cookies       string         `json:"cookies"`
 			} `json:"config"`
 			Steps    []pauseSegmentsStep `json:"steps"`
 			Expected struct {
-				Segments     []map[string]any `json:"segments"`
-				Errors       []string         `json:"errors"`
-				ErrorReasons []string         `json:"error_reasons"`
-				CallCredits  []*float64       `json:"call_credits"`
-				CallEvents   []float64        `json:"call_events"`
-				ToolEvents   []map[string]any `json:"tool_events"`
+				Segments            []map[string]any `json:"segments"`
+				Errors              []string         `json:"errors"`
+				ErrorReasons        []string         `json:"error_reasons"`
+				CallCredits         []*float64       `json:"call_credits"`
+				CallEvents          []float64        `json:"call_events"`
+				ToolEvents          []map[string]any `json:"tool_events"`
+				SegmentContexts     []map[string]any `json:"segment_contexts"`
+				CallEventContexts   []map[string]any `json:"call_event_contexts"`
+				CallEventProperties []map[string]any `json:"call_event_properties"`
 			} `json:"expected"`
 		} `json:"cases"`
 	}
@@ -198,12 +227,16 @@ func TestPauseSegmentsFixture(t *testing.T) {
 			}))
 			r := setupAI(t, opts...)
 			client := &pauseSegmentsClient{recorder: r}
-			_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u", Analytics: client})
+			start := InteractionOptions{UserID: "u", Analytics: client, Context: tc.Config.Context}
+			if tc.Config.Cookies != "" {
+				start.Cookies, start.IdentityFromCookies = tc.Config.Cookies, Ptr(true)
+			}
+			_, i := StartInteraction(context.Background(), start)
 			run = func(steps []pauseSegmentsStep) {
 				for _, step := range steps {
 					switch step.Op {
 					case "record_call":
-						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: derefInt(step.InputTokens), OutputText: step.OutputText, ResponseID: step.ResponseID, BYOK: step.BYOK, ErrorType: step.ErrorType, CallPurpose: step.CallPurpose, Credits: step.Credits, AgentName: step.AgentName, FallbackUsed: step.FallbackUsed}
+						call := LLMCall{Provider: step.Provider, Model: step.Model, Integration: "openai", InputTokens: derefInt(step.InputTokens), OutputText: step.OutputText, ResponseID: step.ResponseID, BYOK: step.BYOK, ErrorType: step.ErrorType, CallPurpose: step.CallPurpose, Credits: step.Credits, AgentName: step.AgentName, FallbackUsed: step.FallbackUsed, InputMessages: step.InputMessages, OutputToolCalls: step.OutputToolCalls}
 						if step.Source == "span" {
 							call.Integration = "tracing"
 						}
@@ -260,6 +293,15 @@ func TestPauseSegmentsFixture(t *testing.T) {
 							if err := json.Unmarshal([]byte(mustJSON(snapshot)), &stored); err != nil {
 								t.Fatal(err)
 							}
+							if step.SnapshotMatch != nil {
+								pauseSegmentsMatch(t, "snapshot", pauseSegmentsJSON(t, stored), step.SnapshotMatch)
+							}
+							if step.PendingCallMatch != nil {
+								if len(stored.PendingCalls) != 1 {
+									t.Fatal("expected one pending call")
+								}
+								pauseSegmentsMatch(t, "pending call", pauseSegmentsJSON(t, stored.PendingCalls[0]), step.PendingCallMatch)
+							}
 							if step.PendingCallOverrides != nil || step.PendingCallOmit != nil {
 								if len(stored.PendingCalls) != 1 {
 									t.Fatal("expected one pending call")
@@ -271,7 +313,20 @@ func TestPauseSegmentsFixture(t *testing.T) {
 									delete(stored.PendingCalls[0], key)
 								}
 							}
-							_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored, Analytics: client})
+							if step.SnapshotOmit != nil {
+								fields := map[string]json.RawMessage{}
+								if err := json.Unmarshal([]byte(mustJSON(stored)), &fields); err != nil {
+									t.Fatal(err)
+								}
+								for _, key := range step.SnapshotOmit {
+									delete(fields, key)
+								}
+								stored = PausedInteraction{}
+								if err := json.Unmarshal([]byte(mustJSON(fields)), &stored); err != nil {
+									t.Fatal(err)
+								}
+							}
+							_, i = StartInteraction(context.Background(), InteractionOptions{Resume: &stored, Analytics: client, Context: step.ResumeContext, CaptureContent: step.ResumeCaptureContent})
 						}
 					case "resume":
 						i.Resume()
@@ -301,11 +356,30 @@ func TestPauseSegmentsFixture(t *testing.T) {
 				}
 			}
 			calls := []float64{}
-			for _, e := range r.named("ai_llm_response_received") {
+			callEvents := r.named("ai_llm_response_received")
+			for _, e := range callEvents {
 				calls = append(calls, pauseSegmentsJSON(t, e.Properties["input_tokens"]).(float64))
 			}
 			if !reflect.DeepEqual(calls, tc.Expected.CallEvents) {
 				t.Errorf("call event input_tokens = %v, want %v", calls, tc.Expected.CallEvents)
+			}
+			for _, check := range []struct {
+				name   string
+				events []analytics.Track
+				want   []map[string]any
+				of     func(analytics.Track) any
+			}{
+				{"segment context", segments, tc.Expected.SegmentContexts, func(e analytics.Track) any { return e.Context.Extra }},
+				{"call event context", callEvents, tc.Expected.CallEventContexts, func(e analytics.Track) any { return e.Context.Extra }},
+				{"call event", callEvents, tc.Expected.CallEventProperties, func(e analytics.Track) any { return e.Properties }},
+			} {
+				for n, want := range check.want {
+					if n >= len(check.events) {
+						t.Errorf("%s %d missing", check.name, n)
+						continue
+					}
+					pauseSegmentsMatch(t, fmt.Sprintf("%s %d", check.name, n), pauseSegmentsJSON(t, check.of(check.events[n])), want)
+				}
 			}
 			if !reflect.DeepEqual(errors, append([]string{}, tc.Expected.Errors...)) {
 				t.Errorf("errors = %v, want %v", errors, tc.Expected.Errors)

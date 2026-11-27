@@ -379,7 +379,9 @@ Steps: `record_call` (`provider`, `model`, `input_tokens`?, `started_ms`?, `ende
 
 `pause-segments-v0.1.json` cases may include `sdks`, an array of applicable drivers (`node`, `python`, `go`); omitted means all SDKs. A `pause` step with `refused: true` asserts the not-paused return and unchanged pause state; optional `reason` names the expected refusal. JSON restoration is attempted only after an accepted pause. `expected.errors` lists error kinds and `expected.error_reasons` lists their corresponding reasons. Existing callback-pricing cases now assert refusal while keeping the final credits and call count.
 
-A JSON `pause` step may include `pending_call_overrides` (fields to replace in its single pending call after the JSON round trip) and `pending_call_omit` (keys to remove before restoration). Drivers assert exactly one pending call before applying either. These fields exercise stored snapshots that ordinary recording does not produce, including retained credits with `credits_explicit: false` and legacy calls without that marker. A cancelled repeat that adds metadata retains credits only when explicit; a legacy pending call with credits and no marker restores those credits as explicit. A failed repeat without new metadata ignores late credits and preserves its retained amount. `record_call` steps also accept `agent_name` and `fallback_used` for metadata enrichment.
+A JSON `pause` step may include `pending_call_overrides` (fields to replace in its single pending call after the JSON round trip) and `pending_call_omit` (keys to remove before restoration). Drivers assert exactly one pending call before applying either.
+
+Message context and pending content (SDK-6945, SDK-7019): `config.context` is the interaction's message context option, and `config.cookies` a raw `Cookie` header passed to the interaction with identity from cookies on. `record_call` also accepts `input_messages` and `output_tool_calls`, reported with the call like `output_text`. After the JSON round trip, and before any override or omission, a JSON `pause` step checks `snapshot_match` against the snapshot and `pending_call_match` against its single pending call (asserting exactly one): each key must deep-equal the snapshot's, `null` meaning the key is absent. `snapshot_omit` lists top-level keys to remove before restoration. `resume_context` is passed as the restoring interaction's context, and `resume_capture_content` as its content capture setting. `expected.segment_contexts` lines up with `expected.segments`, and `expected.call_event_contexts` with `expected.call_events`: each entry lists keys of that event's message context with their values, `null` meaning the key is absent. `expected.call_event_properties` lines up with `expected.call_events` in the same way, for call-event properties. These fields exercise stored snapshots that ordinary recording does not produce, including retained credits with `credits_explicit: false` and legacy calls without that marker. A cancelled repeat that adds metadata retains credits only when explicit; a legacy pending call with credits and no marker restores those credits as explicit. A failed repeat without new metadata ignores late credits and preserves its retained amount. `record_call` steps also accept `agent_name` and `fallback_used` for metadata enrichment.
 
 For Python/Go, `config.pricing_wait_ms` shortens the private 5 s test seam. The `pricing_wait` operation starts a `record_call` (its `provider`, `model`, `input_tokens`) on another thread/goroutine, parks its credits hook, calls pause until the bound expires, asserts refusal and no pause, then releases pricing and joins the worker. Its late credits must reach the still-open segment. This case declares `sdks: ["python", "go"]`; Node cannot have synchronous pricing in flight on another caller.
 
@@ -443,7 +445,8 @@ a scenario or comparing outputs.
 For `report_sinks`, optional `setup.sinks_by_sdk: { <sdk>: [<sink>, ...] }`
 replaces `setup.sinks` for that SDK. Check only those named sinks in
 `expect.decoded`; every other expectation still applies. Node and Python omit
-pause snapshot content and manual span events, and direct tool reports create
+pause snapshot content (other than the stored content of a call whose event is
+still pending) and manual span events, and direct tool reports create
 no tool spans. Their drivers must assert that Pause runs no serializer; resume
 before checking an event for a tool the pause waits on. Go keeps its existing
 snapshot, tool span and span event checks.
@@ -572,8 +575,9 @@ app serializer objects; hand-built tracing reports exercise the report path,
 not a claim that native OTel setters admit arbitrary objects.
 
 Pause/JSON restore reuses detached data that base already persists, including
-pending tool rule output. It does not add provider per-call content to snapshots:
-that content remains omitted as in the existing pause contract. In-process
+pending tool rule output. Snapshots carry provider per-call content only for a
+call whose event is still pending, as the stored, already serialized copy
+([Paused runs](../PAUSE-RESUME.md)); restoring it invokes no serializer. In-process
 pause retains detached content; JSON restore tests compare persisted pending
 tool values and already emitted content, with zero new serializer invocations.
 

@@ -26001,6 +26001,856 @@
           "limit_reached"
         ]
       }
+    },
+    {
+      "name": "message context in process",
+      "description": "The interaction context and the cookie session reach every event of both segments when the run resumes in process.",
+      "config": {
+        "emit_llm_calls": true,
+        "context": {
+          "app_key": "a"
+        },
+        "cookies": "rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsInNlc3Npb25TdGFydCI6dHJ1ZX0%3D"
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "started_ms": 300,
+          "ended_ms": 310
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 20
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [],
+        "segment_contexts": [
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          },
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          }
+        ],
+        "call_event_contexts": [
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          },
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "message context across JSON restore",
+      "description": "The snapshot carries the app context and the cookie session, so the restored segment sends the same message context as an in-process resume.",
+      "config": {
+        "emit_llm_calls": true,
+        "context": {
+          "app_key": "a"
+        },
+        "cookies": "rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsInNlc3Npb25TdGFydCI6dHJ1ZX0%3D"
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "snapshot_match": {
+            "context": {
+              "app_key": "a"
+            },
+            "session_id": 1760342400123
+          }
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "started_ms": 300,
+          "ended_ms": 310
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 20
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [],
+        "segment_contexts": [
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          },
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          }
+        ],
+        "call_event_contexts": [
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          },
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "message context across JSON restore of a snapshot without it",
+      "description": "A snapshot written before these keys restores as before: the restoring call sets no context and cookies are ignored, so the restored segment has neither.",
+      "config": {
+        "emit_llm_calls": true,
+        "context": {
+          "app_key": "a"
+        },
+        "cookies": "rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsInNlc3Npb25TdGFydCI6dHJ1ZX0%3D"
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "snapshot_omit": [
+            "context",
+            "session_id"
+          ]
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "started_ms": 300,
+          "ended_ms": 310
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 20
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [],
+        "segment_contexts": [
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          },
+          {
+            "sessionId": null,
+            "app_key": null
+          }
+        ],
+        "call_event_contexts": [
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a"
+          },
+          {
+            "sessionId": null,
+            "app_key": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "app-set sessionId across JSON restore",
+      "description": "An app-set context sessionId wins over the cookie session in both segments; the snapshot keeps the two apart.",
+      "config": {
+        "emit_llm_calls": true,
+        "context": {
+          "sessionId": 42,
+          "app_key": "a"
+        },
+        "cookies": "rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsInNlc3Npb25TdGFydCI6dHJ1ZX0%3D"
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "snapshot_match": {
+            "context": {
+              "sessionId": 42,
+              "app_key": "a"
+            },
+            "session_id": 1760342400123
+          }
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "started_ms": 300,
+          "ended_ms": 310
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 20
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [],
+        "segment_contexts": [
+          {
+            "sessionId": 42,
+            "app_key": "a"
+          },
+          {
+            "sessionId": 42,
+            "app_key": "a"
+          }
+        ],
+        "call_event_contexts": [
+          {
+            "sessionId": 42,
+            "app_key": "a"
+          },
+          {
+            "sessionId": 42,
+            "app_key": "a"
+          }
+        ]
+      }
+    },
+    {
+      "name": "restoring context wins over the snapshot context",
+      "description": "Keys the restoring call sets, sessionId included, win over the snapshot; the snapshot fills only the keys it does not set.",
+      "config": {
+        "emit_llm_calls": true,
+        "context": {
+          "app_key": "a",
+          "page": "p1"
+        },
+        "cookies": "rl_session=RS_ENC_v3_eyJpZCI6MTc2MDM0MjQwMDEyMywiZXhwaXJlc0F0Ijo0MTAyNDQ0ODAwMDAwLCJ0aW1lb3V0IjoxODAwMDAwLCJhdXRvVHJhY2siOnRydWUsInNlc3Npb25TdGFydCI6dHJ1ZX0%3D"
+      },
+      "steps": [
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 10,
+          "started_ms": 100,
+          "ended_ms": 110
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "resume_context": {
+            "app_key": "b",
+            "request_key": "r",
+            "sessionId": 7
+          }
+        },
+        {
+          "op": "record_call",
+          "provider": "openai",
+          "model": "gpt-4.1",
+          "input_tokens": 20,
+          "started_ms": 300,
+          "ended_ms": 310
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 20
+          }
+        ],
+        "call_events": [
+          10,
+          20
+        ],
+        "tool_events": [],
+        "segment_contexts": [
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a",
+            "page": "p1",
+            "request_key": null
+          },
+          {
+            "sessionId": 7,
+            "app_key": "b",
+            "page": "p1",
+            "request_key": "r"
+          }
+        ],
+        "call_event_contexts": [
+          {
+            "sessionId": 1760342400123,
+            "app_key": "a",
+            "page": "p1",
+            "request_key": null
+          },
+          {
+            "sessionId": 7,
+            "app_key": "b",
+            "page": "p1",
+            "request_key": "r"
+          }
+        ]
+      }
+    },
+    {
+      "name": "pending call content in process",
+      "description": "Delivery of the paused response records a span whose call event waits for its twin. Resumed in process, the call event sends its captured, masked content.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "input_messages": [
+                {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "type": "text",
+                      "content": "Reach me at jane@example.com"
+                    }
+                  ]
+                }
+              ],
+              "output_text": "Sent to jane@example.com.",
+              "output_tool_calls": [
+                {
+                  "name": "lookup",
+                  "arguments": {
+                    "order": "A1"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "pause"
+        },
+        {
+          "op": "resume"
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "tool_events": [],
+        "call_event_properties": [
+          {
+            "input_messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "type": "text",
+                    "content": "Reach me at [email]"
+                  }
+                ]
+              }
+            ],
+            "output_text": "Sent to [email].",
+            "output_tool_calls": [
+              {
+                "name": "lookup",
+                "arguments": {
+                  "order": "A1"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "pending call content across JSON restore",
+      "description": "The pending call record carries the captured content as stored, already masked, and the restored call event sends it as an in-process resume does.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "input_messages": [
+                {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "type": "text",
+                      "content": "Reach me at jane@example.com"
+                    }
+                  ]
+                }
+              ],
+              "output_text": "Sent to jane@example.com.",
+              "output_tool_calls": [
+                {
+                  "name": "lookup",
+                  "arguments": {
+                    "order": "A1"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_match": {
+            "call_event_pending": true,
+            "input_messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "type": "text",
+                    "content": "Reach me at [email]"
+                  }
+                ]
+              }
+            ],
+            "output_text": "Sent to [email].",
+            "output_tool_calls": [
+              {
+                "name": "lookup",
+                "arguments": {
+                  "order": "A1"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "tool_events": [],
+        "call_event_properties": [
+          {
+            "input_messages": [
+              {
+                "role": "user",
+                "parts": [
+                  {
+                    "type": "text",
+                    "content": "Reach me at [email]"
+                  }
+                ]
+              }
+            ],
+            "output_text": "Sent to [email].",
+            "output_tool_calls": [
+              {
+                "name": "lookup",
+                "arguments": {
+                  "order": "A1"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "pending call content across JSON restore of a snapshot without it",
+      "description": "A pending call record written before these keys restores as before: the call event is sent without content.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "input_messages": [
+                {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "type": "text",
+                      "content": "Reach me at jane@example.com"
+                    }
+                  ]
+                }
+              ],
+              "output_text": "Sent to jane@example.com.",
+              "output_tool_calls": [
+                {
+                  "name": "lookup",
+                  "arguments": {
+                    "order": "A1"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_omit": [
+            "input_messages",
+            "output_text",
+            "output_tool_calls"
+          ]
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "tool_events": [],
+        "call_event_properties": [
+          {
+            "input_messages": null,
+            "output_text": null,
+            "output_tool_calls": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "pending call without content capture across JSON restore",
+      "description": "With content capture off nothing is captured, so the snapshot holds no content and the call event sends none.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": false
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "input_messages": [
+                {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "type": "text",
+                      "content": "Reach me at jane@example.com"
+                    }
+                  ]
+                }
+              ],
+              "output_text": "Sent to jane@example.com.",
+              "output_tool_calls": [
+                {
+                  "name": "lookup",
+                  "arguments": {
+                    "order": "A1"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_match": {
+            "call_event_pending": true,
+            "input_messages": null,
+            "output_text": null,
+            "output_tool_calls": null
+          }
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "tool_events": [],
+        "call_event_properties": [
+          {
+            "input_messages": null,
+            "output_text": null,
+            "output_tool_calls": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "pending call content across JSON restore with capture off in the restoring interaction",
+      "description": "Content in the snapshot is sent only when the restoring interaction captures call content.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "input_messages": [
+                {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "type": "text",
+                      "content": "Reach me at jane@example.com"
+                    }
+                  ]
+                }
+              ],
+              "output_text": "Sent to jane@example.com.",
+              "output_tool_calls": [
+                {
+                  "name": "lookup",
+                  "arguments": {
+                    "order": "A1"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "resume_capture_content": false
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "tool_events": [],
+        "call_event_properties": [
+          {
+            "input_messages": null,
+            "output_text": null,
+            "output_tool_calls": null
+          }
+        ]
+      }
     }
   ]
 }
