@@ -460,3 +460,34 @@ func TestSDK6945NestedRunResolvesItsOwnSessionAfterRestore(t *testing.T) {
 		return nil
 	})
 }
+
+func TestSDK6945PendingContentKeepsHugeNumbers(t *testing.T) {
+	r := setupAI(t, WithLLMCallEvents(true), WithCaptureContent(true))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	sdk6945DuringDelivery(r, func() {
+		i.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "tracing", InputTokens: 10,
+			StartedAt: time.UnixMilli(100), EndedAt: time.UnixMilli(110), InputMessages: sdk6945Message("hi")})
+	})
+	s, ok := i.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("not paused")
+	}
+	var m map[string]any
+	dec := json.NewDecoder(strings.NewReader(mustJSON(s)))
+	dec.UseNumber()
+	if err := dec.Decode(&m); err != nil {
+		t.Fatal(err)
+	}
+	call := m["pending_calls"].([]any)[0].(map[string]any)
+	call["input_messages"].([]any)[0].(map[string]any)["parts"].([]any)[0].(map[string]any)["n"] = json.Number("1e400")
+	var stored PausedInteraction
+	if err := json.Unmarshal([]byte(mustJSON(m)), &stored); err != nil {
+		t.Fatalf("restore a snapshot with 1e400 in pending content: %v", err)
+	}
+	r.reset()
+	_, restored := StartInteraction(context.Background(), InteractionOptions{Resume: &stored})
+	restored.End(EndOptions{})
+	if got := mustJSON(r.props(t, "ai_llm_response_received")["input_messages"]); !strings.Contains(got, `"n":1e400`) {
+		t.Fatalf("restored input_messages = %s", got)
+	}
+}

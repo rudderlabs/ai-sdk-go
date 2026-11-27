@@ -208,12 +208,30 @@ func (s *PausedInteraction) UnmarshalJSON(data []byte) error {
 		Context   json.RawMessage `json:"context"`
 		SessionID json.RawMessage `json:"session_id"`
 	}
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
 		*s = PausedInteraction{invalidSnapshot: true}
 		return err
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
+	// Stored call content is read losslessly below, so a number float64 can't hold doesn't fail the rest.
+	var records []map[string]json.RawMessage
+	first := data
+	recordsOK := json.Unmarshal(fields["pending_calls"], &records) == nil
+	if recordsOK && hasPendingContent(records) {
+		stripped := make([]map[string]json.RawMessage, len(records))
+		for n, record := range records {
+			if record != nil {
+				stripped[n] = maps.Clone(record)
+				delete(stripped[n], "input_messages")
+				delete(stripped[n], "output_tool_calls")
+			}
+		}
+		rest := maps.Clone(fields)
+		rest["pending_calls"], _ = json.Marshal(stripped)
+		first, _ = json.Marshal(rest)
+	}
+	if err := json.Unmarshal(first, &decoded); err != nil {
+		*s = PausedInteraction{invalidSnapshot: true}
 		return err
 	}
 	*s = PausedInteraction(decoded.snapshot)
@@ -233,8 +251,7 @@ func (s *PausedInteraction) UnmarshalJSON(data []byte) error {
 		}
 	}
 	// Stored call content keeps its numbers exact; the other pending fields decode as before.
-	var records []map[string]json.RawMessage
-	if json.Unmarshal(fields["pending_calls"], &records) == nil && len(records) == len(s.PendingCalls) {
+	if recordsOK && len(records) == len(s.PendingCalls) {
 		for n, record := range records {
 			for _, key := range []string{"input_messages", "output_tool_calls"} {
 				if raw, ok := record[key]; ok && s.PendingCalls[n] != nil {
@@ -255,4 +272,13 @@ func (s *PausedInteraction) UnmarshalJSON(data []byte) error {
 		}
 	}
 	return nil
+}
+
+func hasPendingContent(records []map[string]json.RawMessage) bool {
+	for _, record := range records {
+		if record["input_messages"] != nil || record["output_tool_calls"] != nil {
+			return true
+		}
+	}
+	return false
 }
