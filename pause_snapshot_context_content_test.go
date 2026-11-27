@@ -491,3 +491,28 @@ func TestSDK6945PendingContentKeepsHugeNumbers(t *testing.T) {
 		t.Fatalf("restored input_messages = %s", got)
 	}
 }
+
+func TestSDK6945SnapshotStaysReadableByPlainDecoders(t *testing.T) {
+	r := setupAI(t, WithLLMCallEvents(true), WithCaptureContent(true))
+	_, i := StartInteraction(context.Background(), InteractionOptions{UserID: "u"})
+	huge := []GenAIMessage{{Role: "user", Parts: []GenAIPart{{"type": "text", "content": "hi", "n": json.Number("1e400")}}}}
+	sdk6945DuringDelivery(r, func() {
+		i.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4.1", Integration: "tracing", InputTokens: 10,
+			StartedAt: time.UnixMilli(100), EndedAt: time.UnixMilli(110), InputMessages: huge, OutputText: "ok"})
+	})
+	s, ok := i.Pause(PauseOptions{})
+	if !ok {
+		t.Fatal("not paused")
+	}
+	// v0.15.0 decodes pending calls into []map[string]any, every number as float64.
+	var old struct {
+		PendingCalls []map[string]any `json:"pending_calls"`
+	}
+	if err := json.Unmarshal([]byte(mustJSON(s)), &old); err != nil {
+		t.Fatalf("a plain decoder can't read the snapshot: %v", err)
+	}
+	record := sdk6945PendingCall(t, s)
+	if _, has := record["input_messages"]; has || record["output_text"] != "ok" {
+		t.Fatalf("pending call = %v, want output_text only", record)
+	}
+}

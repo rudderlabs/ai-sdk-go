@@ -3079,12 +3079,31 @@ func (i *Interaction) pendingCallLocked(c *recordedCall) map[string]any {
 		}
 	}
 	fitted := fitPropertiesQuiet("ai_llm_response_received", props)
+	// Older readers decode every number as float64 and fail the whole snapshot on one it can't hold.
+	for _, key := range []string{"input_messages", "output_tool_calls"} {
+		if v, ok := fitted[key]; ok && !float64Readable(v) {
+			delete(fitted, key)
+			if key == "input_messages" {
+				delete(fitted, "input_truncated")
+			}
+		}
+	}
 	for _, key := range []string{"input_messages", "input_truncated", "output_text", "output_tool_calls"} {
 		if v, ok := fitted[key]; ok {
 			p[key] = deepCopyJSON(v)
 		}
 	}
 	return p
+}
+
+// float64Readable reports whether v's JSON decodes with plain encoding/json.
+func float64Readable(v any) bool {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return false
+	}
+	var decoded any
+	return json.Unmarshal(b, &decoded) == nil
 }
 
 // restoredContent is a pending call's stored content, copied; nil when it has none.
