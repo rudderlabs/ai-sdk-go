@@ -59,7 +59,11 @@ func TestToolOutputFailureFixture(t *testing.T) {
 				if e.Event == "lookup_done" {
 					events++
 					want(t, e.Properties, "tool_status", status)
-					want(t, e.Properties, "error_type", errorType)
+					if v, ok := e.Properties["error_type"]; errorType == nil && ok {
+						t.Errorf("error_type: want absent, got %v", v)
+					} else if errorType != nil {
+						want(t, e.Properties, "error_type", errorType)
+					}
 					want(t, e.Properties, "tool_call_id", "call-1")
 				}
 			}
