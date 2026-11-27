@@ -95,14 +95,14 @@ var open = struct {
 	nextOrder uint64
 	// retired is each ID's latest retirement, oldest first, up to MaxMapEntries; retiredFloor is
 	// the newest one dropped for the cap, so a lookup past the cap fails closed.
-	retired           map[string]*list.Element
-	retiredOrder      *list.List
+	retired           map[string]*retirement
+	retiredOrder      *retirement // Circular FIFO; nodes are reused when the map is full.
 	retiredFloor      uint64
 	retirementEvicted bool
 	lastSweep         time.Time
 }{list: list.New(), paused: map[weak.Pointer[Interaction]]pausedSlot{}, restored: map[weak.Pointer[Interaction]]restoredOriginal{},
 	refused: map[weak.Pointer[Interaction]]string{}, ending: map[weak.Pointer[Interaction]]string{},
-	retired: map[string]*list.Element{}, retiredOrder: list.New()}
+	retired: map[string]*retirement{}}
 
 // restoredOriginal is a held original's ID and the run it continues in. The continuation does not
 // retain the original.
@@ -112,8 +112,31 @@ type restoredOriginal struct {
 }
 
 type retirement struct {
-	id  string
-	seq uint64
+	id         string
+	seq        uint64
+	prev, next *retirement
+}
+
+// removeRetirementLocked unlinks a node so it can be moved or reused without allocating.
+func removeRetirementLocked(r *retirement) {
+	if r.next == r {
+		open.retiredOrder = nil
+	} else {
+		r.prev.next = r.next
+		r.next.prev = r.prev
+		if open.retiredOrder == r {
+			open.retiredOrder = r.next
+		}
+	}
+}
+
+func evictRetirementLocked() *retirement {
+	r := open.retiredOrder
+	removeRetirementLocked(r)
+	delete(open.retired, r.id)
+	open.retiredFloor = max(open.retiredFloor, r.seq)
+	open.retirementEvicted = true
+	return r
 }
 
 // forgetRestoredLocked drops a held original that ended or was collected. That retires its ID
@@ -142,15 +165,27 @@ func registeredLocked(i *Interaction) bool {
 // retireLocked records that a run with this ID ended or was collected.
 func retireLocked(id string) {
 	open.nextOrder++
-	if e, ok := open.retired[id]; ok {
-		open.retiredOrder.Remove(e)
+	limit := max(cfg().limits.MaxMapEntries, 1)
+	r := open.retired[id]
+	if r != nil {
+		removeRetirementLocked(r)
+	} else if len(open.retired) >= limit {
+		r = evictRetirementLocked()
+	} else {
+		r = &retirement{}
 	}
-	open.retired[id] = open.retiredOrder.PushBack(retirement{id, open.nextOrder})
-	for open.retiredOrder.Len() > max(cfg().limits.MaxMapEntries, 1) {
-		oldest := open.retiredOrder.Remove(open.retiredOrder.Front()).(retirement)
-		delete(open.retired, oldest.id)
-		open.retiredFloor = max(open.retiredFloor, oldest.seq)
-		open.retirementEvicted = true
+	r.id, r.seq = id, open.nextOrder
+	if first := open.retiredOrder; first != nil {
+		r.prev, r.next = first.prev, first
+		first.prev.next = r
+		first.prev = r
+	} else {
+		r.prev, r.next = r, r
+		open.retiredOrder = r
+	}
+	open.retired[id] = r
+	for len(open.retired) > limit {
+		evictRetirementLocked()
 	}
 }
 
@@ -168,8 +203,8 @@ func unlockOpen() {
 // retiredSinceLocked reports whether a run with this ID may have retired after seq.
 func retiredSinceLocked(id string, seq uint64) bool {
 	last := open.retiredFloor
-	if e, ok := open.retired[id]; ok {
-		last = e.Value.(retirement).seq
+	if r, ok := open.retired[id]; ok {
+		last = r.seq
 	}
 	return last > seq
 }
@@ -215,12 +250,15 @@ func unregister(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	ref := weak.Make(i)
-	delete(open.paused, ref)
-	delete(open.ending, ref)
-	if found, retires := forgetRestoredLocked(ref); !found || retires {
-		retireLocked(i.id)
+	if len(open.paused)+len(open.ending)+len(open.restored) != 0 {
+		ref := weak.Make(i)
+		delete(open.paused, ref)
+		delete(open.ending, ref)
+		if found, retires := forgetRestoredLocked(ref); found && !retires {
+			return
+		}
 	}
+	retireLocked(i.id)
 }
 
 // holdPausedSlot keeps a paused run counted toward MaxOpenInteractions, off the TTL list. The
@@ -316,10 +354,12 @@ func takePausedSlot(i *Interaction) bool {
 	open.mu.Lock()
 	defer open.mu.Unlock()
 	var match weak.Pointer[Interaction]
+	var original *Interaction
 	var matchedSlot pausedSlot
 	found := false
 	for ref, slot := range open.paused {
-		if ref.Value() == nil || i.pauseToken == "" || slot.token != i.pauseToken || slot.id != i.id || slot.conversationID != i.conversationID ||
+		candidate := ref.Value()
+		if candidate == nil || i.pauseToken == "" || slot.token != i.pauseToken || slot.id != i.id || slot.conversationID != i.conversationID ||
 			slot.userID != i.userID || slot.anonymousID != i.anonymousID {
 			continue
 		}
@@ -327,17 +367,16 @@ func takePausedSlot(i *Interaction) bool {
 			return false
 		}
 		match, matchedSlot, found = ref, slot, true
+		original = candidate
 	}
 	if !found {
 		return false
 	}
 	delete(open.paused, match)
-	original := match.Value()
 	original.continueAs(i)
-	if original != nil {
-		// The original stays visible to product span lookup as this run: not a retirement.
-		open.restored[match] = restoredOriginal{matchedSlot.id, original.cont.Load()}
-	}
+	// The original stays visible to product span lookup as this run: not a retirement.
+	open.restored[match] = restoredOriginal{matchedSlot.id, original.cont.Load()}
+	runtime.KeepAlive(original)
 	i.ownerOrder = matchedSlot.order
 	i.opened = time.Now()
 	i.elem = open.list.PushBack(i)
@@ -497,8 +536,8 @@ func resetOpenForTest() {
 	open.restored = map[weak.Pointer[Interaction]]restoredOriginal{}
 	open.refused = map[weak.Pointer[Interaction]]string{}
 	open.ending = map[weak.Pointer[Interaction]]string{}
-	open.retired = map[string]*list.Element{}
-	open.retiredOrder = list.New()
+	open.retired = map[string]*retirement{}
+	open.retiredOrder = nil
 	open.retiredFloor = 0
 	open.retirementEvicted = false
 	open.lastSweep = time.Time{}
