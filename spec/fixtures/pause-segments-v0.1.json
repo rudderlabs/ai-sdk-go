@@ -26851,6 +26851,95 @@
           }
         ]
       }
+    },
+    {
+      "name": "pending call truncation flag without messages across JSON restore",
+      "description": "input_truncated describes input_messages: a record with the flag and no messages restores without either.",
+      "config": {
+        "emit_llm_calls": true,
+        "capture_content": true
+      },
+      "steps": [
+        {
+          "op": "on_event",
+          "event": "ai_response_received",
+          "steps": [
+            {
+              "op": "record_call",
+              "source": "span",
+              "provider": "openai",
+              "model": "gpt-4.1",
+              "input_tokens": 10,
+              "started_ms": 100,
+              "ended_ms": 110,
+              "input_messages": [
+                {
+                  "role": "user",
+                  "parts": [
+                    {
+                      "type": "text",
+                      "content": "Reach me at jane@example.com"
+                    }
+                  ]
+                }
+              ],
+              "output_text": "Sent to jane@example.com.",
+              "output_tool_calls": [
+                {
+                  "name": "lookup",
+                  "arguments": {
+                    "order": "A1"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "pause",
+          "json": true,
+          "pending_call_overrides": {
+            "input_truncated": true
+          },
+          "pending_call_omit": [
+            "input_messages"
+          ]
+        },
+        {
+          "op": "end"
+        }
+      ],
+      "expected": {
+        "segments": [
+          {
+            "response_status": "paused",
+            "llm_call_count": 0
+          },
+          {
+            "llm_call_count": 1,
+            "total_input_tokens": 10
+          }
+        ],
+        "call_events": [
+          10
+        ],
+        "tool_events": [],
+        "call_event_properties": [
+          {
+            "input_messages": null,
+            "input_truncated": null,
+            "output_text": "Sent to [email].",
+            "output_tool_calls": [
+              {
+                "name": "lookup",
+                "arguments": {
+                  "order": "A1"
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

@@ -175,7 +175,7 @@ func sendStandalone(cv *contextValues, event, userID, anonymousID string, client
 		client = c.analytics
 	}
 	if msgContext == nil {
-		msgContext = cv.context
+		msgContext = cv.appContext()
 	}
 	emitAI(client, event, id.userID, id.anonymousID, props, withSessionID(msgContext, id.sessionID), IntegrationManual, time.Now())
 }

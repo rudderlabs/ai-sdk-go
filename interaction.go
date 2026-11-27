@@ -448,33 +448,58 @@ type PausedInteraction struct {
 }
 
 // sdkContextKeys are message context keys the SDK sets itself: never written to a snapshot or
-// restored from one.
-var sdkContextKeys = []string{"library", "wrapperLibrary"}
+// restored from one. An outer layer's wrapperLibrary is app data and stays: emit nests it inside
+// this SDK's own.
+var sdkContextKeys = []string{"library"}
 
-// restoredContext is the restoring call's context over the snapshot's, which fills only the keys
-// it does not set and never the SDK's own.
-func restoredContext(own, saved map[string]any) map[string]any {
-	out := maps.Clone(saved)
+// restoredFill is the snapshot's message context as the restored interaction keeps it: a deep copy
+// without the SDK's own keys, nil when nothing is left. It fills only the keys the restoring
+// call's context does not set, at every send.
+func restoredFill(saved map[string]any) map[string]any {
+	if len(saved) == 0 {
+		return nil
+	}
+	out, _ := deepCopyJSON(saved).(map[string]any)
 	for _, key := range sdkContextKeys {
 		delete(out, key)
 	}
 	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// fillContext is own over fill: own wins per key, fill only fills gaps. Own itself when there is no fill.
+func fillContext(own, fill map[string]any) map[string]any {
+	if len(fill) == 0 {
 		return own
 	}
+	out := make(map[string]any, len(own)+len(fill))
+	maps.Copy(out, fill)
 	maps.Copy(out, own)
 	return out
+}
+
+// messageContext is the message context events send: the restoring call's live context over the
+// snapshot's, then the session. Without a snapshot context it is the one built at start.
+func (i *Interaction) messageContext() map[string]any {
+	if len(i.ctxFill) == 0 {
+		return i.msgContext
+	}
+	return withSessionID(fillContext(i.ctxOwn, i.ctxFill), i.sessionID)
 }
 
 // snapshotContext is the message context in the JSON form events send it, without the cookie
 // session and the keys the SDK sets itself. It can run app MarshalJSON: never call it under i.mu.
 func (i *Interaction) snapshotContext() map[string]any {
-	if len(i.msgContext) == 0 {
+	msgContext := i.messageContext()
+	if len(msgContext) == 0 {
 		return nil
 	}
 	leave := i.enterCallback(false) // a serializer that pauses is refused, as during delivery
 	defer leave()
 	out := map[string]any{}
-	for k, v := range i.msgContext {
+	for k, v := range msgContext {
 		// withSessionID added the cookie session, which the snapshot keeps as session_id.
 		if slices.Contains(sdkContextKeys, k) || (k == "sessionId" && i.sessionID != 0 && v == any(i.sessionID)) {
 			continue
@@ -630,7 +655,14 @@ type Interaction struct {
 	capture           capture.Resolved
 	explicitAnalytics analytics.Client
 	msgContext        map[string]any
-	sessionID         int64
+	// ctxOwn is the restoring call's context (or the enclosing one), live; ctxFill the snapshot's
+	// own copy, which fills only its gaps. Both nil unless the snapshot carried a context.
+	ctxOwn, ctxFill map[string]any
+	sessionID       int64
+	// pauseContext is the snapshot context taken when the current pause started; pauseContextSet
+	// says it was. Guarded by mu.
+	pauseContext    map[string]any
+	pauseContextSet bool
 	// scope is the context values in effect when it started, restored by JoinInteraction.
 	scope *contextValues
 	// resumed: continued from a Resume snapshot.
@@ -859,11 +891,15 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 	}
 	msgContext := o.Context
 	if msgContext == nil {
-		msgContext = cv.context
+		msgContext = cv.appContext()
 	}
+	var ctxOwn, ctxFill map[string]any
 	if resumed {
-		msgContext = restoredContext(msgContext, snapshot.Context)
 		id.sessionID = snapshot.SessionID
+		if ctxFill = restoredFill(snapshot.Context); ctxFill != nil {
+			ctxOwn = msgContext
+			msgContext = fillContext(ctxOwn, ctxFill)
+		}
 	}
 	analyticsClient := o.Analytics
 	if analyticsClient == nil {
@@ -902,6 +938,8 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 		explicitAnalytics: analyticsClient,
 		adapterAnalytics:  o.adapterAnalytics,
 		msgContext:        withSessionID(msgContext, id.sessionID),
+		ctxOwn:            ctxOwn,
+		ctxFill:           ctxFill,
 		started:           started,
 		intent:            o.Intent,
 		traceID:           o.TraceID,
@@ -1044,7 +1082,9 @@ func RunInteraction(ctx context.Context, o InteractionOptions, fn func(context.C
 		cv.agentVersion, cv.variant = i.agentVersion, i.variant
 		cv.cookies, cv.disconnected = nil, nil
 		cv.identityFromCookies = Ptr(false)
-		cv.context = i.msgContext // helpers send the restored context and session, as in process
+		// What an in-process run's scope holds: the app context (the snapshot's filling its gaps at
+		// every send), never the cookie session, which only helpers' own events add.
+		cv.contextFill, cv.sessionID = i.ctxFill, i.sessionID
 		ctx = context.WithValue(ctx, keyValues, &cv)
 	}
 	completed := false
@@ -2436,10 +2476,10 @@ func (i *Interaction) unlockSpan(sendSpan func()) {
 			leave := i.enterCallback(false)
 			defer leave()
 			if e.pinned {
-				emitAIRates(e.client, e.event, i.userID, i.anonymousID, e.props, i.msgContext, e.integration, e.at, e.rates)
+				emitAIRates(e.client, e.event, i.userID, i.anonymousID, e.props, i.messageContext(), e.integration, e.at, e.rates)
 				return
 			}
-			emitAI(e.client, e.event, i.userID, i.anonymousID, e.props, i.msgContext, e.integration, e.at)
+			emitAI(e.client, e.event, i.userID, i.anonymousID, e.props, i.messageContext(), e.integration, e.at)
 		}()
 	}
 	if capped {
@@ -2588,12 +2628,6 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 		return PausedInteraction{}, false
 	}
 	defer i.releasePause()
-	msgContext := i.snapshotContext() // before the lock: it can run app MarshalJSON
-	defer func() {
-		if ok {
-			snapshot.Context = msgContext
-		}
-	}()
 	// Recheck under the state lock so a new pricing reservation cannot slip between
 	// condition settlement and segment closure. All waits share the original deadline.
 	for {
@@ -2629,12 +2663,25 @@ func (i *Interaction) pause(o PauseOptions) (snapshot PausedInteraction, ok bool
 	}
 	i.pausing = true
 	i.pauseCount++
+	i.pauseContext, i.pauseContextSet = nil, false // this pause takes its own form
 	hooks := i.beforeEnd
 	i.beforeEnd = nil
 	// Move to the paused slot now, so callbacks below never see a free slot.
 	holdPausedSlot(i)
 	i.mu.Unlock()
 	defer func() {
+		// The snapshot's context, taken as the paused response's was: after the totals, outside
+		// the lock (it can run app MarshalJSON), inside the callback guard. Repeated snapshots of
+		// this pause reuse it.
+		i.mu.Lock()
+		taking := !i.ended && !i.pausedAt.IsZero()
+		i.mu.Unlock()
+		if taking {
+			form := i.snapshotContext()
+			i.mu.Lock()
+			i.pauseContext, i.pauseContextSet = form, true
+			i.mu.Unlock()
+		}
 		// Includes writes accepted while unlocked delivery was in progress.
 		i.preparePendingRules(false, func() {
 			i.completeSpanAncestryLocked()
@@ -2851,7 +2898,7 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 	})
 	calls := append(slices.Clone(i.calls), i.overflow...)
 	for _, c := range calls {
-		p := pendingCall(c)
+		p := i.pendingCallLocked(c)
 		if c == i.lastCall {
 			p["last"] = true
 		}
@@ -2865,14 +2912,14 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		key string
 	}{{i.lastCall, "last"}, {i.lastOK, "last_ok"}} {
 		if role.c != nil && !slices.Contains(calls, role.c) {
-			p := pendingCall(role.c)
+			p := i.pendingCallLocked(role.c)
 			p["history_only"], p[role.key] = true, true
 			snapshot.PendingCalls = append(snapshot.PendingCalls, p)
 		}
 	}
 	// A folded group's unsent call event: it restores as that event and adds no totals.
 	for _, c := range i.pendingOverflowCalls {
-		p := pendingCall(c)
+		p := i.pendingCallLocked(c)
 		p["history_only"] = true
 		snapshot.PendingCalls = append(snapshot.PendingCalls, p)
 	}
@@ -2889,6 +2936,9 @@ func (i *Interaction) snapshotLocked() (PausedInteraction, bool) {
 		snapshot.PendingTools = append(snapshot.PendingTools, p)
 	}
 	snapshot.CountedToolIDs = slices.Clone(i.countedToolIDs)
+	if i.pauseContextSet && i.pauseContext != nil {
+		snapshot.Context, _ = deepCopyJSON(i.pauseContext).(map[string]any) // never the live form
+	}
 	return snapshot, true
 }
 
@@ -2989,35 +3039,46 @@ func pendingCall(c *recordedCall) map[string]any {
 	if c.serverToolCostUSD != nil && !c.feesUnknown {
 		p["server_tool_cost_usd"] = *c.serverToolCostUSD
 	}
-	// The masked copy its event sends, so a restored event sends the same; plain values only, so
-	// jsonSafe runs no app code here and drops what the event would drop.
-	if content := c.content; content != nil && c.callEventPending {
-		if content.inputMessages != nil {
-			if v, ok := jsonSafe(content.inputMessages); ok {
-				p["input_messages"] = v
-				if content.inputTruncated {
-					p["input_truncated"] = true
+	return p
+}
+
+// pendingCallLocked is the call's snapshot record. A call whose event is still pending also holds
+// the content that event sends at this pause: built as callEventLocked builds it and fitted as
+// emit fits it, with no side effect (nothing sent, no warning, no state touched), and copied.
+func (i *Interaction) pendingCallLocked(c *recordedCall) map[string]any {
+	p := pendingCall(c)
+	if c.content == nil || !c.callEventPending {
+		return p
+	}
+	props := i.callEventLocked(c)
+	for _, key := range []string{"input_messages", "output_tool_calls"} {
+		if v, ok := props[key]; ok {
+			// Plain values only, so no app code runs here; what the event drops is dropped here too.
+			if safe, ok := jsonSafe(v); ok {
+				props[key] = safe
+			} else {
+				delete(props, key)
+				if key == "input_messages" {
+					delete(props, "input_truncated")
 				}
 			}
 		}
-		if content.hasOutputText {
-			p["output_text"] = content.outputText
-		}
-		if content.outputToolCalls != nil {
-			if v, ok := jsonSafe(content.outputToolCalls); ok {
-				p["output_tool_calls"] = v
-			}
+	}
+	fitted := fitPropertiesQuiet("ai_llm_response_received", props)
+	for _, key := range []string{"input_messages", "input_truncated", "output_text", "output_tool_calls"} {
+		if v, ok := fitted[key]; ok {
+			p[key] = deepCopyJSON(v)
 		}
 	}
 	return p
 }
 
-// restoredContent is a pending call's stored content; nil when it has none.
+// restoredContent is a pending call's stored content, copied; nil when it has none.
 func restoredContent(p map[string]any) *callContent {
 	content := &callContent{inputTruncated: pendingBool(p, "input_truncated")}
-	content.inputMessages, _ = p["input_messages"].([]any)
+	content.inputMessages, _ = deepCopyJSON(p["input_messages"]).([]any)
 	content.outputText, content.hasOutputText = p["output_text"].(string)
-	content.outputToolCalls, _ = p["output_tool_calls"].([]any)
+	content.outputToolCalls, _ = deepCopyJSON(p["output_tool_calls"]).([]any)
 	if content.inputMessages == nil && !content.hasOutputText && content.outputToolCalls == nil {
 		return nil
 	}

@@ -101,7 +101,12 @@ func (i *Interaction) joinScope() (*contextValues, bool) {
 	cv.feature, cv.surface = i.feature, i.surface
 	cv.accountID, cv.onBehalfOf = i.accountID, i.onBehalfOf
 	cv.agentVersion, cv.variant = i.agentVersion, i.variant
-	cv.context = i.msgContext
+	if len(i.ctxFill) > 0 {
+		// The restoring context stays live; the snapshot's fills its gaps at every send.
+		cv.context, cv.contextFill, cv.sessionID = i.ctxOwn, i.ctxFill, i.sessionID
+	} else {
+		cv.context, cv.contextFill = i.msgContext, nil
+	}
 	// Nil falls back to the global client when an event is sent, as the interaction's own do.
 	cv.analytics = i.explicitAnalytics
 	if cv.analytics == nil {

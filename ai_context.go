@@ -44,8 +44,13 @@ type contextValues struct {
 	surface                                                             Surface
 	analytics                                                           analytics.Client
 	context                                                             map[string]any
-	cookies                                                             map[string]string
-	identityFromCookies                                                 *bool
+	// contextFill and sessionID are a restored run's: the snapshot's message context, which fills
+	// only the keys context does not set (at every send), and its cookie session, which only
+	// events sent from this scope add.
+	contextFill         map[string]any
+	sessionID           int64
+	cookies             map[string]string
+	identityFromCookies *bool
 	// disconnected reports whether the client of the request went away ([Middleware]).
 	disconnected func() bool
 }
@@ -57,6 +62,15 @@ const (
 	keyInteraction
 	keyUntracked
 )
+
+// appContext is the app message context of this scope: context, with a restored snapshot's
+// filling its gaps; context itself without one.
+func (cv *contextValues) appContext() map[string]any {
+	if cv == nil {
+		return nil
+	}
+	return fillContext(cv.context, cv.contextFill)
+}
 
 func valuesFrom(ctx context.Context) *contextValues {
 	if ctx == nil {
@@ -98,7 +112,7 @@ func WithValues(ctx context.Context, v ContextValues) context.Context {
 		merged.analytics = v.Analytics
 	}
 	if v.Context != nil {
-		merged.context = v.Context
+		merged.context, merged.contextFill = v.Context, nil // a new context replaces the enclosing one
 	}
 	if cookies != nil {
 		merged.cookies = cookies

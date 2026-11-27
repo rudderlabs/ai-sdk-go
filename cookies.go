@@ -178,6 +178,9 @@ func resolveIdentity(in identityInputs, cv *contextValues, c config) resolvedIde
 		}
 	}
 	out := resolvedIdentity{userID: userID, anonymousID: anonymousID, sessionID: cookie.sessionID}
+	if cv != nil && out.sessionID == 0 {
+		out.sessionID = cv.sessionID // a restored run's, whose cookies are not read again
+	}
 	if out.userID == "" && anonymousID == "" {
 		out.userID = cookie.userID
 	}

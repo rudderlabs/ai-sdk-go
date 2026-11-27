@@ -90,8 +90,9 @@ func TestSDK6945SnapshotContextLeavesOutSDKKeys(t *testing.T) {
 		t.Fatal("not paused")
 	}
 	written, _ := pauseSegmentsJSON(t, s).(map[string]any)
-	if got := mustJSON(written["context"]); got != `{"app_key":"a"}` {
-		t.Fatalf("snapshot context = %s, want only the app's own keys", got)
+	// Only library is the SDK's; an outer layer's wrapperLibrary is app data.
+	if got := mustJSON(written["context"]); got != `{"app_key":"a","wrapperLibrary":{"name":"outer"}}` {
+		t.Fatalf("snapshot context = %s, want the app's keys without library", got)
 	}
 	// A snapshot from an older SDK version may hold its library and wrapperLibrary.
 	stored := sdk6945Stored(t, s, func(m map[string]any) {
@@ -116,8 +117,9 @@ func TestSDK6945SnapshotContextLeavesOutSDKKeys(t *testing.T) {
 			t.Errorf("%s: library restored from the snapshot", e.Event)
 		}
 		wrapper, _ := e.Context.Extra["wrapperLibrary"].(map[string]any)
-		if wrapper["name"] != LibraryName || wrapper["wrapperLibrary"] != nil {
-			t.Errorf("%s: wrapperLibrary = %v, want only this SDK's", e.Event, wrapper)
+		// The snapshot's old wrapperLibrary is the app's outer one: nested inside this SDK's.
+		if outer, _ := wrapper["wrapperLibrary"].(map[string]any); wrapper["name"] != LibraryName || outer["name"] != "old-sdk" {
+			t.Errorf("%s: wrapperLibrary = %v, want this SDK's around the snapshot's", e.Event, wrapper)
 		}
 		if e.Context.Extra["app_key"] != "a" {
 			t.Errorf("%s: app_key = %v, want a", e.Event, e.Context.Extra["app_key"])

@@ -109,10 +109,11 @@ func validPendingRecords(records []map[string]any, kinds map[string]string, call
 			return false
 		}
 		if calls {
-			for _, key := range []string{"input_messages", "output_tool_calls"} {
-				if v, exists := p[key]; exists && !objectList(v) {
-					return false
-				}
+			if v, exists := p["input_messages"]; exists && !validInputMessages(v) {
+				return false
+			}
+			if v, exists := p["output_tool_calls"]; exists && !validToolCalls(v) {
+				return false
 			}
 		}
 		if v, exists := p["rule_outcome"]; exists {
@@ -137,18 +138,37 @@ func validPendingRecords(records []map[string]any, kinds map[string]string, call
 	return true
 }
 
-// objectList: a JSON array of objects, as stored call content is.
-func objectList(v any) bool {
+// objectList: a JSON array whose elements are all objects, each passing check.
+func objectList(v any, check func(map[string]any) bool) bool {
 	list, ok := v.([]any)
 	if !ok {
 		return false
 	}
 	for _, e := range list {
-		if m, ok := e.(map[string]any); !ok || m == nil {
+		if m, ok := e.(map[string]any); !ok || m == nil || !check(m) {
 			return false
 		}
 	}
 	return true
+}
+
+func hasString(m map[string]any, key string) bool {
+	_, ok := m[key].(string)
+	return ok
+}
+
+// validInputMessages: stored input messages as the event schema has them, each an object with a
+// string role and an array of parts, each an object with a string type.
+func validInputMessages(v any) bool {
+	return objectList(v, func(m map[string]any) bool {
+		parts, ok := m["parts"]
+		return hasString(m, "role") && ok && objectList(parts, func(part map[string]any) bool { return hasString(part, "type") })
+	})
+}
+
+// validToolCalls: stored output tool calls, each an object with a string name.
+func validToolCalls(v any) bool {
+	return objectList(v, func(m map[string]any) bool { return hasString(m, "name") })
 }
 
 func validPendingSnapshot(s *PausedInteraction) bool {
