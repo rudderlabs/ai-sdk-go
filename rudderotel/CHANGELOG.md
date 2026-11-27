@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderotel/v0.5.0...rudderotel/v0.6.0) (2026-11-27)
+
+
+### Features
+
+* add JoinInteraction for work that loses the SDK's context ([#98](https://github.com/rudderlabs/ai-sdk-go/issues/98)) ([b3daf39](https://github.com/rudderlabs/ai-sdk-go/commit/b3daf392e4d6cf0e310ed67319324748b841a838))
+
+
+### Bug Fixes
+
+* count tool outputs with successful false as failed calls [SDK-6934] ([#110](https://github.com/rudderlabs/ai-sdk-go/issues/110)) ([272b550](https://github.com/rudderlabs/ai-sdk-go/commit/272b55064b6c4504c0f37212c77e7d1049b79d06))
+* **tracing:** drop a detached span whose owner is ambiguous [SDK-7017] ([#128](https://github.com/rudderlabs/ai-sdk-go/issues/128)) ([c5451cd](https://github.com/rudderlabs/ai-sdk-go/commit/c5451cd471d14611c58188a5f64b892eea21e257))
+
+
+### Miscellaneous
+
+* **deps:** bump golang.org/x/text from 0.42.0 to 0.44.0 in the gomod-non-major group across 1 directory ([#126](https://github.com/rudderlabs/ai-sdk-go/issues/126)) ([a87341c](https://github.com/rudderlabs/ai-sdk-go/commit/a87341c08745e1550838cb6af341be59ed37ab7d))
+* **emit:** pin that a full delivery queue blocks rather than drops [SDK-7215] ([#120](https://github.com/rudderlabs/ai-sdk-go/issues/120)) ([6b3ba59](https://github.com/rudderlabs/ai-sdk-go/commit/6b3ba592791b2183b569970bdb966b1c316dfc86))
+* remove unused code and simplify docs [SDK-7231] ([#114](https://github.com/rudderlabs/ai-sdk-go/issues/114)) ([f3864d5](https://github.com/rudderlabs/ai-sdk-go/commit/f3864d5b205640236615fd36b646debe4843493a))
+
 ## [0.5.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderotel/v0.4.0...rudderotel/v0.5.0) (2026-11-18)
 
 

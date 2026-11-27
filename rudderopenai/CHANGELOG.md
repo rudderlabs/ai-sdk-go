@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.1](https://github.com/rudderlabs/ai-sdk-go/compare/rudderopenai/v0.6.0...rudderopenai/v0.6.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* count tool outputs with successful false as failed calls [SDK-6934] ([#110](https://github.com/rudderlabs/ai-sdk-go/issues/110)) ([272b550](https://github.com/rudderlabs/ai-sdk-go/commit/272b55064b6c4504c0f37212c77e7d1049b79d06))
+* **genai:** never bill the tracing twin of a cancelled stream [SDK-7211] ([#123](https://github.com/rudderlabs/ai-sdk-go/issues/123)) ([52c7cd1](https://github.com/rudderlabs/ai-sdk-go/commit/52c7cd158724e6a1c1676aa0dc13b95c27508fa5))
+* **masking:** match values split by format characters or written in fullwidth forms [SDK-7219] ([#115](https://github.com/rudderlabs/ai-sdk-go/issues/115)) ([77550c1](https://github.com/rudderlabs/ai-sdk-go/commit/77550c1e38138d1aa56bc2aec457c2c6b70d9498))
+
+
+### Miscellaneous
+
+* **deps:** bump golang.org/x/text from 0.42.0 to 0.44.0 in the gomod-non-major group across 1 directory ([#126](https://github.com/rudderlabs/ai-sdk-go/issues/126)) ([a87341c](https://github.com/rudderlabs/ai-sdk-go/commit/a87341c08745e1550838cb6af341be59ed37ab7d))
+* remove unused code and simplify docs [SDK-7231] ([#114](https://github.com/rudderlabs/ai-sdk-go/issues/114)) ([f3864d5](https://github.com/rudderlabs/ai-sdk-go/commit/f3864d5b205640236615fd36b646debe4843493a))
+* **spec:** add the is_error with successful: false fixture case [SDK-7225] ([#127](https://github.com/rudderlabs/ai-sdk-go/issues/127)) ([0aebc25](https://github.com/rudderlabs/ai-sdk-go/commit/0aebc2507d6ffceeb9e4ea0c72bf56ba802bcd92))
+
 ## [0.6.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderopenai/v0.5.1...rudderopenai/v0.6.0) (2026-11-18)
 
 
