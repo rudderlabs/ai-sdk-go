@@ -1,6 +1,6 @@
 package rudderstackai
 
-// SDK-6945, SDK-7019 round 1: SDK keys, fitted content, content shape, resumed scope, copies on
+// SDK-6945, SDK-7019: SDK keys, fitted content, content shape, resumed scope, copies on
 // restore, the serializer at pause, the live restoring context.
 
 import (
