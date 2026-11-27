@@ -7,11 +7,12 @@ import (
 )
 
 // ToolOutputCase is one case of spec/fixtures/tool-output-failure-v0.1.json. A JSON string
-// output stays a string.
+// output stays a string. FrameworkFailure: the adapter's own failure flag is set, with no category.
 type ToolOutputCase struct {
-	Name     string `json:"name"`
-	Output   any    `json:"output"`
-	Expected struct {
+	Name             string `json:"name"`
+	FrameworkFailure bool   `json:"framework_failure"`
+	Output           any    `json:"output"`
+	Expected         struct {
 		Error     bool   `json:"error"`
 		ErrorType string `json:"error_type"`
 	} `json:"expected"`

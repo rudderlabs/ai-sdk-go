@@ -141,6 +141,25 @@
       "expected": {
         "error": false
       }
+    },
+    {
+      "name": "framework failure with successful false",
+      "framework_failure": true,
+      "output": {
+        "successful": false,
+        "error": "backend down"
+      },
+      "expected": {
+        "error": true
+      }
+    },
+    {
+      "name": "framework failure with JSON string successful false",
+      "framework_failure": true,
+      "output": "{\"successful\":false,\"error\":\"backend down\"}",
+      "expected": {
+        "error": true
+      }
     }
   ]
 }
