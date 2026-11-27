@@ -679,3 +679,41 @@ func TestLivePausedRunKeepsCountingAmongCollectedOnes(t *testing.T) {
 	}
 	runtime.KeepAlive(live)
 }
+
+func TestSDK7017RetirementMapEvictionReportsLimit(t *testing.T) {
+	seen := &seenErrors{}
+	callback := false
+	setupAI(t, WithLimits(Limits{MaxMapEntries: 2}), WithOnError(func(err error, info ErrorInfo) {
+		seen.hook(err, info)
+		if info.Where == "MaxMapEntries (retired interactions)" {
+			callback = true
+			// Reporting must happen outside the registry lock.
+			if openCount() != 0 {
+				t.Error("retirement report preceded unregister")
+			}
+		}
+	}))
+	end := func(id string) {
+		_, i := StartInteraction(context.Background(), InteractionOptions{InteractionID: id, NoPromptEvent: true, Classify: Ptr(false)})
+		i.End(EndOptions{})
+	}
+	end("a")
+	end("b")
+	end("a") // Updating an existing ID does not evict.
+	if len(seen.all()) != 0 {
+		t.Fatalf("reported before eviction: %+v", seen.all())
+	}
+	end("c")
+	end("d") // The same kind is rate-limited across repeated evictions and other maps.
+	for _, s := range []*sink{{}, {}, {}} {
+		rememberClient(s)
+	}
+	if !callback || seen.count(ErrorInfo{Kind: KindLimitReached, Where: "MaxMapEntries (retired interactions)"}) != 1 || len(seen.all()) != 1 {
+		t.Fatalf("hook saw %+v; want one limit_reached for retirement-map eviction", seen.all())
+	}
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	if len(open.retired) != 2 || open.retired["c"] == nil || open.retired["d"] == nil || open.retiredFloor == 0 {
+		t.Fatal("retirement map did not retain the newest IDs and advance its floor")
+	}
+}

@@ -61,32 +61,14 @@ func init() {
 			}
 			return i
 		}
+		return liveOwner(id, 0, false)
+	}
+	hook.Tracing.Seq = func() uint64 {
 		open.mu.Lock()
 		defer open.mu.Unlock()
-		var owner *Interaction
-		for e := open.list.Front(); e != nil; e = e.Next() {
-			i := e.Value.(*Interaction)
-			if i.id != id {
-				continue
-			}
-			if owner != nil && owner != i {
-				return nil
-			}
-			owner = i
-		}
-		for ref, slot := range open.paused {
-			if slot.id != id {
-				continue
-			}
-			if i := ref.Value(); i != nil {
-				if owner != nil && owner != i {
-					return nil
-				}
-				owner = i
-			}
-		}
-		return owner
+		return open.nextOrder
 	}
+	hook.Tracing.LateOwner = func(id string, since uint64) any { return liveOwner(id, since, true) }
 	hook.Tracing.AdoptAnalytics = func(i any, c analytics.Client) { i.(*Interaction).adoptAnalytics(c) }
 	hook.Tracing.RecordTool = func(i, call any, outputFailure bool) {
 		i.(*Interaction).recordToolCalls(true, outputFailure, call.(ToolCall))

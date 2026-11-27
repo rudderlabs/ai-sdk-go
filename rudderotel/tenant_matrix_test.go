@@ -197,7 +197,7 @@ func TestDuplicateIDTenantTransitionMatrix(t *testing.T) {
 // SetAttributes is an ordinary OTel API: absent-at-start IDs can be supplied
 // later, but end-time lookup must still reject duplicates in either registry.
 func TestLateInteractionIDRequiresUniqueOwner(t *testing.T) {
-	for _, state := range []string{"unique", "open", "paused", "ended", "restored"} {
+	for _, state := range []string{"unique", "open", "paused", "ended-sibling-drops-id-timing-unobservable", "restored"} {
 		for _, simple := range []bool{false, true} {
 			for _, emit := range []bool{false, true} {
 				t.Run(fmt.Sprintf("%s/simple=%v/emit=%v", state, simple, emit), func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestLateInteractionIDRequiresUniqueOwner(t *testing.T) {
 								_, restored := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{Resume: &snapshot, Analytics: clientB, Classify: rudderstackai.Ptr(false)})
 								restored.End(rudderstackai.EndOptions{})
 							}
-						case "ended":
+						case "ended-sibling-drops-id-timing-unobservable":
 							b.End(rudderstackai.EndOptions{})
 						}
 					}
@@ -260,7 +260,7 @@ func TestLateInteractionIDRequiresUniqueOwner(t *testing.T) {
 						}
 					}
 					want := 0
-					if state == "unique" || state == "ended" {
+					if state == "unique" {
 						want = 1
 					}
 					if calls != want {
