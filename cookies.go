@@ -141,6 +141,7 @@ type identityInputs struct {
 	userID, anonymousID string
 	cookies             map[string]string
 	fromCookies         *bool
+	newInteraction      bool // takes its session from its own cookies, never the scope's
 }
 
 type resolvedIdentity struct {
@@ -178,7 +179,7 @@ func resolveIdentity(in identityInputs, cv *contextValues, c config) resolvedIde
 		}
 	}
 	out := resolvedIdentity{userID: userID, anonymousID: anonymousID, sessionID: cookie.sessionID}
-	if cv != nil && out.sessionID == 0 {
+	if cv != nil && out.sessionID == 0 && !in.newInteraction {
 		out.sessionID = cv.sessionID // a restored run's, whose cookies are not read again
 	}
 	if out.userID == "" && anonymousID == "" {

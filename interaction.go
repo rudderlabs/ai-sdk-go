@@ -880,6 +880,7 @@ func newInteraction(ctx context.Context, o InteractionOptions) *Interaction {
 	in := identityInputs{
 		userID: o.UserID, anonymousID: o.AnonymousID,
 		cookies: rudderstackCookies(header, o.CookieValues), fromCookies: o.IdentityFromCookies,
+		newInteraction: true,
 	}
 	if resumed {
 		in.fromCookies = Ptr(false) // the snapshot's identity wins, and this request's session is not its

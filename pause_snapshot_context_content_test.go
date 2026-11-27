@@ -415,3 +415,43 @@ func TestSDK6945HiddenAppSessionIDStaysHiddenAfterRestore(t *testing.T) {
 		}
 	}
 }
+
+func TestSDK6945NestedRunResolvesItsOwnSessionAfterRestore(t *testing.T) {
+	r := setupAI(t)
+	childSessions := func(parent context.Context) []any {
+		var childID string
+		_ = RunInteraction(parent, InteractionOptions{UserID: "c", IdentityFromCookies: Ptr(false)}, func(_ context.Context, c *Interaction) error {
+			childID = c.ID()
+			c.RecordCall(LLMCall{Provider: "openai", Model: "gpt-4.1", InputTokens: 1})
+			return nil
+		})
+		var out []any
+		for _, e := range r.all() {
+			if e.Properties["interaction_id"] == childID {
+				out = append(out, sdk6945Context(t, e)["sessionId"])
+			}
+		}
+		if len(out) == 0 {
+			t.Fatal("no child events")
+		}
+		return out
+	}
+	var s PausedInteraction
+	_ = RunInteraction(context.Background(), InteractionOptions{UserID: "u", Cookies: sdk6945Cookie, IdentityFromCookies: Ptr(true)}, func(ctx context.Context, i *Interaction) error {
+		if got := childSessions(ctx); got[0] != nil {
+			t.Fatalf("in-process child sessionId = %v", got)
+		}
+		s, _ = i.Pause(PauseOptions{})
+		return nil
+	})
+	stored := sdk6945Stored(t, s, nil)
+	r.reset()
+	_ = RunInteraction(context.Background(), InteractionOptions{Resume: &stored}, func(ctx context.Context, _ *Interaction) error {
+		for _, v := range childSessions(ctx) {
+			if v != nil {
+				t.Errorf("restored child sessionId = %v, want none as in process", v)
+			}
+		}
+		return nil
+	})
+}
