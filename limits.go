@@ -85,6 +85,9 @@ var open = struct {
 	// restored holds paused originals whose snapshot was restored here: uncounted, kept for
 	// product span lookup until the app ends them, resumes them or they are collected.
 	restored map[weak.Pointer[Interaction]]restoredOriginal
+	// refused holds runs refused at MaxOpenInteractions, by the ID they asked for: uncounted, so
+	// product span lookup treats that ID as ambiguous until they end or are collected.
+	refused map[weak.Pointer[Interaction]]string
 	// nextOrder orders registrations and retirements (an end, or a collected paused original).
 	nextOrder uint64
 	// retired is each ID's latest retirement, oldest first, up to MaxMapEntries; retiredFloor is
@@ -94,7 +97,7 @@ var open = struct {
 	retiredFloor uint64
 	lastSweep    time.Time
 }{list: list.New(), paused: map[weak.Pointer[Interaction]]pausedSlot{}, restored: map[weak.Pointer[Interaction]]restoredOriginal{},
-	retired: map[string]*list.Element{}, retiredOrder: list.New()}
+	refused: map[weak.Pointer[Interaction]]string{}, retired: map[string]*list.Element{}, retiredOrder: list.New()}
 
 // restoredOriginal is a held original's ID and the run it continues in. The continuation does not
 // retain the original.
@@ -239,6 +242,34 @@ type pausedRef struct {
 	id  string
 }
 
+// holdRefused keeps untracked i, refused at MaxOpenInteractions under id, visible to product span
+// lookup without retaining it or counting it.
+func holdRefused(i *Interaction, id string) {
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	ref := weak.Make(i)
+	open.refused[ref] = id
+	runtime.AddCleanup(i, func(r pausedRef) {
+		open.mu.Lock()
+		defer open.mu.Unlock()
+		if _, ok := open.refused[r.ref]; ok {
+			delete(open.refused, r.ref)
+			retireLocked(r.id)
+		}
+	}, pausedRef{ref, id})
+}
+
+// forgetRefused drops an ended refused run from product span lookup: a retirement of its ID.
+func forgetRefused(i *Interaction) {
+	open.mu.Lock()
+	defer open.mu.Unlock()
+	ref := weak.Make(i)
+	if id, ok := open.refused[ref]; ok {
+		delete(open.refused, ref)
+		retireLocked(id)
+	}
+}
+
 // onPauseCleanup is a test seam counting cleanup registrations.
 var onPauseCleanup func()
 
@@ -290,8 +321,9 @@ func takePausedSlot(i *Interaction) bool {
 
 // liveOwner is the one live run with this ID, or nil. Open and paused interactions count as
 // themselves; a restored original counts as its newest segment, so it never makes its own run
-// ambiguous but keeps another tenant's same-ID run from owning the span. With late, a run with the
-// ID that retired after since (the span's start) also leaves it without an owner.
+// ambiguous but keeps another tenant's same-ID run from owning the span; so does a live run refused
+// at MaxOpenInteractions. With late, a run with the ID that retired after since (the span's start)
+// also leaves it without an owner.
 func liveOwner(id string, since uint64, late bool) *Interaction {
 	owner := func() *Interaction {
 		open.mu.Lock()
@@ -328,6 +360,18 @@ func liveOwner(id string, since uint64, late bool) *Interaction {
 			if i := ref.Value(); i != nil {
 				add(i.latest())
 			} else if _, retires := forgetRestoredLocked(ref); retires {
+				retireLocked(id)
+			}
+		}
+		// A refused run never owns a span, but its work may name the ID.
+		for ref, rid := range open.refused {
+			if rid != id {
+				continue
+			}
+			if ref.Value() != nil {
+				ambiguous = true
+			} else {
+				delete(open.refused, ref)
 				retireLocked(id)
 			}
 		}
@@ -420,6 +464,7 @@ func resetOpenForTest() {
 	open.list = list.New()
 	open.paused = map[weak.Pointer[Interaction]]pausedSlot{}
 	open.restored = map[weak.Pointer[Interaction]]restoredOriginal{}
+	open.refused = map[weak.Pointer[Interaction]]string{}
 	open.retired = map[string]*list.Element{}
 	open.retiredOrder = list.New()
 	open.retiredFloor = 0

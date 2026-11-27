@@ -441,6 +441,113 @@ func TestSDK7017LateIDAcrossCollectedPausedRun(t *testing.T) {
 	}
 }
 
+// sdk7017Cap allows one open or paused interaction.
+func sdk7017Cap(t *testing.T) {
+	t.Helper()
+	if err := rudderstackai.Configure(rudderstackai.WithLimits(rudderstackai.Limits{MaxOpenInteractions: 1})); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// sdk7017Refused starts B with the shared IDs past the cap: it runs untracked.
+func sdk7017Refused(t *testing.T, client analytics.Client) *rudderstackai.Interaction {
+	t.Helper()
+	_, b := rudderstackai.StartInteraction(context.Background(), sdk7017Options(client))
+	if !b.Ended() {
+		t.Fatal("B was admitted past MaxOpenInteractions")
+	}
+	return b
+}
+
+// A run refused at MaxOpenInteractions runs untracked and never registers. While the app holds it,
+// its detached work naming the shared ID (at start, or set late) must not reach tracked A; nor may
+// a late ID once B ended while the span was open (a retirement).
+func TestSDK7017RefusedAtCapNeverReachesTrackedTwin(t *testing.T) {
+	for _, m := range sdk7017Modes {
+		for _, shape := range []string{"start-id", "late-id", "late-id-after-b-ends"} {
+			t.Run(fmt.Sprintf("%v/%s", m, shape), func(t *testing.T) {
+				provider, p := sdk7017Setup(t, m)
+				sdk7017Cap(t)
+				clientA, eventsA := recorder(t)
+				clientB, eventsB := recorder(t)
+				a := sdk7017Start(t, clientA)
+				b := sdk7017Refused(t, clientB)
+				if shape == "start-id" {
+					sdk7017Detached(provider, "B_PRIVATE")
+				} else {
+					spans, setID := sdk7017StartLate(provider, "B_PRIVATE", false)
+					if shape == "late-id-after-b-ends" {
+						b.End(rudderstackai.EndOptions{})
+					}
+					setID()
+					for _, s := range spans {
+						s.End()
+					}
+				}
+				b.End(rudderstackai.EndOptions{})
+				a.End(rudderstackai.EndOptions{})
+				sdk7017Flush(t, p)
+				sdk7017RequireNone(t, "A", eventsA(), "B_PRIVATE")
+				sdk7017RequireNone(t, "B", eventsB(), "B_PRIVATE")
+			})
+		}
+	}
+}
+
+// The refused run's lookup entry takes no slot: another run is still refused while A is open, and
+// one is admitted once A ends.
+func TestSDK7017RefusedRunTakesNoSlot(t *testing.T) {
+	sdk7017Setup(t, sdk7017Modes[0])
+	sdk7017Cap(t)
+	clientA, _ := recorder(t)
+	clientB, _ := recorder(t)
+	a := sdk7017Start(t, clientA)
+	b := sdk7017Refused(t, clientB)
+	sdk7017Refused(t, clientB)
+	a.End(rudderstackai.EndOptions{})
+	if c := sdk7017Start(t, clientB); c.Ended() {
+		t.Fatal("a run was refused after A ended")
+	}
+	runtime.KeepAlive(b)
+}
+
+// Once the refused run ends, or the app drops it and it is collected, a detached span started
+// afterwards reaches tracked A again.
+func TestSDK7017RefusedRunLeavesLookupWhenGone(t *testing.T) {
+	for _, m := range sdk7017Modes {
+		for _, gone := range []string{"ended", "collected"} {
+			t.Run(fmt.Sprintf("%v/%s", m, gone), func(t *testing.T) {
+				provider, p := sdk7017Setup(t, m)
+				sdk7017Cap(t)
+				clientA, eventsA := recorder(t)
+				clientB, _ := recorder(t)
+				a := sdk7017Start(t, clientA)
+				ref := func() weak.Pointer[rudderstackai.Interaction] {
+					b := sdk7017Refused(t, clientB)
+					if gone == "ended" {
+						b.End(rudderstackai.EndOptions{})
+					}
+					return weak.Make(b)
+				}()
+				if gone == "collected" {
+					deadline := time.Now().Add(5 * time.Second)
+					for ref.Value() != nil {
+						if time.Now().After(deadline) {
+							t.Fatal("dropped refused run was not collected")
+						}
+						runtime.GC()
+						time.Sleep(time.Millisecond)
+					}
+				}
+				sdk7017Detached(provider, "A_PRIVATE")
+				a.End(rudderstackai.EndOptions{})
+				sdk7017Flush(t, p)
+				sdk7017RequireOwn(t, "A", eventsA(), "A_PRIVATE")
+			})
+		}
+	}
+}
+
 // S3 control: A alone is live from the span's start to its end, so its late ID still reaches A.
 func TestSDK7017LateIDKeepsOwnerLiveThroughout(t *testing.T) {
 	for _, m := range sdk7017Modes {
