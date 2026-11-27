@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.1](https://github.com/rudderlabs/ai-sdk-go/compare/rudderbedrock/v0.7.0...rudderbedrock/v0.7.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* count tool outputs with successful false as failed calls [SDK-6934] ([#110](https://github.com/rudderlabs/ai-sdk-go/issues/110)) ([272b550](https://github.com/rudderlabs/ai-sdk-go/commit/272b55064b6c4504c0f37212c77e7d1049b79d06))
+
+
+### Miscellaneous
+
+* **deps:** bump golang.org/x/text from 0.42.0 to 0.44.0 in the gomod-non-major group across 1 directory ([#126](https://github.com/rudderlabs/ai-sdk-go/issues/126)) ([a87341c](https://github.com/rudderlabs/ai-sdk-go/commit/a87341c08745e1550838cb6af341be59ed37ab7d))
+* remove unused code and simplify docs [SDK-7231] ([#114](https://github.com/rudderlabs/ai-sdk-go/issues/114)) ([f3864d5](https://github.com/rudderlabs/ai-sdk-go/commit/f3864d5b205640236615fd36b646debe4843493a))
+
 ## [0.7.0](https://github.com/rudderlabs/ai-sdk-go/compare/rudderbedrock/v0.6.1...rudderbedrock/v0.7.0) (2026-11-18)
 
 

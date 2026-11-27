@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.1](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.8.0...cmd/aicheck/v0.8.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **mcp:** drop non-UUID IDs, mask client info, check versions [SDK-6943] ([#109](https://github.com/rudderlabs/ai-sdk-go/issues/109)) ([8e669c6](https://github.com/rudderlabs/ai-sdk-go/commit/8e669c65da9433177e0e4fa52b5db90d79028d2f))
+* **mcp:** send client session IDs only when ID-shaped [SDK-7218] ([#121](https://github.com/rudderlabs/ai-sdk-go/issues/121)) ([436c18c](https://github.com/rudderlabs/ai-sdk-go/commit/436c18cab3fccb6c75758bcd4091cad585fa736e))
+
+
+### Miscellaneous
+
+* **deps:** bump golang.org/x/text from 0.42.0 to 0.44.0 in the gomod-non-major group across 1 directory ([#126](https://github.com/rudderlabs/ai-sdk-go/issues/126)) ([a87341c](https://github.com/rudderlabs/ai-sdk-go/commit/a87341c08745e1550838cb6af341be59ed37ab7d))
+* drop tests and rows the shared fixtures already run [SDK-7032] ([#108](https://github.com/rudderlabs/ai-sdk-go/issues/108)) ([6122dbd](https://github.com/rudderlabs/ai-sdk-go/commit/6122dbd5cbf2ece46d980774fb5c03653ed6f3b7))
+* remove unused code and simplify docs [SDK-7231] ([#114](https://github.com/rudderlabs/ai-sdk-go/issues/114)) ([f3864d5](https://github.com/rudderlabs/ai-sdk-go/commit/f3864d5b205640236615fd36b646debe4843493a))
+
 ## [0.8.0](https://github.com/rudderlabs/ai-sdk-go/compare/cmd/aicheck/v0.7.0...cmd/aicheck/v0.8.0) (2026-11-18)
 
 

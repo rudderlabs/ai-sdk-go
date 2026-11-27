@@ -18,6 +18,45 @@
 - SDK-5989: add `OneShot: true` on interactions and tasks, using the interaction ID as conversation ID when no thread exists. Existing chat defaults retain a separate generated ID.
 - SDK-5989: extend the shared client schemas, documentation and checker fixtures for web/mobile prompts, actionable suggestions, scoped feedback, exports, conversation/agent controls, limits and declared client tool events.
 
+## [0.16.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.15.0...v0.16.0) (2026-11-27)
+
+
+### Features
+
+* add JoinInteraction for work that loses the SDK's context ([#98](https://github.com/rudderlabs/ai-sdk-go/issues/98)) ([b3daf39](https://github.com/rudderlabs/ai-sdk-go/commit/b3daf392e4d6cf0e310ed67319324748b841a838))
+
+
+### Bug Fixes
+
+* count tool outputs with successful false as failed calls [SDK-6934] ([#110](https://github.com/rudderlabs/ai-sdk-go/issues/110)) ([272b550](https://github.com/rudderlabs/ai-sdk-go/commit/272b55064b6c4504c0f37212c77e7d1049b79d06))
+* **genai:** never bill the tracing twin of a cancelled stream [SDK-7211] ([#123](https://github.com/rudderlabs/ai-sdk-go/issues/123)) ([52c7cd1](https://github.com/rudderlabs/ai-sdk-go/commit/52c7cd158724e6a1c1676aa0dc13b95c27508fa5))
+* keep every message within the client's 32 KiB limit [SDK-7221] ([#112](https://github.com/rudderlabs/ai-sdk-go/issues/112)) ([77f1f5b](https://github.com/rudderlabs/ai-sdk-go/commit/77f1f5b31b4e158d75120c3cea3589d2aa1895d0))
+* log invalid option values by type only [SDK-7015] ([#111](https://github.com/rudderlabs/ai-sdk-go/issues/111)) ([63e6329](https://github.com/rudderlabs/ai-sdk-go/commit/63e632933cf02f038424c6060cc242d51c0938fd))
+* **masking:** match values split by format characters or written in fullwidth forms [SDK-7219] ([#115](https://github.com/rudderlabs/ai-sdk-go/issues/115)) ([77550c1](https://github.com/rudderlabs/ai-sdk-go/commit/77550c1e38138d1aa56bc2aec457c2c6b70d9498))
+* **mcp:** drop non-UUID IDs, mask client info, check versions [SDK-6943] ([#109](https://github.com/rudderlabs/ai-sdk-go/issues/109)) ([8e669c6](https://github.com/rudderlabs/ai-sdk-go/commit/8e669c65da9433177e0e4fa52b5db90d79028d2f))
+* **mcp:** send client session IDs only when ID-shaped [SDK-7218] ([#121](https://github.com/rudderlabs/ai-sdk-go/issues/121)) ([436c18c](https://github.com/rudderlabs/ai-sdk-go/commit/436c18cab3fccb6c75758bcd4091cad585fa736e))
+* **pause:** count a tool call re-reported after a resume once [SDK-7226] ([#122](https://github.com/rudderlabs/ai-sdk-go/issues/122)) ([aed2de7](https://github.com/rudderlabs/ai-sdk-go/commit/aed2de75ec6b1dc0454dbca4b9db5022ae6d1830))
+* **pause:** keep context and pending call content across a JSON restore [SDK-6945, SDK-7019] ([#129](https://github.com/rudderlabs/ai-sdk-go/issues/129)) ([7bf26bd](https://github.com/rudderlabs/ai-sdk-go/commit/7bf26bd694fb43853bd4d37fdf03f829937a8bdd))
+* **tracing:** drop a detached span whose owner is ambiguous [SDK-7017] ([#128](https://github.com/rudderlabs/ai-sdk-go/issues/128)) ([c5451cd](https://github.com/rudderlabs/ai-sdk-go/commit/c5451cd471d14611c58188a5f64b892eea21e257))
+
+
+### Miscellaneous
+
+* **deps:** bump golang.org/x/text from 0.42.0 to 0.44.0 in the gomod-non-major group across 1 directory ([#126](https://github.com/rudderlabs/ai-sdk-go/issues/126)) ([a87341c](https://github.com/rudderlabs/ai-sdk-go/commit/a87341c08745e1550838cb6af341be59ed37ab7d))
+* **deps:** bump the github-actions-version group with 3 updates ([#125](https://github.com/rudderlabs/ai-sdk-go/issues/125)) ([f4b0ffd](https://github.com/rudderlabs/ai-sdk-go/commit/f4b0ffd7704778f3b1f8cc5c13beab6a447c7b98))
+* drop tests and rows the shared fixtures already run [SDK-7032] ([#108](https://github.com/rudderlabs/ai-sdk-go/issues/108)) ([6122dbd](https://github.com/rudderlabs/ai-sdk-go/commit/6122dbd5cbf2ece46d980774fb5c03653ed6f3b7))
+* **emit:** pin that a full delivery queue blocks rather than drops [SDK-7215] ([#120](https://github.com/rudderlabs/ai-sdk-go/issues/120)) ([6b3ba59](https://github.com/rudderlabs/ai-sdk-go/commit/6b3ba592791b2183b569970bdb966b1c316dfc86))
+* remove unused code and simplify docs [SDK-7231] ([#114](https://github.com/rudderlabs/ai-sdk-go/issues/114)) ([f3864d5](https://github.com/rudderlabs/ai-sdk-go/commit/f3864d5b205640236615fd36b646debe4843493a))
+* **spec:** add event-size scenarios for multibyte answers [SDK-7229] ([#117](https://github.com/rudderlabs/ai-sdk-go/issues/117)) ([effbcad](https://github.com/rudderlabs/ai-sdk-go/commit/effbcad9148dd8fde438b1a3260589a7caeb58e2))
+* **spec:** add the is_error with successful: false fixture case [SDK-7225] ([#127](https://github.com/rudderlabs/ai-sdk-go/issues/127)) ([0aebc25](https://github.com/rudderlabs/ai-sdk-go/commit/0aebc2507d6ffceeb9e4ea0c72bf56ba802bcd92))
+* test the latest Go only on PRs [SDK-7032] ([#106](https://github.com/rudderlabs/ai-sdk-go/issues/106)) ([3e6a8df](https://github.com/rudderlabs/ai-sdk-go/commit/3e6a8df55c3aac4d2766aa2af3ba54207ca73f15))
+
+
+### Documentation
+
+* restore qualifiers dropped by the docs cleanup [SDK-7231] ([#119](https://github.com/rudderlabs/ai-sdk-go/issues/119)) ([6574635](https://github.com/rudderlabs/ai-sdk-go/commit/6574635291f996cf04392d34de012fb0ba0b349a))
+* **spec:** sync the capture-budget spec from Node and Python [SDK-7232] ([#124](https://github.com/rudderlabs/ai-sdk-go/issues/124)) ([685767e](https://github.com/rudderlabs/ai-sdk-go/commit/685767eeaf8324a22927903d404991d6affff624))
+
 ## [0.15.0](https://github.com/rudderlabs/ai-sdk-go/compare/v0.10.0...v0.15.0) (2026-11-18)
 
 
