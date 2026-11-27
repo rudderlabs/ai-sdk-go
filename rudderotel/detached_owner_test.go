@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	"weak"
@@ -16,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	rudderstackai "github.com/rudderlabs/ai-sdk-go"
+	"github.com/rudderlabs/ai-sdk-go/ruddertest"
 )
 
 // SDK-7017: tenants with their own clients share the interaction, user, anonymous and
@@ -544,6 +546,98 @@ func TestSDK7017RefusedRunLeavesLookupWhenGone(t *testing.T) {
 				sdk7017Flush(t, p)
 				sdk7017RequireOwn(t, "A", eventsA(), "A_PRIVATE")
 			})
+		}
+	}
+}
+
+// sdk7017BlockingClient holds a sender inside Enqueue while block is set, to keep A's End in flight.
+type sdk7017BlockingClient struct {
+	*ruddertest.Recorder
+	block   atomic.Bool
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (c *sdk7017BlockingClient) Enqueue(m analytics.Message) error {
+	if c.block.Load() {
+		select {
+		case c.entered <- struct{}{}:
+		default:
+		}
+		<-c.release
+	}
+	return c.Recorder.Enqueue(m)
+}
+
+// The TTL sweep or Shutdown takes A off the open list before its End sends anything. While that
+// End is in flight, A's detached work (ID at start, or set late) must not reach same-ID B, open
+// under the TTL or paused under Shutdown (which never ends paused runs).
+func TestSDK7017EndingRunNeverHandsSpansToTwin(t *testing.T) {
+	for _, m := range sdk7017Modes {
+		for _, trigger := range []string{"ttl", "shutdown"} {
+			for _, lateID := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%v/%s/late-id=%v", m, trigger, lateID), func(t *testing.T) {
+					provider, p := sdk7017Setup(t, m)
+					const ttl = 400 * time.Millisecond
+					if trigger == "ttl" {
+						if err := rudderstackai.Configure(rudderstackai.WithLimits(rudderstackai.Limits{InteractionTTL: ttl})); err != nil {
+							t.Fatal(err)
+						}
+					}
+					rec, _ := recorder(t)
+					clientA := &sdk7017BlockingClient{Recorder: rec, entered: make(chan struct{}, 1), release: make(chan struct{})}
+					clientB, eventsB := recorder(t)
+					a := sdk7017Start(t, clientA)
+					if trigger == "ttl" {
+						time.Sleep(ttl / 2)
+					}
+					b := sdk7017Start(t, clientB)
+					if trigger == "shutdown" {
+						sdk7017Snapshot(t, b, false)
+					}
+					var spans []trace.Span
+					var setID func()
+					if lateID {
+						spans, setID = sdk7017StartLate(provider, "A_PRIVATE", false)
+					}
+					if trigger == "ttl" {
+						time.Sleep(ttl/2 + ttl/8) // A is past the TTL, B is not
+					}
+					clientA.block.Store(true)
+					done := make(chan struct{})
+					go func() {
+						defer close(done)
+						if trigger == "shutdown" {
+							rudderstackai.Shutdown(context.Background())
+							return
+						}
+						// Any start runs the sweep.
+						_, c := rudderstackai.StartInteraction(context.Background(), rudderstackai.InteractionOptions{InteractionID: "sdk7017-other", Classify: rudderstackai.Ptr(false)})
+						c.End(rudderstackai.EndOptions{})
+					}()
+					select {
+					case <-clientA.entered:
+					case <-time.After(5 * time.Second):
+						t.Fatal("A's End never started")
+					}
+					if lateID {
+						setID()
+						for _, s := range spans {
+							s.End()
+						}
+					} else {
+						sdk7017Detached(provider, "A_PRIVATE")
+					}
+					close(clientA.release)
+					<-done
+					if !a.Ended() {
+						t.Fatal("A was not ended by the " + trigger)
+					}
+					b.End(rudderstackai.EndOptions{})
+					sdk7017Flush(t, p)
+					sdk7017RequireNone(t, "B", eventsB(), "A_PRIVATE")
+				})
+			}
 		}
 	}
 }

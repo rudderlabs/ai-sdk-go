@@ -375,6 +375,7 @@ Exactly one live run must match when the ambient interaction does not own the sp
 may acquire one through `SetAttributes`; it records only if exactly one owner matches at End and no run with that ID ended (or was dropped and collected) while the span was open.
 - Known limit: that late-ID rule also drops a span when a run with the ID ends while the span is open and the next run reusing the ID is your own, such as the next turn of the same conversation. Set the interaction ID when the span starts, or start it from the interaction's context.
 - Known limit: the same applies when you drop a paused run and it is garbage-collected before its snapshot is restored: the restore is a new run, and a late-ID span open since before the collection drops. A run restored while the paused object is still alive keeps such spans.
+- Known limit: a span started outside any interaction's context after its own interaction ended (by the app or the TTL), naming an interaction ID that another live interaction also uses, reaches that interaction. Give each tenant its own interaction IDs, or start such spans from the interaction's context.
 
 The first convention present decides the role:
 

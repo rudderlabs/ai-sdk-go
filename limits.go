@@ -88,6 +88,9 @@ var open = struct {
 	// refused holds runs refused at MaxOpenInteractions, by the ID they asked for: uncounted, so
 	// product span lookup treats that ID as ambiguous until they end or are collected.
 	refused map[weak.Pointer[Interaction]]string
+	// ending holds runs the TTL sweep or Shutdown took off the list, by ID, until their End
+	// unregisters them (or they pause): the same uncounted ambiguity while their End is in flight.
+	ending map[weak.Pointer[Interaction]]string
 	// nextOrder orders registrations and retirements (an end, or a collected paused original).
 	nextOrder uint64
 	// retired is each ID's latest retirement, oldest first, up to MaxMapEntries; retiredFloor is
@@ -97,7 +100,8 @@ var open = struct {
 	retiredFloor uint64
 	lastSweep    time.Time
 }{list: list.New(), paused: map[weak.Pointer[Interaction]]pausedSlot{}, restored: map[weak.Pointer[Interaction]]restoredOriginal{},
-	refused: map[weak.Pointer[Interaction]]string{}, retired: map[string]*list.Element{}, retiredOrder: list.New()}
+	refused: map[weak.Pointer[Interaction]]string{}, ending: map[weak.Pointer[Interaction]]string{},
+	retired: map[string]*list.Element{}, retiredOrder: list.New()}
 
 // restoredOriginal is a held original's ID and the run it continues in. The continuation does not
 // retain the original.
@@ -196,6 +200,7 @@ func unregister(i *Interaction) {
 	}
 	ref := weak.Make(i)
 	delete(open.paused, ref)
+	delete(open.ending, ref)
 	if found, retires := forgetRestoredLocked(ref); !found || retires {
 		retireLocked(i.id)
 	}
@@ -215,6 +220,7 @@ func holdPausedSlot(i *Interaction) {
 		prunePausedLocked()
 	}
 	ref := weak.Make(i)
+	delete(open.ending, ref)
 	open.paused[ref] = slotFor(i)
 	// A dropped paused run frees its slot and token entry once collected. Registered once per
 	// object: the weak key is stable, so it removes whichever entry the run holds then.
@@ -363,16 +369,19 @@ func liveOwner(id string, since uint64, late bool) *Interaction {
 				retireLocked(id)
 			}
 		}
-		// A refused run never owns a span, but its work may name the ID.
-		for ref, rid := range open.refused {
-			if rid != id {
-				continue
-			}
-			if ref.Value() != nil {
-				ambiguous = true
-			} else {
-				delete(open.refused, ref)
-				retireLocked(id)
+		// A refused run, or one whose sweep or Shutdown End is in flight, never owns a span, but
+		// its work may name the ID.
+		for _, m := range []map[weak.Pointer[Interaction]]string{open.refused, open.ending} {
+			for ref, rid := range m {
+				if rid != id {
+					continue
+				}
+				if ref.Value() != nil {
+					ambiguous = true
+				} else {
+					delete(m, ref)
+					retireLocked(id)
+				}
 			}
 		}
 		if ambiguous || (late && retiredSinceLocked(id, since)) {
@@ -394,6 +403,7 @@ func reopen(i *Interaction) {
 	defer open.mu.Unlock()
 	delete(open.paused, weak.Make(i))
 	delete(open.restored, weak.Make(i))
+	delete(open.ending, weak.Make(i))
 	if i.elem == nil {
 		i.opened = time.Now()
 		i.elem = open.list.PushBack(i)
@@ -429,6 +439,7 @@ func takeOpen() []*Interaction {
 	for e := open.list.Front(); e != nil; e = e.Next() {
 		i := e.Value.(*Interaction)
 		i.elem = nil
+		open.ending[weak.Make(i)] = i.id
 		out = append(out, i)
 	}
 	open.list = list.New()
@@ -452,6 +463,7 @@ func expiredInteractions(ttl time.Duration) []*Interaction {
 		}
 		open.list.Remove(e)
 		i.elem = nil
+		open.ending[weak.Make(i)] = i.id
 		expired = append(expired, i)
 	}
 	return expired
@@ -465,6 +477,7 @@ func resetOpenForTest() {
 	open.paused = map[weak.Pointer[Interaction]]pausedSlot{}
 	open.restored = map[weak.Pointer[Interaction]]restoredOriginal{}
 	open.refused = map[weak.Pointer[Interaction]]string{}
+	open.ending = map[weak.Pointer[Interaction]]string{}
 	open.retired = map[string]*list.Element{}
 	open.retiredOrder = list.New()
 	open.retiredFloor = 0
