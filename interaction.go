@@ -587,6 +587,8 @@ type Interaction struct {
 	cont atomic.Pointer[continuation]
 	// untracked: refused at MaxOpenInteractions; it and its calls are not tracked.
 	untracked bool
+	// retirementCapPending defers pruning's map notice until Pause releases i.mu.
+	retirementCapPending bool
 	// opened and elem place it among the open interactions (guarded by open.mu).
 	opened time.Time
 	// ownerOrder preserves lookup precedence across pause and resume (guarded by open.mu).
@@ -925,19 +927,16 @@ func StartInteraction(ctx context.Context, o InteractionOptions) (context.Contex
 		ctx = context.Background()
 	}
 	var i *Interaction
-	refusedID := ""
 	safely(func() {
 		sweepExpired()
-		if i = newInteraction(ctx, o); !register(i) {
-			refusedID, i = i.id, nil
-		}
+		i = newInteraction(ctx, o)
+		register(i)
 	})
-	if i == nil {
+	if i == nil || i.untracked {
 		// Untracked (tracking failed, or MaxOpenInteractions): a detached interaction keeps the
 		// caller's code working, and its calls are not tracked either.
-		i = &Interaction{id: uuid.NewString(), conversationID: uuid.NewString(), trigger: TriggerUser, ended: true, untracked: true, seen: map[string]*recordedCall{}, toolsByID: map[string]*recordedTool{}}
-		if refusedID != "" {
-			safely(func() { holdRefused(i, refusedID) })
+		if i == nil {
+			i = &Interaction{id: uuid.NewString(), conversationID: uuid.NewString(), trigger: TriggerUser, ended: true, untracked: true, seen: map[string]*recordedCall{}, toolsByID: map[string]*recordedTool{}}
 		}
 		return context.WithValue(ctx, keyInteraction, i), i
 	}
@@ -2363,7 +2362,12 @@ func (i *Interaction) unlockSpan(sendSpan func()) {
 	i.capPending = false
 	errors := i.buildErrors
 	i.buildErrors = nil
+	retirementCapped := i.retirementCapPending
+	i.retirementCapPending = false
 	i.mu.Unlock()
+	if retirementCapped {
+		limitReached("MaxMapEntries (retired interactions)")
+	}
 	if sendSpan != nil {
 		sendSpan()
 	}

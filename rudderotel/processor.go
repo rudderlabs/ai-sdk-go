@@ -140,6 +140,11 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 		return
 	}
 	safe("tracing.onStart", func() {
+		// Capture before identity, tracking, or dedup can call application code.
+		var since uint64
+		if p.options.ProductEvents {
+			since = hook.Tracing.Seq()
+		}
 		traceID := ""
 		if p.options.LinkTraceID {
 			traceID = s.SpanContext().TraceID().String()
@@ -188,14 +193,10 @@ func (p *SpanProcessor) OnStart(ctx context.Context, s sdktrace.ReadWriteSpan) {
 			startID = tags[InteractionIDAttribute]
 		}
 		var productOwner *rudderstackai.Interaction
-		var since uint64
 		if p.options.ProductEvents {
 			// Pin explicit routing before dedup filters can run app code, including
 			// spans that are not AI yet. A live matching ambient owner takes precedence.
 			productOwner = resolveProductOwner(startID, interaction)
-			if startID == "" && productOwner == nil {
-				since = hook.Tracing.Seq()
-			}
 		}
 		if p.options.ProductEvents && productOwner != nil && productOwner == interaction && spanRole(s) != "" && !interaction.Ended() {
 			interaction.Resume()

@@ -701,3 +701,71 @@ func TestSDK7017SingleTenantRestoreKeepsDetachedSpans(t *testing.T) {
 		}
 	}
 }
+
+// Admission must make B ambiguous before the synchronous error handler starts its spans.
+func TestSDK7017RefusalPublishedBeforeOnError(t *testing.T) {
+	for _, m := range sdk7017Modes {
+		t.Run(m.String(), func(t *testing.T) {
+			provider, p := sdk7017Setup(t, m)
+			clientA, eventsA := recorder(t)
+			clientB, _ := recorder(t)
+			a := sdk7017Start(t, clientA)
+			called := false
+			if err := rudderstackai.Configure(rudderstackai.WithLimits(rudderstackai.Limits{MaxOpenInteractions: 1}), rudderstackai.WithOnError(func(_ error, info rudderstackai.ErrorInfo) {
+				if info.Kind == rudderstackai.KindLimitReached && info.Where == "MaxOpenInteractions" {
+					called = true
+					sdk7017Detached(provider, "B_PRIVATE")
+				}
+			})); err != nil {
+				t.Fatal(err)
+			}
+			b := sdk7017Refused(t, clientB)
+			if !called {
+				t.Fatal("admission did not call WithOnError synchronously")
+			}
+			b.End(rudderstackai.EndOptions{})
+			a.End(rudderstackai.EndOptions{})
+			sdk7017Flush(t, p)
+			sdk7017RequireNone(t, "A", eventsA(), "B_PRIVATE")
+		})
+	}
+}
+
+// An unseen model parent makes track report a full dedup map before the child has an ID.
+func TestSDK7017StartSequenceBeforeOnError(t *testing.T) {
+	provider, p := sdk7017Setup(t, sdk7017Mode{simple: true, emit: true})
+	clientA, _ := recorder(t)
+	clientB, eventsB := recorder(t)
+	ctxA, a := rudderstackai.StartInteraction(context.Background(), sdk7017Options(clientA))
+	t.Cleanup(func() { a.End(rudderstackai.EndOptions{}) })
+	var b *rudderstackai.Interaction
+	called := false
+	if err := rudderstackai.Configure(rudderstackai.WithLimits(rudderstackai.Limits{MaxMapEntries: 1}), rudderstackai.WithOnError(func(_ error, info rudderstackai.ErrorInfo) {
+		if info.Kind == rudderstackai.KindLimitReached && info.Where == "MaxMapEntries (span dedup)" {
+			called = true
+			a.End(rudderstackai.EndOptions{})
+			b = sdk7017Start(t, clientB)
+		}
+	})); err != nil {
+		t.Fatal(err)
+	}
+	_, held := provider.Tracer("sdk7017").Start(ctxA, "fill dedup map", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	defer held.End()
+	unseen := sdktrace.NewTracerProvider()
+	defer func() {
+		if err := unseen.Shutdown(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	parentCtx, parent := unseen.Tracer("sdk7017").Start(context.Background(), "unseen parent", trace.WithAttributes(attribute.String("gen_ai.operation.name", "chat")))
+	defer parent.End()
+	_, s := provider.Tracer("sdk7017").Start(parentCtx, "A_PRIVATE", trace.WithAttributes(sdk7017Work("A_PRIVATE")[0]...))
+	if !called || b == nil {
+		t.Fatal("track did not call WithOnError synchronously")
+	}
+	s.SetAttributes(attribute.String(InteractionIDAttribute, sdk7017ID))
+	s.End()
+	b.End(rudderstackai.EndOptions{})
+	sdk7017Flush(t, p)
+	sdk7017RequireNone(t, "B", eventsB(), "A_PRIVATE")
+}

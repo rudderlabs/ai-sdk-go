@@ -95,10 +95,11 @@ var open = struct {
 	nextOrder uint64
 	// retired is each ID's latest retirement, oldest first, up to MaxMapEntries; retiredFloor is
 	// the newest one dropped for the cap, so a lookup past the cap fails closed.
-	retired      map[string]*list.Element
-	retiredOrder *list.List
-	retiredFloor uint64
-	lastSweep    time.Time
+	retired           map[string]*list.Element
+	retiredOrder      *list.List
+	retiredFloor      uint64
+	retirementEvicted bool
+	lastSweep         time.Time
 }{list: list.New(), paused: map[weak.Pointer[Interaction]]pausedSlot{}, restored: map[weak.Pointer[Interaction]]restoredOriginal{},
 	refused: map[weak.Pointer[Interaction]]string{}, ending: map[weak.Pointer[Interaction]]string{},
 	retired: map[string]*list.Element{}, retiredOrder: list.New()}
@@ -149,6 +150,18 @@ func retireLocked(id string) {
 		oldest := open.retiredOrder.Remove(open.retiredOrder.Front()).(retirement)
 		delete(open.retired, oldest.id)
 		open.retiredFloor = max(open.retiredFloor, oldest.seq)
+		open.retirementEvicted = true
+	}
+}
+
+// unlockOpen delivers retirement-map notices after settling the registry and releasing its lock.
+// Like the other bounded maps, reporting uses the shared once-per-kind rate limit.
+func unlockOpen() {
+	evicted := open.retirementEvicted
+	open.retirementEvicted = false
+	open.mu.Unlock()
+	if evicted {
+		limitReached("MaxMapEntries (retired interactions)")
 	}
 }
 
@@ -161,8 +174,9 @@ func retiredSinceLocked(id string, seq uint64) bool {
 	return last > seq
 }
 
-// register opens i; false when MaxOpenInteractions is reached. A restore of a run that holds a
-// slot here (paused in this process) takes it over; any other restore is admitted like a new run.
+// register opens i; at MaxOpenInteractions it becomes an untracked interaction and returns
+// false. A restore of a run that holds a slot here (paused in this process) takes it over;
+// any other restore is admitted like a new run.
 func register(i *Interaction) bool {
 	if i.resumed && takePausedSlot(i) {
 		return true
@@ -176,10 +190,13 @@ func register(i *Interaction) bool {
 
 func opened(i *Interaction, limit int) bool {
 	open.mu.Lock()
-	defer open.mu.Unlock()
+	defer unlockOpen()
 	if open.list.Len()+len(open.paused) >= limit {
 		prunePausedLocked()
 		if open.list.Len()+len(open.paused) >= limit {
+			refusedID := i.id
+			*i = Interaction{id: uuid.NewString(), conversationID: uuid.NewString(), trigger: TriggerUser, ended: true, untracked: true, seen: map[string]*recordedCall{}, toolsByID: map[string]*recordedTool{}}
+			holdRefusedLocked(i, refusedID)
 			return false
 		}
 	}
@@ -193,7 +210,7 @@ func opened(i *Interaction, limit int) bool {
 // unregister forgets an ended interaction.
 func unregister(i *Interaction) {
 	open.mu.Lock()
-	defer open.mu.Unlock()
+	defer unlockOpen()
 	if i.elem != nil {
 		open.list.Remove(i.elem)
 		i.elem = nil
@@ -210,7 +227,11 @@ func unregister(i *Interaction) {
 // move is atomic, so the run never frees its slot in between.
 func holdPausedSlot(i *Interaction) {
 	open.mu.Lock()
-	defer open.mu.Unlock()
+	defer func() {
+		i.retirementCapPending = i.retirementCapPending || open.retirementEvicted
+		open.retirementEvicted = false
+		open.mu.Unlock()
+	}()
 	if i.elem != nil {
 		open.list.Remove(i.elem)
 		i.elem = nil
@@ -233,7 +254,7 @@ func holdPausedSlot(i *Interaction) {
 	}
 	runtime.AddCleanup(i, func(slot pausedRef) {
 		open.mu.Lock()
-		defer open.mu.Unlock()
+		defer unlockOpen()
 		_, paused := open.paused[slot.ref]
 		delete(open.paused, slot.ref)
 		if _, retires := forgetRestoredLocked(slot.ref); paused || retires {
@@ -248,16 +269,14 @@ type pausedRef struct {
 	id  string
 }
 
-// holdRefused keeps untracked i, refused at MaxOpenInteractions under id, visible to product span
-// lookup without retaining it or counting it.
-func holdRefused(i *Interaction, id string) {
-	open.mu.Lock()
-	defer open.mu.Unlock()
+// holdRefusedLocked publishes the returned untracked interaction atomically with refusal,
+// before any error callback, without retaining it or counting it. Holds open.mu.
+func holdRefusedLocked(i *Interaction, id string) {
 	ref := weak.Make(i)
 	open.refused[ref] = id
 	runtime.AddCleanup(i, func(r pausedRef) {
 		open.mu.Lock()
-		defer open.mu.Unlock()
+		defer unlockOpen()
 		if _, ok := open.refused[r.ref]; ok {
 			delete(open.refused, r.ref)
 			retireLocked(r.id)
@@ -268,7 +287,7 @@ func holdRefused(i *Interaction, id string) {
 // forgetRefused drops an ended refused run from product span lookup: a retirement of its ID.
 func forgetRefused(i *Interaction) {
 	open.mu.Lock()
-	defer open.mu.Unlock()
+	defer unlockOpen()
 	ref := weak.Make(i)
 	if id, ok := open.refused[ref]; ok {
 		delete(open.refused, ref)
@@ -333,7 +352,7 @@ func takePausedSlot(i *Interaction) bool {
 func liveOwner(id string, since uint64, late bool) *Interaction {
 	owner := func() *Interaction {
 		open.mu.Lock()
-		defer open.mu.Unlock()
+		defer unlockOpen()
 		var owner *Interaction
 		ambiguous := false
 		add := func(i *Interaction) {
@@ -481,6 +500,7 @@ func resetOpenForTest() {
 	open.retired = map[string]*list.Element{}
 	open.retiredOrder = list.New()
 	open.retiredFloor = 0
+	open.retirementEvicted = false
 	open.lastSweep = time.Time{}
 	open.nextOrder = 0
 }
