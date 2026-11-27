@@ -265,6 +265,17 @@ func resolveProductOwner(id string, ambient *rudderstackai.Interaction) *rudders
 	return owner
 }
 
+// lateProductOwner resolves an ID a span acquired after it started at registry sequence since:
+// the unique live owner, unless a run with that ID ended or was collected while the span was
+// open (the ID may have been set while that run shared it).
+func lateProductOwner(id string, since uint64) *rudderstackai.Interaction {
+	if id == "" {
+		return nil
+	}
+	owner, _ := hook.Tracing.LateOwner(id, since).(*rudderstackai.Interaction)
+	return owner
+}
+
 func recordSpan(s sdktrace.ReadOnlySpan, client analytics.Client, owner *rudderstackai.Interaction) {
 	role := spanRole(s)
 	if role == "" {

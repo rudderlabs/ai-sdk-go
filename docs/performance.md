@@ -62,7 +62,7 @@ analytics-go drops whole batches instead, passing every message in them to `Conf
 
 Memory caps and their effects: [configuration](configuration.md#limits). Product-event trimming: [events](events.md#event-size). MCP state caps: [MCP limits](mcp.md#limits). Span budgets: [tracing](tracing.md#privacy-and-size).
 
-An interaction leaves nothing behind once it ends. MCP keeps each session's or interaction's call position, and one `retry_count` entry per distinct tool and arguments, so a long session can fill a map. These maps hold up to `MaxMapEntries` entries per server and drop the least recently set first.
+An interaction leaves only its ID behind once it ends, in a map of recently ended IDs capped at `MaxMapEntries`. MCP keeps each session's or interaction's call position, and one `retry_count` entry per distinct tool and arguments, so a long session can fill a map. These maps hold up to `MaxMapEntries` entries per server and drop the least recently set first.
 
 ## Fuzz tests
 

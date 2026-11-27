@@ -370,10 +370,11 @@ Spans must name an open interaction through `rudderstack.interaction_id`. Spans 
 or ending after its final End, do not produce product events. An in-flight span retains its owner
 if the interaction pauses before the span ends, and accepted work resumes it.
 The interaction's explicit/context client wins; otherwise it adopts tracing's client.
-- Known limit: a span whose ID matches its live ambient (context) interaction belongs to that interaction. Otherwise, a span that starts while its interaction ID is ambiguous across live tenants, or unresolved, is dropped from product events; it is never resolved again and never reaches another tenant. Duplicate-identity snapshot restores never take over another tenant's paused object.
-- Known limit: a detached span (no interaction in its context) that names an interaction ID reused across tenants can reach the wrong tenant when a snapshot is restored while a same-identity interaction is open, or when a paused original stays in use after its snapshot is restored. Give each tenant its own interaction IDs, or start such spans from the interaction's context.
-Exactly one live open or paused interaction must match when the ambient interaction does not own the span. A span with no ID at start
-may acquire one through `SetAttributes`; it records only if exactly one owner matches at End.
+- Known limit: a span whose ID matches its live ambient (context) interaction belongs to that interaction. Otherwise, a span that starts while its interaction ID is ambiguous across live tenants, or unresolved, is dropped from product events; it is never resolved again and never reaches another tenant. Duplicate-identity snapshot restores never take over another tenant's paused object. A paused original whose snapshot was restored in this process counts as its restored run until you end it or drop it: while you hold it, another run with the same ID makes that ID ambiguous.
+Exactly one live run must match when the ambient interaction does not own the span: an open or paused interaction, or a held original with its restored run. A span with no ID at start
+may acquire one through `SetAttributes`; it records only if exactly one owner matches at End and no run with that ID ended (or was dropped and collected) while the span was open.
+- Known limit: that late-ID rule also drops a span when a run with the ID ends while the span is open and the next run reusing the ID is your own, such as the next turn of the same conversation. Set the interaction ID when the span starts, or start it from the interaction's context.
+- Known limit: the same applies when you drop a paused run and it is garbage-collected before its snapshot is restored: the restore is a new run, and a late-ID span open since before the collection drops. A run restored while the paused object is still alive keeps such spans.
 
 The first convention present decides the role:
 

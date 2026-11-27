@@ -28,7 +28,8 @@ type Limits struct {
 	// (default 1,000 each). Past it, totals keep counting; per-call detail is no longer kept.
 	MaxCallsPerInteraction int
 	// MaxMapEntries caps each of the SDK's own lookup maps (default 10,000): remembered clients,
-	// failed attempts held for a retry, and each MCP map per server. The oldest entries go first.
+	// failed attempts held for a retry, each MCP map per server, and the IDs of recently ended
+	// interactions that late span interaction IDs are checked against. The oldest entries go first.
 	// It also caps the open model-call spans rudderotel tracks for span dedup: once full, a new
 	// one exports without dedup, and none is evicted.
 	MaxMapEntries int
@@ -78,12 +79,80 @@ func slotFor(i *Interaction) pausedSlot {
 
 // open holds the open interactions, oldest first, for MaxOpenInteractions and the TTL sweep.
 var open = struct {
-	mu        sync.Mutex
-	list      *list.List
-	paused    map[weak.Pointer[Interaction]]pausedSlot // One slot per object, without retaining it.
+	mu     sync.Mutex
+	list   *list.List
+	paused map[weak.Pointer[Interaction]]pausedSlot // One slot per object, without retaining it.
+	// restored holds paused originals whose snapshot was restored here: uncounted, kept for
+	// product span lookup until the app ends them, resumes them or they are collected.
+	restored map[weak.Pointer[Interaction]]restoredOriginal
+	// nextOrder orders registrations and retirements (an end, or a collected paused original).
 	nextOrder uint64
-	lastSweep time.Time
-}{list: list.New(), paused: map[weak.Pointer[Interaction]]pausedSlot{}}
+	// retired is each ID's latest retirement, oldest first, up to MaxMapEntries; retiredFloor is
+	// the newest one dropped for the cap, so a lookup past the cap fails closed.
+	retired      map[string]*list.Element
+	retiredOrder *list.List
+	retiredFloor uint64
+	lastSweep    time.Time
+}{list: list.New(), paused: map[weak.Pointer[Interaction]]pausedSlot{}, restored: map[weak.Pointer[Interaction]]restoredOriginal{},
+	retired: map[string]*list.Element{}, retiredOrder: list.New()}
+
+// restoredOriginal is a held original's ID and the run it continues in. The continuation does not
+// retain the original.
+type restoredOriginal struct {
+	id   string
+	cont *continuation
+}
+
+type retirement struct {
+	id  string
+	seq uint64
+}
+
+// forgetRestoredLocked drops a held original that ended or was collected. That retires its ID
+// only when the run it continued in is no longer registered: otherwise the run goes on.
+func forgetRestoredLocked(ref weak.Pointer[Interaction]) (found, retires bool) {
+	r, found := open.restored[ref]
+	if !found {
+		return false, false
+	}
+	delete(open.restored, ref)
+	return true, !registeredLocked(r.cont.current.Load())
+}
+
+// registeredLocked reports whether i is on the open list or holds a paused slot.
+func registeredLocked(i *Interaction) bool {
+	if i == nil {
+		return false
+	}
+	if i.elem != nil {
+		return true
+	}
+	_, ok := open.paused[weak.Make(i)]
+	return ok
+}
+
+// retireLocked records that a run with this ID ended or was collected.
+func retireLocked(id string) {
+	open.nextOrder++
+	if e, ok := open.retired[id]; ok {
+		open.retiredOrder.Remove(e)
+	}
+	open.retired[id] = open.retiredOrder.PushBack(retirement{id, open.nextOrder})
+	for open.retiredOrder.Len() > max(cfg().limits.MaxMapEntries, 1) {
+		oldest := open.retiredOrder.Remove(open.retiredOrder.Front()).(retirement)
+		delete(open.retired, oldest.id)
+		open.retiredFloor = max(open.retiredFloor, oldest.seq)
+	}
+}
+
+// retiredSinceLocked reports whether a run with this ID may have retired after seq.
+func retiredSinceLocked(id string, seq uint64) bool {
+	last := open.retiredFloor
+	if e, ok := open.retired[id]; ok {
+		last = e.Value.(retirement).seq
+	}
+	return last > seq
+}
 
 // register opens i; false when MaxOpenInteractions is reached. A restore of a run that holds a
 // slot here (paused in this process) takes it over; any other restore is admitted like a new run.
@@ -122,7 +191,11 @@ func unregister(i *Interaction) {
 		open.list.Remove(i.elem)
 		i.elem = nil
 	}
-	delete(open.paused, weak.Make(i))
+	ref := weak.Make(i)
+	delete(open.paused, ref)
+	if found, retires := forgetRestoredLocked(ref); !found || retires {
+		retireLocked(i.id)
+	}
 }
 
 // holdPausedSlot keeps a paused run counted toward MaxOpenInteractions, off the TTL list. The
@@ -149,11 +222,21 @@ func holdPausedSlot(i *Interaction) {
 	if onPauseCleanup != nil {
 		onPauseCleanup()
 	}
-	runtime.AddCleanup(i, func(ref weak.Pointer[Interaction]) {
+	runtime.AddCleanup(i, func(slot pausedRef) {
 		open.mu.Lock()
 		defer open.mu.Unlock()
-		delete(open.paused, ref)
-	}, ref)
+		_, paused := open.paused[slot.ref]
+		delete(open.paused, slot.ref)
+		if _, retires := forgetRestoredLocked(slot.ref); paused || retires {
+			retireLocked(slot.id)
+		}
+	}, pausedRef{ref, i.id})
+}
+
+// pausedRef is what a paused run's cleanup needs, without retaining the run.
+type pausedRef struct {
+	ref weak.Pointer[Interaction]
+	id  string
 }
 
 // onPauseCleanup is a test seam counting cleanup registrations.
@@ -162,9 +245,10 @@ var onPauseCleanup func()
 // prunePausedLocked drops the entries of paused runs that were garbage-collected; the cleanup
 // above does the same, but only after the GC cycle, so admission checks prune too.
 func prunePausedLocked() {
-	for ref := range open.paused {
+	for ref, slot := range open.paused {
 		if ref.Value() == nil {
 			delete(open.paused, ref)
+			retireLocked(slot.id)
 		}
 	}
 }
@@ -192,11 +276,71 @@ func takePausedSlot(i *Interaction) bool {
 		return false
 	}
 	delete(open.paused, match)
-	match.Value().continueAs(i)
+	original := match.Value()
+	original.continueAs(i)
+	if original != nil {
+		// The original stays visible to product span lookup as this run: not a retirement.
+		open.restored[match] = restoredOriginal{matchedSlot.id, original.cont.Load()}
+	}
 	i.ownerOrder = matchedSlot.order
 	i.opened = time.Now()
 	i.elem = open.list.PushBack(i)
 	return true
+}
+
+// liveOwner is the one live run with this ID, or nil. Open and paused interactions count as
+// themselves; a restored original counts as its newest segment, so it never makes its own run
+// ambiguous but keeps another tenant's same-ID run from owning the span. With late, a run with the
+// ID that retired after since (the span's start) also leaves it without an owner.
+func liveOwner(id string, since uint64, late bool) *Interaction {
+	owner := func() *Interaction {
+		open.mu.Lock()
+		defer open.mu.Unlock()
+		var owner *Interaction
+		ambiguous := false
+		add := func(i *Interaction) {
+			if owner != nil && owner != i {
+				ambiguous = true
+			}
+			owner = i
+		}
+		for e := open.list.Front(); e != nil; e = e.Next() {
+			if i := e.Value.(*Interaction); i.id == id {
+				add(i)
+			}
+		}
+		for ref, slot := range open.paused {
+			if slot.id != id {
+				continue
+			}
+			if i := ref.Value(); i != nil {
+				add(i)
+			} else {
+				// Collected before its cleanup ran: it retired by now.
+				delete(open.paused, ref)
+				retireLocked(id)
+			}
+		}
+		for ref, r := range open.restored {
+			if r.id != id {
+				continue
+			}
+			if i := ref.Value(); i != nil {
+				add(i.latest())
+			} else if _, retires := forgetRestoredLocked(ref); retires {
+				retireLocked(id)
+			}
+		}
+		if ambiguous || (late && retiredSinceLocked(id, since)) {
+			return nil
+		}
+		return owner
+	}()
+	// After open.mu: Pause holds the interaction's lock while it takes open.mu.
+	if owner == nil || owner.Ended() {
+		return nil
+	}
+	return owner
 }
 
 // reopen puts a resumed interaction back on the open list, whatever MaxOpenInteractions says: it
@@ -205,6 +349,7 @@ func reopen(i *Interaction) {
 	open.mu.Lock()
 	defer open.mu.Unlock()
 	delete(open.paused, weak.Make(i))
+	delete(open.restored, weak.Make(i))
 	if i.elem == nil {
 		i.opened = time.Now()
 		i.elem = open.list.PushBack(i)
@@ -274,6 +419,10 @@ func resetOpenForTest() {
 	// A new list: interactions of earlier tests that end later are not on it.
 	open.list = list.New()
 	open.paused = map[weak.Pointer[Interaction]]pausedSlot{}
+	open.restored = map[weak.Pointer[Interaction]]restoredOriginal{}
+	open.retired = map[string]*list.Element{}
+	open.retiredOrder = list.New()
+	open.retiredFloor = 0
 	open.lastSweep = time.Time{}
 	open.nextOrder = 0
 }
